@@ -7,8 +7,8 @@ if /i not "%~1"=="--keepopen" (
 
 title Build Trend Vault Launcher
 
-:: Resolve project root (parent of bats/)
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+:: Project root is the same folder as this bat file
+for %%I in ("%~dp0.") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
 
 echo.
@@ -19,10 +19,10 @@ echo ============================================================
 echo.
 
 echo ── Checking for PyInstaller ─────────────────────────────────
-pip show pyinstaller >nul 2>&1
+python -m pip show pyinstaller >nul 2>&1
 if errorlevel 1 (
     echo Installing PyInstaller...
-    pip install pyinstaller
+    python -m pip install pyinstaller
     if errorlevel 1 (
         echo ERROR: pip install pyinstaller failed.
         pause & exit /b 1
@@ -32,7 +32,7 @@ echo [OK] PyInstaller found.
 echo.
 
 echo ── Building TrendVaultLauncher.exe ──────────────────────────
-pyinstaller --onefile --windowed --name TrendVaultLauncher launcher.py
+python -m PyInstaller --onefile --windowed --name TrendVaultLauncher launcher.py
 if errorlevel 1 (
     echo.
     echo ERROR: Build failed. Check the output above.
