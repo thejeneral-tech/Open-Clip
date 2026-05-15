@@ -1,3 +1,1 @@
-export const MyComposition = () => {
-  return null;
-};
+// Unused — safe to delete manually.

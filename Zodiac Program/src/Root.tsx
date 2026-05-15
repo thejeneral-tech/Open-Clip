@@ -1,7 +1,6 @@
 import './index.css';
 import React from 'react';
 import { Composition } from 'remotion';
-import { MyComposition } from './Composition';
 import { ClipVideo } from './ClipVideo';
 import { ZodiacVideo } from './ZodiacVideo';
 import type { ZodiacVideoProps } from './ZodiacVideo';
@@ -45,14 +44,6 @@ const defaultZodiacProps: ZodiacVideoProps = {
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition
-        id="MyComp"
-        component={MyComposition}
-        durationInFrames={60}
-        fps={30}
-        width={1280}
-        height={720}
-      />
       <Composition
         id="ClipVideo"
         component={ClipVideoLoose}
