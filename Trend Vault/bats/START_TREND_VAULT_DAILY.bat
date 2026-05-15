@@ -17,8 +17,10 @@ setlocal EnableDelayedExpansion
 title Trend Vault Daily Launcher
 color 0A
 
-set "TREND_VAULT_DIR=%~dp0"
-if "%TREND_VAULT_DIR:~-1%"=="\" set "TREND_VAULT_DIR=%TREND_VAULT_DIR:~0,-1%"
+:: Resolve project root (one level up from bats/)
+pushd "%~dp0.."
+set "TREND_VAULT_DIR=%CD%"
+popd
 
 echo.
 echo ============================================================
@@ -39,7 +41,7 @@ echo.
 echo ============================================================
 echo.
 
-call "%TREND_VAULT_DIR%\start_trend_vault_system.bat"
+call "%~dp0start_trend_vault_system.bat"
 
 echo.
 echo   Daily launcher complete. Use STOP_TREND_VAULT_SYSTEM.bat to stop everything.

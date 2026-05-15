@@ -18,8 +18,10 @@ setlocal EnableDelayedExpansion
 title Trend Vault Health Check
 color 0B
 
-set "TREND_VAULT_DIR=%~dp0"
-if "%TREND_VAULT_DIR:~-1%"=="\" set "TREND_VAULT_DIR=%TREND_VAULT_DIR:~0,-1%"
+:: Resolve project root (one level up from bats/)
+pushd "%~dp0.."
+set "TREND_VAULT_DIR=%CD%"
+popd
 
 echo.
 echo ============================================================

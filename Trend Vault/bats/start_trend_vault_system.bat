@@ -9,9 +9,10 @@ title Trend Vault System Launcher
 color 0A
 
 :: ── USER CONFIG ──────────────────────────────────────────────
-set TREND_VAULT_DIR=%~dp0
-:: Remove trailing backslash from TREND_VAULT_DIR
-if "%TREND_VAULT_DIR:~-1%"=="\" set TREND_VAULT_DIR=%TREND_VAULT_DIR:~0,-1%
+:: Resolve project root (one level up from bats/)
+pushd "%~dp0.."
+set "TREND_VAULT_DIR=%CD%"
+popd
 
 :: ── ElevenLabs key check (optional but recommended) ──────────
 set ELEVENLABS_PRESENT=false

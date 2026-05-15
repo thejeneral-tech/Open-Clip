@@ -20,8 +20,10 @@ echo   Stopping all Trend Vault services...
 echo ============================================================
 echo.
 
-set "TREND_VAULT_DIR=%~dp0"
-if "%TREND_VAULT_DIR:~-1%"=="\" set "TREND_VAULT_DIR=%TREND_VAULT_DIR:~0,-1%"
+:: Resolve project root (one level up from bats/)
+pushd "%~dp0.."
+set "TREND_VAULT_DIR=%CD%"
+popd
 
 set "STOPPED_ANY=0"
 
