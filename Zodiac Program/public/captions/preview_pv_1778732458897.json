@@ -1,0 +1,70 @@
+{
+  "audioFile": "zodiac_preview_pv_1778732458897.mp3",
+  "audioDurationSec": 2.533878,
+  "source": "assemblyai-forced-alignment",
+  "captions": [
+    {
+      "index": 0,
+      "text": "This is how this voice will sound in your video.",
+      "type": "observation",
+      "start": 0,
+      "end": 2.533878,
+      "duration": 2.533878,
+      "wordCount": 10,
+      "startMs": 0,
+      "endMs": 2533.878,
+      "words": [
+        {
+          "word": "This",
+          "startMs": 46,
+          "endMs": 197
+        },
+        {
+          "word": "is",
+          "startMs": 244,
+          "endMs": 325
+        },
+        {
+          "word": "how",
+          "startMs": 372,
+          "endMs": 464
+        },
+        {
+          "word": "this",
+          "startMs": 511,
+          "endMs": 639
+        },
+        {
+          "word": "voice",
+          "startMs": 697,
+          "endMs": 940
+        },
+        {
+          "word": "will",
+          "startMs": 964,
+          "endMs": 1103
+        },
+        {
+          "word": "sound",
+          "startMs": 1149,
+          "endMs": 1440
+        },
+        {
+          "word": "in",
+          "startMs": 1498,
+          "endMs": 1556
+        },
+        {
+          "word": "your",
+          "startMs": 1602,
+          "endMs": 1707
+        },
+        {
+          "word": "video.",
+          "startMs": 1753,
+          "endMs": 2322
+        }
+      ]
+    }
+  ]
+}

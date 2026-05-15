@@ -1,0 +1,13 @@
+{
+  "historyId": "fish_1778777334594_vsu7",
+  "provider": "fish-speech",
+  "voiceId": "calm_storyteller",
+  "audioPath": "C:\\Users\\Anton\\OneDrive\\Desktop\\Zodiac Program\\outputs\\voices\\fish_p01_73587b.mp3",
+  "audioUrl": "/outputs-voices/fish_p01_73587b.mp3",
+  "audioDurationSec": 5.929796,
+  "wordCount": 6,
+  "wordsPerSecond": 1.012,
+  "speed": 1,
+  "source": "fish-audio-duration",
+  "createdAt": "2026-05-14T16:48:54.595Z"
+}

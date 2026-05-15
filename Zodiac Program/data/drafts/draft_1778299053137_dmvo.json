@@ -1,0 +1,99 @@
+{
+  "id": "draft_1778299053137_dmvo",
+  "name": "Tarus better draft 11:57",
+  "savedAt": "2026-05-09T03:57:33.137Z",
+  "state": {
+    "sign": "Taurus",
+    "category": "deep_attachment",
+    "promptId": 147,
+    "promptText": "The weight of loving someone so deeply it scares you.",
+    "promptAngle": "At some point the love stops feeling like freedom and starts feeling like something you cannot survive losing.",
+    "tone": "dramatic",
+    "voice": "custom_1778298364023_acg7t",
+    "script": [
+      {
+        "text": "TAURUS DOESN'T DO THIS BY ACCIDENT.",
+        "type": "hook",
+        "durationSeconds": 4
+      },
+      {
+        "text": "THERE'S SOMETHING SPECIFIC ABOUT THE WAY THEY LOVE AND THE WAY THEY PROTECT THEMSELVES FROM IT.",
+        "type": "observation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "MOST PEOPLE SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN EVERYTHING IS MOVING INSIDE THEM.",
+        "type": "observation",
+        "durationSeconds": 7
+      },
+      {
+        "text": "THEY LOOK CALM, BUT CALM DOESN'T ALWAYS MEAN UNTOUCHED.",
+        "type": "escalation",
+        "durationSeconds": 4
+      },
+      {
+        "text": "BUT THE REALITY IS FAR MORE COMPLICATED THAN THAT.",
+        "type": "escalation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "AT SOME POINT THE LOVE STOPS FEELING LIKE FREEDOM AND STARTS FEELING LIKE SOMETHING YOU CANNOT SURVIVE LOSING.",
+        "type": "truth",
+        "durationSeconds": 7
+      },
+      {
+        "text": "SO THEY HOLD ON QUIETLY, EVEN WHEN IT STARTS TO COST THEM PIECES OF THEMSELVES.",
+        "type": "truth",
+        "durationSeconds": 3
+      },
+      {
+        "text": "THE PEOPLE WHO SEEM THE HARDEST TO REACH ARE USUALLY THE ONES WHO FELT THINGS SO DEEPLY ONCE THEY BUILT SOMETHING AROUND IT.",
+        "type": "twist",
+        "durationSeconds": 3
+      },
+      {
+        "text": "NOT TO KEEP OTHERS OUT.",
+        "type": "twist",
+        "durationSeconds": 6
+      },
+      {
+        "text": "TO KEEP THEMSELVES IN.",
+        "type": "ending",
+        "durationSeconds": 4
+      },
+      {
+        "text": "BECAUSE FOR TAURUS, LOVE DOESN'T PASS THROUGH THEM. IT TAKES ROOT.",
+        "type": "ending",
+        "durationSeconds": 5
+      },
+      {
+        "text": "AND ONCE SOMETHING TAKES ROOT IN THEM, LETTING GO FEELS LIKE PULLING UP PART OF THEIR OWN HEART.",
+        "type": "observation",
+        "durationSeconds": 5
+      },
+      {
+        "text": "IT'S THE BRAVEST THING THEY'VE EVER DONE.",
+        "type": "escalation",
+        "durationSeconds": 5
+      },
+      {
+        "text": "AND SOMETIMES THE BRAVEST THING ISN'T STAYING LOYAL. IT'S KNOWING WHEN LOYALTY HAS BECOME A CAGE.",
+        "type": "truth",
+        "durationSeconds": 5
+      },
+      {
+        "text": "AND MOST PEOPLE NEVER REALIZE THEY WERE WITNESSING IT.",
+        "type": "twist",
+        "durationSeconds": 5
+      }
+    ],
+    "background": "stock_pexels_36554100.mp4",
+    "music": null,
+    "colorGrade": "mono",
+    "grainType": "film",
+    "grainIntensity": 100,
+    "fontFamily": "-apple-system,'SF Pro Display','Helvetica Neue','Inter',sans-serif",
+    "fontSize": 68,
+    "textColor": "#ffffff"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "audioFile": "zodiac_voice_1778651531531.mp3",
+  "audioDurationSec": 15,
+  "source": "word-proportional",
+  "captions": [
+    {
+      "index": 0,
+      "text": "GEMINIS DON'T DO THIS BY ACCIDENT.",
+      "type": "hook",
+      "start": 0,
+      "end": 1.9565217391304348,
+      "duration": 1.9565217391304348,
+      "wordCount": 6,
+      "startMs": 0,
+      "endMs": 1956.5217391304348
+    },
+    {
+      "index": 1,
+      "text": "THERE'S something deeper SPECIFIC ABOUT THE WAY THEY deeply crave — AND THE WAY THEY PROTECT THEMSELVES FROM IT.",
+      "type": "observation",
+      "start": 1.9565217391304348,
+      "end": 8.152173913043478,
+      "duration": 6.195652173913044,
+      "wordCount": 19,
+      "startMs": 1956.5217391304348,
+      "endMs": 8152.173913043479
+    },
+    {
+      "index": 2,
+      "text": "MOST souls SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN absolutely everything IS MOVING INSIDE THEM.",
+      "type": "observation",
+      "start": 8.152173913043478,
+      "end": 15,
+      "duration": 6.8478260869565215,
+      "wordCount": 21,
+      "startMs": 8152.173913043479,
+      "endMs": 15000
+    }
+  ]
+}

@@ -1,0 +1,508 @@
+/**
+ * Zodiac Video Render Pipeline
+ * Bundles Remotion + renders ZodiacVideo composition to 1080×1920 MP4
+ */
+
+import * as dotenv from 'dotenv';
+dotenv.config({ override: true });
+
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import { bundle } from '@remotion/bundler';
+import { renderMedia, selectComposition } from '@remotion/renderer';
+
+// ─── Find a usable browser on Windows ────────────────────────────────────────
+// Remotion's downloaded Chrome Headless Shell silently hangs on most Windows
+// setups due to sandbox restrictions.  Using the user's own Chrome/Edge
+// installation completely avoids the problem.
+function findSystemBrowser(): string | undefined {
+  const local = process.env.LOCALAPPDATA ?? '';
+  const candidates = [
+    // Chrome — 64-bit
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    // Chrome — 32-bit on 64-bit Windows
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    // Chrome — per-user install
+    path.join(local, 'Google\\Chrome\\Application\\chrome.exe'),
+    // Edge (Chromium-based, ships with every Win10/11)
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    path.join(local, 'Microsoft\\Edge\\Application\\msedge.exe'),
+    // Brave
+    'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+  ];
+  const found = candidates.find(p => { try { return fs.existsSync(p); } catch { return false; } });
+  return found;
+}
+import { calculateFrameTiming } from './zodiac-generate';
+import type { GeneratedLine }   from './zodiac-generate';
+import type { ZodiacVideoProps, ScriptLine } from '../src/ZodiacVideo';
+
+function ensurePublicLink(srcDir: string, linkName: string, publicDir: string) {
+  const dest = path.join(publicDir, linkName);
+  if (!fs.existsSync(srcDir)) return;
+  // Always sync — ensures newly generated voice files & stock videos override
+  // any stale public/ copy. Previously this skipped existing files of the same
+  // name, which caused old voice MP3s to be reused even when a fresh render
+  // produced a different one. We now overwrite when sizes or mtimes differ.
+  fs.mkdirSync(dest, { recursive: true });
+  for (const f of fs.readdirSync(srcDir)) {
+    const src = path.join(srcDir, f);
+    const dst = path.join(dest, f);
+    let copy = !fs.existsSync(dst);
+    if (!copy) {
+      try {
+        const a = fs.statSync(src);
+        const b = fs.statSync(dst);
+        if (a.size !== b.size || a.mtimeMs > b.mtimeMs) copy = true;
+      } catch { copy = true; }
+    }
+    if (copy) fs.copyFileSync(src, dst);
+  }
+}
+
+// ─── Config from environment ──────────────────────────────────────────────────
+
+const ROOT        = path.resolve('.');
+const ZODIAC_OUT  = path.join(ROOT, 'zodiac-output');
+const JOB_FILE    = process.env.ZODIAC_JOB_FILE ?? '';
+
+if (!JOB_FILE) { console.error('ZODIAC_JOB_FILE env var not set'); process.exit(1); }
+if (!fs.existsSync(JOB_FILE)) { console.error(`Job file not found: ${JOB_FILE}`); process.exit(1); }
+
+interface RenderJob {
+  jobId: string;
+  outputFolder: string;
+  scriptLines: GeneratedLine[];
+  settings: {
+    zodiacSign: string;
+    zodiacSymbol: string;
+    backgroundVideo: string;
+    backgroundBlur: number;
+    backgroundBrightness: number;
+    grainIntensity: number;
+    grainType: 'film' | 'digital' | 'vhs' | 'none';
+    fogOverlay: boolean;
+    rainOverlay: boolean;
+    slowZoom: boolean;
+    colorGrade: 'none' | 'dark' | 'blue' | 'warm' | 'purple' | 'teal' | 'crimson' | 'mono' | 'analog' | 'nightmare' | 'liminal' | 'bloom' | 'sepia' | 'invert' | 'cyber' | 'neon' | 'faded' | 'vintage' | 'dreamy' | 'sunset' | 'forest' | 'lavender' | 'cold' | 'heat' | 'toxic' | 'bleach' | 'frost' | 'cherry' | 'emerald' | 'obsidian' | 'peach' | 'ash' | 'dusk' | 'ember';
+    colorGradeIntensity?: number;
+    saturation?: number;
+    contrast?: number;
+    exposure?: number;
+    highlights?: number;
+    shadows?: number;
+    captionTopPct?: number | null;
+    captionBgStyle?: 'none' | 'white' | 'dark' | 'yellow';
+    captionRotate?: number;
+    fps?: 30 | 60;
+    width?: number;
+    height?: number;
+    renderQuality?: 'standard' | 'high' | 'ultra';
+    vignette: boolean;
+    fontFamily: string;
+    fontSize: number;
+    textColor: string;
+    textAnimation: 'fade' | 'slide-up' | 'typewriter' | 'scale' | 'glow' | 'blur-in' | 'fade-typewriter' | 'word-drop' | 'rise' | 'bounce' | 'shimmer' | 'cascade' | 'dissolve' | 'flicker' | 'glitch-in';
+    animSpeed: number;
+    musicFile: string;
+    musicVolume: number;
+    audioFile: string;
+    durationSeconds: number;
+    // Duration policy. "autoVoice" = total length follows script/voice timing (default,
+    // matches legacy behaviour). "fixed" = clip is exactly durationSeconds long; lines
+    // that extend past it are trimmed.
+    durationMode?: 'autoVoice' | 'fixed';
+    voiceVolume?: number;
+  };
+}
+
+// ── Resolve a usable ffprobe across platforms ───────────────────────────────
+// Remotion's compositor binary ships an ffprobe.exe on Windows. On other
+// platforms we fall back to ffprobe on PATH. Returns null if none found.
+function resolveFfprobe(): string | null {
+  const candidates = [
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffprobe.exe'),
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-darwin-arm64', 'ffprobe'),
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-darwin-x64', 'ffprobe'),
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-linux-x64-gnu', 'ffprobe'),
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-linux-arm64-gnu', 'ffprobe'),
+  ];
+  for (const c of candidates) { if (fs.existsSync(c)) return c; }
+  return 'ffprobe'; // assume on PATH
+}
+
+function probeDurationSec(filePath: string): number {
+  // Synchronous so we can use the result before calling renderMedia.
+  try {
+    const probe = resolveFfprobe();
+    if (!probe) return 0;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require('child_process');
+    const out = execFileSync(probe, [
+      '-v', 'error', '-print_format', 'json', '-show_format', filePath,
+    ], { timeout: 10_000 }).toString();
+    const data = JSON.parse(out);
+    return parseFloat(data?.format?.duration ?? '0') || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function main() {
+  const job: RenderJob = JSON.parse(fs.readFileSync(JOB_FILE, 'utf8'));
+  const { settings, scriptLines, outputFolder } = job;
+
+  const outDir   = path.join(ZODIAC_OUT, outputFolder);
+  const publicDir = path.join(ROOT, 'public');
+  fs.mkdirSync(outDir,    { recursive: true });
+  fs.mkdirSync(publicDir, { recursive: true });
+
+  // Sync assets into public/ so staticFile() can find them at render time
+  ensurePublicLink(path.join(ROOT, 'backgrounds'),   'backgrounds',   publicDir);
+  ensurePublicLink(path.join(ROOT, 'custom-audio'),  'custom-audio',  publicDir);
+  ensurePublicLink(path.join(ROOT, 'music'),         'music',         publicDir);
+
+  // FPS chosen by the user — Composition reads this from props at render time
+  const FPS = (settings as { fps?: number }).fps === 60 ? 60 : 30;
+
+  // ── Word-level timing (server may have already produced this from the
+  // generated voice via AssemblyAI; if so each line carries `words` with ms
+  // timestamps that we convert to frames). When present, the renderer uses
+  // these exact timings; when absent, we fall back to the heuristic
+  // calculateFrameTiming() that was already in place.
+  type IncomingLine = (typeof scriptLines)[number] & {
+    words?: Array<{ word: string; startMs: number; endMs: number }>;
+    startMs?: number;
+    endMs?: number;
+  };
+  const linesIn = scriptLines as IncomingLine[];
+  const haveWordTimings = linesIn.some(l => l.words && l.words.length > 0);
+
+  let timedLines: Array<{ text: string; type: string; startFrame: number; endFrame: number;
+                          words?: Array<{ word: string; startFrame: number; endFrame: number }> }>;
+
+  if (haveWordTimings) {
+    // Build frame timings directly from real ms timestamps
+    timedLines = linesIn.map(l => {
+      const words = (l.words || []).map(w => ({
+        word: w.word,
+        startFrame: Math.round((w.startMs / 1000) * FPS),
+        endFrame:   Math.round((w.endMs   / 1000) * FPS),
+      }));
+      const start = l.startMs != null ? Math.round((l.startMs / 1000) * FPS)
+                                       : (words[0]?.startFrame ?? 0);
+      const end   = l.endMs   != null ? Math.round((l.endMs   / 1000) * FPS)
+                                       : (words[words.length - 1]?.endFrame ?? start + FPS);
+      return {
+        text: l.text, type: l.type,
+        startFrame: start,
+        endFrame:   Math.max(start + Math.round(FPS * 0.5), end),
+        words: words.length ? words : undefined,
+      };
+    });
+  } else {
+    // Fall back to the heuristic timing
+    const fallback = calculateFrameTiming(scriptLines, FPS);
+    timedLines = fallback.map(l => ({
+      text: l.text, type: l.type,
+      startFrame: l.startFrame, endFrame: l.endFrame,
+    }));
+  }
+
+  // ── Duration policy ──────────────────────────────────────────────────────
+  // Two modes:
+  //   "autoVoice" (default): the clip ends 1s after the last script line.
+  //   "fixed"             : the clip is exactly settings.durationSeconds long;
+  //                          lines extending past it are clipped to the cap.
+  const durationMode = settings.durationMode ?? 'autoVoice';
+  const fixedFrames  = Math.ceil(settings.durationSeconds * FPS);
+
+  let totalFrames: number;
+  if (durationMode === 'fixed') {
+    totalFrames = fixedFrames;
+    // Trim any line whose start is past the cap, clip endFrames to the cap
+    timedLines = timedLines
+      .filter(l => l.startFrame < totalFrames)
+      .map(l => ({ ...l, endFrame: Math.min(l.endFrame, totalFrames) }));
+    console.log(`[DURATION] fixed mode: clip will be exactly ${(totalFrames / FPS).toFixed(1)}s (${totalFrames} frames)`);
+  } else {
+    totalFrames = timedLines.length > 0
+      ? timedLines[timedLines.length - 1].endFrame + FPS // 1 second tail
+      : Math.ceil(settings.durationSeconds * FPS);
+    console.log(`[DURATION] autoVoice mode: clip length = ${(totalFrames / FPS).toFixed(1)}s (${totalFrames} frames)`);
+  }
+
+  const zodiacScriptLines: ScriptLine[] = timedLines.map(l => ({
+    text:       l.text,
+    startFrame: l.startFrame,
+    endFrame:   l.endFrame,
+    type:       l.type as ScriptLine['type'],
+    words:      l.words,
+  }));
+
+  // Probe background clip duration so the composition can <Loop> it cleanly.
+  // 0 = unknown (still works — OffthreadVideo just freezes on its last frame).
+  let backgroundDurationFrames = 0;
+  {
+    const bgName = settings.backgroundVideo || '';
+    if (bgName && bgName !== 'none') {
+      const bgFsPath = path.join(publicDir, 'backgrounds', bgName);
+      const sec = probeDurationSec(bgFsPath);
+      if (sec > 0.2) {
+        backgroundDurationFrames = Math.max(1, Math.floor(sec * FPS));
+        console.log(`[BG] background=${bgName} duration=${sec.toFixed(2)}s loopFrames=${backgroundDurationFrames}`);
+      } else {
+        console.log(`[BG] background=${bgName} duration=unknown (no loop)`);
+      }
+    }
+  }
+
+  const props: ZodiacVideoProps = {
+    backgroundVideo:     settings.backgroundVideo || 'none',
+    backgroundBlur:      settings.backgroundBlur ?? 0,
+    backgroundBrightness:settings.backgroundBrightness ?? 0.8,
+    grainIntensity:      settings.grainIntensity ?? 30,
+    grainType:           settings.grainType ?? 'film',
+    fogOverlay:          settings.fogOverlay ?? false,
+    rainOverlay:         settings.rainOverlay ?? false,
+    slowZoom:            settings.slowZoom ?? true,
+    colorGrade:          settings.colorGrade ?? 'dark',
+    colorGradeIntensity: settings.colorGradeIntensity ?? 100,
+    saturation:          settings.saturation ?? 100,
+    contrast:            settings.contrast   ?? 100,
+    exposure:            settings.exposure   ?? 0,
+    highlights:          settings.highlights ?? 0,
+    shadows:             settings.shadows    ?? 0,
+    captionTopPct:       settings.captionTopPct ?? null,
+    vignette:            settings.vignette ?? true,
+    fontFamily:          settings.fontFamily ?? 'Impact, "Arial Black", sans-serif',
+    fontSize:            settings.fontSize ?? 68,
+    textColor:           settings.textColor ?? '#FFFFFF',
+    textAnimation:       settings.textAnimation ?? 'fade',
+    animSpeed:           settings.animSpeed ?? 1.0,
+    zodiacSign:          settings.zodiacSign,
+    zodiacSymbol:        settings.zodiacSymbol ?? '',
+    scriptLines:         zodiacScriptLines,
+    durationInSeconds:   totalFrames / FPS,
+    audioFile:           settings.audioFile || undefined,
+    musicFile:           settings.musicFile || undefined,
+    musicVolume:         settings.musicVolume ?? 0.25,
+    captionBgStyle:      settings.captionBgStyle ?? 'none',
+    captionRotate:       settings.captionRotate  ?? 0,
+    voiceVolume:         settings.voiceVolume ?? 1,
+    backgroundDurationFrames,
+  };
+  // Pass fps via the input-props bag so Composition.calculateMetadata can read it
+  (props as unknown as Record<string, unknown>).fps = FPS;
+
+  const outputFile = path.join(outDir, 'video.mp4');
+
+  console.log(`\n🔮 Zodiac Render Starting`);
+  console.log(`   Sign:     ${settings.zodiacSign}`);
+  console.log(`   Duration: ${(totalFrames / FPS).toFixed(1)}s (${totalFrames} frames)`);
+  console.log(`   Lines:    ${zodiacScriptLines.length}`);
+  console.log(`   Output:   ${outputFile}`);
+  console.log('');
+  // ── Standardized timeline + audio logs (single source of truth) ────────
+  console.log(`[DURATION] mode=${durationMode} targetSec=${settings.durationSeconds} actualSec=${(totalFrames / FPS).toFixed(2)} fps=${FPS}`);
+  console.log(`[AUDIO] voice path used: ${settings.audioFile ? 'custom-audio/' + settings.audioFile : '(none)'}`);
+  console.log(`[AUDIO] voice volume: 1.0 (full)`);
+  console.log(`[AUDIO] music file: ${settings.musicFile || '(none)'}  music volume: ${settings.musicVolume ?? 0.25}`);
+  if (zodiacScriptLines.length > 0) {
+    const first = zodiacScriptLines[0];
+    const last  = zodiacScriptLines[zodiacScriptLines.length - 1];
+    console.log(`[TIMELINE] firstLineStart=${(first.startFrame / FPS).toFixed(2)}s lastLineEnd=${(last.endFrame / FPS).toFixed(2)}s wordTimings=${haveWordTimings ? 'yes' : 'no'}`);
+  }
+
+  // ── Browser setup ─────────────────────────────────────────────────────────
+  const systemBrowser = findSystemBrowser();
+  if (systemBrowser) {
+    console.log(`✓ Using system browser: ${path.basename(path.dirname(systemBrowser))}`);
+  } else {
+    console.log('No system Chrome/Edge found — using Remotion bundled headless shell');
+  }
+
+  const chromiumOptions = {
+    disableWebSecurity: false,
+    ignoreCertificateErrors: false,
+    headless: true,
+    gl: 'angle' as const,
+  };
+
+  // Use half the logical CPU cores, minimum 2, maximum 8
+  const concurrency = Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2)));
+  console.log(`   Concurrency: ${concurrency} threads`);
+
+  // ── Bundle ────────────────────────────────────────────────────────────────
+  console.log('Bundling Remotion...');
+  const bundleLocation = await bundle({
+    entryPoint: path.join(ROOT, 'src', 'index.ts'),
+    webpackOverride: (config) => config,
+  });
+  console.log('Bundle ready.');
+
+  // ── Select composition ────────────────────────────────────────────────────
+  const propsRecord = props as unknown as Record<string, unknown>;
+
+  const composition = await selectComposition({
+    serveUrl:              bundleLocation,
+    id:                    'ZodiacVideo',
+    inputProps:            propsRecord,
+    browserExecutable:     systemBrowser,
+    chromiumOptions,
+    timeoutInMilliseconds: 60_000,
+  });
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  console.log(`Rendering ${totalFrames} frames...`);
+
+  // Render quality presets (CRF: lower = better quality, larger files)
+  const quality = (settings as { renderQuality?: 'standard' | 'high' | 'ultra' }).renderQuality || 'high';
+  const QUALITY_MAP = {
+    standard: { crf: 23, jpeg: 85 },
+    high:     { crf: 19, jpeg: 92 },
+    ultra:    { crf: 16, jpeg: 96 },
+  } as const;
+  const Q = QUALITY_MAP[quality];
+
+  await renderMedia({
+    composition: {
+      ...composition,
+      durationInFrames: totalFrames,
+      fps:              FPS,
+      width:            (settings as any).width  ?? 1080,
+      height:           (settings as any).height ?? 1920,
+    },
+    serveUrl:              bundleLocation,
+    codec:                 'h264',
+    outputLocation:        outputFile,
+    inputProps:            propsRecord,
+    imageFormat:           'jpeg',
+    jpegQuality:           Q.jpeg,
+    crf:                   Q.crf,
+    pixelFormat:           'yuv420p', // TikTok/QuickTime compatibility
+    concurrency,
+    browserExecutable:     systemBrowser,
+    chromiumOptions,
+    timeoutInMilliseconds: 120_000,
+    onProgress: ({ progress, renderedFrames }) => {
+      const pct = Math.round(progress * 100);
+      process.stdout.write(`\r  ${pct}%  (${renderedFrames}/${totalFrames} frames)`);
+    },
+  });
+
+  console.log(`\n\n✓ Render complete → ${outputFile}\n`);
+
+  // ── Write captionTiming.json — self-contained timing record for every render ─
+  // Includes line-level and word-level frame timestamps so any downstream tool
+  // (or future re-render) can reconstruct exactly what was shown on screen.
+  const captionTimingFile = 'captionTiming.json';
+  const captionTimingData = {
+    fps: FPS,
+    durationInFrames: totalFrames,
+    captionSyncMethod: haveWordTimings ? 'assemblyai-forced-alignment' : 'heuristic-line-duration',
+    generatedAt: new Date().toISOString(),
+    lines: zodiacScriptLines.map((line, i) => ({
+      index:       i,
+      text:        line.text,
+      type:        line.type,
+      startFrame:  line.startFrame,
+      endFrame:    line.endFrame,
+      startTimeMs: Math.round((line.startFrame / FPS) * 1000),
+      endTimeMs:   Math.round((line.endFrame   / FPS) * 1000),
+      words: (line.words ?? []).map(w => ({
+        word:        w.word,
+        startFrame:  w.startFrame,
+        endFrame:    w.endFrame,
+        startTimeMs: Math.round((w.startFrame / FPS) * 1000),
+        endTimeMs:   Math.round((w.endFrame   / FPS) * 1000),
+      })),
+    })),
+  };
+  fs.writeFileSync(
+    path.join(outDir, captionTimingFile),
+    JSON.stringify(captionTimingData, null, 2)
+  );
+  console.log(`✓ captionTiming.json written (${zodiacScriptLines.length} lines, wordTimings=${haveWordTimings})`);
+
+  // ── Write rich completion meta.json — source of truth for the render ───────
+  const sVoice = (settings as { voice?: {
+    presetId?: string; name?: string;
+    throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
+    elevenLabsVoiceId?: string;
+  } }).voice || {};
+  const sEngine = (settings as { voiceEngine?: string }).voiceEngine ?? 'auto';
+
+
+  // Resolve audio file paths for raw vs processed
+  const audioProcessedFile = (settings as any).audioFile as string | null ?? null;
+  const audioRawFile       = (settings as any).audioRawFile as string | null ?? null;
+
+  // Probe audio duration from the processed file if it exists
+  let audioDuration: number | null = null;
+  if (audioProcessedFile) {
+    const audioPath = path.join(ROOT, 'custom-audio', audioProcessedFile);
+    const probed    = probeDurationSec(audioPath);
+    if (probed > 0) audioDuration = Number(probed.toFixed(3));
+  }
+
+  // Full script text from rendered lines
+  const scriptText = scriptLines.map((l: { text: string }) => l.text).join(' ');
+
+  // Voice identity string: most specific identifier available
+  const selectedVoice: string =
+    (sVoice as { name?: string }).name ??
+    (sVoice as { elevenLabsVoiceId?: string }).elevenLabsVoiceId ??
+    sVoice.presetId ??
+    sEngine;
+
+  fs.writeFileSync(
+    path.join(outDir, 'meta.json'),
+    JSON.stringify({
+      zodiacSign:          settings.zodiacSign,
+      topic:               settings.zodiacSign,
+      createdAt:           new Date().toISOString(),
+      script:              scriptText,
+      scriptLines:         scriptLines.map((l: { text: string; type: string }) => ({ text: l.text, type: l.type })),
+      selectedVoice,
+      selectedVoicePreset: sVoice.presetId ?? null,
+      voiceEngine:         sEngine,
+      throatDepth:         sVoice.throatDepth  ?? 0,
+      ancientRasp:         sVoice.ancientRasp  ?? 0,
+      royalPace:           sVoice.royalPace    ?? 0,
+      chamberSpace:        sVoice.chamberSpace ?? 0,
+      punctuationMode:     (sVoice.royalPace ?? 0) > 0 ? 'royal-pace-driven' : 'preset-default',
+      audioRawFile,
+      audioProcessedFile,
+      audioSampleRate:     44100,
+      audioDuration,
+      captionTimingFile,
+      captionSyncMethod:   haveWordTimings ? 'assemblyai-forced-alignment' : 'heuristic-line-duration',
+      durationSec:         Number((totalFrames / FPS).toFixed(2)),
+      fps:                 FPS,
+      width:               (settings as any).width  ?? 1080,
+      height:              (settings as any).height ?? 1920,
+      renderQuality:       quality,
+      durationMode,
+      lines:               zodiacScriptLines.length,
+      musicFile:           settings.musicFile || null,
+      musicVolume:         settings.musicVolume ?? 0.25,
+      visualStyle:         settings.colorGrade ?? null,
+      backgroundAsset:     settings.backgroundVideo ?? null,
+      captionBgStyle:      (settings as any).captionBgStyle ?? 'none',
+      captionRotate:       (settings as any).captionRotate  ?? 0,
+      outputFile:          'video.mp4',
+      renderStatus:        'done',
+      fallbackUsed:        false,
+      errors:              [],
+    }, null, 2)
+  );
+  console.log('ok meta.json written');
+}
+
+main().catch((err) => {
+  console.error('\nZodiac render failed:', err.message);
+  process.exit(1);
+});

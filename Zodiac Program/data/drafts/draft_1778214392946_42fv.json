@@ -1,0 +1,84 @@
+{
+  "id": "draft_1778214392946_42fv",
+  "name": "Test Draft 1",
+  "savedAt": "2026-05-08T04:26:32.946Z",
+  "state": {
+    "sign": "Scorpio",
+    "category": "heartbreak",
+    "promptId": 72,
+    "promptText": "The specific loneliness of healing from someone you chose.",
+    "promptAngle": "Missing a stranger is grief. Missing someone you chose is a different kind of ghost.",
+    "tone": "reflective",
+    "voice": "tiktok_male",
+    "script": [
+      {
+        "text": "Scorpios don't do this by accident.",
+        "type": "hook",
+        "durationSeconds": 4
+      },
+      {
+        "text": "There's something specific about the way they love — and the way they protect themselves from it.",
+        "type": "observation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "Most people see the surface. The silence. The distance. The way they seem unmoved when everything is moving inside them.",
+        "type": "observation",
+        "durationSeconds": 7
+      },
+      {
+        "text": "But the reality is far more complicated than that.",
+        "type": "escalation",
+        "durationSeconds": 4
+      },
+      {
+        "text": "Missing a stranger is grief. Missing someone you chose is a different kind of ghost.",
+        "type": "escalation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "The people who seem the hardest to reach are usually the ones who felt things so deeply once — they built something around it.",
+        "type": "truth",
+        "durationSeconds": 7
+      },
+      {
+        "text": "Not to keep others out.",
+        "type": "truth",
+        "durationSeconds": 3
+      },
+      {
+        "text": "To keep themselves in.",
+        "type": "twist",
+        "durationSeconds": 3
+      },
+      {
+        "text": "When a Scorpio finally lowers that wall — even slightly — it's not weakness.",
+        "type": "twist",
+        "durationSeconds": 6
+      },
+      {
+        "text": "It's the bravest thing they've ever done.",
+        "type": "ending",
+        "durationSeconds": 4
+      },
+      {
+        "text": "And most people never realize they were witnessing it.",
+        "type": "ending",
+        "durationSeconds": 5
+      },
+      {
+        "text": "And yet — Scorpios always find their way back to themselves.",
+        "type": "observation",
+        "durationSeconds": 5
+      }
+    ],
+    "background": "44e0e29fd89dc7205408df0246dd8aca.mp4",
+    "music": null,
+    "colorGrade": "none",
+    "grainType": "none",
+    "grainIntensity": 0,
+    "fontFamily": "'Arial Black','Arial Bold',sans-serif",
+    "fontSize": 68,
+    "textColor": "#ffffff"
+  }
+}

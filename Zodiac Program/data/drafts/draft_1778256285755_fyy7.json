@@ -1,0 +1,79 @@
+{
+  "id": "draft_1778256285755_fyy7",
+  "name": "Scorpio alen draft",
+  "savedAt": "2026-05-08T16:04:45.755Z",
+  "state": {
+    "sign": "Scorpio",
+    "category": "hidden",
+    "promptId": 5,
+    "promptText": "Why some people stop replying even when they still love you.",
+    "promptAngle": "Because saying nothing is easier than explaining pain they don't have words for.",
+    "tone": "mysterious",
+    "voice": "tiktok_male",
+    "script": [
+      {
+        "text": "Scorpios don't do this by accident.",
+        "type": "hook",
+        "durationSeconds": 4
+      },
+      {
+        "text": "There's something specific about the way they love — and the way they protect themselves from it.",
+        "type": "observation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "Most people see the surface. The silence. The distance. The way they seem unmoved when everything is moving inside them.",
+        "type": "observation",
+        "durationSeconds": 7
+      },
+      {
+        "text": "But the reality is far more complicated than that.",
+        "type": "escalation",
+        "durationSeconds": 4
+      },
+      {
+        "text": "Because saying nothing is easier than explaining pain they don't have words for.",
+        "type": "escalation",
+        "durationSeconds": 6
+      },
+      {
+        "text": "The people who seem the hardest to reach are usually the ones who felt things so deeply once — they built something around it.",
+        "type": "truth",
+        "durationSeconds": 7
+      },
+      {
+        "text": "Not to keep others out.",
+        "type": "truth",
+        "durationSeconds": 3
+      },
+      {
+        "text": "To keep themselves in.",
+        "type": "twist",
+        "durationSeconds": 3
+      },
+      {
+        "text": "When a Scorpio finally lowers that wall — even slightly — it's not weakness.",
+        "type": "twist",
+        "durationSeconds": 6
+      },
+      {
+        "text": "It's the bravest thing they've ever done.",
+        "type": "ending",
+        "durationSeconds": 4
+      },
+      {
+        "text": "And most people never realize they were witnessing it.",
+        "type": "ending",
+        "durationSeconds": 5
+      }
+    ],
+    "background": "stock_pexels_35806649.mp4",
+    "music": null,
+    "colorGrade": "mono",
+    "grainType": "vhs",
+    "grainIntensity": 0,
+    "fontFamily": "Georgia,serif",
+    "fontSize": 68,
+    "textColor": "#ffffff"
+  }
+}

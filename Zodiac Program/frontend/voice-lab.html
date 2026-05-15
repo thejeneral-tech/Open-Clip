@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🎙️ Voice Lab — Zodiac Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#040208;--surface:#0b0814;--surface2:#120f1e;--surface3:#1a1530;
+  --border:#281d47;--border2:#3d2a6a;
+  --accent:#9b59b6;--purple:#7c3aed;--purple2:#a855f7;
+  --gold:#c9a227;--gold2:#f0c040;--green:#2ecc71;--red:#e53e3e;
+  --text:#e8e0f5;--text2:#b8aad0;--muted:#6b5d8a;--r:14px;--r2:10px;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh}
+#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
+@keyframes twinkle{from{opacity:var(--lo,.1)}to{opacity:var(--hi,.9)}}
+.app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Header ── */
+header{display:flex;align-items:center;gap:16px;padding:18px 36px;background:rgba(4,2,8,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.logo-wrap{display:flex;align-items:center;gap:12px}
+.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(155,89,182,.8))}
+.logo-text{font-family:'Cinzel',serif;font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
+.logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;font-family:'Inter',sans-serif}
+header nav{margin-left:auto;display:flex;gap:10px}
+.nav-link{padding:8px 18px;border-radius:8px;font-size:.8rem;font-weight:600;text-decoration:none;color:var(--text2);border:1px solid var(--border);transition:all .2s;letter-spacing:.5px}
+.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.1)}
+.nav-link.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)}
+
+/* ── Tab bar ── */
+.tab-bar{display:flex;gap:2px;padding:0 36px;background:rgba(11,8,20,.95);border-bottom:1px solid var(--border);position:sticky;top:72px;z-index:99}
+.tab-btn{padding:14px 24px;font-size:.78rem;font-weight:700;letter-spacing:.5px;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;font-family:inherit;text-transform:uppercase}
+.tab-btn:hover{color:var(--text2)}
+.tab-btn.active{color:var(--purple2);border-bottom-color:var(--purple2)}
+
+/* ── Main layout ── */
+.main-layout{display:flex;flex:1;gap:0;max-width:1600px;margin:0 auto;width:100%}
+
+/* ── Sidebar ── */
+.sidebar{width:220px;min-width:220px;padding:24px 0;border-right:1px solid var(--border);position:sticky;top:110px;height:calc(100vh - 110px);overflow-y:auto}
+.sidebar-title{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:0 20px 10px}
+.cat-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:.8rem;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.cat-item:hover{background:rgba(124,58,237,.08);color:var(--text)}
+.cat-item.active{border-left-color:var(--purple2);background:rgba(124,58,237,.12);color:var(--purple2)}
+.cat-item .cat-icon{font-size:1rem;width:20px;text-align:center}
+.cat-item .cat-count{margin-left:auto;font-size:.62rem;color:var(--muted);background:var(--surface2);padding:2px 7px;border-radius:20px}
+
+/* ── Content area ── */
+.content{flex:1;padding:28px 32px 120px;overflow-y:auto}
+.content-header{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.content-title{font-size:1.1rem;font-weight:700;color:var(--text)}
+.search-box{flex:1;max-width:320px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 14px;color:var(--text);font-family:inherit;font-size:.82rem;outline:none;transition:border-color .2s}
+.search-box:focus{border-color:var(--purple2)}
+.sort-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.78rem;padding:8px 12px;outline:none;cursor:pointer}
+.count-badge{font-size:.72rem;color:var(--muted);padding:5px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:20px}
+
+/* ── Voice grid ── */
+.voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.voice-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:18px 16px;cursor:pointer;transition:all .18s;position:relative;
+  display:flex;flex-direction:column;gap:10px;
+}
+.voice-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.voice-card.active{border-color:var(--purple2);background:rgba(124,58,237,.08);box-shadow:0 0 0 1px rgba(168,85,247,.3),0 8px 32px rgba(124,58,237,.2)}
+.voice-card.favorite-card{border-color:var(--gold);background:rgba(201,162,39,.05)}
+.voice-card.favorite-card:hover{border-color:var(--gold2)}
+.vc-top{display:flex;align-items:flex-start;justify-content:space-between}
+.vc-icon{font-size:1.8rem;line-height:1}
+.vc-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:.55rem;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 6px;border-radius:4px}
+.badge-fav{background:#7c4a03;color:var(--gold2);border:1px solid rgba(240,192,64,.3)}
+.badge-cat{background:rgba(124,58,237,.2);color:var(--purple2);border:1px solid rgba(168,85,247,.2)}
+.badge-energy{background:rgba(229,62,62,.15);color:#fc8181}
+.vc-name{font-size:.92rem;font-weight:700;color:var(--text);line-height:1.2}
+.vc-desc{font-size:.68rem;color:var(--muted);line-height:1.4}
+.vc-metrics{display:flex;gap:6px;flex-wrap:wrap}
+.metric{font-size:.58rem;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.3px}
+.m-energy{background:rgba(252,129,74,.15);color:#fc8f4a;border:1px solid rgba(252,129,74,.2)}
+.m-realism{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.2)}
+.m-retention{background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.2)}
+.vc-example{font-size:.65rem;color:var(--text2);line-height:1.4;font-style:italic;border-left:2px solid var(--border2);padding-left:8px}
+.vc-actions{display:flex;gap:6px;margin-top:auto}
+.btn-test{flex:1;padding:7px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);border-radius:7px;color:var(--purple2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;letter-spacing:.5px;text-transform:uppercase}
+.btn-test:hover{background:rgba(124,58,237,.4);border-color:var(--purple2)}
+.btn-test.playing{background:rgba(46,204,113,.15);border-color:var(--green);color:var(--green)}
+.btn-compare{padding:7px 10px;background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.2);border-radius:7px;color:var(--gold2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-compare:hover{background:rgba(201,162,39,.25)}
+.btn-compare.selected{background:rgba(201,162,39,.3);border-color:var(--gold)}
+.btn-fav{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
+.btn-fav:hover{border-color:var(--gold);color:var(--gold2)}
+.btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(201,162,39,.1)}
+.btn-use{padding:7px 14px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:7px;color:#fff;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:all .15s}
+.btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,58,237,.4)}
+
+/* ── Section header ── */
+.section-head{display:flex;align-items:center;gap:10px;margin:28px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.section-head-label{font-size:.68rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.section-head-icon{font-size:1.1rem}
+
+/* ── Preview panel (sticky bottom) ── */
+.preview-panel{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:rgba(4,2,8,.97);backdrop-filter:blur(24px);
+  border-top:1px solid var(--border2);padding:16px 36px;
+  display:none;gap:24px;align-items:center;flex-wrap:wrap;
+}
+.preview-panel.show{display:flex}
+.pp-voice-info{display:flex;align-items:center;gap:12px;min-width:200px}
+.pp-icon{font-size:1.6rem}
+.pp-name{font-size:.9rem;font-weight:700;color:var(--text)}
+.pp-desc{font-size:.65rem;color:var(--muted)}
+.pp-sliders{display:flex;gap:16px;flex:1;flex-wrap:wrap;min-width:320px}
+.pp-slider-group{display:flex;flex-direction:column;gap:4px;min-width:80px;flex:1}
+.pp-slider-label{font-size:.6rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;text-align:center}
+.pp-slider-val{font-size:.65rem;color:var(--purple2);font-weight:700;text-align:center}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;background:linear-gradient(to right,var(--purple) 0%,var(--purple) var(--pct,50%),var(--surface3) var(--pct,50%));outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--purple2);border:2px solid rgba(255,255,255,.2);cursor:pointer}
+.pp-actions{display:flex;gap:10px;align-items:center;flex-shrink:0}
+.pp-audio{flex:1;min-width:200px;max-width:300px}
+.pp-audio audio{width:100%;height:34px;border-radius:8px}
+.pp-text{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.78rem;flex:1;min-width:200px;max-width:360px;outline:none;resize:none;height:52px}
+.btn-gen{padding:10px 20px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s}
+.btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,58,237,.4)}
+.btn-gen:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-close-pp{padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:1rem;cursor:pointer;transition:all .15s}
+.btn-close-pp:hover{border-color:var(--red);color:var(--red)}
+
+/* ── Compare bar ── */
+.compare-bar{position:fixed;top:110px;left:0;right:0;z-index:99;background:rgba(30,15,60,.97);backdrop-filter:blur(16px);border-bottom:1px solid var(--purple);padding:10px 36px;display:none;align-items:center;gap:16px}
+.compare-bar.show{display:flex}
+.compare-slots{display:flex;gap:10px;flex:1}
+.compare-slot{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:8px;min-width:160px}
+.compare-slot .cs-icon{font-size:1.1rem}
+.compare-slot .cs-name{font-weight:700;color:var(--text)}
+.btn-do-compare{padding:9px 20px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:8px;color:#100a00;font-size:.78rem;font-weight:800;cursor:pointer;font-family:inherit}
+.btn-clear-compare{padding:9px 14px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:.78rem;cursor:pointer;font-family:inherit}
+
+/* ── Voice Clone Tab ── */
+.clone-layout{display:flex;gap:24px;flex-wrap:wrap}
+.clone-panel{flex:1;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
+.clone-panel-title{font-size:.72rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.upload-drop{border:2px dashed var(--border2);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(124,58,237,.05)}
+.upload-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.ud-icon{font-size:2rem;margin-bottom:8px}
+.ud-text{font-size:.78rem;color:var(--muted);line-height:1.5}
+.ud-text strong{color:var(--purple2)}
+.voice-db-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto}
+.vdb-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
+.vdb-item:hover{border-color:var(--purple);background:rgba(124,58,237,.06)}
+.vdb-item.active{border-color:var(--purple2);background:rgba(124,58,237,.12)}
+.vdb-icon{font-size:1.4rem}
+.vdb-info{flex:1}
+.vdb-name{font-size:.82rem;font-weight:700;color:var(--text)}
+.vdb-samples{font-size:.65rem;color:var(--muted);margin-top:2px}
+.vdb-actions{display:flex;gap:6px}
+.btn-sm{padding:5px 12px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:all .15s;border:1px solid var(--border);background:var(--surface2);color:var(--text2)}
+.btn-sm:hover{border-color:var(--purple);color:var(--purple2)}
+.btn-sm.red:hover{border-color:var(--red);color:var(--red)}
+.form-group{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.form-label{font-size:.7rem;color:var(--text2);font-weight:600;letter-spacing:.5px}
+.form-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:9px 12px;outline:none;transition:border-color .2s}
+.form-input:focus{border-color:var(--purple2)}
+.btn-primary{padding:11px 24px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;width:100%}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(124,58,237,.4)}
+.status-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.75rem;color:var(--muted);line-height:1.6;margin-top:12px;min-height:60px}
+.status-box.ok{border-color:rgba(46,204,113,.3);color:#68d391}
+.status-box.error{border-color:rgba(229,62,62,.3);color:#fc8181}
+.sample-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:200px;overflow-y:auto}
+.sample-item{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:.72rem;color:var(--text2)}
+.sample-item audio{flex:1;height:28px}
+
+/* ── Advanced controls ── */
+.adv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.adv-grid{grid-template-columns:1fr 1fr}}
+.adv-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.adv-title{font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;font-weight:700}
+.adv-slider-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.adv-label{font-size:.68rem;color:var(--text2);min-width:80px}
+.adv-val{font-size:.68rem;color:var(--purple2);min-width:36px;text-align:right;font-weight:700}
+
+/* ── Toast ── */
+.toast{position:fixed;top:90px;right:24px;z-index:999;padding:12px 20px;border-radius:10px;font-size:.82rem;font-weight:600;color:#fff;transform:translateX(120%);transition:transform .3s cubic-bezier(.175,.885,.32,1.275);max-width:320px}
+.toast.show{transform:translateX(0)}
+.toast.success{background:linear-gradient(135deg,#1a6b3a,#2ecc71)}
+.toast.error{background:linear-gradient(135deg,#6b1a1a,#e53e3e)}
+.toast.info{background:linear-gradient(135deg,#1a3a6b,var(--purple))}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:5px}
+
+/* ── Misc ── */
+.tab-content{display:none}.tab-content.active{display:block}
+.empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:.85rem}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;font-weight:600;background:rgba(124,58,237,.15);color:var(--purple2);border:1px solid rgba(124,58,237,.2);margin:2px}
+.openai-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;font-size:.65rem;font-weight:700;background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2)}
+.openai-badge.offline{background:rgba(107,93,138,.1);color:var(--muted);border-color:var(--border)}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="app">
+
+<!-- Header -->
+<header>
+  <div class="logo-wrap">
+    <span class="logo-icon">🎙️</span>
+    <div>
+      <div class="logo-text">Voice Lab</div>
+      <div class="logo-sub">33 Cinematic Presets · AI Voice Studio</div>
+    </div>
+  </div>
+  <nav>
+    <a href="/" class="nav-link">🎬 Clip Tool</a>
+    <a href="/zodiac" class="nav-link">🔮 Zodiac Studio</a>
+    <a href="/voice-lab" class="nav-link active">🎙️ Voice Lab</a>
+    <a href="/voice-editor" class="nav-link">🎤 MP3 Editor</a>
+  </nav>
+  <span id="edgeTtsStatus" class="openai-badge offline" style="margin-left:8px">⚡ openai-edge-tts: checking...</span>
+</header>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('browse')">🎭 Browse Voices</button>
+  <button class="tab-btn" onclick="switchTab('favorites')">⭐ Favorites <span id="favCount" style="font-size:.65rem;margin-left:4px;background:rgba(201,162,39,.18);color:var(--gold2);padding:1px 6px;border-radius:8px">0</span></button>
+  <button class="tab-btn" onclick="switchTab('presets')">💾 My Presets</button>
+  <button class="tab-btn" onclick="switchTab('advanced')">🎛️ Advanced Controls</button>
+  <button class="tab-btn" onclick="switchTab('clone')">🧬 Voice Cloning</button>
+</div>
+
+<div class="main-layout">
+
+<!-- Sidebar (browse tab only) -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-title">Categories</div>
+  <div id="catList"></div>
+</div>
+
+<!-- Content -->
+<div class="content" id="mainContent">
+
+  <!-- BROWSE TAB -->
+  <div class="tab-content active" id="tab-browse">
+    <div class="content-header">
+      <div class="content-title">Cinematic Voice Presets</div>
+      <input type="search" class="search-box" id="searchBox" placeholder="🔍 Search voices..." oninput="filterVoices()"/>
+      <select class="sort-select" id="sortSelect" onchange="filterVoices()">
+        <option value="default">Default order</option>
+        <option value="energy">Energy ↓</option>
+        <option value="realism">Realism ↓</option>
+        <option value="retention">Retention ↓</option>
+        <option value="name">Name A-Z</option>
+      </select>
+      <span class="count-badge" id="countBadge">33 voices</span>
+    </div>
+    <div id="voiceGrid"></div>
+  </div>
+
+  <!-- FAVORITES TAB -->
+  <div class="tab-content" id="tab-favorites">
+    <div class="content-header">
+      <div class="content-title">⭐ Your Favorite Voices</div>
+      <span class="count-badge" id="favCountBig">0</span>
+    </div>
+    <div id="favoritesGrid"></div>
+    <div id="favoritesEmpty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:3rem;margin-bottom:12px;opacity:.5">⭐</div>
+      <div style="font-size:.9rem">No favorites yet — click the star on any voice to add it here.</div>
+    </div>
+  </div>
+
+  <!-- PRESETS TAB (saved voice settings — pitch / speed / tone snapshots) -->
+  <div class="tab-content" id="tab-presets">
+    <div class="content-header">
+      <div class="content-title">💾 My Custom Presets</div>
+      <button onclick="savePresetSnapshot()" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:18px;line-height:1.6">
+      Save a snapshot of the current voice + slider settings as a reusable preset. Presets are stored in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">custom-presets.json</code> and appear in Zodiac Studio automatically.
+    </p>
+    <div id="presetsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px"></div>
+    <div id="presetsEmpty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:3rem;margin-bottom:12px;opacity:.5">💾</div>
+      <div style="font-size:.9rem">No saved presets yet — adjust sliders in Advanced Controls and click "Save Current".</div>
+    </div>
+  </div>
+
+  <!-- ADVANCED TAB -->
+  <div class="tab-content" id="tab-advanced">
+    <div style="margin-bottom:24px">
+      <div class="section-head"><span class="section-head-icon">🎛️</span><span class="section-head-label">Advanced Voice Controls</span></div>
+      <p style="font-size:.8rem;color:var(--muted);margin-bottom:20px;line-height:1.6">
+        Select a voice from Browse, then fine-tune every parameter here. Sliders update in real time — preview before rendering.
+      </p>
+    </div>
+
+    <!-- AI PROMPT BAR -->
+    <div style="background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(201,162,39,.04));border:1px solid rgba(124,58,237,.3);border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:1.1rem">🪄</span>
+        <span style="font-size:.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--purple2)">AI Voice Prompt</span>
+        <span style="font-size:.65rem;color:var(--muted);margin-left:auto">Describe how you want it to sound</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <textarea id="aiVoicePrompt" rows="2" placeholder="e.g. 'Make it deeper, slower, more haunted with reverb' or 'Smooth midnight podcast host, intimate' or 'High energy, fast, hype'" style="flex:1;min-width:240px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:10px;resize:vertical;outline:none"></textarea>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:130px">
+          <button class="btn-primary" onclick="applyAIPrompt()" style="padding:10px 16px;font-size:.78rem">✨ Apply Prompt</button>
+          <button onclick="resetSlidersToPreset()" style="padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit">↺ Reset to Preset</button>
+        </div>
+      </div>
+      <div id="aiPromptResult" style="font-size:.7rem;color:var(--muted);margin-top:8px;line-height:1.5;display:none"></div>
+    </div>
+    <div class="adv-grid">
+      <div class="adv-card">
+        <div class="adv-title">🎵 Acoustic</div>
+        <div class="adv-slider-row"><span class="adv-label">Pitch</span><input type="range" id="adv_pitch" min="-24" max="24" value="0" step="1" oninput="advSlider('adv_pitch','adv_pitch_v',v=>(v>0?'+':'')+v+'st')"/><span class="adv-val" id="adv_pitch_v">0st</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Rate</span><input type="range" id="adv_rate" min="-20" max="20" value="0" step="1" oninput="advSlider('adv_rate','adv_rate_v',v=>(v>0?'+':'')+v+'%')"/><span class="adv-val" id="adv_rate_v">0%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Speed</span><input type="range" id="adv_speed" min="80" max="125" value="100" step="1" oninput="advSlider('adv_speed','adv_speed_v',v=>(v/100).toFixed(2)+'x')"/><span class="adv-val" id="adv_speed_v">1.00x</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Volume</span><input type="range" id="adv_volume" min="-10" max="10" value="0" step="0.5" oninput="advSlider('adv_volume','adv_volume_v',v=>(v>0?'+':'')+parseFloat(v).toFixed(1)+'dB')"/><span class="adv-val" id="adv_volume_v">0dB</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Intensity</span><input type="range" id="adv_intensity" min="0" max="100" value="30" step="1" oninput="advSlider('adv_intensity','adv_intensity_v',v=>v+'%')"/><span class="adv-val" id="adv_intensity_v">30%</span></div>
+      </div>
+      <div class="adv-card">
+        <div class="adv-title">🎭 Emotion & Style</div>
+        <div class="adv-slider-row"><span class="adv-label">Seriousness</span><input type="range" id="adv_serious" min="0" max="100" value="70" step="1" oninput="advSlider('adv_serious','adv_serious_v',v=>v+'%')"/><span class="adv-val" id="adv_serious_v">70%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Emotion</span><input type="range" id="adv_emotion" min="0" max="100" value="65" step="1" oninput="advSlider('adv_emotion','adv_emotion_v',v=>v+'%')"/><span class="adv-val" id="adv_emotion_v">65%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Dark Tone</span><input type="range" id="adv_dark" min="0" max="100" value="50" step="1" oninput="advSlider('adv_dark','adv_dark_v',v=>v+'%')"/><span class="adv-val" id="adv_dark_v">50%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Suspense</span><input type="range" id="adv_suspense" min="0" max="100" value="40" step="1" oninput="advSlider('adv_suspense','adv_suspense_v',v=>v+'%')"/><span class="adv-val" id="adv_suspense_v">40%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Confidence</span><input type="range" id="adv_confidence" min="0" max="100" value="75" step="1" oninput="advSlider('adv_confidence','adv_confidence_v',v=>v+'%')"/><span class="adv-val" id="adv_confidence_v">75%</span></div>
+      </div>
+      <div class="adv-card">
+        <div class="adv-title">🔊 Texture</div>
+        <div class="adv-slider-row"><span class="adv-label">Breathiness</span><input type="range" id="adv_breath" min="0" max="100" value="20" step="1" oninput="advSlider('adv_breath','adv_breath_v',v=>v+'%')"/><span class="adv-val" id="adv_breath_v">20%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Softness</span><input type="range" id="adv_soft" min="0" max="100" value="30" step="1" oninput="advSlider('adv_soft','adv_soft_v',v=>v+'%')"/><span class="adv-val" id="adv_soft_v">30%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Aggression</span><input type="range" id="adv_aggression" min="0" max="100" value="20" step="1" oninput="advSlider('adv_aggression','adv_aggression_v',v=>v+'%')"/><span class="adv-val" id="adv_aggression_v">20%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Vocal Fry</span><input type="range" id="adv_fry" min="0" max="100" value="10" step="1" oninput="advSlider('adv_fry','adv_fry_v',v=>v+'%')"/><span class="adv-val" id="adv_fry_v">10%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Realism</span><input type="range" id="adv_realism" min="0" max="100" value="80" step="1" oninput="advSlider('adv_realism','adv_realism_v',v=>v+'%')"/><span class="adv-val" id="adv_realism_v">80%</span></div>
+      </div>
+      <div class="adv-card">
+        <div class="adv-title">⏱️ Pacing</div>
+        <div class="adv-slider-row"><span class="adv-label">Pacing Rand.</span><input type="range" id="adv_pacing_rand" min="0" max="100" value="20" step="1" oninput="advSlider('adv_pacing_rand','adv_pacing_rand_v',v=>v+'%')"/><span class="adv-val" id="adv_pacing_rand_v">20%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Emphasis</span><input type="range" id="adv_emphasis" min="0" max="100" value="50" step="1" oninput="advSlider('adv_emphasis','adv_emphasis_v',v=>v+'%')"/><span class="adv-val" id="adv_emphasis_v">50%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Tension</span><input type="range" id="adv_tension" min="0" max="100" value="40" step="1" oninput="advSlider('adv_tension','adv_tension_v',v=>v+'%')"/><span class="adv-val" id="adv_tension_v">40%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Excitement</span><input type="range" id="adv_excitement" min="0" max="100" value="30" step="1" oninput="advSlider('adv_excitement','adv_excitement_v',v=>v+'%')"/><span class="adv-val" id="adv_excitement_v">30%</span></div>
+        <div class="adv-slider-row"><span class="adv-label">Cinematic</span><input type="range" id="adv_cinematic" min="0" max="100" value="60" step="1" oninput="advSlider('adv_cinematic','adv_cinematic_v',v=>v+'%')"/><span class="adv-val" id="adv_cinematic_v">60%</span></div>
+      </div>
+      <div class="adv-card" style="grid-column:span 2">
+        <div class="adv-title">🧪 Test Advanced Settings</div>
+        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+          <textarea id="advTestText" style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:10px;resize:vertical;height:80px;outline:none" placeholder="Enter test text...">Some people stop replying even when they still love you. Because saying nothing is easier than explaining pain they don't have words for.</textarea>
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:140px">
+            <button class="btn-primary" onclick="testAdvanced()" style="width:auto;padding:10px 20px" id="advTestBtn">▶ Test Voice</button>
+            <div id="advTestStatus" style="font-size:.65rem;color:var(--muted);text-align:center"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:none" id="advAudioWrap">
+          <audio id="advAudio" controls style="width:100%;height:34px;border-radius:8px"></audio>
+        </div>
+      </div>
+    </div>
+
+    <!-- Send advanced settings to Studio -->
+    <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(124,58,237,.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:.78rem;font-weight:700;color:#86efac;margin-bottom:4px">📤 Export to Zodiac Studio</div>
+        <div style="font-size:.7rem;color:var(--muted);line-height:1.5">Sends the selected voice + all Advanced slider values to the Studio for final render.</div>
+      </div>
+      <button onclick="sendAdvancedToStudio()" style="padding:12px 22px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.5);color:#86efac;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+        → USE IN STUDIO
+      </button>
+    </div>
+  </div>
+
+  <!-- CLONE TAB -->
+  <div class="tab-content" id="tab-clone">
+    <div class="section-head"><span class="section-head-icon">🧬</span><span class="section-head-label">Voice Cloning Lab</span></div>
+    <div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:16px;margin-bottom:24px;font-size:.78rem;line-height:1.7;color:var(--text2)">
+      <strong style="color:var(--purple2)">How it works:</strong> Upload reference audio samples (MP3/WAV). The system builds a voice database. When you generate, it uses <strong>openai-edge-tts</strong> (if running on port 5050) to match the voice style. For deep cloning, install <strong>tortoise-tts</strong> locally.<br/>
+      <strong style="color:var(--gold2)">Auto-save:</strong> Your voice database auto-saves every 30 minutes. Last save: <span id="lastSaveTime">Never</span>
+    </div>
+    <div class="clone-layout">
+      <!-- Left: Create / Upload -->
+      <div class="clone-panel" style="max-width:380px">
+        <div class="clone-panel-title">📂 Create Voice Profile</div>
+        <div class="form-group">
+          <label class="form-label">Voice Name</label>
+          <input type="text" class="form-input" id="newVoiceName" placeholder="e.g. My Dark TikTok Voice"/>
+        </div>
+        <div class="upload-drop" id="sampleDropzone" ondrop="handleSampleDrop(event)" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')">
+          <input type="file" accept="audio/*" multiple onchange="uploadSamples(this.files)"/>
+          <div class="ud-icon">🎤</div>
+          <div class="ud-text"><strong>Drop audio samples here</strong><br/>MP3, WAV, M4A — 3–10 samples = better results<br/><span style="font-size:.65rem;opacity:.7">Each sample should be 5–30 seconds of clear speech</span></div>
+        </div>
+        <div id="cloneStatus" class="status-box" style="margin-top:14px">Ready to create a voice profile. Add a name and upload samples.</div>
+        <div style="margin-top:16px">
+          <div class="adv-title" style="margin-bottom:10px">🎛️ Voice Adjustment Prompt</div>
+          <textarea id="voicePrompt" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.78rem;padding:10px;resize:vertical;height:60px;outline:none" placeholder="Describe adjustments: 'make it deeper and slower', 'add slight reverb', 'more dramatic pauses'..."></textarea>
+        </div>
+
+        <!-- Visualization Sliders for cloning -->
+        <div style="margin-top:16px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+          <div class="adv-title" style="margin-bottom:12px">📊 Replication Tuning</div>
+          <p style="font-size:.7rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Visualize and adjust how your replica differs from the source. Default 50% = match source.</p>
+          <div id="cloneSliders" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button class="btn-primary" onclick="saveVoiceProfile()" style="flex:1">💾 Save Profile</button>
+        </div>
+      </div>
+
+      <!-- Right: Voice Database -->
+      <div class="clone-panel" style="flex:1">
+        <div class="clone-panel-title">🗄️ Voice Database <span id="voiceDbCount" style="font-size:.65rem;color:var(--muted);font-weight:400;margin-left:6px">0 profiles</span></div>
+        <div id="voiceDb" class="voice-db-list">
+          <div class="empty">No voice profiles yet. Create one →</div>
+        </div>
+
+        <!-- Generate with cloned voice -->
+        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+          <div class="clone-panel-title">🎙️ Generate with Cloned Voice</div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Select Profile</label>
+            <select class="form-input" id="cloneVoiceSelect" style="cursor:pointer">
+              <option value="">— select a voice profile —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Text to Speak</label>
+            <textarea class="form-input" id="cloneGenText" style="height:80px;resize:vertical" placeholder="Enter the text you want spoken in this voice...">Some people disappear. Not because they stopped caring. But because caring became too loud.</textarea>
+          </div>
+          <button class="btn-primary" onclick="generateCloned()" id="cloneGenBtn">▶ Generate Audio</button>
+          <div id="cloneGenStatus" class="status-box" style="margin-top:10px;display:none"></div>
+          <div id="cloneGenAudio" style="margin-top:10px;display:none">
+            <audio id="clonedAudio" controls style="width:100%;height:34px;border-radius:8px"></audio>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+</div><!-- /main-layout -->
+
+</div><!-- /app -->
+
+<!-- Preview panel -->
+<div class="preview-panel" id="previewPanel">
+  <div class="pp-voice-info">
+    <div class="pp-icon" id="ppIcon">🎙️</div>
+    <div>
+      <div class="pp-name" id="ppName">No voice selected</div>
+      <div class="pp-desc" id="ppDesc">Select a voice to preview</div>
+    </div>
+  </div>
+  <div class="pp-sliders">
+    <div class="pp-slider-group">
+      <div class="pp-slider-label">Pitch</div>
+      <input type="range" id="pp_pitch" min="-24" max="24" value="0" step="1" oninput="ppSlider('pp_pitch','pp_pitch_v',v=>(v>0?'+':'')+v+'st')"/>
+      <div class="pp-slider-val" id="pp_pitch_v">0st</div>
+    </div>
+    <div class="pp-slider-group">
+      <div class="pp-slider-label">Rate</div>
+      <input type="range" id="pp_rate" min="-20" max="20" value="0" step="1" oninput="ppSlider('pp_rate','pp_rate_v',v=>(v>0?'+':'')+v+'%')"/>
+      <div class="pp-slider-val" id="pp_rate_v">0%</div>
+    </div>
+    <div class="pp-slider-group">
+      <div class="pp-slider-label">Speed</div>
+      <input type="range" id="pp_speed" min="80" max="125" value="100" step="1" oninput="ppSlider('pp_speed','pp_speed_v',v=>(v/100).toFixed(2)+'x')"/>
+      <div class="pp-slider-val" id="pp_speed_v">1.00x</div>
+    </div>
+    <div class="pp-slider-group">
+      <div class="pp-slider-label">Volume</div>
+      <input type="range" id="pp_volume" min="-10" max="10" value="0" step="0.5" oninput="ppSlider('pp_volume','pp_volume_v',v=>(v>0?'+':'')+parseFloat(v).toFixed(1)+'dB')"/>
+      <div class="pp-slider-val" id="pp_volume_v">0dB</div>
+    </div>
+    <div class="pp-slider-group">
+      <div class="pp-slider-label">Intensity</div>
+      <input type="range" id="pp_intensity" min="0" max="100" value="30" step="1" oninput="ppSlider('pp_intensity','pp_intensity_v',v=>v+'%')"/>
+      <div class="pp-slider-val" id="pp_intensity_v">30%</div>
+    </div>
+  </div>
+  <textarea class="pp-text" id="ppText" placeholder="Type preview text...">Some people stop replying even when they still love you. Because saying nothing is easier than explaining pain they don't have words for.</textarea>
+  <div class="pp-audio">
+    <audio id="ppAudio" controls></audio>
+  </div>
+  <div class="pp-actions">
+    <button class="btn-gen" id="ppGenBtn" onclick="generatePreview()">▶ GENERATE</button>
+    <button onclick="useInStudio()" style="padding:10px 16px;background:rgba(201,162,39,.15);border:1px solid rgba(201,162,39,.3);border-radius:8px;color:var(--gold2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">USE IN STUDIO</button>
+    <button class="btn-close-pp" onclick="closePreview()">✕</button>
+  </div>
+</div>
+
+<!-- Compare bar -->
+<div class="compare-bar" id="compareBar">
+  <div style="font-size:.72rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-weight:700;white-space:nowrap">⚡ Comparing</div>
+  <div class="compare-slots" id="compareSlots"></div>
+  <button class="btn-do-compare" onclick="runComparison()">▶ Compare Both</button>
+  <button class="btn-clear-compare" onclick="clearComparison()">✕ Clear</button>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+const AUTO_SAVE_INTERVAL = 30 * 60 * 1000; // 30 minutes
+
+const CATEGORIES = [
+  {id:'all',         label:'All Voices',    icon:'🎙️'},
+  {id:'dark_storytelling', label:'Dark Storytelling', icon:'🌑'},
+  {id:'documentary', label:'Documentary',   icon:'🎬'},
+  {id:'horror',      label:'Horror & Eerie',icon:'👻'},
+  {id:'motivational',label:'Motivational',  icon:'💪'},
+  {id:'relationship',label:'Relationship',  icon:'💔'},
+  {id:'podcast',     label:'Podcast & Chat',icon:'🎧'},
+  {id:'luxury',      label:'Luxury',        icon:'💎'},
+  {id:'mystery',     label:'Mystery',       icon:'🌀'},
+  {id:'special',     label:'Special FX',    icon:'🤖'},
+];
+
+let allPresets = [];
+let favorites  = new Set(JSON.parse(localStorage.getItem('vl_favorites') || '["news_reporter"]'));
+let activePresetId = null;
+let compareSet  = new Set(); // max 2
+let currentTab  = 'browse';
+let activeCat   = 'all';
+let ppController = null;
+let edgeTtsAvailable = false;
+let voiceDatabase = [];
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+async function init(){
+  buildStars();
+  buildCatList();
+  await loadPresets();
+  await checkEdgeTts();
+  await loadVoiceDb();
+  setupAutoSave();
+  initSliderTracks();
+  buildCloneSliders();
+}
+
+async function loadPresets(){
+  try{
+    const r = await fetch(`${API_BASE}/api/zodiac/voice-presets`);
+    if(r.ok){ const d = await r.json(); allPresets = d.presets || []; }
+  }catch{}
+  if(!allPresets.length){
+    // fallback inline
+    allPresets = [
+      {id:'news_reporter',name:'News Reporter',icon:'📰',description:'Broadcast • Clear • Authoritative',category:'documentary',favorite:true,edgeId:'en-US-ChristopherNeural',defaults:{pitch:0,rate:0,speed:1.0,volume:0,intensity:10},energyRating:6,realismRating:9,retentionRating:8,exampleLine:'What they discovered next changed everything.',tags:['broadcast']},
+      {id:'velvet_static',name:'Velvet Static',icon:'🎙️',description:'Baritone • Smoky • Midnight Podcast',category:'dark_storytelling',favorite:false,edgeId:'en-US-EricNeural',defaults:{pitch:-5,rate:-10,speed:0.88,volume:2,intensity:40},energyRating:7,realismRating:10,retentionRating:10,exampleLine:'Some people disappear. Not because they stopped caring.',tags:['baritone','smoky']},
+    ];
+  }
+  // Apply saved favorites
+  allPresets.forEach(p => { if(favorites.has(p.id)) p.favorite = true; });
+  renderVoiceGrid();
+}
+
+async function checkEdgeTts(){
+  try{
+    const r = await fetch(`${API_BASE}/api/zodiac/edge-tts-status`);
+    const d = await r.json();
+    edgeTtsAvailable = d.available;
+    const badge = document.getElementById('edgeTtsStatus');
+    if(badge){
+      badge.className = d.available ? 'openai-badge' : 'openai-badge offline';
+      badge.textContent = d.available
+        ? `⚡ openai-edge-tts: LIVE (${d.voices||0} voices)`
+        : '⚡ openai-edge-tts: offline';
+    }
+  }catch{}
+
+  // Initial favorites count
+  const favCountEl = document.getElementById('favCount');
+  if(favCountEl){
+    const count = allPresets.filter(p => favorites.has(p.id) || p.favorite).length;
+    favCountEl.textContent = count;
+  }
+}
+
+function buildStars(){
+  const c = document.getElementById('stars');
+  for(let i=0;i<100;i++){
+    const s=document.createElement('div');s.className='star';
+    const sz=Math.random()*2+.5;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--lo:${(Math.random()*.3).toFixed(2)};--hi:${(.5+Math.random()*.5).toFixed(2)};--dur:${(2+Math.random()*5).toFixed(1)}s;animation-delay:${(Math.random()*5).toFixed(1)}s`;
+    c.appendChild(s);
+  }
+}
+
+function buildCatList(){
+  const list = document.getElementById('catList');
+  if(!list) return;
+  list.innerHTML = CATEGORIES.map(c=>`
+    <div class="cat-item${c.id===activeCat?' active':''}" data-cat="${c.id}" onclick="selectCat('${c.id}')">
+      <span class="cat-icon">${c.icon}</span>
+      <span>${c.label}</span>
+      <span class="cat-count" id="cc_${c.id}">0</span>
+    </div>`).join('');
+}
+
+function updateCatCounts(){
+  const q = document.getElementById('searchBox')?.value?.toLowerCase()||'';
+  CATEGORIES.forEach(c=>{
+    const count = c.id==='all'
+      ? allPresets.filter(p=>matchSearch(p,q)).length
+      : allPresets.filter(p=>p.category===c.id&&matchSearch(p,q)).length;
+    const el = document.getElementById('cc_'+c.id);
+    if(el) el.textContent = count;
+  });
+}
+
+function matchSearch(p, q){
+  if(!q) return true;
+  return [p.name,p.description,...(p.tags||[])].some(t=>t?.toLowerCase().includes(q));
+}
+
+function selectCat(id){
+  activeCat = id;
+  document.querySelectorAll('.cat-item').forEach(el=>el.classList.toggle('active',el.dataset.cat===id));
+  renderVoiceGrid();
+}
+
+// ═══════════════════════════════════════════════════════
+// VOICE GRID
+// ═══════════════════════════════════════════════════════
+function filterVoices(){ renderVoiceGrid(); }
+
+function renderVoiceGrid(){
+  const grid = document.getElementById('voiceGrid');
+  if(!grid) return;
+
+  const q    = (document.getElementById('searchBox')?.value||'').toLowerCase();
+  const sort = document.getElementById('sortSelect')?.value || 'default';
+
+  let filtered = allPresets.filter(p=>{
+    const catOk = activeCat==='all' || p.category===activeCat;
+    const searchOk = matchSearch(p, q);
+    return catOk && searchOk;
+  });
+
+  if(sort==='energy')    filtered.sort((a,b)=>(b.energyRating||0)-(a.energyRating||0));
+  if(sort==='realism')   filtered.sort((a,b)=>(b.realismRating||0)-(a.realismRating||0));
+  if(sort==='retention') filtered.sort((a,b)=>(b.retentionRating||0)-(a.retentionRating||0));
+  if(sort==='name')      filtered.sort((a,b)=>a.name.localeCompare(b.name));
+
+  // Favorites + News Reporter always first
+  const favs    = filtered.filter(p=>p.favorite);
+  const regular = filtered.filter(p=>!p.favorite);
+  const sorted  = [...favs, ...regular];
+
+  const countEl = document.getElementById('countBadge');
+  if(countEl) countEl.textContent = sorted.length+' voices';
+  updateCatCounts();
+
+  if(!sorted.length){
+    grid.innerHTML='<div class="empty">No voices match your search. Try a different filter.</div>';
+    return;
+  }
+
+  // Group by section
+  let html = '';
+  if(favs.length && activeCat==='all' && !q){
+    html += `<div class="section-head"><span class="section-head-icon">⭐</span><span class="section-head-label">Favorites</span></div>
+      <div class="voice-grid" style="margin-bottom:28px">${favs.map(renderCard).join('')}</div>`;
+    if(regular.length) html += `<div class="section-head"><span class="section-head-icon">🎙️</span><span class="section-head-label">All Voices</span></div>
+      <div class="voice-grid">${regular.map(renderCard).join('')}</div>`;
+  } else {
+    html += `<div class="voice-grid">${sorted.map(renderCard).join('')}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function renderCard(p){
+  const isFav     = favorites.has(p.id) || p.favorite;
+  const isActive  = p.id===activePresetId;
+  const isCompare = compareSet.has(p.id);
+  return `
+  <div class="voice-card${isActive?' active':''}${isFav?' favorite-card':''}" data-id="${p.id}" onclick="selectVoice('${p.id}')">
+    <div class="vc-top">
+      <div class="vc-icon">${p.icon}</div>
+      <div class="vc-badges">
+        ${isFav?'<span class="badge badge-fav">⭐ Fav</span>':''}
+        <span class="badge badge-cat">${CATEGORIES.find(c=>c.id===p.category)?.icon||'🎙️'}</span>
+      </div>
+    </div>
+    <div class="vc-name">${p.name}</div>
+    <div class="vc-desc">${p.description}</div>
+    <div class="vc-metrics">
+      <span class="metric m-energy">⚡${p.energyRating||'?'}/10</span>
+      <span class="metric m-realism">🎯${p.realismRating||'?'}/10</span>
+      <span class="metric m-retention">🔥${p.retentionRating||'?'}/10</span>
+    </div>
+    ${p.exampleLine?`<div class="vc-example">"${p.exampleLine.slice(0,80)}${p.exampleLine.length>80?'..':''}"</div>`:''}
+    <div class="vc-actions">
+      <button class="btn-test${isActive&&document.getElementById('previewPanel')?.classList.contains('show')?' playing':''}" onclick="event.stopPropagation();quickTest('${p.id}')">▶ TEST</button>
+      <button class="btn-compare${isCompare?' selected':''}" onclick="event.stopPropagation();toggleCompare('${p.id}')" title="Compare">⚖</button>
+      <button class="btn-fav${isFav?' starred':''}" onclick="event.stopPropagation();toggleFav('${p.id}')" title="Favorite">★</button>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// VOICE SELECTION
+// ═══════════════════════════════════════════════════════
+function selectVoice(id){
+  const p = allPresets.find(x=>x.id===id);
+  if(!p) return;
+  activePresetId = id;
+  renderVoiceGrid();
+  // Open preview panel
+  openPreviewPanel(p);
+}
+
+function openPreviewPanel(p){
+  document.getElementById('ppIcon').textContent = p.icon;
+  document.getElementById('ppName').textContent = p.name;
+  document.getElementById('ppDesc').textContent = p.description;
+  // Set slider defaults
+  setRangeSlider('pp_pitch',    p.defaults?.pitch   ?? 0,  'pp_pitch_v',    v=>(v>0?'+':'')+v+'st');
+  setRangeSlider('pp_rate',     p.defaults?.rate    ?? 0,  'pp_rate_v',     v=>(v>0?'+':'')+v+'%');
+  setRangeSlider('pp_speed',    Math.round((p.defaults?.speed??1.0)*100), 'pp_speed_v', v=>(v/100).toFixed(2)+'x');
+  setRangeSlider('pp_volume',   p.defaults?.volume  ?? 0,  'pp_volume_v',   v=>(v>0?'+':'')+parseFloat(v).toFixed(1)+'dB');
+  setRangeSlider('pp_intensity',p.defaults?.intensity??30, 'pp_intensity_v',v=>v+'%');
+  if(p.exampleLine) document.getElementById('ppText').value = p.exampleLine;
+  document.getElementById('previewPanel').classList.add('show');
+  initSliderTracks();
+}
+
+function closePreview(){
+  document.getElementById('previewPanel').classList.remove('show');
+  activePresetId = null;
+  renderVoiceGrid();
+}
+
+function setRangeSlider(id, value, valId, fmt){
+  const el = document.getElementById(id);
+  const lbl = document.getElementById(valId);
+  if(el){ el.value = value; updateSliderTrack(id); }
+  if(lbl) lbl.textContent = fmt(value);
+}
+
+// ═══════════════════════════════════════════════════════
+// PREVIEW GENERATION
+// ═══════════════════════════════════════════════════════
+async function generatePreview(){
+  if(!activePresetId){ showToast('Select a voice first','error'); return; }
+  const text = document.getElementById('ppText')?.value?.trim();
+  if(!text){ showToast('Enter preview text','error'); return; }
+  const btn = document.getElementById('ppGenBtn');
+  btn.innerHTML = '<span class="spinner"></span> Generating...';
+  btn.disabled = true;
+  if(ppController) ppController.abort();
+  ppController = new AbortController();
+  try{
+    const p = allPresets.find(x=>x.id===activePresetId);
+    const pitch = parseFloat(document.getElementById('pp_pitch').value);
+    const rate  = parseFloat(document.getElementById('pp_rate').value);
+    const speed = parseFloat(document.getElementById('pp_speed').value)/100;
+    const volume= parseFloat(document.getElementById('pp_volume').value);
+    const intens= parseFloat(document.getElementById('pp_intensity').value);
+    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      signal:ppController.signal,
+      body:JSON.stringify({text,presetId:p.id,pitch,rate,speed,volume,intensity:intens,preview:false})
+    });
+    if(!r.ok){ const e=await r.json().catch(()=>({error:'Error'})); throw new Error(e.error); }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = document.getElementById('ppAudio');
+    if(audio.dataset.url) URL.revokeObjectURL(audio.dataset.url);
+    audio.dataset.url = url;
+    audio.src = url;
+    audio.play();
+    showToast('✅ Playing '+p.name,'success');
+  }catch(e){
+    if(e.name==='AbortError') return;
+    showToast('Voice gen failed: '+e.message,'error');
+  }finally{
+    btn.innerHTML='▶ GENERATE'; btn.disabled=false; ppController=null;
+  }
+}
+
+async function quickTest(id){
+  const p = allPresets.find(x=>x.id===id);
+  if(!p) return;
+  activePresetId = id;
+  openPreviewPanel(p);
+  await generatePreview();
+}
+
+function useInStudio(){
+  if(!activePresetId){ showToast('No voice selected','error'); return; }
+  // Write to both sessionStorage (same-tab redirect) and localStorage (cross-tab storage event)
+  sessionStorage.setItem('selectedVoicePreset', activePresetId);
+  localStorage.setItem('selectedVoicePreset', activePresetId);
+  // Also pass current advanced slider values if the panel is open
+  const advObj = {
+    pitch:  parseFloat(document.getElementById('pp_pitch')?.value  ?? 0),
+    rate:   parseFloat(document.getElementById('pp_rate')?.value   ?? 0),
+    speed:  parseFloat(document.getElementById('pp_speed')?.value  ?? 100) / 100,
+    volume: parseFloat(document.getElementById('pp_volume')?.value ?? 0),
+    intensity: parseFloat(document.getElementById('pp_intensity')?.value ?? 30),
+  };
+  sessionStorage.setItem('selectedVoiceAdv', JSON.stringify(advObj));
+  localStorage.setItem('selectedVoiceAdv', JSON.stringify(advObj));
+  showToast('🎙️ Voice applied to Studio','success');
+  // If zodiac is open in another tab the storage event fires there instantly.
+  // If this IS the zodiac tab (redirected here), go back.
+  if(document.referrer.includes('/zodiac') || sessionStorage.getItem('fromZodiac')){
+    setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+  } else {
+    setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// COMPARE
+// ═══════════════════════════════════════════════════════
+function toggleCompare(id){
+  if(compareSet.has(id)){
+    compareSet.delete(id);
+  } else {
+    if(compareSet.size>=2){
+      showToast('Only 2 voices can be compared at once. Deselect one first.','info');
+      return;
+    }
+    compareSet.add(id);
+  }
+  renderVoiceGrid();
+  updateCompareBar();
+}
+
+function updateCompareBar(){
+  const bar = document.getElementById('compareBar');
+  const slots = document.getElementById('compareSlots');
+  if(compareSet.size===0){ bar.classList.remove('show'); return; }
+  bar.classList.add('show');
+  const ids = [...compareSet];
+  slots.innerHTML = ids.map(id=>{
+    const p = allPresets.find(x=>x.id===id);
+    return `<div class="compare-slot"><span class="cs-icon">${p?.icon||'🎙️'}</span><span class="cs-name">${p?.name||id}</span></div>`;
+  }).concat(ids.length<2?['<div class="compare-slot" style="opacity:.4;border-style:dashed"><span class="cs-icon">+</span><span class="cs-name">Select 2nd voice</span></div>']:[]).join('');
+}
+
+async function runComparison(){
+  const ids = [...compareSet];
+  if(ids.length<2){ showToast('Select 2 voices to compare','error'); return; }
+  const text = document.getElementById('ppText')?.value?.trim() ||
+    "Some people disappear. Not because they stopped caring. But because caring became too loud.";
+
+  // Show loading state in compare bar
+  const bar = document.getElementById('compareSlots');
+  if(bar) bar.innerHTML = ids.map(id=>{
+    const p = allPresets.find(x=>x.id===id);
+    return `<div class="compare-slot"><span class="cs-icon">${p?.icon||'🎙️'}</span><span class="cs-name">${p?.name||id}</span><span style="font-size:.65rem;color:var(--muted);margin-left:6px">⏳ generating...</span></div>`;
+  }).join('');
+
+  // Fetch both voices in parallel
+  const results = await Promise.allSettled(ids.map(async id => {
+    const p = allPresets.find(x=>x.id===id);
+    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        text, presetId: id,
+        pitch:     p?.defaults?.pitch    ?? 0,
+        rate:      p?.defaults?.rate     ?? 0,
+        speed:     p?.defaults?.speed    ?? 1.0,
+        volume:    p?.defaults?.volume   ?? 0,
+        intensity: p?.defaults?.intensity?? 30,
+        preview: false,
+      })
+    });
+    if(!r.ok){ const e=await r.json().catch(()=>({error:'Error'})); throw new Error(e.error); }
+    const blob = await r.blob();
+    return { id, name: p?.name||id, icon: p?.icon||'🎙️', url: URL.createObjectURL(blob) };
+  }));
+
+  // Build side-by-side audio players in compare bar
+  if(bar) bar.innerHTML = results.map((res,i) => {
+    if(res.status==='rejected'){
+      const id = ids[i];
+      const p = allPresets.find(x=>x.id===id);
+      return `<div class="compare-slot" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <div><span class="cs-icon">${p?.icon||'🎙️'}</span> <span class="cs-name">${p?.name||id}</span></div>
+        <span style="font-size:.65rem;color:#fca5a5">❌ ${res.reason?.message||'Failed'}</span>
+      </div>`;
+    }
+    const { name, icon, url } = res.value;
+    return `<div class="compare-slot" style="flex-direction:column;align-items:flex-start;gap:6px;min-width:220px">
+      <div><span class="cs-icon">${icon}</span> <span class="cs-name">${name}</span></div>
+      <audio controls src="${url}" style="width:100%;height:32px;border-radius:6px"></audio>
+    </div>`;
+  }).join('');
+
+  const succeeded = results.filter(r=>r.status==='fulfilled').length;
+  if(succeeded===2) showToast('▶ Both voices ready — compare below','success');
+  else if(succeeded===1) showToast('⚠️ One voice generated, one failed','info');
+  else showToast('❌ Both voices failed','error');
+}
+
+function clearComparison(){
+  compareSet.clear();
+  updateCompareBar();
+  renderVoiceGrid();
+}
+
+// ═══════════════════════════════════════════════════════
+// CLONE VISUALIZATION SLIDERS
+// ═══════════════════════════════════════════════════════
+const CLONE_SLIDERS = [
+  { id:'cl_pitch',       label:'Pitch',       hint:'lower ↔ higher' },
+  { id:'cl_speed',       label:'Speed',       hint:'slower ↔ faster' },
+  { id:'cl_tone',        label:'Tone',        hint:'soft ↔ sharp' },
+  { id:'cl_emotion',     label:'Emotion',     hint:'flat ↔ expressive' },
+  { id:'cl_stability',   label:'Stability',   hint:'varied ↔ steady' },
+  { id:'cl_clarity',     label:'Clarity',     hint:'soft ↔ crisp' },
+  { id:'cl_similarity',  label:'Similarity',  hint:'fresh ↔ exact match' },
+  { id:'cl_warmth',      label:'Warmth',      hint:'cool ↔ warm' },
+  { id:'cl_depth',       label:'Depth',       hint:'thin ↔ deep' },
+  { id:'cl_breathiness', label:'Breathiness', hint:'tight ↔ airy' },
+  { id:'cl_intensity',   label:'Intensity',   hint:'gentle ↔ powerful' },
+];
+
+function buildCloneSliders(){
+  const wrap = document.getElementById('cloneSliders');
+  if(!wrap) return;
+  wrap.innerHTML = CLONE_SLIDERS.map(s=>`
+    <div class="clone-slider">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
+        <span style="font-size:.75rem;font-weight:600;color:var(--text2)">${s.label}</span>
+        <span style="font-size:.6rem;color:var(--muted)">${s.hint}</span>
+        <span id="${s.id}_v" style="font-size:.7rem;font-weight:700;color:var(--purple2);min-width:36px;text-align:right">50%</span>
+      </div>
+      <input type="range" id="${s.id}" min="0" max="100" value="50" step="1"
+        oninput="onCloneSlider('${s.id}')"
+        style="width:100%;accent-color:var(--purple)"/>
+      <div class="clone-vis" id="${s.id}_vis" style="height:3px;background:linear-gradient(90deg,var(--purple) 50%,transparent 50%);border-radius:2px;margin-top:3px;transition:background .15s"></div>
+    </div>
+  `).join('');
+}
+
+function onCloneSlider(id){
+  const el  = document.getElementById(id);
+  const lbl = document.getElementById(id+'_v');
+  const vis = document.getElementById(id+'_vis');
+  if(!el) return;
+  const v = parseFloat(el.value);
+  if(lbl) lbl.textContent = v + '%';
+  // Visual bar fills from middle outward to show deviation from baseline (50%)
+  if(vis){
+    const offset = Math.abs(v - 50);
+    const dir = v > 50 ? 'right' : 'left';
+    if(v === 50){
+      vis.style.background = 'rgba(255,255,255,.1)';
+    } else {
+      const color = v > 50 ? 'var(--gold2)' : 'var(--purple2)';
+      vis.style.background = dir === 'right'
+        ? `linear-gradient(90deg, transparent 50%, ${color} 50%, ${color} ${50+offset}%, transparent ${50+offset}%)`
+        : `linear-gradient(90deg, transparent ${50-offset}%, ${color} ${50-offset}%, ${color} 50%, transparent 50%)`;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// FAVORITES
+// ═══════════════════════════════════════════════════════
+function toggleFav(id){
+  if(id==='news_reporter'){ showToast('News Reporter is pinned as a permanent favorite','info'); return; }
+  if(favorites.has(id)){
+    favorites.delete(id);
+    const p = allPresets.find(x=>x.id===id);
+    if(p) p.favorite = false;
+    showToast('Removed from favorites','info');
+  } else {
+    favorites.add(id);
+    const p = allPresets.find(x=>x.id===id);
+    if(p) p.favorite = true;
+    showToast('⭐ Added to favorites!','success');
+  }
+  localStorage.setItem('vl_favorites', JSON.stringify([...favorites]));
+  renderVoiceGrid();
+  // Update reactive favorites count + refresh favorites tab if visible
+  const favPresets = allPresets.filter(p => favorites.has(p.id) || p.favorite);
+  const favCountEl = document.getElementById('favCount');
+  if(favCountEl) favCountEl.textContent = favPresets.length;
+  if(currentTab === 'favorites') renderFavoritesGrid();
+}
+
+// ═══════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    const tabs=['browse','favorites','presets','advanced','clone'];
+    b.classList.toggle('active', tabs[i]===tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+tab)?.classList.add('active');
+  document.getElementById('sidebar').style.display = tab==='browse' ? '' : 'none';
+
+  if(tab==='favorites') renderFavoritesGrid();
+  if(tab==='presets')   renderCustomPresetsGrid();
+  if(tab==='advanced')  populateAdvancedFromPreset();
+}
+
+// When switching to Advanced tab, populate sliders from the active preset's defaults
+function populateAdvancedFromPreset(){
+  if(!activePresetId) return;
+  const p = allPresets.find(x=>x.id===activePresetId);
+  if(!p) return;
+  const d = p.defaults || {};
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if(el && val != null){
+      el.value = val;
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+    }
+  };
+  set('adv_pitch',   d.pitch ?? 0);
+  set('adv_rate',    d.rate ?? 0);
+  set('adv_speed',   Math.round((d.speed ?? 1) * 100));
+  set('adv_volume',  d.volume ?? 0);
+  set('adv_intensity', d.intensity ?? 30);
+  // Show which voice is loaded
+  const header = document.querySelector('#tab-advanced .section-head-label');
+  if(header) header.textContent = `Advanced Voice Controls — ${p.icon || ''} ${p.name}`;
+}
+
+// Send active preset with current Advanced slider values to Zodiac Studio
+function sendAdvancedToStudio(){
+  if(!activePresetId){ showToast('Select a voice in Browse first','error'); return; }
+  const adv = {
+    pitch:     parseFloat(document.getElementById('adv_pitch')?.value ?? '0'),
+    rate:      parseFloat(document.getElementById('adv_rate')?.value ?? '0'),
+    speed:     parseFloat(document.getElementById('adv_speed')?.value ?? '100') / 100,
+    volume:    parseFloat(document.getElementById('adv_volume')?.value ?? '0'),
+    intensity: parseFloat(document.getElementById('adv_intensity')?.value ?? '30'),
+  };
+  sessionStorage.setItem('selectedVoicePreset', activePresetId);
+  sessionStorage.setItem('selectedVoiceAdv', JSON.stringify(adv));
+  showToast('Opening Zodiac Studio with advanced settings...', 'success');
+  setTimeout(() => { window.location.href = '/zodiac'; }, 600);
+}
+
+// ═══════════════════════════════════════════════════════
+// FAVORITES TAB (filtered grid of favorited voices)
+// ═══════════════════════════════════════════════════════
+function renderFavoritesGrid(){
+  const grid = document.getElementById('favoritesGrid');
+  const empty = document.getElementById('favoritesEmpty');
+  const favPresets = allPresets.filter(p => favorites.has(p.id) || p.favorite);
+  document.getElementById('favCountBig').textContent = `${favPresets.length} favorites`;
+  document.getElementById('favCount').textContent = favPresets.length;
+  if(!favPresets.length){
+    grid.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+    ${favPresets.map(p => renderVoiceCardForFavorites(p)).join('')}
+  </div>`;
+}
+
+function renderVoiceCardForFavorites(p){
+  const isActive = activePresetId === p.id;
+  return `
+  <div class="voice-card${isActive?' active':''} favorite-card" data-id="${p.id}" onclick="selectVoice('${p.id}')">
+    <div class="voice-icon">${p.icon}</div>
+    <div class="voice-name">${p.name}</div>
+    <div class="voice-desc">${p.description||''}</div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+      <button onclick="event.stopPropagation();quickTest('${p.id}')" style="flex:1;background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ TEST</button>
+      <button onclick="event.stopPropagation();toggleFav('${p.id}')" style="background:rgba(201,162,39,.18);border:1px solid var(--gold2);color:var(--gold2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">★ FAV</button>
+      <button onclick="event.stopPropagation();sendVoiceToStudio('${p.id}')" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">→ STUDIO</button>
+    </div>
+  </div>`;
+}
+
+function sendVoiceToStudio(id){
+  sessionStorage.setItem('selectedVoicePreset', id);
+  showToast('Opening Zodiac Studio with this voice...','success');
+  setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+}
+
+// ═══════════════════════════════════════════════════════
+// PRESETS TAB (custom voice setting snapshots)
+// ═══════════════════════════════════════════════════════
+async function renderCustomPresetsGrid(){
+  const grid = document.getElementById('presetsGrid');
+  const empty = document.getElementById('presetsEmpty');
+  try{
+    const r = await fetch('/api/custom-presets');
+    const {presets} = await r.json();
+    if(!presets?.length){
+      grid.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.innerHTML = presets.map(p => `
+      <div class="voice-card" style="cursor:default">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:1.6rem">${p.icon||'🎨'}</span>
+          <div style="flex:1">
+            <div style="font-size:.85rem;font-weight:700;color:var(--text)">${p.name}</div>
+            <div style="font-size:.62rem;color:var(--muted)">${p.edgeId||'custom'}</div>
+          </div>
+        </div>
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:6px">${p.description||''}</div>
+        <div style="font-size:.62rem;color:var(--text2);background:var(--surface2);padding:6px 8px;border-radius:6px;line-height:1.6">
+          Pitch ${p.defaults?.pitch ?? 0} · Speed ${(p.defaults?.speed ?? 1).toFixed(2)}× · Vol ${p.defaults?.volume ?? 0}dB
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button onclick="sendVoiceToStudio('${p.id}')" style="flex:1;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">→ STUDIO</button>
+          <button onclick="deleteCustomPreset('${p.id}')" style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#f87171;padding:5px 8px;border-radius:6px;font-size:.65rem;cursor:pointer">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }catch(e){
+    grid.innerHTML = `<div style="color:#f87171;padding:20px;text-align:center">Failed to load presets</div>`;
+  }
+}
+
+async function savePresetSnapshot(){
+  if(!activePresetId){ showToast('Select a voice in Browse first','error'); return; }
+  const base = allPresets.find(p=>p.id===activePresetId);
+  if(!base){ showToast('Voice not found','error'); return; }
+  const name = prompt('Name this preset:', `${base.name} Custom`);
+  if(!name) return;
+  // Capture current advanced sliders if they exist
+  const getVal = id => {
+    const el = document.getElementById(id);
+    return el ? parseFloat(el.value) : null;
+  };
+  const payload = {
+    name, icon: base.icon || '🎨',
+    description: `Custom snapshot from ${base.name}`,
+    edgeId: base.edgeId,
+    defaults: {
+      pitch:     getVal('advPitch')     ?? base.defaults?.pitch ?? 0,
+      rate:      getVal('advRate')      ?? base.defaults?.rate  ?? 0,
+      speed:    (getVal('advSpeed') ?? (base.defaults?.speed ?? 1)*100) / 100,
+      volume:    getVal('advVolume')    ?? base.defaults?.volume ?? 0,
+      intensity: getVal('advIntensity') ?? base.defaults?.intensity ?? 30,
+    },
+    eq: base.eq || 'clear',
+    reverb: !!base.reverb, robot: !!base.robot,
+  };
+  try{
+    const r = await fetch('/api/custom-presets',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if(!data.ok) throw new Error('Save failed');
+    showToast('💾 Preset saved: '+name,'success');
+    renderCustomPresetsGrid();
+  }catch(e){ showToast('Save failed: '+e.message,'error'); }
+}
+
+async function deleteCustomPreset(id){
+  if(!confirm('Delete this preset?')) return;
+  await fetch('/api/custom-presets/'+id,{method:'DELETE'});
+  renderCustomPresetsGrid();
+  showToast('Preset deleted','info');
+}
+
+// ═══════════════════════════════════════════════════════
+// SLIDERS
+// ═══════════════════════════════════════════════════════
+function ppSlider(id, valId, fmt){
+  const el  = document.getElementById(id);
+  const lbl = document.getElementById(valId);
+  if(el && lbl) lbl.textContent = fmt(parseFloat(el.value));
+  updateSliderTrack(id);
+}
+
+function advSlider(id, valId, fmt){
+  const el  = document.getElementById(id);
+  const lbl = document.getElementById(valId);
+  if(el && lbl) lbl.textContent = fmt(parseFloat(el.value));
+  updateSliderTrack(id);
+}
+
+function updateSliderTrack(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const pct = ((el.value-el.min)/(el.max-el.min))*100;
+  el.style.setProperty('--pct', pct+'%');
+}
+
+function initSliderTracks(){
+  document.querySelectorAll('input[type=range]').forEach(el=>updateSliderTrack(el.id));
+}
+
+// ═══════════════════════════════════════════════════════
+// ADVANCED TAB
+// ═══════════════════════════════════════════════════════
+async function testAdvanced(){
+  if(!activePresetId){ showToast('Select a voice from Browse first','error'); return; }
+  const text = document.getElementById('advTestText')?.value?.trim();
+  if(!text){ showToast('Enter test text','error'); return; }
+  const btn = document.getElementById('advTestBtn');
+  const statusEl = document.getElementById('advTestStatus');
+  btn.innerHTML = '<span class="spinner"></span>Generating...';
+  btn.disabled = true;
+  if(statusEl) statusEl.textContent = '⏳ Processing...';
+  try{
+    const pitch   = parseFloat(document.getElementById('adv_pitch').value);
+    const rate    = parseFloat(document.getElementById('adv_rate').value);
+    const speed   = parseFloat(document.getElementById('adv_speed').value)/100;
+    const volume  = parseFloat(document.getElementById('adv_volume').value);
+    const intens  = parseFloat(document.getElementById('adv_intensity').value);
+    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text,presetId:activePresetId,pitch,rate,speed,volume,intensity:intens,preview:false})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = document.getElementById('advAudio');
+    if(audio.dataset.url) URL.revokeObjectURL(audio.dataset.url);
+    audio.dataset.url = url;
+    audio.src = url;
+    document.getElementById('advAudioWrap').style.display='block';
+    audio.play();
+    if(statusEl) statusEl.textContent = '✅ Playing';
+  }catch(e){
+    if(statusEl) statusEl.textContent = '❌ '+e.message;
+    showToast('Failed: '+e.message,'error');
+  }finally{
+    btn.innerHTML='▶ Test Voice'; btn.disabled=false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// AI PROMPT INTERPRETER — converts natural-language requests
+// into slider deltas. Runs locally, no API call needed.
+// ═══════════════════════════════════════════════════════
+const PROMPT_RULES = [
+  // Pitch / tone
+  {kw:['deeper','lower','bass','baritone','darker','dark','sub','rumble'], deltas:{adv_pitch:-3, adv_dark:+15}},
+  {kw:['higher','lighter','bright','brighter'], deltas:{adv_pitch:+3, adv_dark:-15}},
+  {kw:['velvet','smoky','smoke','cinematic','noir','midnight'], deltas:{adv_pitch:-4, adv_dark:+25, adv_serious:+15, adv_cinematic:+25, adv_breath:+10, adv_intensity:+15}},
+  // Speed / pacing
+  {kw:['slower','calm','calmer','slow','relaxed','intimate'], deltas:{adv_speed:-12, adv_rate:-8, adv_breath:+10, adv_soft:+15}},
+  {kw:['faster','fast','quick','rapid','energetic','high energy','hype'], deltas:{adv_speed:+15, adv_rate:+10, adv_excitement:+25, adv_aggression:+15}},
+  // Emotion
+  {kw:['emotional','feeling','heartfelt','vulnerable'], deltas:{adv_emotion:+25, adv_breath:+10, adv_realism:+10}},
+  {kw:['serious','authoritative','formal','professional','news'], deltas:{adv_serious:+25, adv_confidence:+15, adv_emphasis:+10}},
+  {kw:['confident','strong','assertive','powerful'], deltas:{adv_confidence:+25, adv_aggression:+10, adv_volume:+1}},
+  {kw:['scary','scared','horror','creepy','eerie','haunted','sinister'], deltas:{adv_dark:+25, adv_suspense:+30, adv_intensity:+25, adv_pitch:-2}},
+  {kw:['mysterious','mystery','suspense','suspenseful','tense','cliffhang'], deltas:{adv_suspense:+25, adv_tension:+20, adv_dark:+10}},
+  // Texture
+  {kw:['breathy','breath','airy','asmr'], deltas:{adv_breath:+30, adv_volume:-1, adv_soft:+15}},
+  {kw:['whisper','whispering','quiet'], deltas:{adv_breath:+35, adv_soft:+30, adv_volume:-3, adv_speed:-8}},
+  {kw:['soft','smooth','silky','gentle'], deltas:{adv_soft:+25, adv_aggression:-15, adv_emotion:+10}},
+  {kw:['aggressive','aggression','angry','intense','harsh'], deltas:{adv_aggression:+30, adv_serious:+15, adv_volume:+1}},
+  {kw:['fry','rasp','raspy','rough'], deltas:{adv_fry:+25, adv_soft:-10}},
+  {kw:['real','realistic','natural','human','believable'], deltas:{adv_realism:+20, adv_emotion:+10}},
+  // FX
+  {kw:['reverb','echo','spacious','cathedral','cave'], deltas:{adv_intensity:+30}},
+  {kw:['dry','close','tight','no reverb'], deltas:{adv_intensity:-30}},
+  {kw:['louder','loud','project'], deltas:{adv_volume:+2}},
+  {kw:['quieter','softer volume','intimate volume'], deltas:{adv_volume:-2}},
+  // Style packs
+  {kw:['tiktok','viral'], deltas:{adv_speed:+5, adv_emphasis:+15, adv_excitement:+15, adv_pacing_rand:+10}},
+  {kw:['podcast','npr','radio'], deltas:{adv_serious:+15, adv_breath:+10, adv_realism:+15, adv_speed:-5}},
+  {kw:['documentary','narrator','narrative'], deltas:{adv_serious:+20, adv_cinematic:+20, adv_pitch:-2}},
+  {kw:['motivat','gym','hype man'], deltas:{adv_excitement:+30, adv_confidence:+25, adv_aggression:+15, adv_speed:+8}},
+  {kw:['luxury','elegant','sophisticated','fancy'], deltas:{adv_soft:+15, adv_breath:+10, adv_speed:-5, adv_dark:+10}},
+  {kw:['conspirac','theory','rabbit hole'], deltas:{adv_suspense:+25, adv_dark:+15, adv_tension:+20, adv_serious:+10}},
+  {kw:['gen z','genz','casual','conversation'], deltas:{adv_serious:-20, adv_realism:+15, adv_pacing_rand:+15, adv_emphasis:+10}},
+  {kw:['robot','robotic','ai voice','synthetic'], deltas:{adv_realism:-30, adv_emotion:-20, adv_fry:-20}},
+];
+
+const SLIDER_BOUNDS = {
+  adv_pitch:[-24,24], adv_rate:[-20,20], adv_speed:[80,125], adv_volume:[-10,10],
+  adv_intensity:[0,100], adv_serious:[0,100], adv_emotion:[0,100], adv_dark:[0,100],
+  adv_suspense:[0,100], adv_confidence:[0,100], adv_breath:[0,100], adv_soft:[0,100],
+  adv_aggression:[0,100], adv_fry:[0,100], adv_realism:[0,100], adv_pacing_rand:[0,100],
+  adv_emphasis:[0,100], adv_tension:[0,100], adv_excitement:[0,100], adv_cinematic:[0,100],
+};
+
+function clampSlider(id, val){
+  const [lo,hi] = SLIDER_BOUNDS[id] || [0,100];
+  return Math.max(lo, Math.min(hi, val));
+}
+
+function applyAIPrompt(){
+  const prompt = (document.getElementById('aiVoicePrompt')?.value || '').toLowerCase().trim();
+  const resultEl = document.getElementById('aiPromptResult');
+  if(!prompt){ showToast('Type a description first','error'); return; }
+
+  // Aggregate deltas from matched rules
+  const totals = {};
+  const matched = [];
+  for(const rule of PROMPT_RULES){
+    for(const kw of rule.kw){
+      if(prompt.includes(kw)){
+        matched.push(kw);
+        for(const [id,delta] of Object.entries(rule.deltas)){
+          totals[id] = (totals[id] || 0) + delta;
+        }
+        break; // one match per rule is enough
+      }
+    }
+  }
+
+  if(!matched.length){
+    if(resultEl){ resultEl.style.display='block'; resultEl.innerHTML = '⚠️ No keywords matched. Try words like: <em>deeper, slower, scarier, breathy, confident, cinematic, podcast, motivational, luxury, mysterious, faster, louder, reverb</em>.'; }
+    return;
+  }
+
+  // Apply deltas to current slider values
+  const changes = [];
+  for(const [id, delta] of Object.entries(totals)){
+    const el = document.getElementById(id);
+    if(!el) continue;
+    const before = parseFloat(el.value);
+    const after  = clampSlider(id, before + delta);
+    if(after !== before){
+      el.value = after;
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      changes.push(`${id.replace('adv_','')}: ${before>0?'+':''}${before} → ${after>0?'+':''}${after}`);
+    }
+  }
+
+  if(resultEl){
+    resultEl.style.display='block';
+    resultEl.innerHTML = `✨ <strong style="color:var(--gold2)">Matched:</strong> ${matched.join(', ')}<br><strong style="color:var(--purple2)">Changes:</strong> ${changes.join(' &nbsp;•&nbsp; ') || 'no slider changes (already at target)'}`;
+  }
+  showToast(`Applied ${matched.length} keyword${matched.length>1?'s':''}`, 'success');
+}
+
+function resetSlidersToPreset(){
+  if(!activePresetId){ showToast('Pick a voice first','error'); return; }
+  const p = allPresets.find(x=>x.id===activePresetId);
+  if(!p) return;
+  const d = p.defaults || {};
+  const set = (id,val)=>{ const el=document.getElementById(id); if(el && val!=null){ el.value=val; el.dispatchEvent(new Event('input',{bubbles:true})); } };
+  set('adv_pitch', d.pitch ?? 0);
+  set('adv_rate',  d.rate  ?? 0);
+  set('adv_speed', Math.round((d.speed ?? 1.0)*100));
+  set('adv_volume', d.volume ?? 0);
+  set('adv_intensity', d.intensity ?? 30);
+  // Reset secondary sliders to neutral defaults
+  set('adv_serious',70); set('adv_emotion',65); set('adv_dark',50); set('adv_suspense',40); set('adv_confidence',75);
+  set('adv_breath',20); set('adv_soft',30); set('adv_aggression',20); set('adv_fry',10); set('adv_realism',80);
+  set('adv_pacing_rand',20); set('adv_emphasis',50); set('adv_tension',40); set('adv_excitement',30); set('adv_cinematic',60);
+  const r = document.getElementById('aiPromptResult'); if(r) r.style.display='none';
+  showToast(`Reset to ${p.name} defaults`,'info');
+}
+
+// ═══════════════════════════════════════════════════════
+// VOICE CLONE TAB
+// ═══════════════════════════════════════════════════════
+async function loadVoiceDb(){
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/list`);
+    const d = await r.json();
+    voiceDatabase = d.voices || [];
+    renderVoiceDb();
+  }catch{ voiceDatabase = []; renderVoiceDb(); }
+}
+
+function renderVoiceDb(){
+  const container = document.getElementById('voiceDb');
+  const countEl   = document.getElementById('voiceDbCount');
+  const select    = document.getElementById('cloneVoiceSelect');
+  if(countEl) countEl.textContent = voiceDatabase.length+' profiles';
+  if(!voiceDatabase.length){
+    if(container) container.innerHTML='<div class="empty">No voice profiles yet. Create one on the left →</div>';
+    if(select) select.innerHTML='<option value="">— no profiles yet —</option>';
+    return;
+  }
+  if(container) container.innerHTML = voiceDatabase.map(v=>`
+    <div class="vdb-item" data-id="${v.id}" onclick="selectDbVoice('${v.id}')">
+      <div class="vdb-icon">🎤</div>
+      <div class="vdb-info">
+        <div class="vdb-name">${v.meta?.name||v.id}</div>
+        <div class="vdb-samples">${v.sampleCount} sample${v.sampleCount!==1?'s':''} • Created ${v.meta?.createdAt?new Date(v.meta.createdAt).toLocaleDateString():'unknown'}</div>
+      </div>
+      <div class="vdb-actions">
+        <button class="btn-sm" onclick="event.stopPropagation();viewSamples('${v.id}')">📂 Samples</button>
+        <button class="btn-sm red" onclick="event.stopPropagation();deleteVoiceProfile('${v.id}')">🗑️</button>
+      </div>
+    </div>`).join('');
+  if(select) select.innerHTML = '<option value="">— select a voice profile —</option>'+
+    voiceDatabase.map(v=>`<option value="${v.id}">${v.meta?.name||v.id} (${v.sampleCount} samples)</option>`).join('');
+}
+
+function selectDbVoice(id){
+  document.querySelectorAll('.vdb-item').forEach(el=>el.classList.toggle('active',el.dataset.id===id));
+  document.getElementById('cloneVoiceSelect').value = id;
+}
+
+async function saveVoiceProfile(){
+  const name = document.getElementById('newVoiceName')?.value?.trim();
+  if(!name){ showToast('Enter a voice name','error'); return; }
+  const status = document.getElementById('cloneStatus');
+  if(status) status.textContent = '⏳ Creating profile...';
+  // The ID is sanitized name
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,32);
+  // Hit upload endpoint with no files (creates the folder + meta)
+  const fd = new FormData();
+  fd.append('voiceId', id);
+  fd.append('name', name);
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/upload`,{method:'POST',body:fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Failed');
+    if(status){ status.className='status-box ok'; status.textContent='✅ Profile "'+name+'" created! Now upload audio samples.'; }
+    await loadVoiceDb();
+    showToast('Voice profile created','success');
+  }catch(e){
+    if(status){ status.className='status-box error'; status.textContent='❌ '+e.message; }
+  }
+}
+
+async function uploadSamples(files){
+  const name = document.getElementById('newVoiceName')?.value?.trim();
+  if(!name){ showToast('Enter a voice name first','error'); return; }
+  const status = document.getElementById('cloneStatus');
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,32);
+  if(status) status.textContent = `⏳ Uploading ${files.length} sample(s)...`;
+  const fd = new FormData();
+  fd.append('voiceId', id);
+  fd.append('name', name);
+  for(const f of files) fd.append('samples', f);
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/upload`,{method:'POST',body:fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Upload failed');
+    if(status){ status.className='status-box ok'; status.textContent=`✅ Uploaded ${files.length} sample(s) to "${name}".`; }
+    await loadVoiceDb();
+    showToast('Samples uploaded','success');
+  }catch(e){
+    if(status){ status.className='status-box error'; status.textContent='❌ '+e.message; }
+  }
+}
+
+function handleSampleDrop(e){
+  e.preventDefault();
+  document.getElementById('sampleDropzone').classList.remove('drag-over');
+  uploadSamples(e.dataTransfer.files);
+}
+
+async function viewSamples(id){
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/${id}/samples`);
+    const d = await r.json();
+    const v = voiceDatabase.find(x=>x.id===id);
+    const name = v?.meta?.name||id;
+    if(!d.samples?.length){ showToast('No samples in '+name,'info'); return; }
+    showToast(`${d.samples.length} sample(s) in "${name}"`, 'info');
+  }catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+async function deleteVoiceProfile(id){
+  const v = voiceDatabase.find(x=>x.id===id);
+  if(!confirm(`Delete voice profile "${v?.meta?.name||id}"? This cannot be undone.`)) return;
+  try{
+    await fetch(`${API_BASE}/api/voice-clone/${id}`,{method:'DELETE'});
+    await loadVoiceDb();
+    showToast('Profile deleted','success');
+  }catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+async function generateCloned(){
+  const profileId = document.getElementById('cloneVoiceSelect')?.value;
+  const text      = document.getElementById('cloneGenText')?.value?.trim();
+  if(!profileId){ showToast('Select a voice profile','error'); return; }
+  if(!text){ showToast('Enter text to speak','error'); return; }
+  const btn    = document.getElementById('cloneGenBtn');
+  const status = document.getElementById('cloneGenStatus');
+  const wrap   = document.getElementById('cloneGenAudio');
+  btn.innerHTML='<span class="spinner"></span>Generating...'; btn.disabled=true;
+  status.style.display='block'; status.className='status-box';
+  status.textContent = '⏳ Generating audio...';
+  try{
+    // Try openai-edge-tts first for voice matching
+    const v = voiceDatabase.find(x=>x.id===profileId);
+    const prompt = document.getElementById('voicePrompt')?.value||'';
+    let url;
+    if(edgeTtsAvailable){
+      // Pick an appropriate voice for the description
+      const r = await fetch(`${API_BASE}/api/zodiac/generate-voice-openai`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text, voice:'en-US-GuyNeural', speed:0.88})
+      });
+      if(!r.ok) throw new Error('openai-edge-tts failed: '+r.status);
+      const blob = await r.blob();
+      url = URL.createObjectURL(blob);
+      status.className='status-box ok'; status.textContent='✅ Generated via openai-edge-tts'+(prompt?'\nPrompt: '+prompt:'');
+    } else {
+      // Fall back to regular preset generation
+      const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text,presetId:'velvet_static',preview:false})
+      });
+      if(!r.ok) throw new Error('Generation failed');
+      const blob = await r.blob();
+      url = URL.createObjectURL(blob);
+      status.className='status-box ok'; status.textContent='✅ Generated (install openai-edge-tts for voice matching)';
+    }
+    const audio = document.getElementById('clonedAudio');
+    if(audio.dataset.url) URL.revokeObjectURL(audio.dataset.url);
+    audio.dataset.url = url; audio.src = url;
+    wrap.style.display='block'; audio.play();
+  }catch(e){
+    status.className='status-box error'; status.textContent='❌ '+e.message;
+  }finally{
+    btn.innerHTML='▶ Generate Audio'; btn.disabled=false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// AUTO SAVE
+// ═══════════════════════════════════════════════════════
+function setupAutoSave(){
+  // Restore last save time
+  const last = localStorage.getItem('vl_lastSave');
+  updateLastSaveDisplay(last);
+  // Auto-save every 30 minutes
+  setInterval(performAutoSave, AUTO_SAVE_INTERVAL);
+}
+
+function performAutoSave(){
+  const saveData = {
+    favorites: [...favorites],
+    activePreset: activePresetId,
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem('vl_session', JSON.stringify(saveData));
+  localStorage.setItem('vl_lastSave', saveData.savedAt);
+  updateLastSaveDisplay(saveData.savedAt);
+}
+
+function updateLastSaveDisplay(isoStr){
+  const el = document.getElementById('lastSaveTime');
+  if(!el) return;
+  el.textContent = isoStr ? new Date(isoStr).toLocaleString() : 'Never';
+}
+
+// ═══════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════
+function showToast(msg, type='info'){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type}`;
+  setTimeout(()=>t.classList.add('show'),10);
+  setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

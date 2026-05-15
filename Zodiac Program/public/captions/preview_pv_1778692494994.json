@@ -1,0 +1,29 @@
+{
+  "audioFile": "zodiac_preview_pv_1778692494994.mp3",
+  "audioDurationSec": 90,
+  "source": "word-proportional",
+  "captions": [
+    {
+      "index": 0,
+      "text": "This is a quick smoke test of the voice preview pipeline.",
+      "type": "observation",
+      "start": 0,
+      "end": 52.10526315789474,
+      "duration": 52.10526315789474,
+      "wordCount": 11,
+      "startMs": 0,
+      "endMs": 52105.26315789474
+    },
+    {
+      "index": 1,
+      "text": "It should return a timing object with hashes.",
+      "type": "observation",
+      "start": 52.10526315789474,
+      "end": 90,
+      "duration": 37.89473684210526,
+      "wordCount": 8,
+      "startMs": 52105.26315789474,
+      "endMs": 90000
+    }
+  ]
+}

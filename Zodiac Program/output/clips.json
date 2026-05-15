@@ -1,0 +1,72 @@
+[
+  {
+    "title": "Clip 1",
+    "start": 330,
+    "end": 420,
+    "hook": "FUNNY MOMENT #1",
+    "reason": "Highest energy window in section 1"
+  },
+  {
+    "title": "Clip 2",
+    "start": 2015.6,
+    "end": 2105.6,
+    "hook": "FUNNY MOMENT #2",
+    "reason": "Highest energy window in section 2"
+  },
+  {
+    "title": "Clip 3",
+    "start": 2531.1,
+    "end": 2621.1,
+    "hook": "FUNNY MOMENT #3",
+    "reason": "Highest energy window in section 3"
+  },
+  {
+    "title": "Clip 4",
+    "start": 4131.7,
+    "end": 4221.7,
+    "hook": "FUNNY MOMENT #4",
+    "reason": "Highest energy window in section 4"
+  },
+  {
+    "title": "Clip 5",
+    "start": 5152.2,
+    "end": 5242.2,
+    "hook": "FUNNY MOMENT #5",
+    "reason": "Highest energy window in section 5"
+  },
+  {
+    "title": "Clip 6",
+    "start": 5477.8,
+    "end": 5567.8,
+    "hook": "FUNNY MOMENT #6",
+    "reason": "Highest energy window in section 6"
+  },
+  {
+    "title": "Clip 7",
+    "start": 6963.3,
+    "end": 7053.3,
+    "hook": "FUNNY MOMENT #7",
+    "reason": "Highest energy window in section 7"
+  },
+  {
+    "title": "Clip 8",
+    "start": 8308.9,
+    "end": 8398.9,
+    "hook": "FUNNY MOMENT #8",
+    "reason": "Highest energy window in section 8"
+  },
+  {
+    "title": "Clip 9",
+    "start": 8869.5,
+    "end": 8959.5,
+    "hook": "FUNNY MOMENT #9",
+    "reason": "Highest energy window in section 9"
+  },
+  {
+    "title": "Clip 10",
+    "start": 10130,
+    "end": 10220,
+    "hook": "FUNNY MOMENT #10",
+    "reason": "Highest energy window in section 10"
+  }
+]
