@@ -1,14 +1,14 @@
 /**
- * Zodiac Program — Shared Timing Engine
+ * Trend Vault Program — Shared Timing Engine
  *
  * THE single source of truth for "what caption is on screen when".
  *
  * One contract used by every consumer:
  *   • server.ts          → after TTS, builds the canonical timeline
- *   • zodiac-render.ts   → reads startMs/endMs/words from each line
- *   • src/ZodiacVideo.tsx → consumes startFrame/endFrame computed from the same ms
- *   • frontend/zodiac.html → fetches the timed-captions JSON via the
- *                            /api/zodiac/voice-preview endpoint and uses the
+ *   • trend-vault-render.ts   → reads startMs/endMs/words from each line
+ *   • src/TrendVaultVideo.tsx → consumes startFrame/endFrame computed from the same ms
+ *   • frontend/trend-vault.html → fetches the timed-captions JSON via the
+ *                            /api/trend-vault/voice-preview endpoint and uses the
  *                            exact same start/end times for live preview
  *
  * Rule: the generated voice audio duration is the master clock. Captions,
@@ -46,7 +46,7 @@ export interface TimedCaption {
   end: number;
   duration: number;
   wordCount: number;
-  // ms convenience aliases — scripts/zodiac-render.ts and src/ZodiacVideo.tsx
+  // ms convenience aliases — scripts/trend-vault-render.ts and src/TrendVaultVideo.tsx
   // both consume startMs / endMs to compute frame indices.
   startMs: number;
   endMs: number;
@@ -212,7 +212,7 @@ export function buildTimedCaptions(
  *
  * Reveal happens across the first 75% of the line's window so the line
  * settles before the next one takes over — same shape used inside
- * src/ZodiacVideo.tsx so preview and render stay aligned.
+ * src/TrendVaultVideo.tsx so preview and render stay aligned.
  */
 export function getTypingProgressForTime(
   line: { start: number; end: number; text: string },
@@ -230,7 +230,7 @@ export function getTypingProgressForTime(
 
 /**
  * Print the standard [TIMING] debug block. Used by server.ts when building
- * the canonical bundle and by zodiac-render.ts when consuming it — so the
+ * the canonical bundle and by trend-vault-render.ts when consuming it — so the
  * same log block appears at every layer.
  */
 export function logTimingDebug(
@@ -268,7 +268,7 @@ export function logTimingDebug(
 
 /**
  * Convenience: convert a TimedCaptionsBundle into the shape that
- * scripts/zodiac-render.ts and src/ZodiacVideo.tsx already understand
+ * scripts/trend-vault-render.ts and src/TrendVaultVideo.tsx already understand
  * (the existing "scriptLines with startMs/endMs/words" interface).
  *
  * No new shape — we keep the existing renderer contract stable. Both the

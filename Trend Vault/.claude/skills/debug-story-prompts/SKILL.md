@@ -6,23 +6,23 @@ description: Use this skill when the Story Prompt panel is broken — clicking G
 # Debug Story Prompt Generation
 
 ## Files involved
-- `server.ts` lines ~1684–1722 — `POST /api/zodiac/generate-prompts`
+- `server.ts` lines ~1684–1722 — `POST /api/trend-vault/generate-prompts`
 - `server.ts` lines ~1658–1682 — `FALLBACK_PROMPTS` bank + `_fallbackPrompts()`
 - `scripts/ai-completion.ts` — `aiComplete()`
-- `frontend/zodiac.html` — prompt panel UI + caller function
+- `frontend/trend-vault.html` — prompt panel UI + caller function
 
 ## Files NOT to touch
-- `scripts/zodiac-generate.ts`
-- `src/ZodiacVideo.tsx`
+- `scripts/trend-vault-generate.ts`
+- `src/TrendVaultVideo.tsx`
 - `scripts/sync-worker.js`
 
 ## Decision tree
 
 ### 1. Test the endpoint directly
 ```bash
-curl -X POST http://localhost:3001/api/zodiac/generate-prompts \
+curl -X POST http://localhost:3001/api/trend-vault/generate-prompts \
   -H "Content-Type: application/json" \
-  -d '{"zodiacSign":"Scorpio","category":"general","count":4}'
+  -d '{"trendVaultSign":"Scorpio","category":"general","count":4}'
 ```
 Expected: `{ ok: true, prompts: [...4 items...], provider: "fallback"|"claude"|"openai" }`
 
@@ -39,12 +39,12 @@ The server clamps: `const n = Math.min(Math.max(count || 4, 1), 20)`.
 If `provider: "claude"` or `"openai"`, the AI was called. The prompt asks for a JSON array of `n` strings. `parseAIJson` returns the array. The response is then `.slice(0, n)`. If AI returns fewer than `n`, the response will have fewer prompts — this is an AI compliance issue, not a code bug.
 
 ### 5. Frontend: exclude list growing too large
-The frontend may send `exclude` (already-shown prompts) to avoid repeats. If the exclude list grows beyond the pool size, all prompts may repeat anyway. The server handles this with the fallback to full pool — but check `frontend/zodiac.html` to confirm `exclude` is being capped or reset.
+The frontend may send `exclude` (already-shown prompts) to avoid repeats. If the exclude list grows beyond the pool size, all prompts may repeat anyway. The server handles this with the fallback to full pool — but check `frontend/trend-vault.html` to confirm `exclude` is being capped or reset.
 
 ## Quick test (no API key needed)
 ```bash
-curl -X POST http://localhost:3001/api/zodiac/generate-prompts \
+curl -X POST http://localhost:3001/api/trend-vault/generate-prompts \
   -H "Content-Type: application/json" \
-  -d '{"zodiacSign":"Scorpio","count":4}'
+  -d '{"trendVaultSign":"Scorpio","count":4}'
 # Must always return exactly 4 prompts regardless of API key status
 ```

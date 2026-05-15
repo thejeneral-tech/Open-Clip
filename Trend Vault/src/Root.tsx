@@ -2,15 +2,15 @@ import './index.css';
 import React from 'react';
 import { Composition } from 'remotion';
 import { ClipVideo } from './ClipVideo';
-import { ZodiacVideo } from './ZodiacVideo';
-import type { ZodiacVideoProps } from './ZodiacVideo';
+import { TrendVaultVideo } from './TrendVaultVideo';
+import type { TrendVaultVideoProps } from './TrendVaultVideo';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ClipVideoLoose   = ClipVideo   as React.ComponentType<any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ZodiacVideoLoose = ZodiacVideo as React.ComponentType<any>;
+const TrendVaultVideoLoose = TrendVaultVideo as React.ComponentType<any>;
 
-const defaultZodiacProps: ZodiacVideoProps = {
+const defaultTrendVaultProps: TrendVaultVideoProps = {
   backgroundVideo:      'none',
   backgroundBlur:       0,
   backgroundBrightness: 0.8,
@@ -32,8 +32,8 @@ const defaultZodiacProps: ZodiacVideoProps = {
   textColor:            '#FFFFFF',
   textAnimation:        'fade',
   animSpeed:            1.0,
-  zodiacSign:           'Scorpio',
-  zodiacSymbol:         '♏',
+  trendVaultSign:           'Scorpio',
+  trendVaultSymbol:         '♏',
   scriptLines:          [
     { text: 'This is a preview.', type: 'hook', startFrame: 0, endFrame: 120 },
   ],
@@ -63,13 +63,13 @@ export const RemotionRoot: React.FC = () => {
         })}
       />
       <Composition
-        id="ZodiacVideo"
-        component={ZodiacVideoLoose}
+        id="TrendVaultVideo"
+        component={TrendVaultVideoLoose}
         fps={30}
         width={1080}
         height={1920}
         durationInFrames={2700}
-        defaultProps={defaultZodiacProps}
+        defaultProps={defaultTrendVaultProps}
         // calculateMetadata runs at render time so we can read the user's
         // chosen fps (30 or 60) and the actual voice-driven duration from
         // props. This is what makes 60 fps work end-to-end.

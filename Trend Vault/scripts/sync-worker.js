@@ -1,9 +1,9 @@
 // ============================================================
-// Zodiac Program — Sync Worker  (Integrated Edition)
+// Trend Vault Program — Sync Worker  (Integrated Edition)
 // Runs on the HOME COMPUTER.
 //
 // Watches Google Drive for jobs → copies files locally →
-// runs the real Zodiac pipeline (script gen + TTS + render) →
+// runs the real Trend Vault pipeline (script gen + TTS + render) →
 // sends finished video back to Google Drive.
 //
 // Usage:
@@ -48,8 +48,8 @@ const PATHS = {
   driveLogs     : path.join(DRIVE_ROOT, 'logs'),
 };
 
-// Zodiac symbols lookup
-const ZODIAC_SYMBOLS = {
+// Trend Vault symbols lookup
+const TREND_VAULT_SYMBOLS = {
   Aries:'♈', Taurus:'♉', Gemini:'♊', Cancer:'♋', Leo:'♌', Virgo:'♍',
   Libra:'♎', Scorpio:'♏', Sagittarius:'♐', Capricorn:'♑', Aquarius:'♒', Pisces:'♓',
 };
@@ -175,17 +175,17 @@ function updateJob(job) {
 // JOB HANDLERS
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── Step 1: Generate zodiac script via tsx ────────────────────────────────────
+// ── Step 1: Generate trend-vault script via tsx ────────────────────────────────────
 async function generateScript(scriptParams) {
-  const { zodiacSign, emotionalTone = 'dark', prompt = '', angle = '',
+  const { trendVaultSign, emotionalTone = 'dark', prompt = '', angle = '',
           category = 'psychology', targetDuration = 100 } = scriptParams;
 
-  log('INFO', `Generating script: ${zodiacSign} / ${emotionalTone} / "${prompt}"`);
+  log('INFO', `Generating script: ${trendVaultSign} / ${emotionalTone} / "${prompt}"`);
 
   const code = `
-import { generateZodiacScript } from './scripts/zodiac-generate.js';
-generateZodiacScript({
-  zodiacSign: ${JSON.stringify(zodiacSign)},
+import { generateTrendVaultScript } from './scripts/trend-vault-generate.js';
+generateTrendVaultScript({
+  trendVaultSign: ${JSON.stringify(trendVaultSign)},
   category: ${JSON.stringify(category)},
   prompt: ${JSON.stringify(prompt)},
   angle: ${JSON.stringify(angle)},
@@ -195,7 +195,7 @@ generateZodiacScript({
   .catch(e => { process.stderr.write(e.message); process.exit(1); });
   `.trim();
 
-  // Write temp file into PROJECT_ROOT so './scripts/zodiac-generate' resolves correctly
+  // Write temp file into PROJECT_ROOT so './scripts/trend-vault-generate' resolves correctly
   const tmpScript = path.join(PROJECT_ROOT, `_script-gen-${Date.now()}.ts`);
   fs.writeFileSync(tmpScript, code, 'utf8');
 
@@ -233,7 +233,7 @@ async function generateTTS(scriptLines, voice = {}, jobId, audioDir) {
   const voiceId = presetId.includes('Neural') ? presetId : 'en-US-DavisNeural';
 
   const fullText = scriptLines.map(l => l.text).join('\n\n');
-  const audioFile = `zodiac_voice_${jobId}.mp3`;
+  const audioFile = `trend_vault_voice_${jobId}.mp3`;
   const audioPath = path.join(audioDir, audioFile);
 
   log('INFO', `[TTS] selected voice: ${voiceId} rate=${rate} pitch=${pitch}`);
@@ -258,16 +258,16 @@ async function generateTTS(scriptLines, voice = {}, jobId, audioDir) {
   return audioFile;
 }
 
-// ── Step 3: Build the zodiac-render job file and spawn the renderer ───────────
-async function runZodiacRender(job, scriptLines, audioFile, settings) {
+// ── Step 3: Build the trend-vault-render job file and spawn the renderer ───────────
+async function runTrendVaultRender(job, scriptLines, audioFile, settings) {
   const jobId    = job.jobId;
-  const sign     = settings.zodiacSign || 'Unknown';
-  const symbol   = ZODIAC_SYMBOLS[sign] || '✦';
+  const sign     = settings.trendVaultSign || 'Unknown';
+  const symbol   = TREND_VAULT_SYMBOLS[sign] || '✦';
   const dateStr  = new Date().toISOString().slice(0,10);
   const folder   = `${dateStr}_${sign.replace(/\s+/g,'_')}_${jobId}`;
 
-  const zodiacOut = path.join(PROJECT_ROOT, 'zodiac-output');
-  fs.mkdirSync(path.join(zodiacOut, folder), { recursive: true });
+  const trendVaultOut = path.join(PROJECT_ROOT, 'trend-vault-output');
+  fs.mkdirSync(path.join(trendVaultOut, folder), { recursive: true });
 
   // Build the background video path — accept filename-only or full path
   let bgVideo = settings.backgroundVideo || '';
@@ -289,14 +289,14 @@ async function runZodiacRender(job, scriptLines, audioFile, settings) {
     fs.copyFileSync(localAudioSrc, path.join(pubAudioDir, audioFile));
   }
 
-  // Build the full render job JSON (matches RenderJob interface in zodiac-render.ts)
+  // Build the full render job JSON (matches RenderJob interface in trend-vault-render.ts)
   const renderJob = {
     jobId,
     outputFolder: folder,
     scriptLines,
     settings: {
-      zodiacSign:           sign,
-      zodiacSymbol:         symbol,
+      trendVaultSign:           sign,
+      trendVaultSymbol:         symbol,
       backgroundVideo:      bgVideo,
       backgroundBlur:       settings.backgroundBlur       ?? 2,
       backgroundBrightness: settings.backgroundBrightness ?? 0.7,
@@ -332,21 +332,21 @@ async function runZodiacRender(job, scriptLines, audioFile, settings) {
     },
   };
 
-  const jobFilePath = path.join(zodiacOut, `sync_job_${jobId}.json`);
+  const jobFilePath = path.join(trendVaultOut, `sync_job_${jobId}.json`);
   fs.writeFileSync(jobFilePath, JSON.stringify(renderJob, null, 2));
   log('INFO', `Render job file written: sync_job_${jobId}.json`);
   log('INFO', `Starting Remotion render: ${sign} / ${renderJob.settings.colorGrade} grade`);
 
   try {
-    await spawnLogged('npx', ['tsx', 'scripts/zodiac-render.ts'], {
+    await spawnLogged('npx', ['tsx', 'scripts/trend-vault-render.ts'], {
       cwd: PROJECT_ROOT,
-      env: { ...process.env, ZODIAC_JOB_FILE: jobFilePath },
+      env: { ...process.env, TREND_VAULT_JOB_FILE: jobFilePath },
     });
   } finally {
     try { fs.unlinkSync(jobFilePath); } catch { /* cleanup */ }
   }
 
-  const outputFile = path.join(zodiacOut, folder, 'video.mp4');
+  const outputFile = path.join(trendVaultOut, folder, 'video.mp4');
   if (!fs.existsSync(outputFile)) {
     throw new Error(`Render finished but video.mp4 not found at: ${outputFile}`);
   }
@@ -385,9 +385,9 @@ async function runZodiacRender(job, scriptLines, audioFile, settings) {
   return { outputFile, folder };
 }
 
-// ── HANDLER: Full zodiac video render ─────────────────────────────────────────
+// ── HANDLER: Full trend-vault video render ─────────────────────────────────────────
 async function handleRender(job) {
-  const sign = job.script?.zodiacSign || job.settings?.zodiacSign || 'Scorpio';
+  const sign = job.script?.trendVaultSign || job.settings?.trendVaultSign || 'Scorpio';
   const audioDir = path.join(PROJECT_ROOT, 'custom-audio');
   fs.mkdirSync(audioDir, { recursive: true });
 
@@ -397,7 +397,7 @@ async function handleRender(job) {
     log('INFO', `Using pre-written script: ${job.scriptLines.length} lines`);
     scriptLines = job.scriptLines;
   } else {
-    const generated = await generateScript(job.script || { zodiacSign: sign });
+    const generated = await generateScript(job.script || { trendVaultSign: sign });
     scriptLines = generated.lines;
   }
 
@@ -408,17 +408,17 @@ async function handleRender(job) {
 
   // 3. Run Remotion render
   const mergedSettings = {
-    zodiacSign: sign,
+    trendVaultSign: sign,
     ...(job.settings || {}),
   };
-  const { outputFile, folder } = await runZodiacRender(job, scriptLines, audioFile, mergedSettings);
+  const { outputFile, folder } = await runTrendVaultRender(job, scriptLines, audioFile, mergedSettings);
 
   // 4. Copy output to local final and Drive final
   const outputName = `${job.jobId}_${sign}.mp4`;
   safeCopy(outputFile, path.join(PATHS.final, outputName));
   safeCopy(outputFile, path.join(PATHS.driveFinal, outputName));
 
-  // 5. Also copy the internal zodiac-output folder name to the job result
+  // 5. Also copy the internal trend-vault-output folder name to the job result
   return { outputFile: outputName, folder };
 }
 
@@ -427,18 +427,18 @@ async function handleScriptOnly(job) {
   let script;
   if (job.scriptLines && job.scriptLines.length > 0) {
     log('INFO', `Using pre-written script lines (${job.scriptLines.length} lines) — skipping Claude`);
-    const sign = job.script?.zodiacSign || 'Unknown';
+    const sign = job.script?.trendVaultSign || 'Unknown';
     script = {
       lines:         job.scriptLines,
       totalDuration: job.scriptLines.reduce((s, l) => s + (l.durationSeconds || 5), 0),
       title:         `${sign} Script`,
       hook:          job.scriptLines[0]?.text || '',
-      zodiacSign:    sign,
+      trendVaultSign:    sign,
       topic:         job.script?.prompt || '',
       emotionalTone: job.script?.emotionalTone || 'dark',
     };
   } else {
-    script = await generateScript(job.script || { zodiacSign: 'Scorpio' });
+    script = await generateScript(job.script || { trendVaultSign: 'Scorpio' });
   }
   const outputName = `${job.jobId}_script.json`;
   const outputPath = path.join(PATHS.final, outputName);
@@ -554,7 +554,7 @@ async function processJob(job) {
 // ── Test mode ─────────────────────────────────────────────────────────────────
 async function runTestMode() {
   log('INFO', '══════════════════════════════════════════════════════');
-  log('INFO', '  Zodiac Sync Worker — TEST MODE');
+  log('INFO', '  Trend Vault Sync Worker — TEST MODE');
   log('INFO', `  Date        : ${new Date().toISOString()}`);
   log('INFO', `  Project     : ${PROJECT_ROOT}`);
   log('INFO', `  Local root  : ${LOCAL_ROOT}`);
@@ -629,7 +629,7 @@ async function runTestMode() {
       { text: 'SYNC TEST — LINE TWO.',  type: 'observation', durationSeconds: 5 },
       { text: 'SYNC TEST — LINE THREE.', type: 'ending',     durationSeconds: 5 },
     ],
-    script: { zodiacSign: 'Scorpio', emotionalTone: 'dark', prompt: 'sync-test' },
+    script: { trendVaultSign: 'Scorpio', emotionalTone: 'dark', prompt: 'sync-test' },
   };
 
   fs.writeFileSync(jobFile, JSON.stringify(jobData, null, 2));
@@ -698,7 +698,7 @@ function checkDriveAccess() {
 // ── Main poll loop ────────────────────────────────────────────────────────────
 async function mainLoop() {
   log('INFO', '══════════════════════════════════════════════════════');
-  log('INFO', '  Zodiac Program Sync Worker — Starting');
+  log('INFO', '  Trend Vault Program Sync Worker — Starting');
   log('INFO', `  Project     : ${PROJECT_ROOT}`);
   log('INFO', `  Local root  : ${LOCAL_ROOT}`);
   log('INFO', `  Drive root  : ${DRIVE_ROOT}`);

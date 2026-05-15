@@ -5,20 +5,20 @@ description: Use this skill when the user wants to add a new text/caption animat
 
 # Add a new text animation
 
-Text animations live in **two synchronized places** — `src/ZodiacVideo.tsx` (for the actual Remotion render) and `frontend/zodiac.html` (for the live preview). Both must produce visually-equivalent motion or preview ≠ render.
+Text animations live in **two synchronized places** — `src/TrendVaultVideo.tsx` (for the actual Remotion render) and `frontend/trend-vault.html` (for the live preview). Both must produce visually-equivalent motion or preview ≠ render.
 
 ## Step 1: Add to `textAnimation` type union
 
 Both files reference a type union. Add the new id to:
 
-1. `src/ZodiacVideo.tsx` — `textAnimation` on `ZodiacVideoProps`
-2. `scripts/zodiac-render.ts` — `textAnimation` on `RenderJob.settings`
+1. `src/TrendVaultVideo.tsx` — `textAnimation` on `TrendVaultVideoProps`
+2. `scripts/trend-vault-render.ts` — `textAnimation` on `RenderJob.settings`
 
 Example: append `| 'NEW_NAME'` to the existing chain.
 
 ## Step 2: Remotion implementation in `ScriptLineComp`
 
-Find `ScriptLineComp` in `src/ZodiacVideo.tsx`. The animation pattern is:
+Find `ScriptLineComp` in `src/TrendVaultVideo.tsx`. The animation pattern is:
 
 ```tsx
 } else if (textAnimation === 'NEW_NAME') {
@@ -53,7 +53,7 @@ Critical rules:
 
 ## Step 3: HTML preview implementation in `playCaptionAnim`
 
-In `frontend/zodiac.html`, find `function playCaptionAnim(cap, text, anim, lineDurMs, speed)`.
+In `frontend/trend-vault.html`, find `function playCaptionAnim(cap, text, anim, lineDurMs, speed)`.
 
 Two paths:
 

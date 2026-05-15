@@ -1,6 +1,6 @@
 ---
 name: file-safety-rules
-description: Use this skill before editing any file in the Zodiac Program to understand what is safe to touch, what must never be deleted, what is auto-generated, and what rules prevent data loss. Trigger on "can I delete this", "is it safe to edit X", "what's in this folder", "will deleting X break anything", "what files should I never touch", "what auto-generates".
+description: Use this skill before editing any file in the Trend Vault Program to understand what is safe to touch, what must never be deleted, what is auto-generated, and what rules prevent data loss. Trigger on "can I delete this", "is it safe to edit X", "what's in this folder", "will deleting X break anything", "what files should I never touch", "what auto-generates".
 ---
 
 # File Safety Rules
@@ -8,8 +8,8 @@ description: Use this skill before editing any file in the Zodiac Program to und
 ## NEVER delete
 | Path | Why |
 |------|-----|
-| `zodiac-output/*/video.mp4` | Rendered videos — irreplaceable, no trash bin |
-| `zodiac-output/*/meta.json` | Render settings log |
+| `trend-vault-output/*/video.mp4` | Rendered videos — irreplaceable, no trash bin |
+| `trend-vault-output/*/meta.json` | Render settings log |
 | `custom-presets.json` | User's saved voice presets |
 | `backgrounds/*.mp4` | Background library — re-downloading takes time |
 | `music/*.mp3` | Music library |
@@ -19,7 +19,7 @@ description: Use this skill before editing any file in the Zodiac Program to und
 ## NEVER edit these files directly (auto-generated / runtime state)
 | Path | Why |
 |------|-----|
-| `zodiac-output/job_*.json` | Active render jobs — server reads/deletes these |
+| `trend-vault-output/job_*.json` | Active render jobs — server reads/deletes these |
 | `public/` | Assembled at render time by `ensurePublicLink()` |
 | `node_modules/` | npm managed |
 | `output/active-job.json` | Clip tool job state |
@@ -27,8 +27,8 @@ description: Use this skill before editing any file in the Zodiac Program to und
 ## Safe to edit freely
 | Path | Notes |
 |------|-------|
-| `frontend/zodiac.html` | All UI logic — changes reflect immediately on refresh |
-| `src/ZodiacVideo.tsx` | Remotion composition — changes require re-render |
+| `frontend/trend-vault.html` | All UI logic — changes reflect immediately on refresh |
+| `src/TrendVaultVideo.tsx` | Remotion composition — changes require re-render |
 | `server.ts` | Restart server after changes |
 | `scripts/*.ts` | Restart server after changes |
 | `sync.config.json` | Sync paths — restart sync worker after changes |
@@ -48,15 +48,15 @@ backgrounds/       ← background video library (laptop + home computer)
 music/             ← background music library
 custom-audio/      ← user voiceovers + TikTok sounds
 uploads/           ← multer temp uploads (safe to clear if not rendering)
-zodiac-output/     ← render outputs (NEVER clear)
+trend-vault-output/     ← render outputs (NEVER clear)
 output/            ← clip tool outputs
 public/            ← auto-assembled at render time (safe to clear)
 piper/             ← offline TTS binary + voice models
 data/drafts/       ← saved studio drafts
 scripts/           ← all server-side logic
 src/               ← Remotion React components
-frontend/          ← browser UI (zodiac.html)
-C:\Zodiac Program\ ← home computer SSD (incoming/working/cache/renders/final/logs)
+frontend/          ← browser UI (trend-vault.html)
+C:\Trend Vault Program\ ← home computer SSD (incoming/working/cache/renders/final/logs)
 ```
 
 ## Name rules for new files

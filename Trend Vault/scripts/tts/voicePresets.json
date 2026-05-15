@@ -43,7 +43,7 @@
     "eq": "dark", "reverb": false, "robot": false,
     "tags": ["tiktok","deep","locked in","dark","viral"],
     "energyRating": 7, "realismRating": 8, "retentionRating": 10,
-    "contentType": ["tiktok","zodiac","relationship","viral"],
+    "contentType": ["tiktok","trend-vault","relationship","viral"],
     "exampleLine": "The truth about why they left was never what they told you.",
     "pacing": "deliberate", "emotionalIntensity": "high"
   },
@@ -59,7 +59,7 @@
     "eq": "warm", "reverb": true, "robot": false,
     "tags": ["tiktok","female","mysterious","soft","viral"],
     "energyRating": 6, "realismRating": 9, "retentionRating": 10,
-    "contentType": ["tiktok","zodiac","relationship","emotional"],
+    "contentType": ["tiktok","trend-vault","relationship","emotional"],
     "exampleLine": "She knew. She always knew. She just wasn't ready to say it out loud.",
     "pacing": "soft", "emotionalIntensity": "high"
   },
@@ -139,7 +139,7 @@
     "eq": "dark", "reverb": true, "robot": false,
     "tags": ["cinematic","haunting","emotional","deep","story"],
     "energyRating": 6, "realismRating": 9, "retentionRating": 9,
-    "contentType": ["zodiac","emotional story","cinematic","philosophy"],
+    "contentType": ["trend-vault","emotional story","cinematic","philosophy"],
     "exampleLine": "There is a version of you that exists only in someone else's memory. You'll never know what they remember.",
     "pacing": "very slow", "emotionalIntensity": "very high"
   },
@@ -1167,7 +1167,7 @@
     "eq": "warm", "reverb": true, "robot": false,
     "tags": ["kingdom","medieval","documentary","narrator","realistic"],
     "energyRating": 7, "realismRating": 10, "retentionRating": 10,
-    "contentType": ["narrator","documentary","all_zodiac"],
+    "contentType": ["narrator","documentary","all_trend-vault"],
     "exampleLine": "What follows was recorded the year the rivers ran low — when truth was easier to see.",
     "pacing": "steady", "emotionalIntensity": "high"
   }

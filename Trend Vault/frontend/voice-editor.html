@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>🎤 MP3 Voice Editor — Zodiac</title>
+<title>🎤 MP3 Voice Editor — Trend Vault</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Inter:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -170,12 +170,12 @@ textarea:focus{border-color:var(--purple2)}
   <header>
     <span class="logo-icon">🔮</span>
     <div>
-      <div class="logo-text">ZODIAC PROGRAM</div>
+      <div class="logo-text">TREND_VAULT PROGRAM</div>
       <div class="logo-sub">MP3 Voice Editor</div>
     </div>
     <nav>
       <a class="nav-link" href="/">🎬 Clip Tool</a>
-      <a class="nav-link" href="/zodiac">🔮 Zodiac Studio</a>
+      <a class="nav-link" href="/trend-vault">🔮 Trend Vault Studio</a>
       <a class="nav-link" href="/voice-lab">🎙️ Voice Lab</a>
       <a class="nav-link active" href="/voice-editor">🎤 MP3 Editor</a>
     </nav>
@@ -757,7 +757,7 @@ async function generateReplica(){
 
   try{
     // Build a one-shot ad-hoc preset on the fly:
-    // We POST to /api/zodiac/generate-voice with presetId='__editor__' which
+    // We POST to /api/trend-vault/generate-voice with presetId='__editor__' which
     // doesn't exist server-side; so instead we save a temp custom preset first
     // OR (cleaner): use an existing preset id with overrides from sliders.
     // The server already supports per-request slider overrides.
@@ -769,7 +769,7 @@ async function generateReplica(){
       body: JSON.stringify(pe),
     });
 
-    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`, {
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         text,
@@ -862,7 +862,7 @@ function useInStudio(){
   }).then(r => r.json()).then(j => {
     sessionStorage.setItem('selectedVoicePreset', j.preset.id);
     showToast('Loading in Studio...', 'success');
-    setTimeout(()=> window.location.href = '/zodiac', 400);
+    setTimeout(()=> window.location.href = '/trend-vault', 400);
   }).catch(e => showToast('Failed: '+e.message, 'error'));
 }
 
@@ -927,7 +927,7 @@ async function loadPresetIntoEditor(id){
 
 function usePresetInStudio(id){
   sessionStorage.setItem('selectedVoicePreset', id);
-  window.location.href = '/zodiac';
+  window.location.href = '/trend-vault';
 }
 
 async function deletePreset(id, name){

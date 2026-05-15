@@ -7,7 +7,7 @@
   "createdAt": "2026-05-11T12:00:00Z",
 
   "script": {
-    "zodiacSign":    "Aries",
+    "trendVaultSign":    "Aries",
     "emotionalTone": "motivational",
     "prompt":        "coming back stronger after burnout",
     "targetDuration": 100

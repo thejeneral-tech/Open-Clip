@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Zodiac Backend (Express + TTS)",
+      "name": "Trend Vault Backend (Express + TTS)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 3001

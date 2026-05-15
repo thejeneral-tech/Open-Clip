@@ -6,10 +6,10 @@ description: Use this skill when the user wants to send a render job to the home
 # Create and Submit a Google Drive Sync Job
 
 ## How the pipeline works
-1. **Laptop**: Create a job JSON file → drop into `Google Drive/Zodiac Program Sync/requests/`
+1. **Laptop**: Create a job JSON file → drop into `Google Drive/Trend Vault Program Sync/requests/`
 2. **Drive syncs** the file to home computer
 3. **Home computer**: sync-worker sees the file, processes it, renders the video
-4. **Drive syncs** `video.mp4` back to `Google Drive/Zodiac Program Sync/final/`
+4. **Drive syncs** `video.mp4` back to `Google Drive/Trend Vault Program Sync/final/`
 5. **Laptop**: file appears in `final/` within minutes
 
 ## Job JSON format
@@ -17,14 +17,14 @@ description: Use this skill when the user wants to send a render job to the home
 {
   "id": "my-job-001",
   "type": "render",
-  "zodiacSign": "Scorpio",
+  "trendVaultSign": "Scorpio",
   "scriptLines": [
     { "text": "Scorpio, your time has come.", "type": "hook", "durationSeconds": 4 },
     { "text": "The transformation begins now.", "type": "escalation", "durationSeconds": 5 }
   ],
   "settings": {
-    "zodiacSign": "Scorpio",
-    "zodiacSymbol": "♏",
+    "trendVaultSign": "Scorpio",
+    "trendVaultSymbol": "♏",
     "backgroundVideo": "stock_pexels_14209304.mp4",
     "colorGrade": "dark",
     "grainType": "film",
@@ -52,7 +52,7 @@ description: Use this skill when the user wants to send a render job to the home
 {
   "id": "script-001",
   "type": "script-only",
-  "zodiacSign": "Scorpio",
+  "trendVaultSign": "Scorpio",
   "scriptLines": [
     { "text": "Scorpio, your power is rising.", "type": "hook", "durationSeconds": 4 }
   ]
@@ -61,13 +61,13 @@ description: Use this skill when the user wants to send a render job to the home
 
 ## Drop the job
 ```
-Drive requests folder: C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync\requests\
+Drive requests folder: C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync\requests\
 ```
 Save the file as `<job-id>.json`. The home computer sync-worker picks it up within `pollIntervalSeconds` (default 10 seconds).
 
 ## Check output
 ```
-Drive final folder: C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync\final\
+Drive final folder: C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync\final\
 ```
 Completed videos appear here as `<job-id>.mp4` or `<folder>/video.mp4`.
 

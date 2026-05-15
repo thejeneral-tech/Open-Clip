@@ -1,6 +1,6 @@
 ---
 name: add-motivational-script
-description: Use this skill when the user wants to write or add a new motivational / cinematic zodiac script — including replacing one of the 12 built-in sign scripts, adding scripts for a different topic, or contributing a brand new sign-agnostic motivational story. Trigger on phrases like "write a motivational script for Scorpio", "add a Pisces grow-after-heartbreak script", "swap the Aries script", "give me a new cinematic narration", "build me a passionate script for [sign]", or "add this script to the library".
+description: Use this skill when the user wants to write or add a new motivational / cinematic trend-vault script — including replacing one of the 12 built-in sign scripts, adding scripts for a different topic, or contributing a brand new sign-agnostic motivational story. Trigger on phrases like "write a motivational script for Scorpio", "add a Pisces grow-after-heartbreak script", "swap the Aries script", "give me a new cinematic narration", "build me a passionate script for [sign]", or "add this script to the library".
 ---
 
 # Add a motivational script
@@ -72,6 +72,6 @@ npx tsc --noEmit --skipLibCheck
 
 The motivational scripts are NOT exposed in the UI (intentionally — they're a silent library). To trigger one, either:
 - Generate a script via the AI Generate button without a custom prompt
-- Or call `/api/zodiac/generate-zodiac-script` server-side with `emotionalTone: 'motivational'`
+- Or call `/api/trend-vault/generate-trend-vault-script` server-side with `emotionalTone: 'motivational'`
 
 The output of `generateFallbackScript()` is automatically uppercased for TikTok caption style.

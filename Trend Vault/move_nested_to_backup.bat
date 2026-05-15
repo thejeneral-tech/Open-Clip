@@ -1,11 +1,11 @@
 @echo off
 setlocal
 
-set "SRC=C:\Users\Anton\OneDrive\Desktop\Zodiac Program\Zodiac Program"
-set "DST=C:\Users\Anton\OneDrive\Desktop\Zodiac_Program_BACKUP_2026-05-10"
+set "SRC=C:\Users\Anton\OneDrive\Desktop\Trend Vault Program\Trend Vault Program"
+set "DST=C:\Users\Anton\OneDrive\Desktop\Trend Vault_Program_BACKUP_2026-05-10"
 
 echo.
-echo === Zodiac Program: move nested duplicate to backup ===
+echo === Trend Vault Program: move nested duplicate to backup ===
 echo.
 echo Source : %SRC%
 echo Target : %DST%
@@ -42,7 +42,7 @@ echo The duplicate has been moved to:
 echo   %DST%
 echo.
 echo Your live project remains at:
-echo   C:\Users\Anton\OneDrive\Desktop\Zodiac Program
+echo   C:\Users\Anton\OneDrive\Desktop\Trend Vault Program
 echo.
 pause
 endlocal

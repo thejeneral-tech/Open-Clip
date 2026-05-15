@@ -1,6 +1,6 @@
 ---
 name: export-to-capcut
-description: Use this skill when the user wants to export the current Zodiac project to a CapCut draft, hand off to CapCut for manual editing/finishing, generate a CapCut .json draft, or any time they mention CapCut export, the 📤 button, or "I want to finish this in CapCut". Use also when CapCut export fails and the user needs help diagnosing why.
+description: Use this skill when the user wants to export the current Trend Vault project to a CapCut draft, hand off to CapCut for manual editing/finishing, generate a CapCut .json draft, or any time they mention CapCut export, the 📤 button, or "I want to finish this in CapCut". Use also when CapCut export fails and the user needs help diagnosing why.
 ---
 
 # Export to CapCut
@@ -27,14 +27,14 @@ http://localhost:9001/
 
 Or check the studio's engine-status endpoint:
 ```
-http://localhost:3001/api/zodiac/engine-status
+http://localhost:3001/api/trend-vault/engine-status
 ```
 
 `capcut.ok` should be `true`.
 
 ## How export works under the hood
 
-The Node server endpoint is `POST /api/zodiac/export-capcut`. It orchestrates:
+The Node server endpoint is `POST /api/trend-vault/export-capcut`. It orchestrates:
 
 1. `/create_draft` — creates a 1080×1920 draft
 2. `/add_video` — adds the chosen background (must be HTTP-fetchable by CapCutAPI, so Node exposes it at `http://localhost:3001/backgrounds/...`)
@@ -63,7 +63,7 @@ To skip the manual copy: set `CAPCUT_DRAFT_FOLDER` in `.env` to the full path of
 
 ## When user asks "did it work"
 
-`/api/zodiac/export-capcut` returns:
+`/api/trend-vault/export-capcut` returns:
 ```json
 { "ok": true, "draftId": "dfd_cat_...", "message": "..." }
 ```

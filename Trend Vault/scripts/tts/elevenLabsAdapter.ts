@@ -1,5 +1,5 @@
 /**
- * ElevenLabs adapter for the Zodiac timing pipeline.
+ * ElevenLabs adapter for the Trend Vault timing pipeline.
  *
  * Why this exists:
  *   Edge TTS gives no per-word timings; Kokoro also doesn't.
@@ -76,7 +76,7 @@ export async function listElevenLabsVoices(): Promise<ElevenLabsVoice[]> {
 
 /**
  * POST /v1/text-to-speech/{voice_id}/with-timestamps — returns audio + word/character alignment.
- * This is the variant we want for the Zodiac pipeline so captions can be
+ * This is the variant we want for the Trend Vault pipeline so captions can be
  * placed at the exact frame each word is spoken.
  */
 export async function generateElevenLabsVoiceWithTimestamps(

@@ -14,7 +14,7 @@ Start: `npm start` (runs `npx tsx server.ts`)
 ## Files involved
 - `server.ts` — all API routes
 - `.env` — API keys and environment variables
-- `scripts/zodiac-generate.ts` — imported at startup
+- `scripts/trend-vault-generate.ts` — imported at startup
 - `scripts/tts/ttsService.ts` — imported at startup
 - `scripts/ai-completion.ts` — imported at startup
 
@@ -35,7 +35,7 @@ npx kill-port 3001
 
 ### 2. Cannot find module
 ```
-Error: Cannot find module './scripts/zodiac-generate'
+Error: Cannot find module './scripts/trend-vault-generate'
 ```
 - `npm install` not run → run `npm install`
 - File path wrong in import → check the import at the top of `server.ts`
@@ -47,15 +47,15 @@ Error: ENOENT: no such file or directory, open 'custom-presets.json'
 ```
 Usually harmless — the server creates missing data files on first write. If it crashes instead of creating: the target directory doesn't exist. Check:
 ```bash
-dir C:\Users\Anton\Desktop\Zodiac Program\data
-dir C:\Users\Anton\Desktop\Zodiac Program\output
+dir C:\Users\Anton\Desktop\Trend Vault Program\data
+dir C:\Users\Anton\Desktop\Trend Vault Program\output
 ```
 
 ### 4. Unhandled promise rejection
 Look for `UnhandledPromiseRejection` in stdout. The error includes the file and line. Common sources:
-- `generateZodiacScript()` — Anthropic API call without try/catch (shouldn't happen — it has fallback)
+- `generateTrendVaultScript()` — Anthropic API call without try/catch (shouldn't happen — it has fallback)
 - `generateVoice()` — TTS call
-- Render subprocess (`zodiac-render.ts`) — check its own error handling
+- Render subprocess (`trend-vault-render.ts`) — check its own error handling
 
 ### 5. AssemblyAI / API key errors at startup
 The server imports `AssemblyAI` but doesn't instantiate it at startup — safe. If you see `ASSEMBLYAI_API_KEY` warnings, add the key to `.env` or ignore (transcription is optional).
@@ -73,7 +73,7 @@ Fix the flagged errors before starting the server.
 ## Reading server logs
 The server logs everything to stdout. Pattern:
 ```
-[Zodiac] ...     ← zodiac-specific logs
+[Trend Vault] ...     ← trend-vault-specific logs
 [TTS] ...        ← voice generation logs
 [Render] ...     ← render pipeline logs
 [SYNC] ...       ← sync worker (separate process)
@@ -81,7 +81,7 @@ The server logs everything to stdout. Pattern:
 
 ## Quick health check
 ```bash
-curl -s http://localhost:3001/api/zodiac/engine-status
+curl -s http://localhost:3001/api/trend-vault/engine-status
 # Returns: { anthropicOk, openaiOk, localTts, piperReady, ... }
 # Any 500 here means server is running but an import/startup step failed
 ```

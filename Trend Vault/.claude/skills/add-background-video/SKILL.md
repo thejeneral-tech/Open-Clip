@@ -1,6 +1,6 @@
 ---
 name: add-background-video
-description: Use this skill when the user wants to add a new background video to the Zodiac studio — from a local file, a URL, or by downloading stock footage. Trigger on "add background", "new background video", "add stock footage", "add my video as background", "download pexels video", "background not in picker".
+description: Use this skill when the user wants to add a new background video to the Trend Vault studio — from a local file, a URL, or by downloading stock footage. Trigger on "add background", "new background video", "add stock footage", "add my video as background", "download pexels video", "background not in picker".
 ---
 
 # Add a Background Video
@@ -8,7 +8,7 @@ description: Use this skill when the user wants to add a new background video to
 ## Where files go
 All background videos live in:
 ```
-C:\Users\Anton\Desktop\Zodiac Program\backgrounds\
+C:\Users\Anton\Desktop\Trend Vault Program\backgrounds\
 ```
 They are served statically at `http://localhost:3001/backgrounds/<filename>`.
 Remotion copies them to `public/backgrounds/` at render time via `ensurePublicLink()`.
@@ -28,8 +28,8 @@ Remotion copies them to `public/backgrounds/` at render time via `ensurePublicLi
 ### Option B — Paste URL in the studio
 The studio has a URL input for background videos. If a download queue exists:
 ```
-GET http://localhost:3001/api/zodiac/download-queue
-POST http://localhost:3001/api/zodiac/import-url  { url: "..." }
+GET http://localhost:3001/api/trend-vault/download-queue
+POST http://localhost:3001/api/trend-vault/import-url  { url: "..." }
 ```
 Check `server.ts` for `import-url` endpoint implementation.
 
@@ -41,7 +41,7 @@ yt-dlp -f "bestvideo[ext=mp4][vcodec^=avc]" "https://www.pexels.com/video/XXXXX/
 ```
 
 ## Make it appear in the picker
-The background picker in `zodiac.html` reads available backgrounds from the server. Check how it fetches the list:
+The background picker in `trend-vault.html` reads available backgrounds from the server. Check how it fetches the list:
 - If it calls a dynamic endpoint → restart server to pick up new files
 - If it uses a hardcoded array in the HTML → add the filename to that array
 

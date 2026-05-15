@@ -9,9 +9,9 @@ description: Use this skill when music is broken — the music picker shows noth
 - `server.ts` line ~87 — `app.use('/music', express.static(MUSIC_DIR))`
 - `server.ts` ~108–114 — `musicUpload` multer config (50MB limit)
 - `music/` folder — all MP3/WAV music files
-- `scripts/zodiac-render.ts` — `ensurePublicLink()` copies music to `public/music/`
-- `src/ZodiacVideo.tsx` — `<Audio src={staticFile('music/...')} volume={musicVolume}>`
-- `frontend/zodiac.html` — music picker, `state.music`, `state.musicVolume`
+- `scripts/trend-vault-render.ts` — `ensurePublicLink()` copies music to `public/music/`
+- `src/TrendVaultVideo.tsx` — `<Audio src={staticFile('music/...')} volume={musicVolume}>`
+- `frontend/trend-vault.html` — music picker, `state.music`, `state.musicVolume`
 
 ## Files NOT to touch
 - `backgrounds/` folder
@@ -28,12 +28,12 @@ curl -I http://localhost:3001/music/stock_jamendo_1502537.mp3
 
 ### 2. Check music folder
 ```
-dir C:\Users\Anton\Desktop\Zodiac Program\music
+dir C:\Users\Anton\Desktop\Trend Vault Program\music
 ```
 If empty: no music available. Add at least one MP3.
 
 ### 3. Music not playing in preview
-The preview is a browser `<audio>` element, not Remotion. In `zodiac.html`:
+The preview is a browser `<audio>` element, not Remotion. In `trend-vault.html`:
 - Find `state.music` — should be the filename (e.g. `stock_jamendo_1502537.mp3`)
 - The preview sets `src="/music/<filename>"` on an audio element
 - If the audio element plays but the wrong track: `state.music` is stale — check if picker updates `state.music` on selection
@@ -45,10 +45,10 @@ The preview is a browser `<audio>` element, not Remotion. In `zodiac.html`:
 - `renderVideo()` sends `musicVolume: state.musicVolume / 100` in settings
 
 ### 5. Music absent in render
-`zodiac-render.ts` calls `ensurePublicLink(ROOT+'music', 'music', publicDir)` — this copies music files into `public/music/` so Remotion's `staticFile('music/<name>')` resolves them.
+`trend-vault-render.ts` calls `ensurePublicLink(ROOT+'music', 'music', publicDir)` — this copies music files into `public/music/` so Remotion's `staticFile('music/<name>')` resolves them.
 - If music file was added AFTER the last render: the copy runs at start of each render, so a re-render will pick it up
 - If `settings.musicFile` is empty string or `'none'`: render skips music (intended)
-- Check `ZodiacVideo.tsx` — `musicFile` prop must be truthy for the `<Audio>` component to render
+- Check `TrendVaultVideo.tsx` — `musicFile` prop must be truthy for the `<Audio>` component to render
 
 ### 6. Music upload fails
 Upload limit is 50MB. Files > 50MB → multer rejects with 413. Files must be MP3 or WAV.
@@ -56,7 +56,7 @@ Upload limit is 50MB. Files > 50MB → multer rejects with 413. Files must be MP
 ## Quick check
 ```bash
 # Confirm music file renders at correct volume
-curl -s http://localhost:3001/api/zodiac/outputs | node -e "
+curl -s http://localhost:3001/api/trend-vault/outputs | node -e "
 process.stdin.resume();
 let d='';process.stdin.on('data',c=>d+=c);
 process.stdin.on('end',()=>{

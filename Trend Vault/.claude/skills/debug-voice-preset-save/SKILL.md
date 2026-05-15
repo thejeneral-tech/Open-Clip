@@ -8,11 +8,11 @@ description: Use this skill when saving or deleting a voice preset fails — the
 ## Files involved
 - `server.ts` lines ~674–726 — `POST /api/custom-presets`, `DELETE /api/custom-presets/:id`
 - `custom-presets.json` — persisted custom presets (project root)
-- `frontend/zodiac.html` — `saveCurrentVoiceAsPreset()`, `deleteCustomPreset()`
+- `frontend/trend-vault.html` — `saveCurrentVoiceAsPreset()`, `deleteCustomPreset()`
 
 ## Files NOT to touch
 - `scripts/tts/ttsService.ts` — voice generation, unrelated
-- `src/ZodiacVideo.tsx`
+- `src/TrendVaultVideo.tsx`
 
 ## Decision tree
 
@@ -41,12 +41,12 @@ cat custom-presets.json
 curl -X DELETE http://localhost:3001/api/custom-presets/<id>
 # Must return: { ok: true }
 ```
-If the preset reappears after delete, the UI is re-fetching from a stale cache. Check `buildPresetGrid()` is called after delete and re-fetches from `/api/zodiac/voice-presets`.
+If the preset reappears after delete, the UI is re-fetching from a stale cache. Check `buildPresetGrid()` is called after delete and re-fetches from `/api/trend-vault/voice-presets`.
 
 ### 4. Preset not appearing in grid
-After save, the UI calls `GET /api/zodiac/voice-presets` which merges custom + built-in. Check:
+After save, the UI calls `GET /api/trend-vault/voice-presets` which merges custom + built-in. Check:
 - The freshly-saved preset has `category: "custom"` — the grid filters/groups by category
-- `VOICE_PRESETS` (the JS array in `zodiac.html`) is updated after the fetch: look for `VOICE_PRESETS = ld.presets`
+- `VOICE_PRESETS` (the JS array in `trend-vault.html`) is updated after the fetch: look for `VOICE_PRESETS = ld.presets`
 - `buildPresetGrid()` is called after updating `VOICE_PRESETS`
 
 ### 5. Base preset has no edgeId

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>🔮 Zodiac Mainframe</title>
+<title>🔮 Trend Vault Mainframe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -415,11 +415,11 @@ main{
       <div class="logo-glyph">🔮</div>
     </div>
     <div class="logo-block">
-      <div class="logo-name">Zodiac Mainframe</div>
+      <div class="logo-name">Trend Vault Mainframe</div>
       <div class="logo-sub">Command &amp; Control</div>
     </div>
     <nav>
-      <a href="/zodiac" class="nav-btn">🎬 Studio</a>
+      <a href="/trend-vault" class="nav-btn">🎬 Studio</a>
       <a href="/voice-lab" class="nav-btn">🎙️ Voice Lab</a>
       <a href="/" class="nav-btn">✂️ Clip Tool</a>
       <a href="/mainframe" class="nav-btn active">⚡ Mainframe</a>
@@ -479,11 +479,11 @@ main{
       <!-- Tools -->
       <div class="section-label">Launch Tools</div>
       <div class="tools-grid">
-        <a href="/zodiac" class="tool-tile gold">
+        <a href="/trend-vault" class="tool-tile gold">
           <div class="tile-badge gold">Main</div>
           <div class="tile-icon">🔮</div>
-          <div class="tile-name">Zodiac Studio</div>
-          <div class="tile-desc">Generate &amp; render zodiac videos</div>
+          <div class="tile-name">Trend Vault Studio</div>
+          <div class="tile-desc">Generate &amp; render trend-vault videos</div>
         </a>
         <a href="/voice-lab" class="tool-tile">
           <div class="tile-icon">🎙️</div>
@@ -577,9 +577,9 @@ main{
       <!-- Quick actions -->
       <div class="actions-card">
         <div class="section-label" style="margin-bottom:14px">Quick Actions</div>
-        <a href="/zodiac" class="action-btn gold">
+        <a href="/trend-vault" class="action-btn gold">
           <span class="action-icon">✨</span>
-          <span class="action-text">New Zodiac Video</span>
+          <span class="action-text">New Trend Vault Video</span>
           <span class="action-arrow">→</span>
         </a>
         <a href="/voice-lab" class="action-btn">
@@ -665,7 +665,7 @@ async function checkWorker(){
   const wUrl=document.getElementById('workerUrl');
 
   try{
-    const r=await fetch('/api/zodiac/engine-status',{signal:AbortSignal.timeout(6000)});
+    const r=await fetch('/api/trend-vault/engine-status',{signal:AbortSignal.timeout(6000)});
     const d=await r.json();
     const url=d.workerUrl||d.renderWorkerUrl||'';
     if(url)wUrl.textContent=url;
@@ -703,7 +703,7 @@ async function checkTts(){
   const cSt=document.getElementById('ttsConnStatus');
   const sT=document.getElementById('sysTts');
   try{
-    const r=await fetch('/api/zodiac/tts-status',{signal:AbortSignal.timeout(5000)});
+    const r=await fetch('/api/trend-vault/tts-status',{signal:AbortSignal.timeout(5000)});
     const d=await r.json();
     const ok=d.local||d.localOnline||d.kokoro||d.status==='ok'||false;
     const engine=d.engine||d.localEngine||'TTS';
@@ -733,19 +733,19 @@ function setDot(el,state){
 // ── Jobs ─────────────────────────────────────────────────────────────────
 async function loadJobs(){
   try{
-    const r=await fetch('/api/zodiac/outputs',{signal:AbortSignal.timeout(5000)});
+    const r=await fetch('/api/trend-vault/outputs',{signal:AbortSignal.timeout(5000)});
     const d=await r.json();
     const outputs=(d.outputs||d.jobs||d||[]).slice(0,6);
     const el=document.getElementById('jobsList');
     if(!outputs.length){
-      el.innerHTML='<div style="color:var(--muted);font-size:.75rem;padding:20px;text-align:center;">No jobs yet — create your first video in Zodiac Studio</div>';
+      el.innerHTML='<div style="color:var(--muted);font-size:.75rem;padding:20px;text-align:center;">No jobs yet — create your first video in Trend Vault Studio</div>';
       document.getElementById('statJobs').textContent='0';
       return;
     }
     document.getElementById('statJobs').textContent=outputs.length;
     el.innerHTML=outputs.map(j=>{
       const status=j.status||'complete';
-      const sign=j.zodiacSign||j.sign||j.folder||j.id||'Unknown';
+      const sign=j.trendVaultSign||j.sign||j.folder||j.id||'Unknown';
       const ts=j.createdAt||j.timestamp||j.date||'';
       const tsFmt=ts?new Date(typeof ts==='number'?ts:ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
       const dotCls=status==='failed'?'failed':status==='pending'?'pending':'complete';
@@ -787,7 +787,7 @@ async function loadStats(){
 // ── Engine status (env/api keys) ──────────────────────────────────────────
 async function loadEnvStatus(){
   try{
-    const r=await fetch('/api/zodiac/engine-status',{signal:AbortSignal.timeout(5000)});
+    const r=await fetch('/api/trend-vault/engine-status',{signal:AbortSignal.timeout(5000)});
     const d=await r.json();
 
     const keys=[
@@ -830,7 +830,7 @@ async function refreshAll(){
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────
-addLog('info','Zodiac Mainframe initializing…');
+addLog('info','Trend Vault Mainframe initializing…');
 refreshAll();
 setInterval(()=>{ checkWorker(); checkTts(); },30000);
 setInterval(loadJobs,20000);

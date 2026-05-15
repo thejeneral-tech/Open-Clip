@@ -6,7 +6,7 @@ description: Use this skill when the preview editor is broken — the Layers pan
 # Debug Preview Editor
 
 ## Files involved
-- `frontend/zodiac.html` — ALL preview editor logic lives here
+- `frontend/trend-vault.html` — ALL preview editor logic lives here
   - `state` object (line ~1510) — `captionTopPct`, `captionRotate`, `captionBgStyle`, `fontSize`
   - `updatePreview()` — applies state to the preview DOM
   - `undo()`, `redo()`, `pushUndo()`, `_applyUndo()` — undo engine
@@ -14,12 +14,12 @@ description: Use this skill when the preview editor is broken — the Layers pan
   - `UNDO_KEYS` — list of state keys tracked by undo
 
 ## Files NOT to touch
-- `src/ZodiacVideo.tsx` — Remotion render component
-- `scripts/zodiac-render.ts` — server-side render script
+- `src/TrendVaultVideo.tsx` — Remotion render component
+- `scripts/trend-vault-render.ts` — server-side render script
 - `server.ts`
 
 ## Component map
-| Feature | Where in zodiac.html |
+| Feature | Where in trend-vault.html |
 |---------|---------------------|
 | Layers panel toggle button | `id="layersTabBtn"` |
 | Layers panel container | `id="layersPanel"` |

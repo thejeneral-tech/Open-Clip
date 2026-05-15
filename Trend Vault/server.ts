@@ -1,8 +1,8 @@
 /**
- * Zodiac Program — Local Web Server
+ * Trend Vault Program — Local Web Server
  * Run: npm start  (or double-click start.bat)
  *
- * Zodiac Studio: /zodiac   → zodiac-output/<folder>/
+ * Trend Vault Studio: /trend-vault   → trend-vault-output/<folder>/
  * Clip Tool:     /          → output/final/<VideoName>/
  */
 
@@ -15,7 +15,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { spawn } from 'child_process';
-import { generateZodiacScript, generateFallbackScript } from './scripts/zodiac-generate';
+import { generateTrendVaultScript, generateFallbackScript } from './scripts/trend-vault-generate';
 import { generateVoice, VOICE_PRESETS } from './scripts/tts/ttsService';
 import { probeLocalTts } from './scripts/tts/localTtsAdapter';
 import { aiComplete, parseAIJson } from './scripts/ai-completion';
@@ -45,7 +45,7 @@ const JOB_STATE_FILE = path.join(ROOT, 'output', 'active-job.json');
 const BACKGROUNDS   = path.join(ROOT, 'backgrounds');
 const MUSIC_DIR     = path.join(ROOT, 'music');
 const AUDIO_DIR     = path.join(ROOT, 'custom-audio');
-const ZODIAC_OUT    = path.join(ROOT, 'zodiac-output');
+const TREND_VAULT_OUT    = path.join(ROOT, 'trend-vault-output');
 const DRAFTS_DIR    = path.join(ROOT, 'data', 'drafts');
 const PIPER_DIR     = path.join(ROOT, 'piper');
 const PIPER_EXE     = path.join(PIPER_DIR, 'piper.exe');
@@ -54,30 +54,30 @@ const PIPER_VOICES  = path.join(PIPER_DIR, 'voices');
 // Older preview payloads referenced this directory under the same name, so
 // existing /outputs-voices URLs continue to resolve after the cleanup.
 const ELEVENLABS_OUT_DIR = path.join(ROOT, 'outputs', 'voices');
-// When set, POST /api/zodiac/render proxies the Remotion step to the remote
+// When set, POST /api/trend-vault/render proxies the Remotion step to the remote
 // worker instead of running it in-process. TTS + alignment still run here.
 // Local test: RENDER_WORKER_URL=http://localhost:4000
 // Remote:     RENDER_WORKER_URL=http://192.168.x.x:4000
 const RENDER_WORKER_URL  = (process.env.RENDER_WORKER_URL ?? '').trim();
 
-for (const d of [UPLOADS, FINAL_DIR, BACKGROUNDS, MUSIC_DIR, AUDIO_DIR, ZODIAC_OUT, DRAFTS_DIR]) {
+for (const d of [UPLOADS, FINAL_DIR, BACKGROUNDS, MUSIC_DIR, AUDIO_DIR, TREND_VAULT_OUT, DRAFTS_DIR]) {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 }
 
 // ── Startup: sweep stale orphan job files left by any previous crashed session
 // These job_*.json / test_job.json files are created at render-start and
 // deleted in the finally block after success or failure. If the server was
-// killed mid-render they stay behind forever and clutter zodiac-output/.
+// killed mid-render they stay behind forever and clutter trend-vault-output/.
 try {
-  const orphans = fs.readdirSync(ZODIAC_OUT)
+  const orphans = fs.readdirSync(TREND_VAULT_OUT)
     .filter(f => (f.startsWith('job_') || f === 'test_job.json') && f.endsWith('.json'));
   for (const orphan of orphans) {
     try {
-      fs.unlinkSync(path.join(ZODIAC_OUT, orphan));
+      fs.unlinkSync(path.join(TREND_VAULT_OUT, orphan));
       console.log(`[STARTUP] cleaned stale job file: ${orphan}`);
     } catch { /* ignore individual failures */ }
   }
-} catch { /* ignore if zodiac-output doesn't exist yet */ }
+} catch { /* ignore if trend-vault-output doesn't exist yet */ }
 
 // ── Piper TTS helpers ─────────────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ function getPiperVoices(): string[] {
 async function runPiper(text: string, modelName: string): Promise<Buffer> {
   const modelPath = path.join(PIPER_VOICES, `${modelName}.onnx`);
   if (!fs.existsSync(modelPath)) throw new Error(`Voice not installed: ${modelName}`);
-  const tmpFile = path.join(os.tmpdir(), `zodiac-${Date.now()}.wav`);
+  const tmpFile = path.join(os.tmpdir(), `trend-vault-${Date.now()}.wav`);
   return new Promise((resolve, reject) => {
     const proc = spawn(PIPER_EXE, [
       '--model', modelPath,
@@ -121,7 +121,7 @@ app.use(express.static(path.join(ROOT, 'frontend')));
 app.use('/clips',       express.static(FINAL_DIR));
 app.use('/backgrounds', express.static(BACKGROUNDS));
 app.use('/music',       express.static(MUSIC_DIR));
-app.use('/zodiac-clips',   express.static(ZODIAC_OUT));
+app.use('/trend-vault-clips',   express.static(TREND_VAULT_OUT));
 if (!fs.existsSync(ELEVENLABS_OUT_DIR)) fs.mkdirSync(ELEVENLABS_OUT_DIR, { recursive: true });
 app.use('/outputs-voices', express.static(ELEVENLABS_OUT_DIR));
 // Serve generated voice MP3 and timed-caption JSON files for the frontend
@@ -512,15 +512,15 @@ app.get('/download/:folder/:filename', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-//  ZODIAC STUDIO ROUTES
+//  TREND_VAULT STUDIO ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
-// Serve zodiac studio page
-app.get('/zodiac', (_req, res) => {
+// Serve trend-vault studio page
+app.get('/trend-vault', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.sendFile(path.join(ROOT, 'frontend', 'zodiac.html'));
+  res.sendFile(path.join(ROOT, 'frontend', 'trend-vault.html'));
 });
 
 app.get('/mainframe', (_req, res) => {
@@ -598,17 +598,17 @@ app.delete('/api/audio/:filename', (req, res) => {
 });
 
 // ── Generate script ───────────────────────────────────────────────────────────
-app.post('/api/zodiac/generate-script', async (req, res) => {
-  const { zodiacSign, category, prompt, angle, emotionalTone, targetDuration } = req.body;
+app.post('/api/trend-vault/generate-script', async (req, res) => {
+  const { trendVaultSign, category, prompt, angle, emotionalTone, targetDuration } = req.body;
 
-  if (!zodiacSign || !prompt) {
-    res.status(400).json({ error: 'zodiacSign and prompt are required.' });
+  if (!trendVaultSign || !prompt) {
+    res.status(400).json({ error: 'trendVaultSign and prompt are required.' });
     return;
   }
 
   const sendFallback = (notice?: string) => {
     try {
-      const script = generateFallbackScript({ zodiacSign, prompt: prompt || '', angle: angle || '' });
+      const script = generateFallbackScript({ trendVaultSign, prompt: prompt || '', angle: angle || '' });
       res.json({ ok: true, script, source: 'fallback', ...(notice ? { notice } : {}) });
     } catch (fbErr) {
       res.status(500).json({ ok: false, error: 'Script generation failed.' });
@@ -621,8 +621,8 @@ app.post('/api/zodiac/generate-script', async (req, res) => {
   }
 
   try {
-    const script = await generateZodiacScript({
-      zodiacSign,
+    const script = await generateTrendVaultScript({
+      trendVaultSign,
       category:       category || 'general',
       prompt,
       angle:          angle || '',
@@ -633,14 +633,14 @@ app.post('/api/zodiac/generate-script', async (req, res) => {
   } catch (err: unknown) {
     const msg = String((err as Error).message || '');
     const isBilling = /credit|billing|balance|quota|429|insufficient|402|400/i.test(msg);
-    console.warn('[Zodiac] Anthropic script error:', msg.slice(0, 150));
+    console.warn('[Trend Vault] Anthropic script error:', msg.slice(0, 150));
 
     // Try OpenAI as fallback when Anthropic fails (especially on billing errors)
     if (process.env.OPENAI_API_KEY && isBilling) {
       try {
         const result = await aiComplete({
           maxTokens: 2048,
-          user: `Write a TikTok zodiac storytelling script for ${zodiacSign}.
+          user: `Write a TikTok trend-vault storytelling script for ${trendVaultSign}.
 
 Topic: ${prompt}
 Angle: ${angle || ''}
@@ -661,11 +661,11 @@ Return ONLY valid JSON, no other text:
 Use these line types in order: hook, observation, escalation, truth, twist, ending. 12-18 lines total. Each line 1-2 sentences, 3-8 seconds.`,
         });
         const parsed = parseAIJson<{ lines: unknown[]; totalDuration: number; title: string; hook: string }>(result.text);
-        const fullScript = { ...parsed, zodiacSign, topic: prompt, emotionalTone: emotionalTone || 'mysterious' };
+        const fullScript = { ...parsed, trendVaultSign, topic: prompt, emotionalTone: emotionalTone || 'mysterious' };
         res.json({ ok: true, script: fullScript, source: 'openai', notice: result.warning || 'Using OpenAI (Anthropic credits exhausted).' });
         return;
       } catch (oaiErr) {
-        console.warn('[Zodiac] OpenAI fallback also failed:', String((oaiErr as Error).message).slice(0, 100));
+        console.warn('[Trend Vault] OpenAI fallback also failed:', String((oaiErr as Error).message).slice(0, 100));
       }
     }
 
@@ -675,13 +675,13 @@ Use these line types in order: hook, observation, escalation, truth, twist, endi
 
 // ── TTS: Piper (offline) + Edge TTS (online fallback) ────────────────────────
 
-app.get('/api/zodiac/tts-status', (_req, res) => {
+app.get('/api/trend-vault/tts-status', (_req, res) => {
   const piperReady  = fs.existsSync(PIPER_EXE);
   const piperVoices = getPiperVoices();
   res.json({ piperReady, piperVoices });
 });
 
-app.post('/api/zodiac/tts', async (req, res) => {
+app.post('/api/trend-vault/tts', async (req, res) => {
   const { text, piperId, edgeId } = req.body as { text: string; piperId?: string; edgeId?: string };
   if (!text) { res.status(400).json({ error: 'text required' }); return; }
 
@@ -706,7 +706,7 @@ app.post('/api/zodiac/tts', async (req, res) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { EdgeTTS } = require('node-edge-tts');
       const tts = new EdgeTTS({ voice: edgeId, outputFormat: 'audio-24khz-96kbitrate-mono-mp3' });
-      const tmpFile = path.join(os.tmpdir(), `zodiac-edge-${Date.now()}.mp3`);
+      const tmpFile = path.join(os.tmpdir(), `trend-vault-edge-${Date.now()}.mp3`);
       await tts.ttsPromise(text, tmpFile);
       const buf = fs.readFileSync(tmpFile);
       try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
@@ -787,13 +787,13 @@ app.delete('/api/custom-presets/:id', (req, res) => {
 });
 
 // ── Voice presets list (built-in + custom merged) ────────────────────────────
-app.get('/api/zodiac/voice-presets', (_req, res) => {
+app.get('/api/trend-vault/voice-presets', (_req, res) => {
   const custom = readCustomPresets();
   res.json({ presets: [...custom, ...VOICE_PRESETS] });
 });
 
 // ── Check openai-edge-tts server (localhost:5050) ─────────────────────────────
-app.get('/api/zodiac/edge-tts-status', async (_req, res) => {
+app.get('/api/trend-vault/edge-tts-status', async (_req, res) => {
   try {
     const r = await fetch('http://localhost:5050/v1/voices', { signal: AbortSignal.timeout(1500) });
     if (r.ok) {
@@ -808,7 +808,7 @@ app.get('/api/zodiac/edge-tts-status', async (_req, res) => {
 });
 
 // ── Generate voice via openai-edge-tts (high quality, localhost:5050) ─────────
-app.post('/api/zodiac/generate-voice-openai', async (req, res) => {
+app.post('/api/trend-vault/generate-voice-openai', async (req, res) => {
   const { text, voice, speed } = req.body as { text: string; voice: string; speed?: number };
   if (!text || !voice) { res.status(400).json({ error: 'text and voice required' }); return; }
   try {
@@ -895,11 +895,11 @@ app.get('/api/voice-clone/:voiceId/samples', (req, res) => {
 app.use('/voice-samples', express.static(VOICE_SAMPLES_DIR));
 
 // ── Generate voice with presets + sliders ─────────────────────────────────────
-// ── Export current zodiac project to a CapCutAPI draft ───────────────────────
+// ── Export current trend-vault project to a CapCutAPI draft ───────────────────────
 // Calls the local CapCutAPI Python server (default :9001) to build a draft the
 // user can finish in CapCut. Does NOT replace the Remotion render — both work
 // independently. Falls back to a clear error if the Python server isn't up.
-app.post('/api/zodiac/export-capcut', async (req, res) => {
+app.post('/api/trend-vault/export-capcut', async (req, res) => {
   const capcutUrl = process.env.CAPCUT_API_URL || 'http://localhost:9001';
   const { settings, scriptLines, voiceUrl, backgroundUrl } = req.body as {
     settings: Record<string, unknown>;
@@ -1004,7 +1004,7 @@ app.post('/api/zodiac/export-capcut', async (req, res) => {
 
 // ── Probe local TTS engine + CapCutAPI server (UI status indicators) ─────────
 
-app.get('/api/zodiac/engine-status', async (_req, res) => {
+app.get('/api/trend-vault/engine-status', async (_req, res) => {
   const localTts = await probeLocalTts();
 
   // CapCutAPI
@@ -1027,7 +1027,7 @@ app.get('/api/zodiac/engine-status', async (_req, res) => {
   });
 });
 
-app.post('/api/zodiac/generate-voice', async (req, res) => {
+app.post('/api/trend-vault/generate-voice', async (req, res) => {
   const {
     text, presetId, pitch, rate, speed, volume, intensity, preview, engine,
     throatDepth, ancientRasp, royalPace, chamberSpace,
@@ -1062,7 +1062,7 @@ app.post('/api/zodiac/generate-voice', async (req, res) => {
 // timed-captions bundle (same engine the render path uses). The frontend
 // caches both and plays them together — preview audio + captions are now
 // driven by the SAME timeline the final render will use.
-app.post('/api/zodiac/voice-preview', async (req, res) => {
+app.post('/api/trend-vault/voice-preview', async (req, res) => {
   const { scriptLines, voice = {}, voiceEngine = 'auto' } = req.body as {
     scriptLines: Array<{ text: string; type?: string; durationSeconds?: number }>;
     voice: {
@@ -1087,7 +1087,7 @@ app.post('/api/zodiac/voice-preview', async (req, res) => {
   if (!fullText.trim()) { res.status(400).json({ error: 'scriptLines all empty' }); return; }
 
   const previewId = `pv_${Date.now()}`;
-  const audioFile = `zodiac_preview_${previewId}.mp3`;
+  const audioFile = `trend_vault_preview_${previewId}.mp3`;
   const audioPath = path.join(AUDIO_DIR, audioFile);
   const publicAudioDir = path.join(ROOT, 'public', 'custom-audio');
   fs.mkdirSync(publicAudioDir, { recursive: true });
@@ -1221,7 +1221,7 @@ app.post('/api/zodiac/voice-preview', async (req, res) => {
       return String(h);
     };
     const scriptText = scriptLines.map(l => (l.text || '').trim()).join('||');
-    // KEEP IN SYNC with the submittedVoiceKey computation inside /api/zodiac/render.
+    // KEEP IN SYNC with the submittedVoiceKey computation inside /api/trend-vault/render.
     // Any voice-affecting field that changes the generated audio must appear here,
     // otherwise the render-time hash check will let a stale preview through.
     const voiceKey   = [
@@ -1617,8 +1617,8 @@ app.post('/api/elevenlabs/save-preset', (req, res) => {
   res.json({ ok: true, preset: entry });
 });
 
-// ── Active zodiac renders ─────────────────────────────────────────────────────
-interface ZodiacRenderState {
+// ── Active trend-vault renders ─────────────────────────────────────────────────────
+interface TrendVaultRenderState {
   status: 'running' | 'done' | 'error';
   logs: string[];
   pct: number;
@@ -1627,18 +1627,18 @@ interface ZodiacRenderState {
   outputFile?: string;
   startTime: number;
 }
-const activeZodiacRenders = new Map<string, ZodiacRenderState>();
+const activeTrendVaultRenders = new Map<string, TrendVaultRenderState>();
 
 // SSE clients per jobId — for real-time log streaming
-const zodiacSseClients = new Map<string, Set<express.Response>>();
+const trendVaultSseClients = new Map<string, Set<express.Response>>();
 
-function zodiacBroadcast(jobId: string, payload: object) {
+function trendVaultBroadcast(jobId: string, payload: object) {
   const msg = `data: ${JSON.stringify(payload)}\n\n`;
-  zodiacSseClients.get(jobId)?.forEach(c => { try { c.write(msg); } catch { /* ignore */ } });
+  trendVaultSseClients.get(jobId)?.forEach(c => { try { c.write(msg); } catch { /* ignore */ } });
 }
 
-// ── SSE for zodiac render progress ────────────────────────────────────────────
-app.get('/api/zodiac/render-status/:jobId', (req, res) => {
+// ── SSE for trend-vault render progress ────────────────────────────────────────────
+app.get('/api/trend-vault/render-status/:jobId', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -1647,11 +1647,11 @@ app.get('/api/zodiac/render-status/:jobId', (req, res) => {
   const jobId = req.params.jobId;
 
   // Register this client for real-time pushes
-  if (!zodiacSseClients.has(jobId)) zodiacSseClients.set(jobId, new Set());
-  zodiacSseClients.get(jobId)!.add(res);
+  if (!trendVaultSseClients.has(jobId)) trendVaultSseClients.set(jobId, new Set());
+  trendVaultSseClients.get(jobId)!.add(res);
 
   // Replay existing logs so reconnects get history
-  const job = activeZodiacRenders.get(jobId);
+  const job = activeTrendVaultRenders.get(jobId);
   if (job) {
     for (const log of job.logs) {
       res.write(`data: ${JSON.stringify({ log })}\n\n`);
@@ -1659,7 +1659,7 @@ app.get('/api/zodiac/render-status/:jobId', (req, res) => {
     res.write(`data: ${JSON.stringify({ progress: job.pct, stage: job.stage })}\n\n`);
     if (job.status !== 'running') {
       res.write(`data: ${JSON.stringify({ done: true, success: job.status === 'done', outputFile: job.outputFile })}\n\n`);
-      zodiacSseClients.get(jobId)?.delete(res);
+      trendVaultSseClients.get(jobId)?.delete(res);
     }
   }
 
@@ -1668,12 +1668,12 @@ app.get('/api/zodiac/render-status/:jobId', (req, res) => {
 
   req.on('close', () => {
     clearInterval(hb);
-    zodiacSseClients.get(jobId)?.delete(res);
+    trendVaultSseClients.get(jobId)?.delete(res);
   });
 });
 
-// ── Trigger zodiac render ─────────────────────────────────────────────────────
-app.post('/api/zodiac/render', async (req, res) => {
+// ── Trigger trend-vault render ─────────────────────────────────────────────────────
+app.post('/api/trend-vault/render', async (req, res) => {
   const { settings, scriptLines } = req.body;
 
   // ── Preflight: every required field validated BEFORE we mark a job started.
@@ -1686,7 +1686,7 @@ app.post('/api/zodiac/render', async (req, res) => {
     preflightErrors.push('scriptLines: empty line text — remove blank lines');
   }
   if (settings) {
-    if (!settings.zodiacSign) preflightErrors.push('zodiacSign missing');
+    if (!settings.trendVaultSign) preflightErrors.push('trendVaultSign missing');
     const engine = settings.voiceEngine || 'auto';
     if (engine === 'elevenlabs' && !settings.voice?.elevenLabsVoiceId) {
       preflightErrors.push('voiceEngine=elevenlabs but no elevenLabsVoiceId selected');
@@ -1705,7 +1705,7 @@ app.post('/api/zodiac/render', async (req, res) => {
         return String(h);
       };
       const submittedScriptHash = stableHash(scriptLines.map((l: { text?: string }) => (l.text || '').trim()).join('||'));
-      // KEEP IN SYNC with the voiceKey computation inside /api/zodiac/voice-preview.
+      // KEEP IN SYNC with the voiceKey computation inside /api/trend-vault/voice-preview.
       // Adding any new voice-affecting param requires updating both sites.
       const v = (settings.voice || {}) as Record<string, unknown>;
       const submittedVoiceKey   = [
@@ -1744,12 +1744,12 @@ app.post('/api/zodiac/render', async (req, res) => {
   }
 
   const jobId  = Date.now().toString();
-  const folder = `${new Date().toISOString().slice(0, 10)}_${settings.zodiacSign.replace(/\s+/g, '_')}_${jobId}`;
+  const folder = `${new Date().toISOString().slice(0, 10)}_${settings.trendVaultSign.replace(/\s+/g, '_')}_${jobId}`;
 
-  const jobFile = path.join(ZODIAC_OUT, `job_${jobId}.json`);
+  const jobFile = path.join(TREND_VAULT_OUT, `job_${jobId}.json`);
   fs.writeFileSync(jobFile, JSON.stringify({ jobId, outputFolder: folder, scriptLines, settings }));
 
-  const renderState: ZodiacRenderState = {
+  const renderState: TrendVaultRenderState = {
     status: 'running',
     logs:   [],
     pct:    0,
@@ -1757,7 +1757,7 @@ app.post('/api/zodiac/render', async (req, res) => {
     outputFolder: folder,
     startTime: Date.now(),
   };
-  activeZodiacRenders.set(jobId, renderState);
+  activeTrendVaultRenders.set(jobId, renderState);
 
   // Respond immediately — pipeline runs in background
   res.json({ ok: true, jobId, folder });
@@ -1778,13 +1778,13 @@ app.post('/api/zodiac/render', async (req, res) => {
     if (pct !== undefined) renderState.pct = pct;
     const pctMatch = clean.match(/^(\d+)%/);
     if (pctMatch) renderState.pct = Math.max(renderState.pct, parseInt(pctMatch[1]));
-    zodiacBroadcast(jobId, { log: clean, progress: renderState.pct, stage: renderState.stage });
+    trendVaultBroadcast(jobId, { log: clean, progress: renderState.pct, stage: renderState.stage });
   };
 
   const setStage = (label: string, pct: number) => {
     renderState.stage = label;
     renderState.pct   = pct;
-    zodiacBroadcast(jobId, { stage: label, progress: pct });
+    trendVaultBroadcast(jobId, { stage: label, progress: pct });
   };
 
   // ─── Background pipeline ────────────────────────────────────────────────────
@@ -1796,7 +1796,7 @@ app.post('/api/zodiac/render', async (req, res) => {
 
       const voiceParams    = settings.voice || {};
       const fullText       = (scriptLines as Array<{text:string}>).map(l => l.text).join('\n\n');
-      const voiceFile      = `zodiac_voice_${jobId}.mp3`;
+      const voiceFile      = `trend_vault_voice_${jobId}.mp3`;
       const voicePath      = path.join(AUDIO_DIR, voiceFile);
       const selectedPreset = voiceParams.presetId || 'tiktok_female';
       const selectedEngine = settings.voiceEngine || 'auto';
@@ -2051,7 +2051,7 @@ app.post('/api/zodiac/render', async (req, res) => {
         pushLog(`[TIMING] could not persist caption JSON: ${(e as Error).message}`);
       }
 
-      // Convert the bundle into the shape zodiac-render.ts already consumes
+      // Convert the bundle into the shape trend-vault-render.ts already consumes
       // (text + startMs + endMs + words). Preview and render now share this
       // same array via the captions JSON above.
       const alignedScriptLines: ScriptLineWithWords[] = bundleToRenderLines(canonicalBundle) as ScriptLineWithWords[];
@@ -2143,7 +2143,7 @@ app.post('/api/zodiac/render', async (req, res) => {
                   renderState.pct = Math.round(32 + parseInt(fMatch[1]) * 0.6);
                   renderState.stage = `🎬 ${fMatch[2]} / ${fMatch[3]} frames`;
                 }
-                zodiacBroadcast(jobId, { log, progress: renderState.pct, stage: renderState.stage });
+                trendVaultBroadcast(jobId, { log, progress: renderState.pct, stage: renderState.stage });
               }
 
               if (status.state === 'done') { resolve(); return; }
@@ -2164,10 +2164,10 @@ app.post('/api/zodiac/render', async (req, res) => {
       } else {
         // ── In-process path (original) ─────────────────────────────────────────
         await new Promise<void>((resolve, reject) => {
-          const proc = spawn('npx tsx scripts/zodiac-render.ts', [], {
+          const proc = spawn('npx tsx scripts/trend-vault-render.ts', [], {
             cwd: ROOT,
             shell: true,
-            env: { ...process.env, ZODIAC_JOB_FILE: jobFile },
+            env: { ...process.env, TREND_VAULT_JOB_FILE: jobFile },
           });
 
           const onData = (data: Buffer) => {
@@ -2193,7 +2193,7 @@ app.post('/api/zodiac/render', async (req, res) => {
                 renderState.pct = Math.round(32 + parseInt(fMatch[1]) * 0.6);
                 renderState.stage = `🎬 ${fMatch[2]} / ${fMatch[3]} frames`;
               }
-              zodiacBroadcast(jobId, { log: clean, progress: renderState.pct, stage: renderState.stage });
+              trendVaultBroadcast(jobId, { log: clean, progress: renderState.pct, stage: renderState.stage });
             }
           };
 
@@ -2202,7 +2202,7 @@ app.post('/api/zodiac/render', async (req, res) => {
 
           proc.on('close', (code) => {
             if (code === 0) resolve();
-            else reject(new Error(`zodiac-render.ts exited with code ${code}`));
+            else reject(new Error(`trend-vault-render.ts exited with code ${code}`));
           });
           proc.on('error', reject);
         });
@@ -2210,7 +2210,7 @@ app.post('/api/zodiac/render', async (req, res) => {
 
 
       // ── Done — verify mp4 exists AND has an audio stream with real content ─
-      const outFile = path.join(ZODIAC_OUT, folder, 'video.mp4');
+      const outFile = path.join(TREND_VAULT_OUT, folder, 'video.mp4');
       if (!fs.existsSync(outFile)) {
         throw new Error('Render process finished but video.mp4 not found');
       }
@@ -2271,35 +2271,35 @@ app.post('/api/zodiac/render', async (req, res) => {
       renderState.pct        = 100;
       renderState.stage      = '✅ Complete!';
       renderState.outputFile = `${folder}/video.mp4`;
-      pushLog(`✅ Render complete! → zodiac-output/${folder}/video.mp4`, 100);
-      zodiacBroadcast(jobId, { done: true, success: true, outputFile: renderState.outputFile });
+      pushLog(`✅ Render complete! → trend-vault-output/${folder}/video.mp4`, 100);
+      trendVaultBroadcast(jobId, { done: true, success: true, outputFile: renderState.outputFile });
 
     } catch (err) {
       const msg = (err as Error).message || String(err);
       renderState.status = 'error';
       renderState.stage  = '❌ Failed';
       pushLog(`❌ Render failed: ${msg}`);
-      zodiacBroadcast(jobId, { done: true, success: false, error: msg });
+      trendVaultBroadcast(jobId, { done: true, success: false, error: msg });
     } finally {
       // Clean up job file
       try { if (fs.existsSync(jobFile)) fs.unlinkSync(jobFile); } catch { /* ignore */ }
       // Clean up SSE client refs after a delay
-      setTimeout(() => zodiacSseClients.delete(jobId), 30000);
-      // Prune the activeZodiacRenders entry after 1 hour so the Map doesn't
+      setTimeout(() => trendVaultSseClients.delete(jobId), 30000);
+      // Prune the activeTrendVaultRenders entry after 1 hour so the Map doesn't
       // grow unbounded across many sequential renders in a long server session.
-      setTimeout(() => activeZodiacRenders.delete(jobId), 3_600_000);
+      setTimeout(() => activeTrendVaultRenders.delete(jobId), 3_600_000);
     }
   })();
 });
 
-// ── List zodiac outputs ────────────────────────────────────────────────────────
-app.get('/api/zodiac/outputs', (_req, res) => {
-  if (!fs.existsSync(ZODIAC_OUT)) { res.json({ folders: [] }); return; }
-  const folders = fs.readdirSync(ZODIAC_OUT, { withFileTypes: true })
+// ── List trend-vault outputs ────────────────────────────────────────────────────────
+app.get('/api/trend-vault/outputs', (_req, res) => {
+  if (!fs.existsSync(TREND_VAULT_OUT)) { res.json({ folders: [] }); return; }
+  const folders = fs.readdirSync(TREND_VAULT_OUT, { withFileTypes: true })
     .filter(d => d.isDirectory())
     .map(d => {
-      const videoFile = path.join(ZODIAC_OUT, d.name, 'video.mp4');
-      const metaFile  = path.join(ZODIAC_OUT, d.name, 'meta.json');
+      const videoFile = path.join(TREND_VAULT_OUT, d.name, 'video.mp4');
+      const metaFile  = path.join(TREND_VAULT_OUT, d.name, 'meta.json');
       const meta = fs.existsSync(metaFile)
         ? JSON.parse(fs.readFileSync(metaFile, 'utf8'))
         : {};
@@ -2315,7 +2315,7 @@ app.get('/api/zodiac/outputs', (_req, res) => {
 });
 
 // ── Analyze reference video style ────────────────────────────────────────────
-app.post('/api/zodiac/analyze-reference', bgUpload.single('video'), async (req, res) => {
+app.post('/api/trend-vault/analyze-reference', bgUpload.single('video'), async (req, res) => {
   if (!req.file) { res.status(400).json({ error: 'No file.' }); return; }
 
   const videoPath = req.file.path;
@@ -2405,14 +2405,14 @@ app.get('/api/prompts', (_req, res) => {
 });
 
 // ── Extend existing script with AI ────────────────────────────────────────────
-app.post('/api/zodiac/extend-script', async (req, res) => {
-  const { zodiacSign, prompt, emotionalTone, existingLines, addCount } = req.body as {
-    zodiacSign: string; category?: string; prompt: string; angle?: string;
+app.post('/api/trend-vault/extend-script', async (req, res) => {
+  const { trendVaultSign, prompt, emotionalTone, existingLines, addCount } = req.body as {
+    trendVaultSign: string; category?: string; prompt: string; angle?: string;
     emotionalTone: string; existingLines: { text: string; type: string; durationSeconds: number }[];
     addCount: number;
   };
-  if (!zodiacSign || !prompt || !existingLines?.length) {
-    res.status(400).json({ error: 'zodiacSign, prompt, existingLines required.' }); return;
+  if (!trendVaultSign || !prompt || !existingLines?.length) {
+    res.status(400).json({ error: 'trendVaultSign, prompt, existingLines required.' }); return;
   }
   const count = Math.min(Math.max(addCount || 4, 1), 12);
 
@@ -2420,7 +2420,7 @@ app.post('/api/zodiac/extend-script', async (req, res) => {
   if (!hasAnyKey) {
     const types = ['observation','escalation','truth','twist'] as const;
     const newLines = Array.from({ length: count }, (_, i) => ({
-      text: `${zodiacSign}s carry something most people never see.`,
+      text: `${trendVaultSign}s carry something most people never see.`,
       type: types[i % types.length],
       durationSeconds: 5,
     }));
@@ -2439,9 +2439,9 @@ app.post('/api/zodiac/extend-script', async (req, res) => {
 
     const result = await aiComplete({
       maxTokens: 1024,
-      user: `You write TikTok zodiac storytelling scripts. Tone: ${tone}.
+      user: `You write TikTok trend-vault storytelling scripts. Tone: ${tone}.
 
-Existing script for ${zodiacSign} about "${prompt}":
+Existing script for ${trendVaultSign} about "${prompt}":
 ${existingText}
 
 Add ${count} NEW continuation lines. Keep the same emotional arc and tone.
@@ -2459,7 +2459,7 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
     console.warn('[extend-script] error:', msg);
     const types = ['observation','escalation','truth','twist'] as const;
     const newLines = Array.from({ length: count }, (_, i) => ({
-      text: `And yet — ${zodiacSign}s always find their way back to themselves.`,
+      text: `And yet — ${trendVaultSign}s always find their way back to themselves.`,
       type: types[i % types.length], durationSeconds: 5,
     }));
     res.json({ ok: true, lines: newLines, source: 'fallback', error: msg });
@@ -2469,7 +2469,7 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
 // ── Local (no-API) script reframe engine ─────────────────────────────────────
 function localReframe(
   lines: { text: string; type: string; durationSeconds: number }[],
-  zodiacSign: string,
+  trendVaultSign: string,
   emotionalTone: string
 ): { text: string; type: string; durationSeconds: number }[] {
 
@@ -2561,7 +2561,7 @@ function localReframe(
   const pickOpener = (type: string): string => {
     const list = openers[type] || openers.observation;
     const pick  = list[Math.floor(Math.random() * list.length)];
-    return pick.replace(/\{sign\}/g, zodiacSign || 'This sign');
+    return pick.replace(/\{sign\}/g, trendVaultSign || 'This sign');
   };
 
   // Assign proper arc type sequence if all types are the same
@@ -2576,14 +2576,14 @@ function localReframe(
     if (type === 'hook' && text.length < 60) {
       const opener = pickOpener('hook');
       // Only prepend if it won't duplicate meaning
-      if (!text.toLowerCase().includes('no one') && !text.toLowerCase().includes(zodiacSign.toLowerCase())) {
+      if (!text.toLowerCase().includes('no one') && !text.toLowerCase().includes(trendVaultSign.toLowerCase())) {
         text = opener + ' ' + text;
       }
     }
 
     // For ending: ensure it ends on a high note
-    if (type === 'ending' && !text.includes(zodiacSign) && !text.match(/always|never|that'?s/i)) {
-      text = text.replace(/\.$/, '') + ` — that\'s ${zodiacSign}.`;
+    if (type === 'ending' && !text.includes(trendVaultSign) && !text.match(/always|never|that'?s/i)) {
+      text = text.replace(/\.$/, '') + ` — that\'s ${trendVaultSign}.`;
     }
 
     // Normalise duration
@@ -2598,9 +2598,9 @@ function localReframe(
 }
 
 // ── Regenerate / reframe a full script (preserves meaning, fixes structure) ───
-app.post('/api/zodiac/regenerate-script', async (req, res) => {
-  const { zodiacSign, prompt, angle, emotionalTone, existingLines } = req.body as {
-    zodiacSign: string; category?: string; prompt: string; angle: string;
+app.post('/api/trend-vault/regenerate-script', async (req, res) => {
+  const { trendVaultSign, prompt, angle, emotionalTone, existingLines } = req.body as {
+    trendVaultSign: string; category?: string; prompt: string; angle: string;
     emotionalTone: string; existingLines: { text: string; type: string; durationSeconds: number }[];
   };
   if (!existingLines?.length) {
@@ -2608,7 +2608,7 @@ app.post('/api/zodiac/regenerate-script', async (req, res) => {
   }
 
   const existingText = existingLines.map((l, i) => `${i + 1}. [${l.type}] "${l.text}"`).join('\n');
-  const aiPrompt = `Reframe and clean up this zodiac TikTok script. Improve EACH line in place — do NOT reorder, move, or renumber them.
+  const aiPrompt = `Reframe and clean up this trend-vault TikTok script. Improve EACH line in place — do NOT reorder, move, or renumber them.
 
 Rules:
 - Return lines in the EXACT same order as the input, line 1 stays line 1, line 2 stays line 2, etc.
@@ -2618,7 +2618,7 @@ Rules:
 - Keep the same [type] for each line unless it is clearly wrong
 - Tone: ${emotionalTone || 'mysterious'}
 
-Sign: ${zodiacSign}, Topic: ${prompt}${angle ? `, Angle: ${angle}` : ''}
+Sign: ${trendVaultSign}, Topic: ${prompt}${angle ? `, Angle: ${angle}` : ''}
 
 CURRENT SCRIPT (improve each line in place, same order):
 ${existingText}
@@ -2642,7 +2642,7 @@ Return ONLY a JSON array with the same number of elements as the input (no other
 
   // 2. Local reframe engine — zero API calls, always works
   try {
-    const lines = localReframe(existingLines, zodiacSign || 'Scorpio', emotionalTone || 'mysterious');
+    const lines = localReframe(existingLines, trendVaultSign || 'Scorpio', emotionalTone || 'mysterious');
     res.json({
       ok: true,
       lines,
@@ -2668,7 +2668,7 @@ const FALLBACK_PROMPTS: Record<string, string[]> = {
   Capricorn:   ['Why Capricorn works this hard — and what it costs them','The version of Capricorn nobody sees when the work is done','How Capricorn loves — slowly, carefully, and forever','Why Capricorn carries everyone\'s weight without ever asking for help','The moment Capricorn stopped climbing and finally looked down','What Capricorn sacrificed to become who they are today','Capricorn and the success that still feels like it is not enough','Why Capricorn\'s toughness is just love with armor on'],
   Aquarius:    ['Why Aquarius feels like a stranger in every room they walk into','The revolution Aquarius is quietly planning in their head','How Aquarius loves — unexpectedly, deeply, on their own terms','Why Aquarius detaches before you can see them falling apart','The moment Aquarius realized being different was their superpower','What Aquarius is actually thinking when they go distant','Aquarius and the future they see that nobody else believes in yet','Why Aquarius will die for a cause before they cry for themselves'],
   Pisces:      ['Why Pisces absorbs everyone else\'s pain before their own','The dream Pisces is still chasing no matter what it costs','How Pisces loves — completely, selflessly, and at great risk','Why Pisces already sensed what was about to happen','The moment Pisces stopped being everyone\'s emotional escape','What Pisces feels when reality refuses to match the vision','Pisces and the world they built inside their head to survive','Why Pisces empathy is their greatest gift and greatest wound'],
-  All:         ['Why your zodiac sign knows your trauma before you do','The thing every sign does when they are secretly falling apart','How each zodiac sign shows they care — without saying a word','The dark trait every sign has that they refuse to acknowledge','Why the most dangerous person in the room is a quiet zodiac','What each sign does to protect themselves from real love','The moment every sign realizes they have outgrown someone','Why your zodiac sign attracts the exact chaos it fears'],
+  All:         ['Why your trend-vault sign knows your trauma before you do','The thing every sign does when they are secretly falling apart','How each trend-vault sign shows they care — without saying a word','The dark trait every sign has that they refuse to acknowledge','Why the most dangerous person in the room is a quiet trend-vault','What each sign does to protect themselves from real love','The moment every sign realizes they have outgrown someone','Why your trend-vault sign attracts the exact chaos it fears'],
 };
 
 function _fallbackPrompts(sign: string, n: number, exclude: string[]): string[] {
@@ -2685,11 +2685,11 @@ function _fallbackPrompts(sign: string, n: number, exclude: string[]): string[] 
 // to ADD detail/sharpness without replacing the original idea.
 //
 // Request body:
-//   { originalPrompt, currentPrompt, aiAdditions: [{text, source}], zodiacSign?, tone? }
+//   { originalPrompt, currentPrompt, aiAdditions: [{text, source}], trendVaultSign?, tone? }
 //
 // Response:
 //   { ok, improvedPrompt, addedDetails, explanation, provider, warning? }
-app.post('/api/zodiac/improve-prompt', async (req, res) => {
+app.post('/api/trend-vault/improve-prompt', async (req, res) => {
   const body = req.body as {
     // New canonical fields requested by the spec
     prompt?:         string;
@@ -2700,7 +2700,7 @@ app.post('/api/zodiac/improve-prompt', async (req, res) => {
     originalPrompt?: string;
     currentPrompt?:  string;
     aiAdditions?:    Array<{ text: string; source?: string }>;
-    zodiacSign?:     string;
+    trendVaultSign?:     string;
     tone?:           string;
   };
   // Accept both legacy (currentPrompt/originalPrompt) and new (prompt) shapes.
@@ -2710,7 +2710,7 @@ app.post('/api/zodiac/improve-prompt', async (req, res) => {
     res.status(400).json({ ok: false, error: 'prompt (or currentPrompt) required' });
     return;
   }
-  const sign = body.currentSign || body.zodiacSign || 'any sign';
+  const sign = body.currentSign || body.trendVaultSign || 'any sign';
   // Tone resolution: prefer the boolean `emotionalTone` flag from the new
   // contract; fall back to the legacy string tone id. If `emotionalTone` is
   // explicitly true/false we treat it as the deciding signal; otherwise we
@@ -2761,7 +2761,7 @@ ${scriptStyle ? `\nSCRIPT STYLE: ${scriptStyle}` : ''}
 ${toneInstruction}
 
 Your job: Rewrite the CURRENT prompt into a stronger single-paragraph premise.
-- Keep the original idea intact (same topic, same zodiac sign).
+- Keep the original idea intact (same topic, same trend-vault sign).
 - Preserve the user's intent — do not steer it somewhere new.
 - Sharpen the hook, the rhythm, and the emotional precision.
 - Add ONE concrete detail or angle that wasn't there before.
@@ -2810,7 +2810,7 @@ Return ONLY this JSON, nothing else:
 /**
  * Local, deterministic prompt sharpener used when both AI providers fail.
  * Must change the prompt visibly so the user can see the button worked, while
- * preserving the topic / zodiac sign. Picks the first pool entry whose opening
+ * preserving the topic / trend-vault sign. Picks the first pool entry whose opening
  * 24 chars are not already present in the prompt to avoid repeat additions.
  */
 function _localHeuristicImprove(
@@ -2837,14 +2837,14 @@ function _localHeuristicImprove(
   };
 }
 
-app.post('/api/zodiac/generate-prompts', async (req, res) => {
-  const { zodiacSign, category, count, exclude } = req.body as {
-    zodiacSign?: string; category?: string; count?: number; exclude?: string[];
+app.post('/api/trend-vault/generate-prompts', async (req, res) => {
+  const { trendVaultSign, category, count, exclude } = req.body as {
+    trendVaultSign?: string; category?: string; count?: number; exclude?: string[];
   };
   const n = Math.min(Math.max(count || 4, 1), 20);
-  const sign = zodiacSign || 'All';
+  const sign = trendVaultSign || 'All';
   const cat  = category  || 'general';
-  const signCtx = sign === 'All' ? 'any zodiac sign (universal)' : sign;
+  const signCtx = sign === 'All' ? 'any trend-vault sign (universal)' : sign;
   const excludeList = (exclude || []).slice(0, 30);
 
   // No AI key — return fallback immediately
@@ -2878,7 +2878,7 @@ Return ONLY a JSON array of strings, no other text:
 });
 
 // ── Draft save / load / delete ─────────────────────────────────────────────────
-app.get('/api/zodiac/drafts', (_req, res) => {
+app.get('/api/trend-vault/drafts', (_req, res) => {
   if (!fs.existsSync(DRAFTS_DIR)) { res.json({ drafts: [] }); return; }
   const drafts = fs.readdirSync(DRAFTS_DIR)
     .filter(f => f.endsWith('.json'))
@@ -2893,7 +2893,7 @@ app.get('/api/zodiac/drafts', (_req, res) => {
   res.json({ drafts });
 });
 
-app.post('/api/zodiac/drafts', (req, res) => {
+app.post('/api/trend-vault/drafts', (req, res) => {
   const { name, state: draftState } = req.body as { name: string; state: unknown };
   if (!name || !draftState) { res.status(400).json({ error: 'name and state required' }); return; }
   const id = `draft_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -2902,7 +2902,7 @@ app.post('/api/zodiac/drafts', (req, res) => {
   res.json({ ok: true, id, name });
 });
 
-app.delete('/api/zodiac/drafts/:id', (req, res) => {
+app.delete('/api/trend-vault/drafts/:id', (req, res) => {
   const fp = path.join(DRAFTS_DIR, `${path.basename(req.params.id)}.json`);
   if (fs.existsSync(fp)) fs.unlinkSync(fp);
   res.json({ ok: true });
@@ -2927,11 +2927,11 @@ function addJob(job: DownloadJob) {
   if (downloadQueue.length > 50) downloadQueue.length = 50;
 }
 
-app.get('/api/zodiac/download-queue', (_req, res) => {
+app.get('/api/trend-vault/download-queue', (_req, res) => {
   res.json({ jobs: downloadQueue });
 });
 
-app.delete('/api/zodiac/download-queue/:id', (req, res) => {
+app.delete('/api/trend-vault/download-queue/:id', (req, res) => {
   const idx = downloadQueue.findIndex(j => j.id === req.params.id);
   if (idx >= 0) downloadQueue.splice(idx, 1);
   res.json({ ok: true });
@@ -2956,7 +2956,7 @@ async function resolveUrl(url: string): Promise<string> {
 }
 
 // ── Import audio/video from URL (yt-dlp) — background queue ──────────────────
-app.post('/api/zodiac/import-url', async (req, res) => {
+app.post('/api/trend-vault/import-url', async (req, res) => {
   const { url, type } = req.body as { url: string; type: 'audio' | 'video' };
   if (!url) { res.status(400).json({ error: 'url required' }); return; }
 
@@ -3259,7 +3259,7 @@ app.get('/api/health', async (_req, res) => {
 
   // 1. Required storage folders
   const requiredDirs: [string, string][] = [
-    [ZODIAC_OUT,                  'zodiac-output'],
+    [TREND_VAULT_OUT,                  'trend-vault-output'],
     [FINAL_DIR,                   'output/final'],
     [UPLOADS,                     'uploads'],
     [AUDIO_DIR,                   'custom-audio'],
@@ -3350,18 +3350,18 @@ app.get('/api/health', async (_req, res) => {
     check('env_vars', 'warning', envWarnings.join('; '));
   }
 
-  // 8. Zodiac output folder write test
+  // 8. Trend Vault output folder write test
   try {
-    const probe = path.join(ZODIAC_OUT, `.health_probe_${Date.now()}`);
+    const probe = path.join(TREND_VAULT_OUT, `.health_probe_${Date.now()}`);
     fs.writeFileSync(probe, '1');
     fs.unlinkSync(probe);
-    check('output_writable', 'ok', 'zodiac-output is writable');
+    check('output_writable', 'ok', 'trend-vault-output is writable');
   } catch (e) {
-    check('output_writable', 'failed', `zodiac-output not writable: ${(e as Error).message}`);
+    check('output_writable', 'failed', `trend-vault-output not writable: ${(e as Error).message}`);
   }
 
   // 9. Active render count
-  const activeCount = [...activeZodiacRenders.values()].filter(j => j.status === 'running').length;
+  const activeCount = [...activeTrendVaultRenders.values()].filter(j => j.status === 'running').length;
   if (activeCount === 0) {
     check('render_queue', 'ok', 'No renders in progress — ready for new job');
   } else {
@@ -3390,12 +3390,12 @@ app.get('/api/health', async (_req, res) => {
 const server = app.listen(PORT, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════╗');
-  console.log('  ║   🔮  Zodiac Program  —  Ready!      ║');
-  console.log(`  ║   Zodiac Studio : /zodiac             ║`);
+  console.log('  ║   🔮  Trend Vault Program  —  Ready!      ║');
+  console.log(`  ║   Trend Vault Studio : /trend-vault             ║`);
   console.log(`  ║   http://localhost:${PORT}             ║`);
   console.log('  ╚══════════════════════════════════════╝');
   console.log('');
-  console.log('  Zodiac videos → zodiac-output/<folder>/');
+  console.log('  Trend Vault videos → trend-vault-output/<folder>/');
   console.log('  Clip tool     → output/final/<VideoName>/');
   console.log('');
 
@@ -3429,10 +3429,10 @@ server.on('error', (err: NodeJS.ErrnoException) => {
     console.error('');
     console.error('  ══════════════════════════════════════════════════');
     console.error(`  ERROR: Port ${PORT} is already in use.`);
-    console.error('  An old Zodiac window is still running in the background.');
+    console.error('  An old Trend Vault window is still running in the background.');
     console.error('');
-    console.error('  Fix: run  stop_zodiac_system.bat  then try again.');
-    console.error('  Or close all Zodiac windows in the taskbar first.');
+    console.error('  Fix: run  stop_trend_vault_system.bat  then try again.');
+    console.error('  Or close all Trend Vault windows in the taskbar first.');
     console.error('  ════════════════════════════════════════════════════');
     process.exit(1);
   } else {

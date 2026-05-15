@@ -1,15 +1,15 @@
 ---
 name: add-cinematic-preset
-description: Use this skill when the user wants to add a new cinematic visual preset to the Zodiac studio — a one-click bundle of color grade, grain, blur, fog, vignette, and tone settings (the "Liminal Horror / VHS Nightmare / Storycore" style scrollable cards). Trigger on phrases like "add a preset called X", "make a Y aesthetic preset", "I want a 90s home video preset", "add another vibe to the strip", "create a cinematic look", or anything where the user describes a complete look-and-feel that should be one click.
+description: Use this skill when the user wants to add a new cinematic visual preset to the Trend Vault studio — a one-click bundle of color grade, grain, blur, fog, vignette, and tone settings (the "Liminal Horror / VHS Nightmare / Storycore" style scrollable cards). Trigger on phrases like "add a preset called X", "make a Y aesthetic preset", "I want a 90s home video preset", "add another vibe to the strip", "create a cinematic look", or anything where the user describes a complete look-and-feel that should be one click.
 ---
 
 # Add a new cinematic preset
 
-A cinematic preset is a single object in `frontend/zodiac.html`'s `CINEMATIC_PRESETS` constant + a card button in the scrollable strip. It bundles every visual setting so one click delivers a complete look.
+A cinematic preset is a single object in `frontend/trend-vault.html`'s `CINEMATIC_PRESETS` constant + a card button in the scrollable strip. It bundles every visual setting so one click delivers a complete look.
 
 ## Step 1: Add the preset object
 
-In `frontend/zodiac.html`, find `const CINEMATIC_PRESETS = {` and add a new entry. The full schema is:
+In `frontend/trend-vault.html`, find `const CINEMATIC_PRESETS = {` and add a new entry. The full schema is:
 
 ```js
 'preset-id': {

@@ -1,7 +1,7 @@
 /**
  * Cinematic Motivational Scripts — Built-in Library
  * ─────────────────────────────────────────────────────────────────────────────
- * 12 hand-written passionate motivational scripts (one per zodiac sign) in the
+ * 12 hand-written passionate motivational scripts (one per trend-vault sign) in the
  * Hook / Observation / Energy Shift / Strength / Motivation / Deep Truth /
  * Ending structure. They are wired into the script-generation pipeline as a
  * built-in fallback / library. The frontend doesn't expose them as a separate
@@ -20,7 +20,7 @@
  *   ENDING       → 'ending'
  */
 
-import type { GeneratedLine, GeneratedScript } from './zodiac-generate';
+import type { GeneratedLine, GeneratedScript } from './trend-vault-generate';
 
 // Quick line factory — keeps the data dense + readable
 const L = (
@@ -275,16 +275,16 @@ export const MOTIVATIONAL_SCRIPTS: Record<string, GeneratedLine[]> = {
  * Look up a built-in motivational script by sign.
  * Returns null if the sign isn't in the library (e.g. a typo or custom sign).
  */
-export function getMotivationalScript(zodiacSign: string): GeneratedScript | null {
-  const lines = MOTIVATIONAL_SCRIPTS[zodiacSign];
+export function getMotivationalScript(trendVaultSign: string): GeneratedScript | null {
+  const lines = MOTIVATIONAL_SCRIPTS[trendVaultSign];
   if (!lines || lines.length === 0) return null;
   const totalDuration = lines.reduce((sum, l) => sum + l.durationSeconds, 0);
   return {
     lines,
     totalDuration,
-    title: `${zodiacSign} — A Cinematic Motivational Reading`,
+    title: `${trendVaultSign} — A Cinematic Motivational Reading`,
     hook: lines[0]?.text ?? '',
-    zodiacSign,
+    trendVaultSign,
     topic: 'motivational',
     emotionalTone: 'motivational',
   };
@@ -293,14 +293,14 @@ export function getMotivationalScript(zodiacSign: string): GeneratedScript | nul
 /**
  * Returns true when the caller is asking for a motivational tone or has not
  * given the AI generator anything specific to work with. Used by the fallback
- * path in `zodiac-generate.ts` to pick this library over the generic fallback.
+ * path in `trend-vault-generate.ts` to pick this library over the generic fallback.
  */
 export function shouldUseMotivationalScript(opts: {
-  zodiacSign: string;
+  trendVaultSign: string;
   emotionalTone?: string;
   prompt?: string;
 }): boolean {
-  if (!MOTIVATIONAL_SCRIPTS[opts.zodiacSign]) return false;
+  if (!MOTIVATIONAL_SCRIPTS[opts.trendVaultSign]) return false;
   const tone = (opts.emotionalTone || '').toLowerCase();
   if (tone === 'motivational' || tone === 'positive' || tone === 'cinematic') return true;
   // If there's no real prompt to work with, motivational is a strong default

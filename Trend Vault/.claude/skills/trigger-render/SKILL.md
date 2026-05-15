@@ -1,11 +1,11 @@
 ---
 name: trigger-render
-description: Use this skill when the user wants to trigger, kick off, fire, or start a video render from the Zodiac studio without manually clicking the button — typically because they're testing, debugging, batch-rendering, or running automated checks. Trigger on phrases like "render the current project", "kick off a render", "render via API", "test the pipeline end to end", "render this without the UI", "automate this render".
+description: Use this skill when the user wants to trigger, kick off, fire, or start a video render from the Trend Vault studio without manually clicking the button — typically because they're testing, debugging, batch-rendering, or running automated checks. Trigger on phrases like "render the current project", "kick off a render", "render via API", "test the pipeline end to end", "render this without the UI", "automate this render".
 ---
 
 # Trigger a render via API
 
-The studio's `🎬 Render` button is just a thin wrapper around `POST /api/zodiac/render`. To trigger a render programmatically (for testing, debugging, or batch runs), call that endpoint directly.
+The studio's `🎬 Render` button is just a thin wrapper around `POST /api/trend-vault/render`. To trigger a render programmatically (for testing, debugging, or batch runs), call that endpoint directly.
 
 ## Required inputs
 
@@ -16,8 +16,8 @@ Minimum viable payload (everything else gets defaults from server / Root.tsx):
 ```json
 {
   "settings": {
-    "zodiacSign": "Scorpio",
-    "zodiacSymbol": "♏",
+    "trendVaultSign": "Scorpio",
+    "trendVaultSymbol": "♏",
     "fps": 60,
     "renderQuality": "high",
     "voiceEngine": "auto"
@@ -29,19 +29,19 @@ Minimum viable payload (everything else gets defaults from server / Root.tsx):
 }
 ```
 
-To capture the EXACT settings the user has in their browser RIGHT NOW, open DevTools → Network tab, click Render, look at the `/api/zodiac/render` request payload, and copy it. That's the full settings shape.
+To capture the EXACT settings the user has in their browser RIGHT NOW, open DevTools → Network tab, click Render, look at the `/api/trend-vault/render` request payload, and copy it. That's the full settings shape.
 
 ## Submit + watch
 
 ```bash
 # Submit
-curl -X POST http://localhost:3001/api/zodiac/render \
+curl -X POST http://localhost:3001/api/trend-vault/render \
   -H "Content-Type: application/json" \
   -d @payload.json
 # → { ok: true, jobId: "1778304...", folder: "2026-05-09_Scorpio_1778304..." }
 
 # Watch real-time progress (Server-Sent Events)
-curl -N http://localhost:3001/api/zodiac/render-status/<jobId>
+curl -N http://localhost:3001/api/trend-vault/render-status/<jobId>
 ```
 
 The SSE stream emits `{ log, progress, stage }` events as each render stage completes:
@@ -54,7 +54,7 @@ The SSE stream emits `{ log, progress, stage }` events as each render stage comp
 
 When done:
 ```
-zodiac-output/<folder>/
+trend-vault-output/<folder>/
 ├── video.mp4         ← the render
 ├── meta.json         ← settings + voice + caption sync method
 └── (no other files)
@@ -62,7 +62,7 @@ zodiac-output/<folder>/
 
 ## When you'd want this
 
-- **Batch render** all 12 zodiac signs with the same settings — script it
+- **Batch render** all 12 trend-vault signs with the same settings — script it
 - **Reproduce a bug** with a known-good payload saved to disk
 - **Smoke test** the pipeline after editing FFmpeg / Remotion code
 - **Automated nightly render** with cron (via the schedule skill)

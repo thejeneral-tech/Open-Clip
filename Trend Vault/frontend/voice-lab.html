@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>🎙️ Voice Lab — Zodiac Studio</title>
+<title>🎙️ Voice Lab — Trend Vault Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
 <style>
@@ -221,7 +221,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   </div>
   <nav>
     <a href="/" class="nav-link">🎬 Clip Tool</a>
-    <a href="/zodiac" class="nav-link">🔮 Zodiac Studio</a>
+    <a href="/trend-vault" class="nav-link">🔮 Trend Vault Studio</a>
     <a href="/voice-lab" class="nav-link active">🎙️ Voice Lab</a>
     <a href="/voice-editor" class="nav-link">🎤 MP3 Editor</a>
   </nav>
@@ -285,7 +285,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
       <button onclick="savePresetSnapshot()" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
     </div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:18px;line-height:1.6">
-      Save a snapshot of the current voice + slider settings as a reusable preset. Presets are stored in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">custom-presets.json</code> and appear in Zodiac Studio automatically.
+      Save a snapshot of the current voice + slider settings as a reusable preset. Presets are stored in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">custom-presets.json</code> and appear in Trend Vault Studio automatically.
     </p>
     <div id="presetsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px"></div>
     <div id="presetsEmpty" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
@@ -370,7 +370,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     <!-- Send advanced settings to Studio -->
     <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(124,58,237,.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
-        <div style="font-size:.78rem;font-weight:700;color:#86efac;margin-bottom:4px">📤 Export to Zodiac Studio</div>
+        <div style="font-size:.78rem;font-weight:700;color:#86efac;margin-bottom:4px">📤 Export to Trend Vault Studio</div>
         <div style="font-size:.7rem;color:var(--muted);line-height:1.5">Sends the selected voice + all Advanced slider values to the Studio for final render.</div>
       </div>
       <button onclick="sendAdvancedToStudio()" style="padding:12px 22px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.5);color:#86efac;border-radius:10px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
@@ -556,7 +556,7 @@ async function init(){
 
 async function loadPresets(){
   try{
-    const r = await fetch(`${API_BASE}/api/zodiac/voice-presets`);
+    const r = await fetch(`${API_BASE}/api/trend-vault/voice-presets`);
     if(r.ok){ const d = await r.json(); allPresets = d.presets || []; }
   }catch{}
   if(!allPresets.length){
@@ -573,7 +573,7 @@ async function loadPresets(){
 
 async function checkEdgeTts(){
   try{
-    const r = await fetch(`${API_BASE}/api/zodiac/edge-tts-status`);
+    const r = await fetch(`${API_BASE}/api/trend-vault/edge-tts-status`);
     const d = await r.json();
     edgeTtsAvailable = d.available;
     const badge = document.getElementById('edgeTtsStatus');
@@ -774,7 +774,7 @@ async function generatePreview(){
     const speed = parseFloat(document.getElementById('pp_speed').value)/100;
     const volume= parseFloat(document.getElementById('pp_volume').value);
     const intens= parseFloat(document.getElementById('pp_intensity').value);
-    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       signal:ppController.signal,
       body:JSON.stringify({text,presetId:p.id,pitch,rate,speed,volume,intensity:intens,preview:false})
@@ -820,12 +820,12 @@ function useInStudio(){
   sessionStorage.setItem('selectedVoiceAdv', JSON.stringify(advObj));
   localStorage.setItem('selectedVoiceAdv', JSON.stringify(advObj));
   showToast('🎙️ Voice applied to Studio','success');
-  // If zodiac is open in another tab the storage event fires there instantly.
-  // If this IS the zodiac tab (redirected here), go back.
-  if(document.referrer.includes('/zodiac') || sessionStorage.getItem('fromZodiac')){
-    setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+  // If trend-vault is open in another tab the storage event fires there instantly.
+  // If this IS the trend-vault tab (redirected here), go back.
+  if(document.referrer.includes('/trend-vault') || sessionStorage.getItem('fromTrend Vault')){
+    setTimeout(()=>{ window.location.href='/trend-vault'; }, 600);
   } else {
-    setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+    setTimeout(()=>{ window.location.href='/trend-vault'; }, 600);
   }
 }
 
@@ -874,7 +874,7 @@ async function runComparison(){
   // Fetch both voices in parallel
   const results = await Promise.allSettled(ids.map(async id => {
     const p = allPresets.find(x=>x.id===id);
-    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         text, presetId: id,
@@ -1043,7 +1043,7 @@ function populateAdvancedFromPreset(){
   if(header) header.textContent = `Advanced Voice Controls — ${p.icon || ''} ${p.name}`;
 }
 
-// Send active preset with current Advanced slider values to Zodiac Studio
+// Send active preset with current Advanced slider values to Trend Vault Studio
 function sendAdvancedToStudio(){
   if(!activePresetId){ showToast('Select a voice in Browse first','error'); return; }
   const adv = {
@@ -1055,8 +1055,8 @@ function sendAdvancedToStudio(){
   };
   sessionStorage.setItem('selectedVoicePreset', activePresetId);
   sessionStorage.setItem('selectedVoiceAdv', JSON.stringify(adv));
-  showToast('Opening Zodiac Studio with advanced settings...', 'success');
-  setTimeout(() => { window.location.href = '/zodiac'; }, 600);
+  showToast('Opening Trend Vault Studio with advanced settings...', 'success');
+  setTimeout(() => { window.location.href = '/trend-vault'; }, 600);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1096,8 +1096,8 @@ function renderVoiceCardForFavorites(p){
 
 function sendVoiceToStudio(id){
   sessionStorage.setItem('selectedVoicePreset', id);
-  showToast('Opening Zodiac Studio with this voice...','success');
-  setTimeout(()=>{ window.location.href='/zodiac'; }, 600);
+  showToast('Opening Trend Vault Studio with this voice...','success');
+  setTimeout(()=>{ window.location.href='/trend-vault'; }, 600);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1229,7 +1229,7 @@ async function testAdvanced(){
     const speed   = parseFloat(document.getElementById('adv_speed').value)/100;
     const volume  = parseFloat(document.getElementById('adv_volume').value);
     const intens  = parseFloat(document.getElementById('adv_intensity').value);
-    const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text,presetId:activePresetId,pitch,rate,speed,volume,intensity:intens,preview:false})
     });
@@ -1503,7 +1503,7 @@ async function generateCloned(){
     let url;
     if(edgeTtsAvailable){
       // Pick an appropriate voice for the description
-      const r = await fetch(`${API_BASE}/api/zodiac/generate-voice-openai`,{
+      const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice-openai`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({text, voice:'en-US-GuyNeural', speed:0.88})
       });
@@ -1513,7 +1513,7 @@ async function generateCloned(){
       status.className='status-box ok'; status.textContent='✅ Generated via openai-edge-tts'+(prompt?'\nPrompt: '+prompt:'');
     } else {
       // Fall back to regular preset generation
-      const r = await fetch(`${API_BASE}/api/zodiac/generate-voice`,{
+      const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({text,presetId:'velvet_static',preview:false})
       });

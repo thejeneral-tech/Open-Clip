@@ -1,5 +1,5 @@
 {
-  "_readme": "FULL RENDER JOB — Drop this in Google Drive/Zodiac Program Sync/requests/",
+  "_readme": "FULL RENDER JOB — Drop this in Google Drive/Trend Vault Program Sync/requests/",
   "_howto": "Edit the fields below, remove all lines starting with underscore, save as your-job-name.json",
 
   "jobId": "scorpio-dark-001",
@@ -8,7 +8,7 @@
   "createdAt": "2026-05-11T12:00:00Z",
 
   "script": {
-    "zodiacSign":    "Scorpio",
+    "trendVaultSign":    "Scorpio",
     "emotionalTone": "dark",
     "prompt":        "why they go silent and push everyone away",
     "targetDuration": 100

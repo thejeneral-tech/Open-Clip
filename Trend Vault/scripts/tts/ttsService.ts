@@ -59,7 +59,7 @@ export interface GenerateVoiceOptions {
 }
 
 function tmpFile(ext: string): string {
-  return path.join(os.tmpdir(), `zodiac-tts-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  return path.join(os.tmpdir(), `trend-vault-tts-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
 }
 
 async function edgeTtsToFile(text: string, voiceId: string, outputPath: string): Promise<void> {

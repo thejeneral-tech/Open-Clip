@@ -8,23 +8,23 @@ description: Use this skill to check the quality of a completed render — verif
 ## Find the latest render
 ```bash
 # List most recent render folders
-dir C:\Users\Anton\Desktop\Zodiac Program\zodiac-output /O-D
+dir C:\Users\Anton\Desktop\Trend Vault Program\trend-vault-output /O-D
 # Latest folder at top
 ```
 
 ## Inspect the meta.json
 ```bash
-type "zodiac-output\<folder>\meta.json"
+type "trend-vault-output\<folder>\meta.json"
 ```
 Check:
 - `renderStatus: "done"` (not "error")
 - `audioFile` not null/empty → voice was generated
-- `settings.zodiacSign` matches what you intended
+- `settings.trendVaultSign` matches what you intended
 - `settings.colorGrade`, `settings.grainType` etc. are correct
 
 ## File size sanity check
 ```bash
-dir "zodiac-output\<folder>\video.mp4"
+dir "trend-vault-output\<folder>\video.mp4"
 ```
 Expected ranges for a typical 90-second 1080×1920 video:
 - < 10 MB → suspiciously small, likely no audio or very short
@@ -33,7 +33,7 @@ Expected ranges for a typical 90-second 1080×1920 video:
 
 ## Check dimensions and duration with ffprobe
 ```bash
-ffprobe -v quiet -print_format json -show_streams "zodiac-output\<folder>\video.mp4"
+ffprobe -v quiet -print_format json -show_streams "trend-vault-output\<folder>\video.mp4"
 ```
 Check:
 - `width: 1080`, `height: 1920` (for TikTok)
@@ -52,7 +52,7 @@ Open the video in VLC or Windows Media Player:
 - [ ] **Music present** (if enabled) — background music at correct volume
 - [ ] **Grain/fog overlay** — subtle, not overwhelming
 - [ ] **No watermarks** — Remotion trial watermark only appears if license unpaid
-- [ ] **Correct sign** — the zodiac sign in script matches the folder name
+- [ ] **Correct sign** — the trend-vault sign in script matches the folder name
 
 ## Common quality issues
 | Symptom | Likely cause | Fix |

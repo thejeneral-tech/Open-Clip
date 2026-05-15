@@ -1,3 +1,3 @@
 # Removed
 
-Fish Speech has been removed from the Zodiac Program. This file can be deleted.
+Fish Speech has been removed from the Trend Vault Program. This file can be deleted.

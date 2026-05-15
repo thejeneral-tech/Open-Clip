@@ -1,10 +1,10 @@
 @echo off
-title Zodiac Render Worker (port 4000)
+title Trend Vault Render Worker (port 4000)
 cd /d "%~dp0"
 
 echo.
 echo  =============================================
-echo    Zodiac Render Worker  -  Port 4000
+echo    Trend Vault Render Worker  -  Port 4000
 echo  =============================================
 echo.
 

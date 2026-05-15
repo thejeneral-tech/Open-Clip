@@ -1,6 +1,6 @@
 /**
  * setup-storage.js
- * Creates all required Zodiac Program storage folders.
+ * Creates all required Trend Vault Program storage folders.
  * Run: npm run setup:storage
  */
 const fs = require('fs');
@@ -9,7 +9,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 
 const DIRS = [
-  'zodiac-output',
+  'trend-vault-output',
   'output/final',
   'output/raw',
   'output/tts',
@@ -24,7 +24,7 @@ const DIRS = [
   'outputs/voices',
 ];
 
-console.log('\n  Setting up Zodiac Program storage folders...\n');
+console.log('\n  Setting up Trend Vault Program storage folders...\n');
 let created = 0;
 for (const dir of DIRS) {
   const full = path.join(ROOT, dir);

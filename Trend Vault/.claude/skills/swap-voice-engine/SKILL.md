@@ -5,7 +5,7 @@ description: Use this skill when the user wants to switch the voice engine — b
 
 # Swap the voice engine
 
-The Zodiac project supports three voice engine modes selected via UI chip in the Voice Preset card:
+The Trend Vault project supports three voice engine modes selected via UI chip in the Voice Preset card:
 
 | Mode | Behavior |
 |---|---|
@@ -14,7 +14,7 @@ The Zodiac project supports three voice engine modes selected via UI chip in the
 | `edge` | Always use Microsoft Edge TTS (cloud); skip the local server |
 
 The wiring lives in:
-- `frontend/zodiac.html` — `state.voiceEngine` chip handlers
+- `frontend/trend-vault.html` — `state.voiceEngine` chip handlers
 - `server.ts` — engine forwarded into `generateVoice`
 - `scripts/tts/ttsService.ts` — engine selection logic
 - `scripts/tts/localTtsAdapter.ts` — HTTP adapter for local engines
@@ -71,14 +71,14 @@ Restart Kokoro after editing.
 Edge TTS is still in the codebase as a defensive fallback. To FORCE all renders through local:
 
 1. Set the studio's engine chip to `🏠 Local Only`. This is per-session.
-2. To persist it across sessions, edit `state.voiceEngine` default in `frontend/zodiac.html` from `'auto'` to `'local'`. The autosave layer respects this.
+2. To persist it across sessions, edit `state.voiceEngine` default in `frontend/trend-vault.html` from `'auto'` to `'local'`. The autosave layer respects this.
 3. To remove Edge TTS code entirely, delete `import { edgeTtsToFile } from './edgeTtsAdapter'` from `ttsService.ts` and remove the `await edgeTtsToFile(...)` call. The `if (engine === 'local')` path already throws a clear error if local fails — so removing Edge breaks `auto` mode. Don't do this unless local is rock-solid.
 
 ## After swapping
 
 Verify via:
 ```
-http://localhost:3001/api/zodiac/engine-status
+http://localhost:3001/api/trend-vault/engine-status
 ```
 
 `localTts.ok: true` confirms the Node server can reach the new local engine. Any voice preview from this point uses it.

@@ -9,8 +9,8 @@ description: Use this skill when working with custom audio — uploading a voice
 - `server.ts` lines ~116–122 — `audioUpload` multer config (50MB limit → `custom-audio/`)
 - `custom-audio/` folder — uploaded voiceovers and TikTok sounds
 - `public/custom-audio/` — mirrored by server at render time so Remotion can find them
-- `src/ZodiacVideo.tsx` — `audioFile` prop → `<Audio src={staticFile('custom-audio/...')}>`
-- `frontend/zodiac.html` — custom audio upload UI, `state.customAudio`
+- `src/TrendVaultVideo.tsx` — `audioFile` prop → `<Audio src={staticFile('custom-audio/...')}>`
+- `frontend/trend-vault.html` — custom audio upload UI, `state.customAudio`
 
 ## Files NOT to touch
 - `music/` folder (that's for background music, different from voiceover/custom audio)
@@ -45,7 +45,7 @@ yt-dlp -x --audio-format mp3 --audio-quality 192k \
 2. Check `state.customAudio` matches exact filename
 3. Check render settings include `audioFile: state.customAudio`
 4. Check `public/custom-audio/<filename>` exists after render starts (ensurePublicLink runs first)
-5. In `ZodiacVideo.tsx`, `audioFile` is used as: `staticFile('custom-audio/' + audioFile)` — confirm the path pattern hasn't changed
+5. In `TrendVaultVideo.tsx`, `audioFile` is used as: `staticFile('custom-audio/' + audioFile)` — confirm the path pattern hasn't changed
 
 ## Upload limit
 50MB per file. For longer recordings, compress first:

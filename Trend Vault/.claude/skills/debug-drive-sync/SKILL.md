@@ -8,13 +8,13 @@ description: Use this skill when the Drive sync is broken — jobs aren't being 
 ## Files involved
 - `scripts/sync-worker.js` — the worker (runs on HOME COMPUTER)
 - `sync.config.json` — paths config (project root)
-- `C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync\` — Drive bridge
-- `C:\Zodiac Program\` — local SSD on home computer (not synced to Drive)
+- `C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync\` — Drive bridge
+- `C:\Trend Vault Program\` — local SSD on home computer (not synced to Drive)
 
 ## Files NOT to touch
 - `server.ts` — laptop server, separate
-- `frontend/zodiac.html`
-- `src/ZodiacVideo.tsx`
+- `frontend/trend-vault.html`
+- `src/TrendVaultVideo.tsx`
 
 ## Decision tree
 
@@ -27,7 +27,7 @@ If any check fails, the output tells you exactly which folder or write failed.
 
 ### 2. Check Drive is mounted
 ```bash
-dir "C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync"
+dir "C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync"
 # Must show: final  logs  requests  uploads
 ```
 If the folder doesn't exist or is empty: Google Drive desktop app is not running or not signed in.
@@ -36,17 +36,17 @@ If the folder doesn't exist or is empty: Google Drive desktop app is not running
 ```bash
 node scripts/sync-worker.js
 ```
-Should print: `[INFO] Zodiac Sync Worker started. Polling every 10 seconds.`
+Should print: `[INFO] Trend Vault Sync Worker started. Polling every 10 seconds.`
 
 If it crashes immediately:
 - Check `sync.config.json` exists
-- Check `homeLocalRoot` path exists (`C:\Zodiac Program` on home computer)
+- Check `homeLocalRoot` path exists (`C:\Trend Vault Program` on home computer)
 - Check `googleDriveRoot` path exists
 
 ### 4. Job not being picked up
 Drop a test job manually:
 ```bash
-echo '{"id":"debug-001","type":"script-only","zodiacSign":"Scorpio","scriptLines":[{"text":"Test","type":"hook","durationSeconds":3}]}' > "C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync\requests\debug-001.json"
+echo '{"id":"debug-001","type":"script-only","trendVaultSign":"Scorpio","scriptLines":[{"text":"Test","type":"hook","durationSeconds":3}]}' > "C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync\requests\debug-001.json"
 ```
 Wait 10–15 seconds. Worker should log `[PENDING] Job debug-001`.
 
@@ -56,25 +56,25 @@ If not picked up:
 - File must be stable (not still being written) — worker waits `stableFileCheckSeconds` (5s)
 
 ### 5. Job picked up but crashes
-Check log at `C:\Zodiac Program\logs\sync-worker-<date>.log`. Log messages explain each failure:
+Check log at `C:\Trend Vault Program\logs\sync-worker-<date>.log`. Log messages explain each failure:
 - `[FAILED]` → error during job processing — stack trace in log
 - TTS timeout → Edge TTS unreachable from home computer
-- Render crash → check `zodiac-render.ts` was installed on home computer
+- Render crash → check `trend-vault-render.ts` was installed on home computer
 
 ### 6. Output not in Drive/final
 If `[COMPLETE]` logged but file not in Drive:
-- Check `PATHS.driveFinal` path: `C:\Users\Anton\Google Drive\My Drive\Zodiac Program Sync\final\`
+- Check `PATHS.driveFinal` path: `C:\Users\Anton\Google Drive\My Drive\Trend Vault Program Sync\final\`
 - Worker copies file with `fs.copyFileSync` — check disk space on Drive
 - Google Drive client must sync the local file to cloud — wait 1–2 minutes after the copy
 
 ### 7. Logs not appearing
-Logs go to both `C:\Zodiac Program\logs\` and `Drive/logs/`. If Drive logs missing, Drive write failed (check permissions). Local logs always work.
+Logs go to both `C:\Trend Vault Program\logs\` and `Drive/logs/`. If Drive logs missing, Drive write failed (check permissions). Local logs always work.
 
 ## Config reference
 ```json
 {
-  "homeLocalRoot": "C:\\Zodiac Program",
-  "googleDriveRoot": "C:\\Users\\Anton\\Google Drive\\My Drive\\Zodiac Program Sync",
+  "homeLocalRoot": "C:\\Trend Vault Program",
+  "googleDriveRoot": "C:\\Users\\Anton\\Google Drive\\My Drive\\Trend Vault Program Sync",
   "pollIntervalSeconds": 10,
   "stableFileCheckSeconds": 5
 }

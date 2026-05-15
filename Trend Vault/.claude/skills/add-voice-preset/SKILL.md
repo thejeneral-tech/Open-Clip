@@ -1,6 +1,6 @@
 ---
 name: add-voice-preset
-description: Use this skill when the user wants to add a new voice preset, narrator character, voice variant, or TTS preset to the Zodiac studio. Trigger on phrases like "add a voice called Witch Queen", "create a new narrator preset", "I want a Russian villain voice", "make a young heroine voice", "add another preset to the voice grid", or any time the user describes a vocal character/persona that should be selectable.
+description: Use this skill when the user wants to add a new voice preset, narrator character, voice variant, or TTS preset to the Trend Vault studio. Trigger on phrases like "add a voice called Witch Queen", "create a new narrator preset", "I want a Russian villain voice", "make a young heroine voice", "add another preset to the voice grid", or any time the user describes a vocal character/persona that should be selectable.
 ---
 
 # Add a new voice preset

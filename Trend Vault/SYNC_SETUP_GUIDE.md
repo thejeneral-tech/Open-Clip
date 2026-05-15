@@ -1,4 +1,4 @@
-# Zodiac Program — Sync Setup Guide
+# Trend Vault Program — Sync Setup Guide
 
 This system lets your laptop hand jobs off to your home computer over Google Drive.
 Your home computer does all the heavy work (script generation, TTS, Remotion rendering)
@@ -28,21 +28,21 @@ Google Drive is a **mailbox only** — nothing runs inside it.
 
 | Folder | What goes there |
 |--------|----------------|
-| `Zodiac Program Sync/requests/` | You drop job JSON files here |
-| `Zodiac Program Sync/uploads/` | You drop source video files here (clip jobs only) |
-| `Zodiac Program Sync/final/` | Finished videos appear here |
-| `Zodiac Program Sync/logs/` | Log lines mirrored here |
+| `Trend Vault Program Sync/requests/` | You drop job JSON files here |
+| `Trend Vault Program Sync/uploads/` | You drop source video files here (clip jobs only) |
+| `Trend Vault Program Sync/final/` | Finished videos appear here |
+| `Trend Vault Program Sync/logs/` | Log lines mirrored here |
 
 ### Home computer local folders (the real workspace)
 
 | Folder | Purpose |
 |--------|---------|
-| `C:\Zodiac Program\incoming\` | Files land here after being copied from Drive |
-| `C:\Zodiac Program\working\` | Files move here during active processing |
-| `C:\Zodiac Program\cache\` | Render cache — never synced |
-| `C:\Zodiac Program\renders\` | Intermediate render files |
-| `C:\Zodiac Program\final\` | Completed outputs (also copied to Drive final) |
-| `C:\Zodiac Program\logs\` | Full worker logs |
+| `C:\Trend Vault Program\incoming\` | Files land here after being copied from Drive |
+| `C:\Trend Vault Program\working\` | Files move here during active processing |
+| `C:\Trend Vault Program\cache\` | Render cache — never synced |
+| `C:\Trend Vault Program\renders\` | Intermediate render files |
+| `C:\Trend Vault Program\final\` | Completed outputs (also copied to Drive final) |
+| `C:\Trend Vault Program\logs\` | Full worker logs |
 
 ---
 
@@ -54,9 +54,9 @@ Open `sync.config.json` in the project folder. Check three things:
 
 ```json
 {
-  "homeLocalRoot": "C:\\Zodiac Program",
-  "googleDriveRoot": "C:\\Users\\Anton\\Google Drive\\My Drive\\Zodiac Program Sync",
-  "projectRoot": "C:\\Users\\Anton\\Desktop\\Zodiac Program"
+  "homeLocalRoot": "C:\\Trend Vault Program",
+  "googleDriveRoot": "C:\\Users\\Anton\\Google Drive\\My Drive\\Trend Vault Program Sync",
+  "projectRoot": "C:\\Users\\Anton\\Desktop\\Trend Vault Program"
 }
 ```
 
@@ -64,7 +64,7 @@ Open `sync.config.json` in the project folder. Check three things:
 - **googleDriveRoot** — where Google Drive lives on your home computer.
   To find it: open Google Drive app → gear icon → Preferences → Folder location.
   Common paths: `C:\Users\Anton\Google Drive\My Drive\...` or `G:\My Drive\...`
-- **projectRoot** — the full path to this Zodiac Program project folder on your home computer.
+- **projectRoot** — the full path to this Trend Vault Program project folder on your home computer.
 
 ### Step 2 — Create all folders (run once)
 
@@ -104,7 +104,7 @@ You should see `EXISTS ✓` for both local and Drive outputs at the end.
 
 ## How to Send a Job
 
-### For a full zodiac video render
+### For a full trend-vault video render
 
 1. Create a job file like this and save it as `job-scorpio-001.json`:
 
@@ -116,7 +116,7 @@ You should see `EXISTS ✓` for both local and Drive outputs at the end.
   "createdAt": "2026-05-11T12:00:00Z",
 
   "script": {
-    "zodiacSign":    "Scorpio",
+    "trendVaultSign":    "Scorpio",
     "emotionalTone": "dark",
     "prompt":        "why they go silent and pull away",
     "targetDuration": 100
@@ -144,7 +144,7 @@ You should see `EXISTS ✓` for both local and Drive outputs at the end.
 
 2. Drop it into:
    ```
-   Google Drive → Zodiac Program Sync → requests → job-scorpio-001.json
+   Google Drive → Trend Vault Program Sync → requests → job-scorpio-001.json
    ```
 
 3. Wait for Google Drive to sync (tray icon stops spinning).
@@ -154,7 +154,7 @@ You should see `EXISTS ✓` for both local and Drive outputs at the end.
    - Generate the script with Claude
    - Generate TTS voice audio
    - Run the Remotion renderer
-   - Put the finished `.mp4` in `Google Drive → Zodiac Program Sync → final`
+   - Put the finished `.mp4` in `Google Drive → Trend Vault Program Sync → final`
 
 ### For a render using your own script (no Claude needed)
 
@@ -177,7 +177,7 @@ Same job file but replace the `"script"` block with `"scriptLines"`:
   "voice": { "presetId": "en-US-DavisNeural", "rate": "-12%", "pitch": "-3Hz" },
 
   "settings": {
-    "zodiacSign":  "Virgo",
+    "trendVaultSign":  "Virgo",
     "colorGrade":  "ash",
     "backgroundVideo": "stock_pexels_35806649.mp4"
   }
@@ -213,7 +213,7 @@ Same job file but replace the `"script"` block with `"scriptLines"`:
 }
 ```
 
-Also drop `my-long-video.mp4` into `Google Drive → Zodiac Program Sync → uploads/` before creating the job.
+Also drop `my-long-video.mp4` into `Google Drive → Trend Vault Program Sync → uploads/` before creating the job.
 
 ---
 
@@ -222,7 +222,7 @@ Also drop `my-long-video.mp4` into `Google Drive → Zodiac Program Sync → upl
 ### script block
 | Field | Values | Default |
 |-------|--------|---------|
-| zodiacSign | Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces | required |
+| trendVaultSign | Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces | required |
 | emotionalTone | mysterious, dark, emotional, reflective, dramatic, intimate, melancholic, calm, motivational | dark |
 | prompt | Any text describing the topic/angle | "" |
 | targetDuration | Number of seconds (60–120) | 100 |
@@ -234,7 +234,7 @@ Also drop `my-long-video.mp4` into `Google Drive → Zodiac Program Sync → upl
 | rate | e.g. "-15%" (negative = slower) | -10% |
 | pitch | e.g. "-5Hz" (negative = lower) | -3Hz |
 
-**Recommended voices for dark zodiac content:**
+**Recommended voices for dark trend-vault content:**
 - `en-US-DavisNeural` — calm, slightly dark male
 - `en-US-GuyNeural` — authoritative male
 - `en-US-TonyNeural` — smooth, warm male
@@ -279,7 +279,7 @@ Amazing_Rain_forest_#short_...mp4
 The worker updates the job JSON file in place. Open it to check progress:
 
 ```
-Google Drive → Zodiac Program Sync → requests → your-job.json
+Google Drive → Trend Vault Program Sync → requests → your-job.json
 ```
 
 | status | Meaning |
@@ -307,7 +307,7 @@ The `example-jobs/` folder in your project contains copy-paste-ready job files:
 | `tts-only.json` | Generate a Capricorn voiceover MP3 |
 | `clip-factory.json` | Extract clips from a long video |
 
-To use one: copy it, rename it with a unique `jobId`, edit the fields, remove lines starting with `_`, and drop it in `Google Drive → Zodiac Program Sync → requests/`.
+To use one: copy it, rename it with a unique `jobId`, edit the fields, remove lines starting with `_`, and drop it in `Google Drive → Trend Vault Program Sync → requests/`.
 
 ---
 
@@ -343,9 +343,9 @@ To use one: copy it, rename it with a unique `jobId`, edit the fields, remove li
 
 | DO NOT sync | Reason |
 |-------------|--------|
-| `C:\Zodiac Program\cache\` | Render cache — huge, constantly changing |
-| `C:\Zodiac Program\working\` | Mid-flight processing files |
-| `C:\Zodiac Program\renders\` | Intermediate frames |
+| `C:\Trend Vault Program\cache\` | Render cache — huge, constantly changing |
+| `C:\Trend Vault Program\working\` | Mid-flight processing files |
+| `C:\Trend Vault Program\renders\` | Intermediate frames |
 | `node_modules\` | Never sync these — re-run `npm install` on each machine |
 | `.tmp`, `.uploading`, `.crdownload` | Incomplete files — the worker ignores these automatically |
 

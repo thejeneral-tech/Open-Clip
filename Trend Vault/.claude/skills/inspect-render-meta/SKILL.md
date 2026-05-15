@@ -5,14 +5,14 @@ description: Use this skill when the user wants details about a recent render, a
 
 # Inspect render meta
 
-Every render writes a `meta.json` to `zodiac-output/<DATE>_<SIGN>_<JOBID>/meta.json`. It's the source of truth — if you want to know what was actually used, read this file.
+Every render writes a `meta.json` to `trend-vault-output/<DATE>_<SIGN>_<JOBID>/meta.json`. It's the source of truth — if you want to know what was actually used, read this file.
 
 ## Step 1: Find the latest render folder
 
-If the user didn't specify a folder, list `zodiac-output/` and pick the most recent (folder names are date-prefixed, but mtime is more reliable):
+If the user didn't specify a folder, list `trend-vault-output/` and pick the most recent (folder names are date-prefixed, but mtime is more reliable):
 
 ```
-Glob: C:\Users\Anton\Desktop\Zodiac Program\zodiac-output\*\meta.json
+Glob: C:\Users\Anton\Desktop\Trend Vault Program\trend-vault-output\*\meta.json
 ```
 
 Pick the path with the latest modification time.
@@ -23,7 +23,7 @@ The schema (as of the cinematic-narrator pass):
 
 ```json
 {
-  "zodiacSign": "Scorpio",
+  "trendVaultSign": "Scorpio",
   "topic": "Scorpio",
   "createdAt": "2026-05-09T13:42:11.123Z",
   "durationSec": 87.33,
@@ -33,7 +33,7 @@ The schema (as of the cinematic-narrator pass):
   "renderQuality": "ultra",
   "lines": 17,
   "captionSyncMethod": "assemblyai-forced-alignment",
-  "audioFile": "zodiac_voice_<jobId>.mp3",
+  "audioFile": "trend_vault_voice_<jobId>.mp3",
   "audioSampleRate": 44100,
   "musicFile": null,
   "visualStyle": "analog",

@@ -6,20 +6,20 @@ description: Use this skill when the home computer render worker fails — the R
 # Debug Home Computer Render Worker
 
 ## Files involved
-- `scripts/zodiac-render.ts` — main render script (spawned by server or sync worker)
+- `scripts/trend-vault-render.ts` — main render script (spawned by server or sync worker)
 - `scripts/tts/ttsService.ts` — TTS audio generation
-- `src/ZodiacVideo.tsx` — Remotion composition
+- `src/TrendVaultVideo.tsx` — Remotion composition
 - `public/` — assets copied here before render
-- `zodiac-output/<folder>/` — output location
+- `trend-vault-output/<folder>/` — output location
 
 ## Files NOT to touch
 - `scripts/sync-worker.js` — the watcher, not the renderer
-- `frontend/zodiac.html`
+- `frontend/trend-vault.html`
 
 ## Common failures
 
 ### 1. Browser not found / Remotion sandbox error
-`zodiac-render.ts` runs `findSystemBrowser()` to locate Chrome or Edge. If none found, Remotion uses its bundled headless shell which may fail on Windows with sandbox restrictions.
+`trend-vault-render.ts` runs `findSystemBrowser()` to locate Chrome or Edge. If none found, Remotion uses its bundled headless shell which may fail on Windows with sandbox restrictions.
 ```
 Fix: Install Chrome or Edge on the home computer.
 Check: dir "C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -40,25 +40,25 @@ If TTS fails:
 Remotion bundles the Remotion app on each render. This takes 30–60s on first run (cache cold) and 5–10s after (warm). If it hangs > 5 minutes:
 - Kill the process, check for zombie `npx` processes
 - Check `node_modules/` is installed: `npm install`
-- Check `src/Root.tsx` and `src/ZodiacVideo.tsx` have no TypeScript errors that prevent bundling
+- Check `src/Root.tsx` and `src/TrendVaultVideo.tsx` have no TypeScript errors that prevent bundling
 
 ### 4. Exit code non-zero
 ```bash
 # Run manually to see full error:
-ZODIAC_JOB_FILE="zodiac-output/job_<id>.json" npx tsx scripts/zodiac-render.ts
+TREND_VAULT_JOB_FILE="trend-vault-output/job_<id>.json" npx tsx scripts/trend-vault-render.ts
 ```
 Full error will print to stdout/stderr.
 
 ### 5. Output folder missing video.mp4
-Server checks `zodiac-output/<folder>/video.mp4` exists after render. If missing:
+Server checks `trend-vault-output/<folder>/video.mp4` exists after render. If missing:
 - Remotion render failed silently — check exit code
-- Output path mismatch — `outputFolder` in job file must match the folder `zodiac-render.ts` writes to
+- Output path mismatch — `outputFolder` in job file must match the folder `trend-vault-render.ts` writes to
 
 ### 6. Memory / OOM crash
 4K backgrounds or very long videos (> 3 min) can OOM. Check:
 - Background video resolution: keep to 1080p max
 - Total render duration: keep under 3 minutes
-- Concurrency: `zodiac-render.ts` uses `os.cpus().length / 2` threads, max 8
+- Concurrency: `trend-vault-render.ts` uses `os.cpus().length / 2` threads, max 8
 
 ## Quick manual render test
 ```bash
@@ -67,15 +67,15 @@ node -e "
 const fs=require('fs');
 const job={jobId:'manual-test',outputFolder:'manual-test-output',
   scriptLines:[{text:'Test line',type:'hook',durationSeconds:4}],
-  settings:{zodiacSign:'Scorpio',zodiacSymbol:'♏',backgroundVideo:'none',
+  settings:{trendVaultSign:'Scorpio',trendVaultSymbol:'♏',backgroundVideo:'none',
   backgroundBlur:0,backgroundBrightness:1,grainIntensity:0,grainType:'none',
   fogOverlay:false,rainOverlay:false,slowZoom:false,colorGrade:'none',
   fps:30,width:1080,height:1920,fontFamily:'Inter',fontSize:48,
   textColor:'#ffffff',textAnimation:'fade',animSpeed:1,voiceEngine:'auto',
   vignette:false,durationSeconds:6,captionBgStyle:'none',captionRotate:0,
   musicVolume:0.5,musicFile:'',audioFile:''}};
-fs.mkdirSync('zodiac-output/manual-test-output',{recursive:true});
-fs.writeFileSync('zodiac-output/job_manual.json',JSON.stringify(job));
-console.log('Job written. Run: ZODIAC_JOB_FILE=zodiac-output/job_manual.json npx tsx scripts/zodiac-render.ts');
+fs.mkdirSync('trend-vault-output/manual-test-output',{recursive:true});
+fs.writeFileSync('trend-vault-output/job_manual.json',JSON.stringify(job));
+console.log('Job written. Run: TREND_VAULT_JOB_FILE=trend-vault-output/job_manual.json npx tsx scripts/trend-vault-render.ts');
 "
 ```

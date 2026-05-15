@@ -6,25 +6,25 @@ description: Use this skill when Script Reframe is broken — lines come back re
 # Fix Script Reframe
 
 ## Files involved
-- `server.ts` lines ~1601–1656 — `POST /api/zodiac/regenerate-script`
+- `server.ts` lines ~1601–1656 — `POST /api/trend-vault/regenerate-script`
 - `server.ts` lines ~1470–1600 — `localReframe()` engine (zero-API fallback)
 - `scripts/ai-completion.ts` — `aiComplete()`, `parseAIJson()`
-- `frontend/zodiac.html` — `reframeScript()` or similar caller
+- `frontend/trend-vault.html` — `reframeScript()` or similar caller
 
 ## Files NOT to touch
-- `scripts/zodiac-generate.ts` — script generator, separate concern
-- `src/ZodiacVideo.tsx`
-- `scripts/zodiac-render.ts`
+- `scripts/trend-vault-generate.ts` — script generator, separate concern
+- `src/TrendVaultVideo.tsx`
+- `scripts/trend-vault-render.ts`
 
 ## Decision tree
 
 ### 1. Confirm input is correct
 The endpoint requires `existingLines` array — it must have at least one item.
 ```bash
-curl -X POST http://localhost:3001/api/zodiac/regenerate-script \
+curl -X POST http://localhost:3001/api/trend-vault/regenerate-script \
   -H "Content-Type: application/json" \
   -d '{
-    "zodiacSign":"Scorpio","prompt":"test","angle":"","emotionalTone":"dark",
+    "trendVaultSign":"Scorpio","prompt":"test","angle":"","emotionalTone":"dark",
     "existingLines":[
       {"text":"Line 1","type":"hook","durationSeconds":4},
       {"text":"Line 2","type":"observation","durationSeconds":5}
@@ -50,7 +50,7 @@ The AI prompt says "Keep the same number of lines (only merge two lines if they 
 If local engine fails, read `localReframe` implementation and check the loop is `existingLines.map()` not `sort()`.
 
 ### 5. Frontend: what triggers reframe
-Search `zodiac.html` for the function that calls `/api/zodiac/regenerate-script`. Confirm it passes `existingLines: state.script` (the current lines in order, not sorted or filtered).
+Search `trend-vault.html` for the function that calls `/api/trend-vault/regenerate-script`. Confirm it passes `existingLines: state.script` (the current lines in order, not sorted or filtered).
 
 ## Key invariant
 Input line count === output line count (unless near-duplicates merged). Always verify this in any fix.

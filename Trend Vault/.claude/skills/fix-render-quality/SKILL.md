@@ -16,7 +16,7 @@ The render pipeline has several quality knobs. Map the user's complaint to the r
 | Banding in dark areas | `renderQuality: 'ultra'` + check that `colorGrade` isn't crushing levels too hard |
 | Audio/video desync | Voice was regenerated mid-render OR `captionTopPct` got reset |
 | Captions floating / out of sync with words | AssemblyAI either timed out or wasn't called; `meta.json.captionSyncMethod` will say `heuristic-line-duration` if so |
-| Preview ≠ render | Filter chain mismatch in HTML vs ZodiacVideo.tsx — see `diagnose-voice-pipeline` for audio side |
+| Preview ≠ render | Filter chain mismatch in HTML vs TrendVaultVideo.tsx — see `diagnose-voice-pipeline` for audio side |
 | Background video stutters | Source clip is 24fps; Remotion can't reframe-interpolate it at 60fps |
 | Text glitches in mid-frame | Animation references something non-deterministic (date/random); should be `frame`-locked |
 
@@ -24,7 +24,7 @@ The render pipeline has several quality knobs. Map the user's complaint to the r
 
 Two settings in the studio:
 
-1. **FPS selector** — `state.renderFps` (30 or 60). Sent in render request as `settings.fps`. Read by `zodiac-render.ts` line ~140.
+1. **FPS selector** — `state.renderFps` (30 or 60). Sent in render request as `settings.fps`. Read by `trend-vault-render.ts` line ~140.
 2. **Quality selector** — `state.renderQuality` (`standard | high | ultra`). Sent as `settings.renderQuality`. Mapped to FFmpeg CRF inside the render script.
 
 Both default to safe values (30fps / high). 60fps + ultra is the heaviest combo and uses ~3× more CPU/disk.
@@ -37,7 +37,7 @@ If the user genuinely has frame skipping at 60fps, check:
    - Pick a 60fps source video (search "60fps" in the stock browser)
    - Drop render fps to 30 (matches most source content)
 
-2. **Concurrency.** `zodiac-render.ts` sets `concurrency = Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2)))`. On low-core machines, this can cause stutter under load. Lower it to 2 for cleaner rendering.
+2. **Concurrency.** `trend-vault-render.ts` sets `concurrency = Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2)))`. On low-core machines, this can cause stutter under load. Lower it to 2 for cleaner rendering.
 
 3. **Browser executable.** Remotion uses Chrome Headless Shell by default on Windows, which has a sandbox bug. The render script falls back to system Chrome/Edge via `findSystemBrowser()`. If THAT fails too, renders can produce missing frames silently. Confirm via the log line "Using system browser: Chrome".
 

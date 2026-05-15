@@ -23,7 +23,7 @@
   },
 
   "settings": {
-    "zodiacSign":           "Virgo",
+    "trendVaultSign":           "Virgo",
     "backgroundVideo":      "stock_pexels_35806649.mp4",
     "colorGrade":           "ash",
     "colorGradeIntensity":  80,

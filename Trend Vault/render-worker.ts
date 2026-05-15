@@ -1,7 +1,7 @@
 /**
  * render-worker.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Standalone Zodiac Render Worker — runs on port 4000.
+ * Standalone Trend Vault Render Worker — runs on port 4000.
  *
  * PURPOSE
  *   This process handles ONLY the CPU-heavy Remotion rendering step.
@@ -40,11 +40,11 @@ import { spawn, ChildProcess } from 'child_process';
 const WORKER_PORT      = Number(process.env.RENDER_WORKER_PORT ?? 4000);
 const MAX_CONCURRENT   = 1; // only one render at a time — Remotion is CPU-bound
 const ROOT             = path.resolve('.');
-const ZODIAC_OUT       = path.join(ROOT, 'zodiac-output');
-const JOB_HISTORY_FILE = path.join(ZODIAC_OUT, '.worker-job-history.json');
+const TREND_VAULT_OUT       = path.join(ROOT, 'trend-vault-output');
+const JOB_HISTORY_FILE = path.join(TREND_VAULT_OUT, '.worker-job-history.json');
 
 // Ensure output dir exists
-fs.mkdirSync(ZODIAC_OUT, { recursive: true });
+fs.mkdirSync(TREND_VAULT_OUT, { recursive: true });
 
 // ── Job state ────────────────────────────────────────────────────────────────
 
@@ -113,10 +113,10 @@ async function runJob(job: WorkerJob, jobFilePath: string): Promise<void> {
   broadcast(job.id, { status: 'running', stage: job.stage, progress: 0 });
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn('npx tsx scripts/zodiac-render.ts', [], {
+    const proc = spawn('npx tsx scripts/trend-vault-render.ts', [], {
       cwd:   ROOT,
       shell: true,
-      env:   { ...process.env, ZODIAC_JOB_FILE: jobFilePath },
+      env:   { ...process.env, TREND_VAULT_JOB_FILE: jobFilePath },
     });
 
     processes.set(job.id, proc);
@@ -153,7 +153,7 @@ async function runJob(job: WorkerJob, jobFilePath: string): Promise<void> {
     proc.on('close', code => {
       processes.delete(job.id);
       if (code === 0) resolve();
-      else reject(new Error('zodiac-render.ts exited with code ' + code));
+      else reject(new Error('trend-vault-render.ts exited with code ' + code));
     });
     proc.on('error', reject);
   });
@@ -163,7 +163,7 @@ async function startJob(job: WorkerJob, jobFilePath: string): Promise<void> {
   try {
     await runJob(job, jobFilePath);
     // Confirm output exists
-    const outFile = path.join(ZODIAC_OUT, job.outputFolder, 'video.mp4');
+    const outFile = path.join(TREND_VAULT_OUT, job.outputFolder, 'video.mp4');
     if (!fs.existsSync(outFile)) throw new Error('video.mp4 not found after render');
     job.status     = 'done';
     job.pct        = 100;
@@ -188,7 +188,7 @@ async function startJob(job: WorkerJob, jobFilePath: string): Promise<void> {
     // Start next queued job if any
     const next = queuedJobs()[0];
     if (next) {
-      const nextFile = path.join(ZODIAC_OUT, 'worker_job_' + next.id + '.json');
+      const nextFile = path.join(TREND_VAULT_OUT, 'worker_job_' + next.id + '.json');
       setImmediate(() => startJob(next, nextFile));
     }
   }
@@ -211,12 +211,12 @@ app.use((_req, res, next) => {
 app.get('/api/render/health', (_req, res) => {
   const running   = activeCount();
   const queued    = queuedJobs().length;
-  const zodiacOk  = fs.existsSync(ZODIAC_OUT);
-  const renderOk  = fs.existsSync(path.join(ROOT, 'scripts', 'zodiac-render.ts'));
+  const trendVaultOk  = fs.existsSync(TREND_VAULT_OUT);
+  const renderOk  = fs.existsSync(path.join(ROOT, 'scripts', 'trend-vault-render.ts'));
   const tsxOk     = fs.existsSync(path.join(ROOT, 'node_modules', '.bin', 'tsx')) ||
                     fs.existsSync(path.join(ROOT, 'node_modules', 'tsx'));
 
-  const status = (!zodiacOk || !renderOk || !tsxOk) ? 'failed'
+  const status = (!trendVaultOk || !renderOk || !tsxOk) ? 'failed'
                : running >= MAX_CONCURRENT            ? 'busy'
                : 'ready';
 
@@ -226,7 +226,7 @@ app.get('/api/render/health', (_req, res) => {
     maxConcurrent:    MAX_CONCURRENT,
     activeRenders:    running,
     queuedJobs:       queued,
-    zodiacOutputOk:   zodiacOk,
+    trendVaultOutputOk:   trendVaultOk,
     renderScriptOk:   renderOk,
     tsxAvailable:     tsxOk,
     uptime:           Math.round(process.uptime()),
@@ -241,7 +241,7 @@ app.get('/api/render/health', (_req, res) => {
 
 // ── POST /api/render/job ──────────────────────────────────────────────────────
 // Body: { jobId, outputFolder, scriptLines, settings }
-// (same shape as the zodiac-render.ts job file)
+// (same shape as the trend-vault-render.ts job file)
 app.post('/api/render/job', (req, res) => {
   const body = req.body as {
     jobId?: string;
@@ -257,8 +257,8 @@ app.post('/api/render/job', (req, res) => {
 
   const jobId = body.jobId ?? Date.now().toString();
 
-  // Write job file so zodiac-render.ts can read it (same interface as server.ts)
-  const jobFilePath = path.join(ZODIAC_OUT, 'worker_job_' + jobId + '.json');
+  // Write job file so trend-vault-render.ts can read it (same interface as server.ts)
+  const jobFilePath = path.join(TREND_VAULT_OUT, 'worker_job_' + jobId + '.json');
   try {
     fs.writeFileSync(jobFilePath, JSON.stringify({
       jobId,
@@ -393,7 +393,7 @@ loadHistory();
 
 const server = app.listen(WORKER_PORT, () => {
   console.log('');
-  console.log('  Zodiac Render Worker  —  Ready');
+  console.log('  Trend Vault Render Worker  —  Ready');
   console.log('  http://localhost:' + WORKER_PORT);
   console.log('  Max concurrent renders: ' + MAX_CONCURRENT);
   console.log('  Jobs in history: ' + jobs.size);
