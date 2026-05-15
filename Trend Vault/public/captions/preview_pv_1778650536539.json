@@ -1,0 +1,40 @@
+{
+  "audioFile": "trend_vault_preview_pv_1778650536539.mp3",
+  "audioDurationSec": 90,
+  "source": "word-proportional",
+  "captions": [
+    {
+      "index": 0,
+      "text": "GEMINIS DON'T DO THIS BY ACCIDENT.",
+      "type": "hook",
+      "start": 0,
+      "end": 11.739130434782608,
+      "duration": 11.739130434782608,
+      "wordCount": 6,
+      "startMs": 0,
+      "endMs": 11739.130434782608
+    },
+    {
+      "index": 1,
+      "text": "THERE'S something deeper SPECIFIC ABOUT THE WAY THEY deeply crave — AND THE WAY THEY PROTECT THEMSELVES FROM IT.",
+      "type": "observation",
+      "start": 11.739130434782608,
+      "end": 48.91304347826087,
+      "duration": 37.17391304347826,
+      "wordCount": 19,
+      "startMs": 11739.130434782608,
+      "endMs": 48913.043478260865
+    },
+    {
+      "index": 2,
+      "text": "MOST souls SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN absolutely everything IS MOVING INSIDE THEM.",
+      "type": "observation",
+      "start": 48.91304347826087,
+      "end": 90,
+      "duration": 41.08695652173913,
+      "wordCount": 21,
+      "startMs": 48913.043478260865,
+      "endMs": 90000
+    }
+  ]
+}

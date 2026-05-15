@@ -1,0 +1,40 @@
+{
+  "_readme": "FULL RENDER JOB — Drop this in Google Drive/Trend Vault Program Sync/requests/",
+  "_howto": "Edit the fields below, remove all lines starting with underscore, save as your-job-name.json",
+
+  "jobId": "scorpio-dark-001",
+  "type": "render",
+  "status": "pending",
+  "createdAt": "2026-05-11T12:00:00Z",
+
+  "script": {
+    "trendVaultSign":    "Scorpio",
+    "emotionalTone": "dark",
+    "prompt":        "why they go silent and push everyone away",
+    "targetDuration": 100
+  },
+
+  "voice": {
+    "presetId": "en-US-DavisNeural",
+    "rate":     "-15%",
+    "pitch":    "-5Hz"
+  },
+
+  "settings": {
+    "backgroundVideo":      "stock_pexels_34837491.mp4",
+    "colorGrade":           "dark",
+    "colorGradeIntensity":  85,
+    "grainType":            "film",
+    "grainIntensity":       0.35,
+    "backgroundBlur":       2,
+    "backgroundBrightness": 0.65,
+    "fogOverlay":           true,
+    "rainOverlay":          false,
+    "slowZoom":             true,
+    "vignette":             true,
+    "textAnimation":        "fade",
+    "fontSize":             68,
+    "musicFile":            "",
+    "musicVolume":          0.20
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "_readme": "homeLocalRoot = fast SSD folder on the HOME COMPUTER (not synced to Drive). googleDriveRoot = local path to your Google Drive sync folder (update the username for each machine). projectRoot is intentionally omitted — the worker auto-resolves it from its own location.",
+  "homeLocalRoot": "C:\\Trend Vault Program",
+  "googleDriveRoot": "C:\\Users\\Anton\\Google Drive\\My Drive\\Trend Vault Program Sync",
+  "pollIntervalSeconds": 10,
+  "stableFileCheckSeconds": 5
+}

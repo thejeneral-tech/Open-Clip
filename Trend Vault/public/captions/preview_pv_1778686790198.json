@@ -1,0 +1,256 @@
+{
+  "audioFile": "trend_vault_preview_pv_1778686790198.mp3",
+  "audioDurationSec": 90,
+  "source": "assemblyai-forced-alignment",
+  "captions": [
+    {
+      "index": 0,
+      "text": "GEMINIS DON'T DO THIS BY ACCIDENT.",
+      "type": "hook",
+      "start": 0,
+      "end": 12.55813953488372,
+      "duration": 12.55813953488372,
+      "wordCount": 6,
+      "startMs": 0,
+      "endMs": 12558.13953488372,
+      "words": [
+        {
+          "word": "GEMINIS",
+          "startMs": 58,
+          "endMs": 488
+        },
+        {
+          "word": "DON'T",
+          "startMs": 569,
+          "endMs": 848
+        },
+        {
+          "word": "DO",
+          "startMs": 906,
+          "endMs": 1080
+        },
+        {
+          "word": "THIS",
+          "startMs": 1149,
+          "endMs": 1289
+        },
+        {
+          "word": "BY",
+          "startMs": 1347,
+          "endMs": 1498
+        },
+        {
+          "word": "ACCIDENT.",
+          "startMs": 1544,
+          "endMs": 2125
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "text": "THERE'S SOMETHING SPECIFIC ABOUT THE WAY THEY LOVE — AND THE WAY THEY PROTECT THEMSELVES FROM IT.",
+      "type": "observation",
+      "start": 12.55813953488372,
+      "end": 48.13953488372093,
+      "duration": 35.581395348837205,
+      "wordCount": 17,
+      "startMs": 12558.13953488372,
+      "endMs": 48139.534883720924,
+      "words": [
+        {
+          "word": "THERE'S",
+          "startMs": 2728,
+          "endMs": 2984
+        },
+        {
+          "word": "SOMETHING",
+          "startMs": 3007,
+          "endMs": 3332
+        },
+        {
+          "word": "SPECIFIC",
+          "startMs": 3390,
+          "endMs": 3959
+        },
+        {
+          "word": "ABOUT",
+          "startMs": 4029,
+          "endMs": 4296
+        },
+        {
+          "word": "THE",
+          "startMs": 4331,
+          "endMs": 4400
+        },
+        {
+          "word": "WAY",
+          "startMs": 4481,
+          "endMs": 4702
+        },
+        {
+          "word": "THEY",
+          "startMs": 4772,
+          "endMs": 4923
+        },
+        {
+          "word": "LOVE",
+          "startMs": 5039,
+          "endMs": 5492
+        },
+        {
+          "word": "AND",
+          "startMs": 5968,
+          "endMs": 6165
+        },
+        {
+          "word": "THE",
+          "startMs": 6211,
+          "endMs": 6281
+        },
+        {
+          "word": "WAY",
+          "startMs": 6362,
+          "endMs": 6571
+        },
+        {
+          "word": "THEY",
+          "startMs": 6641,
+          "endMs": 6780
+        },
+        {
+          "word": "PROTECT",
+          "startMs": 6838,
+          "endMs": 7221
+        },
+        {
+          "word": "THEMSELVES",
+          "startMs": 7245,
+          "endMs": 7802
+        },
+        {
+          "word": "FROM",
+          "startMs": 7848,
+          "endMs": 8022
+        },
+        {
+          "word": "IT.",
+          "startMs": 8069,
+          "endMs": 8313
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "text": "MOST PEOPLE SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN EVERYTHING IS MOVING INSIDE THEM.",
+      "type": "observation",
+      "start": 48.13953488372093,
+      "end": 90,
+      "duration": 41.86046511627907,
+      "wordCount": 20,
+      "startMs": 48139.534883720924,
+      "endMs": 90000,
+      "words": [
+        {
+          "word": "MOST",
+          "startMs": 8824,
+          "endMs": 9067
+        },
+        {
+          "word": "PEOPLE",
+          "startMs": 9114,
+          "endMs": 9416
+        },
+        {
+          "word": "SEE",
+          "startMs": 9462,
+          "endMs": 9659
+        },
+        {
+          "word": "THE",
+          "startMs": 9706,
+          "endMs": 9776
+        },
+        {
+          "word": "SURFACE.",
+          "startMs": 9822,
+          "endMs": 10403
+        },
+        {
+          "word": "THE",
+          "startMs": 10728,
+          "endMs": 10832
+        },
+        {
+          "word": "SILENCE.",
+          "startMs": 10902,
+          "endMs": 11564
+        },
+        {
+          "word": "THE",
+          "startMs": 11807,
+          "endMs": 11923
+        },
+        {
+          "word": "DISTANCE.",
+          "startMs": 11981,
+          "endMs": 12585
+        },
+        {
+          "word": "THE",
+          "startMs": 12864,
+          "endMs": 12968
+        },
+        {
+          "word": "WAY",
+          "startMs": 13050,
+          "endMs": 13270
+        },
+        {
+          "word": "THEY",
+          "startMs": 13317,
+          "endMs": 13433
+        },
+        {
+          "word": "SEEM",
+          "startMs": 13491,
+          "endMs": 13723
+        },
+        {
+          "word": "UNMOVED",
+          "startMs": 13874,
+          "endMs": 14478
+        },
+        {
+          "word": "WHEN",
+          "startMs": 14652,
+          "endMs": 14861
+        },
+        {
+          "word": "EVERYTHING",
+          "startMs": 14988,
+          "endMs": 15453
+        },
+        {
+          "word": "IS",
+          "startMs": 15499,
+          "endMs": 15581
+        },
+        {
+          "word": "MOVING",
+          "startMs": 15662,
+          "endMs": 15940
+        },
+        {
+          "word": "INSIDE",
+          "startMs": 15987,
+          "endMs": 16382
+        },
+        {
+          "word": "THEM.",
+          "startMs": 16405,
+          "endMs": 16672
+        }
+      ]
+    }
+  ]
+}

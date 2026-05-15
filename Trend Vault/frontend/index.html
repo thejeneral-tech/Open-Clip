@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>🔮 Trend Vault Program — Clip Tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #080810;
+      --surface:  #10101a;
+      --surface2: #17172a;
+      --border:   #272740;
+      --accent:   #FFE500;
+      --red:      #fe2c55;
+      --green:    #1db954;
+      --blue:     #4f9eff;
+      --text:     #eeeef5;
+      --muted:    #60607a;
+      --r:        16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%;
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,8,16,0.9);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    header .logo { font-size: 1.8rem; }
+    header h1 { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; }
+    header h1 span { color: var(--accent); }
+    .badge { background: var(--red); color: #fff; font-size: 0.65rem; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; }
+    header .badge { margin-left: auto; }
+
+    main { width: 100%; max-width: 940px; padding: 32px 20px 100px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── Card ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 24px; }
+    .card-title { font-size: 0.68rem; font-weight: 800; letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
+
+    /* ── Drop zone ── */
+    #dropzone {
+      border: 2px dashed var(--border);
+      border-radius: calc(var(--r) - 4px);
+      padding: 52px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    #dropzone:hover, #dropzone.drag-over {
+      border-color: var(--accent);
+      background: rgba(255,229,0,0.03);
+    }
+    #dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    #dropzone .dz-icon { font-size: 3rem; margin-bottom: 12px; }
+    #dropzone .dz-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+    #dropzone .dz-sub { font-size: 0.82rem; color: var(--muted); }
+
+    #fileInfo { display: none; align-items: center; gap: 12px; background: rgba(255,229,0,0.06); border: 1px solid rgba(255,229,0,0.2); border-radius: 10px; padding: 12px 16px; margin-top: 12px; }
+    #fileInfo.show { display: flex; }
+    .fi-icon { font-size: 1.4rem; }
+    .fi-name { font-weight: 700; font-size: 0.88rem; }
+    .fi-size { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+    .fi-x { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .fi-x:hover { color: var(--red); background: rgba(254,44,85,0.1); }
+
+    #startBtn {
+      width: 100%;
+      margin-top: 14px;
+      padding: 15px;
+      background: var(--accent);
+      color: #000;
+      font-size: 1rem;
+      font-weight: 900;
+      border: none;
+      border-radius: calc(var(--r) - 4px);
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      display: none;
+      letter-spacing: 0.3px;
+    }
+    #startBtn.show { display: block; }
+    #startBtn:hover { opacity: 0.87; }
+    #startBtn:active { transform: scale(0.985); }
+    #startBtn:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; border: 1px solid var(--border); }
+
+    /* ── Processing dashboard ── */
+    #dashboard { display: none; }
+    #dashboard.show { display: flex; flex-direction: column; gap: 16px; }
+
+    /* processing header */
+    .proc-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 4px; }
+    .proc-icon { font-size: 2rem; margin-top: 2px; }
+    .proc-video-name { font-weight: 800; font-size: 1.1rem; line-height: 1.3; }
+    .proc-folder { font-size: 0.76rem; color: var(--muted); margin-top: 3px; }
+    .proc-status { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.4s ease-in-out infinite; }
+    .live-dot.done  { background: var(--green); animation: none; }
+    .live-dot.error { background: var(--red);   animation: none; }
+    @keyframes pulse { 0%,100%{ opacity: 1; transform: scale(1); } 50%{ opacity: 0.5; transform: scale(1.3); } }
+    .live-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--green); }
+    .live-label.done  { color: var(--green); }
+    .live-label.error { color: var(--red); }
+
+    /* overall progress bar */
+    .pbar-wrap { position: relative; margin: 8px 0; }
+    .pbar-track { height: 12px; background: var(--surface2); border-radius: 6px; overflow: hidden; }
+    .pbar-fill {
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #b89000, var(--accent));
+      transition: width 0.6s ease;
+      position: relative;
+      min-width: 0;
+    }
+    .pbar-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 60%, rgba(255,255,255,0.25));
+      border-radius: inherit;
+    }
+    .pbar-fill.glow { box-shadow: 0 0 12px 2px rgba(255,229,0,0.4); }
+    .pbar-pct {
+      position: absolute;
+      right: 0;
+      top: -22px;
+      font-size: 0.95rem;
+      font-weight: 900;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* clip-level bar */
+    .clip-bar-row {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .clip-bar-row.show { display: flex; }
+    .clip-bar-label { display: flex; justify-content: space-between; font-size: 0.78rem; }
+    .clip-bar-name { font-weight: 700; color: var(--text); }
+    .clip-bar-pct  { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .clip-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .clip-fill  { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s ease; }
+
+    /* stage pipeline */
+    .stages { display: flex; align-items: center; gap: 0; margin: 4px 0; }
+    .stage-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      position: relative;
+    }
+    .stage-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: calc(50% + 14px);
+      right: calc(-50% + 14px);
+      height: 2px;
+      background: var(--border);
+      transition: background 0.3s;
+      z-index: 0;
+    }
+    .stage-item.complete:not(:last-child)::after { background: var(--green); }
+    .stage-item.active:not(:last-child)::after { background: var(--border); }
+
+    .stage-circle {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: var(--muted);
+      transition: all 0.3s;
+      position: relative;
+      z-index: 1;
+    }
+    .stage-item.complete .stage-circle {
+      border-color: var(--green);
+      background: rgba(29,185,84,0.12);
+      color: var(--green);
+    }
+    .stage-item.active .stage-circle {
+      border-color: var(--accent);
+      background: rgba(255,229,0,0.1);
+      color: var(--accent);
+      animation: stagePulse 1.2s ease-in-out infinite;
+    }
+    @keyframes stagePulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(255,229,0,0.3); } 50%{ box-shadow: 0 0 0 6px rgba(255,229,0,0); } }
+    .stage-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-align: center;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      line-height: 1.2;
+    }
+    .stage-item.complete .stage-label { color: var(--green); }
+    .stage-item.active  .stage-label  { color: var(--accent); }
+
+    /* stats row */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-label { font-size: 0.63rem; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+    .stat-value { font-size: 1.05rem; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+    .stat-value.accent { color: var(--accent); }
+    .stat-value.green  { color: var(--green); }
+
+    /* log */
+    .log-toggle {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      transition: color 0.2s;
+    }
+    .log-toggle:hover { color: var(--text); }
+    .log-toggle .arrow { transition: transform 0.2s; }
+    .log-toggle.open .arrow { transform: rotate(90deg); }
+    #logBox {
+      display: none;
+      margin-top: 8px;
+      background: #05050c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      height: 200px;
+      overflow-y: auto;
+      font-family: 'Consolas','Courier New',monospace;
+      font-size: 0.75rem;
+      line-height: 1.7;
+    }
+    #logBox.show { display: block; }
+    .ll { color: #9090b0; }
+    .ll.hi  { color: var(--accent); font-weight: 700; }
+    .ll.err { color: #ff6b6b; }
+    .ll.ok  { color: var(--green); }
+
+    /* ── Live clips (appear in real time) ── */
+    #liveSection { display: none; }
+    #liveSection.show { display: block; }
+
+    .live-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .live-header .badge { font-size: 0.65rem; }
+    .live-header-title { font-size: 0.8rem; font-weight: 800; color: var(--text); }
+    .live-clips-count { font-size: 0.8rem; color: var(--muted); margin-left: auto; }
+
+    #liveGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+
+    .clip-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.18s, box-shadow 0.2s;
+      animation: fadeUp 0.4s ease both;
+    }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .clip-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .clip-card video { width: 100%; aspect-ratio: 9/16; object-fit: cover; display: block; background: #000; }
+    .clip-foot { padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .clip-num { font-size: 0.75rem; font-weight: 800; }
+    .clip-dl { text-decoration: none; background: var(--accent); color: #000; font-size: 0.68rem; font-weight: 900; padding: 4px 10px; border-radius: 20px; transition: opacity 0.15s; flex-shrink: 0; }
+    .clip-dl:hover { opacity: 0.82; }
+
+    /* ── Library ── */
+    #library { display: flex; flex-direction: column; gap: 20px; }
+    #emptyLib { display: none; text-align: center; padding: 40px; color: var(--muted); font-size: 0.85rem; }
+    #emptyLib.show { display: block; }
+
+    .vs { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+    .vs-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.015);
+    }
+    .vs-icon { font-size: 1.2rem; }
+    .vs-name { font-weight: 800; font-size: 0.95rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vs-count { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .vs-dl {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .vs-dl:hover { border-color: var(--accent); color: var(--accent); }
+    .vs-grid { padding: 16px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+
+    /* ── New video btn ── */
+    #newVideoBtn {
+      display: none;
+      width: 100%;
+      padding: 14px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--r);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #newVideoBtn.show { display: block; }
+    #newVideoBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🔮</span>
+  <h1>Trend Vault <span>Program</span></h1>
+  <nav style="display:flex;gap:10px;margin-left:20px">
+    <a href="/" style="padding:6px 14px;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none;background:rgba(255,229,0,.12);border:1px solid rgba(255,229,0,.3);color:#FFE500;letter-spacing:.5px">🎬 Clip Tool</a>
+    <a href="/trend-vault" style="padding:6px 14px;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#a855f7;letter-spacing:.5px">🔮 Trend Vault Studio</a>
+    <a href="/voice-lab" style="padding:6px 14px;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.35);color:#c4b5fd;letter-spacing:.5px">🎙️ Voice Lab</a>
+    <a href="/voice-editor" style="padding:6px 14px;border-radius:8px;font-size:.78rem;font-weight:700;text-decoration:none;background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.35);color:#f0c040;letter-spacing:.5px">🎤 MP3 Editor</a>
+  </nav>
+  <span class="badge" style="margin-left:auto">TikTok Ready</span>
+</header>
+
+<main>
+
+  <!-- Upload card -->
+  <div class="card" id="uploadCard">
+    <div class="card-title">Upload Video</div>
+    <div id="dropzone">
+      <input type="file" id="fileInput" accept="video/mp4,video/*"/>
+      <div class="dz-icon">📁</div>
+      <div class="dz-title">Drop your MP4 here</div>
+      <div class="dz-sub">or click to browse — any length, any size</div>
+    </div>
+    <div id="fileInfo">
+      <span class="fi-icon">🎥</span>
+      <div>
+        <div class="fi-name" id="fiName"></div>
+        <div class="fi-size" id="fiSize"></div>
+      </div>
+      <button class="fi-x" id="fiX">✕</button>
+    </div>
+    <button id="startBtn">🚀 Start Processing</button>
+  </div>
+
+  <!-- Processing dashboard -->
+  <div id="dashboard">
+    <div class="card">
+      <div class="card-title">Processing</div>
+
+      <!-- video name + live indicator -->
+      <div class="proc-header">
+        <span class="proc-icon">🎬</span>
+        <div>
+          <div class="proc-video-name" id="procName">—</div>
+          <div class="proc-folder" id="procFolder"></div>
+        </div>
+        <div class="proc-status">
+          <div class="live-dot" id="liveDot"></div>
+          <span class="live-label" id="liveLabel">LIVE</span>
+        </div>
+      </div>
+
+      <!-- Overall progress bar -->
+      <div class="pbar-wrap" style="margin-top:18px;">
+        <div class="pbar-pct" id="overallPct">0%</div>
+        <div class="pbar-track">
+          <div class="pbar-fill glow" id="overallBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Stage pipeline -->
+      <div class="stages" id="stages" style="margin-top:22px;">
+        <div class="stage-item" id="st0">
+          <div class="stage-circle">1</div>
+          <div class="stage-label">Extract<br>Audio</div>
+        </div>
+        <div class="stage-item" id="st1">
+          <div class="stage-circle">2</div>
+          <div class="stage-label">Tran-<br>scribe</div>
+        </div>
+        <div class="stage-item" id="st2">
+          <div class="stage-circle">3</div>
+          <div class="stage-label">AI<br>Select</div>
+        </div>
+        <div class="stage-item" id="st3">
+          <div class="stage-circle">4</div>
+          <div class="stage-label">Cut<br>Clips</div>
+        </div>
+        <div class="stage-item" id="st4">
+          <div class="stage-circle">5</div>
+          <div class="stage-label">Render<br>Vertical</div>
+        </div>
+      </div>
+
+      <!-- Per-clip render bar (shown only during stage 5) -->
+      <div class="clip-bar-row" id="clipBarRow" style="margin-top:16px;">
+        <div class="clip-bar-label">
+          <span class="clip-bar-name" id="clipBarName">Rendering clip 1 of 10</span>
+          <span class="clip-bar-pct"  id="clipBarPct">0%</span>
+        </div>
+        <div class="clip-track"><div class="clip-fill" id="clipFill" style="width:0%"></div></div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats" style="margin-top:16px;">
+        <div class="stat-card">
+          <div class="stat-label">⏱ Elapsed</div>
+          <div class="stat-value" id="statElapsed">0:00</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">⏳ ETA</div>
+          <div class="stat-value accent" id="statETA">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">✅ Clips Ready</div>
+          <div class="stat-value green" id="statClips">0 / 10</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">📍 Stage</div>
+          <div class="stat-value" id="statStage" style="font-size:0.8rem;">Starting</div>
+        </div>
+      </div>
+
+      <!-- Log toggle + log box -->
+      <button class="log-toggle" id="logToggle" style="margin-top:14px;">
+        <span class="arrow">▶</span> Show log
+      </button>
+      <div id="logBox"></div>
+    </div>
+
+    <!-- Live clip previews (appear one by one as clips finish) -->
+    <div class="card" id="liveSection">
+      <div class="live-header">
+        <span class="badge">LIVE</span>
+        <span class="live-header-title">Clips Ready Now</span>
+        <span class="live-clips-count" id="liveCount">0 of 10</span>
+      </div>
+      <div id="liveGrid"></div>
+    </div>
+  </div>
+
+  <!-- New video button -->
+  <button id="newVideoBtn">+ Process Another Video</button>
+
+  <!-- Completed video library -->
+  <div id="library"></div>
+  <div id="emptyLib">No clips yet — upload an MP4 above to get started.</div>
+
+</main>
+
+<script>
+// ─── state ───────────────────────────────────────────────────────────────────
+let selectedFile = null, currentJobId = null, sse = null;
+let jobStartTime = null, elapsedTimer = null;
+let liveClips = [];
+
+// ─── elements ─────────────────────────────────────────────────────────────────
+const E = id => document.getElementById(id);
+const dropzone    = E('dropzone'),   fileInput  = E('fileInput');
+const fileInfo    = E('fileInfo'),   fiName     = E('fiName');
+const fiSize      = E('fiSize'),     fiX        = E('fiX');
+const startBtn    = E('startBtn'),   uploadCard = E('uploadCard');
+const dashboard   = E('dashboard'),  procName   = E('procName');
+const procFolder  = E('procFolder'), liveDot    = E('liveDot');
+const liveLabel   = E('liveLabel'),  overallBar = E('overallBar');
+const overallPct  = E('overallPct'), clipBarRow = E('clipBarRow');
+const clipBarName = E('clipBarName'),clipBarPct = E('clipBarPct');
+const clipFill    = E('clipFill'),   statElapsed= E('statElapsed');
+const statETA     = E('statETA'),    statClips  = E('statClips');
+const statStage   = E('statStage'),  logBox     = E('logBox');
+const logToggle   = E('logToggle'),  liveSection= E('liveSection');
+const liveGrid    = E('liveGrid'),   liveCount  = E('liveCount');
+const newVideoBtn = E('newVideoBtn'),library    = E('library');
+const emptyLib    = E('emptyLib');
+const stageEls    = [0,1,2,3,4].map(n => E('st'+n));
+
+const STAGE_NAMES = ['Extract Audio','Transcribing','AI Selecting','Cutting Clips','Rendering'];
+
+// ─── file pick ────────────────────────────────────────────────────────────────
+const fmt = b => b < 1e6 ? (b/1024).toFixed(1)+' KB' : b < 1e9 ? (b/1e6).toFixed(1)+' MB' : (b/1e9).toFixed(2)+' GB';
+
+function setFile(f) {
+  if (!f) return;
+  selectedFile = f;
+  fiName.textContent = f.name;
+  fiSize.textContent = fmt(f.size);
+  fileInfo.classList.add('show');
+  startBtn.classList.add('show');
+  dropzone.style.display = 'none';
+}
+function clearFile() {
+  selectedFile = null;
+  fileInput.value = '';
+  fileInfo.classList.remove('show');
+  startBtn.classList.remove('show');
+  dropzone.style.display = '';
+}
+fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+fiX.addEventListener('click', clearFile);
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('drag-over'); setFile(e.dataTransfer.files[0]); });
+
+// ─── log ─────────────────────────────────────────────────────────────────────
+function appendLog(text) {
+  const hi  = /step \d|→|✓|done!|bundle ready|audio extracted|transcript saved/i.test(text);
+  const err = /error|fail/i.test(text);
+  const ok  = /✓|done|rendered|extracted|saved/i.test(text);
+  const d = document.createElement('div');
+  d.className = 'll' + (hi ? ' hi' : err ? ' err' : ok ? ' ok' : '');
+  d.textContent = text;
+  logBox.appendChild(d);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+logToggle.addEventListener('click', () => {
+  logToggle.classList.toggle('open');
+  logBox.classList.toggle('show');
+  logToggle.querySelector('span:last-child').textContent = logBox.classList.contains('show') ? 'Hide log' : 'Show log';
+});
+
+// ─── elapsed timer ───────────────────────────────────────────────────────────
+function fmtMs(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${String(ss).padStart(2,'0')}s`;
+  return `${ss}s`;
+}
+function startElapsed() {
+  stopElapsed();
+  jobStartTime = Date.now();
+  elapsedTimer = setInterval(() => {
+    statElapsed.textContent = fmtMs(Date.now() - jobStartTime);
+  }, 1000);
+}
+function stopElapsed() {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+}
+
+// ─── progress update ─────────────────────────────────────────────────────────
+function applyProgress(p) {
+  // Overall bar
+  const pct = Math.min(100, Math.max(0, p.overallPct || 0));
+  overallBar.style.width = pct + '%';
+  overallPct.textContent = pct + '%';
+
+  // Stage pipeline
+  stageEls.forEach((el, i) => {
+    const cls = i < p.stage ? 'complete' : i === p.stage ? 'active' : '';
+    el.className = 'stage-item' + (cls ? ' '+cls : '');
+    const circle = el.querySelector('.stage-circle');
+    circle.textContent = i < p.stage ? '✓' : i+1;
+  });
+
+  // Clip-level bar (shown during render stage)
+  if (p.stage >= 4 && p.totalClips > 0) {
+    clipBarRow.classList.add('show');
+    const cur  = p.currentClip || 1;
+    const tot  = p.totalClips || 10;
+    const cpct = Math.min(100, p.clipPct || 0);
+    clipBarName.textContent = `Rendering clip ${cur} of ${tot}`;
+    clipBarPct.textContent  = cpct + '%';
+    clipFill.style.width    = cpct + '%';
+  } else {
+    clipBarRow.classList.remove('show');
+  }
+
+  // Stats
+  if (p.etaMs != null && p.etaMs > 0) {
+    statETA.textContent = fmtMs(p.etaMs);
+  }
+  statClips.textContent = `${p.clipsFinished || 0} / ${p.totalClips || 10}`;
+  statStage.textContent = STAGE_NAMES[p.stage] || 'Starting';
+}
+
+// ─── live clip card ───────────────────────────────────────────────────────────
+function addLiveClip(folder, name) {
+  if (liveClips.includes(name)) return;
+  liveClips.push(name);
+
+  liveSection.classList.add('show');
+  liveCount.textContent = `${liveClips.length} of 10`;
+
+  const folderEnc = encodeURIComponent(folder);
+  const fileEnc   = encodeURIComponent(name);
+  const num       = name.replace('clip-','').replace('.mp4','');
+
+  const card = document.createElement('div');
+  card.className = 'clip-card';
+  card.innerHTML = `
+    <video src="/clips/${folderEnc}/${fileEnc}" controls preload="metadata" playsinline></video>
+    <div class="clip-foot">
+      <span class="clip-num">Clip ${parseInt(num)}</span>
+      <a class="clip-dl" href="/download/${folderEnc}/${fileEnc}" download="${name}">⬇</a>
+    </div>
+  `;
+  liveGrid.appendChild(card);
+}
+
+// ─── SSE ─────────────────────────────────────────────────────────────────────
+function connectSSE(jobId) {
+  if (sse) sse.close();
+  sse = new EventSource(`/events/${jobId}`);
+
+  sse.onmessage = e => {
+    const data = JSON.parse(e.data);
+
+    if (data.log) appendLog(data.log);
+
+    if (data.progress) applyProgress(data.progress);
+
+    if (data.status === 'starting') {
+      procName.textContent   = data.filename;
+      procFolder.textContent = `→ output/final/${data.folder}/`;
+    }
+
+    if (data.clipReady) addLiveClip(data.clipReady.folder, data.clipReady.name);
+
+    if (data.done) {
+      sse.close();
+      stopElapsed();
+
+      liveDot.className   = 'live-dot ' + (data.success ? 'done' : 'error');
+      liveLabel.className = 'live-label '+ (data.success ? 'done' : 'error');
+      liveLabel.textContent = data.success ? 'DONE' : 'ERROR';
+
+      if (data.success) {
+        overallBar.style.width = '100%';
+        overallPct.textContent = '100%';
+        stageEls.forEach(el => el.className = 'stage-item complete');
+        stageEls.forEach(el => el.querySelector('.stage-circle').textContent = '✓');
+        statStage.textContent = 'Complete ✓';
+        statETA.textContent   = '—';
+        loadLibrary();
+      }
+      newVideoBtn.classList.add('show');
+      startBtn.disabled = false;
+      startBtn.textContent = '🚀 Start Processing';
+    }
+  };
+
+  sse.onerror = () => appendLog('[connection lost — will retry]');
+}
+
+// ─── library ──────────────────────────────────────────────────────────────────
+function renderLibrary(videos) {
+  library.innerHTML = '';
+  if (!videos || !videos.length) { emptyLib.classList.add('show'); return; }
+  emptyLib.classList.remove('show');
+
+  for (const v of videos) {
+    const sec = document.createElement('div');
+    sec.className = 'vs';
+    sec.innerHTML = `
+      <div class="vs-head">
+        <span class="vs-icon">🎬</span>
+        <span class="vs-name" title="${v.name}">${v.name}</span>
+        <span class="vs-count">${v.clips.length} clip${v.clips.length !== 1 ? 's' : ''}</span>
+        <button class="vs-dl" data-folder="${encodeURIComponent(v.name)}">⬇ Download All</button>
+      </div>
+      <div class="vs-grid" id="grid-${encodeURIComponent(v.name)}"></div>
+    `;
+    library.appendChild(sec);
+
+    const grid = sec.querySelector('.vs-grid');
+    for (const clip of v.clips) {
+      const fe = encodeURIComponent(v.name), ce = encodeURIComponent(clip);
+      const num = clip.replace('clip-','').replace('.mp4','');
+      const card = document.createElement('div');
+      card.className = 'clip-card';
+      card.innerHTML = `
+        <video src="/clips/${fe}/${ce}" controls preload="metadata" playsinline></video>
+        <div class="clip-foot">
+          <span class="clip-num">Clip ${parseInt(num)}</span>
+          <a class="clip-dl" href="/download/${fe}/${ce}" download="${clip}">⬇</a>
+        </div>
+      `;
+      grid.appendChild(card);
+    }
+  }
+
+  // Download-all per section
+  library.querySelectorAll('.vs-dl').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.vs').querySelectorAll('.clip-dl')
+        .forEach((a, i) => setTimeout(() => a.click(), i * 750));
+    });
+  });
+}
+
+async function loadLibrary() {
+  try {
+    const d = await fetch('/status').then(r => r.json());
+    renderLibrary(d.videos || []);
+    return d;
+  } catch { return null; }
+}
+
+// ─── new video ────────────────────────────────────────────────────────────────
+newVideoBtn.addEventListener('click', () => {
+  clearFile();
+  logBox.innerHTML = '';
+  liveGrid.innerHTML = '';
+  liveClips = [];
+  newVideoBtn.classList.remove('show');
+  dashboard.classList.remove('show');
+  liveSection.classList.remove('show');
+  uploadCard.style.display = '';
+  overallBar.style.width = '0%';
+  overallPct.textContent = '0%';
+  clipBarRow.classList.remove('show');
+  stageEls.forEach(el => el.className = 'stage-item');
+  stageEls.forEach(el => el.querySelector('.stage-circle').textContent = '');
+  [0,1,2,3,4].forEach(i => E('st'+i).querySelector('.stage-circle').textContent = i+1);
+  statElapsed.textContent = '0:00';
+  statETA.textContent = '—';
+  statClips.textContent = '0 / 10';
+  statStage.textContent = 'Starting';
+  liveDot.className = 'live-dot';
+  liveLabel.className = 'live-label';
+  liveLabel.textContent = 'LIVE';
+  if (logBox.classList.contains('show')) {
+    logBox.classList.remove('show');
+    logToggle.classList.remove('open');
+    logToggle.querySelector('span:last-child').textContent = 'Show log';
+  }
+  if (sse) { sse.close(); sse = null; }
+  stopElapsed();
+});
+
+// ─── start ────────────────────────────────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ Uploading…';
+  logBox.innerHTML = '';
+  liveGrid.innerHTML = '';
+  liveClips = [];
+  liveSection.classList.remove('show');
+  newVideoBtn.classList.remove('show');
+  overallBar.style.width = '0%';
+  overallPct.textContent = '0%';
+  stageEls.forEach((el, i) => {
+    el.className = 'stage-item';
+    el.querySelector('.stage-circle').textContent = i+1;
+  });
+
+  uploadCard.style.display = 'none';
+  dashboard.classList.add('show');
+  procName.textContent   = selectedFile.name;
+  procFolder.textContent = 'uploading…';
+
+  const fd = new FormData();
+  fd.append('video', selectedFile);
+
+  try {
+    const r    = await fetch('/upload', { method: 'POST', body: fd });
+    const json = await r.json();
+
+    if (!r.ok) {
+      appendLog('Upload error: ' + (json.error || r.statusText));
+      liveDot.className = 'live-dot error';
+      liveLabel.textContent = 'ERROR';
+      startBtn.disabled = false;
+      startBtn.textContent = '🚀 Start Processing';
+      return;
+    }
+
+    currentJobId = json.jobId;
+    procName.textContent   = json.filename;
+    procFolder.textContent = `→ output/final/${json.folder}/`;
+    startElapsed();
+    connectSSE(currentJobId);
+
+  } catch (err) {
+    appendLog('Network error: ' + err.message);
+    liveDot.className = 'live-dot error';
+    liveLabel.textContent = 'ERROR';
+    startBtn.disabled = false;
+    startBtn.textContent = '🚀 Start Processing';
+  }
+});
+
+// ─── on load ──────────────────────────────────────────────────────────────────
+(async () => {
+  const d = await loadLibrary();
+  if (!d) return;
+  if (d.running && d.jobId) {
+    currentJobId = d.jobId;
+    uploadCard.style.display = 'none';
+    dashboard.classList.add('show');
+    procName.textContent   = d.filename || 'Reconnecting…';
+    procFolder.textContent = d.folder   ? `→ output/final/${d.folder}/` : '';
+    startElapsed();
+    connectSSE(d.jobId);
+  }
+})();
+</script>
+</body>
+</html>

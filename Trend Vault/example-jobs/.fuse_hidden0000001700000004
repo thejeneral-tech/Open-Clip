@@ -1,0 +1,15 @@
+{
+  "_readme": "SCRIPT ONLY — Generates a script JSON file, no video rendered. Fast.",
+
+  "jobId": "aries-script-001",
+  "type": "script-only",
+  "status": "pending",
+  "createdAt": "2026-05-11T12:00:00Z",
+
+  "script": {
+    "trendVaultSign":    "Aries",
+    "emotionalTone": "motivational",
+    "prompt":        "coming back stronger after burnout",
+    "targetDuration": 100
+  }
+}

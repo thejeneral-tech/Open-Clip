@@ -1,0 +1,18 @@
+{
+  "audioFile": "trend_vault_preview_pv_1778699832807.mp3",
+  "audioDurationSec": 4.231837,
+  "source": "word-proportional",
+  "captions": [
+    {
+      "index": 0,
+      "text": "This is how this voice will sound in your video.",
+      "type": "observation",
+      "start": 0,
+      "end": 4.231837,
+      "duration": 4.231837,
+      "wordCount": 10,
+      "startMs": 0,
+      "endMs": 4231.8369999999995
+    }
+  ]
+}

@@ -1,0 +1,840 @@
+{
+  "audioFile": "trend_vault_preview_pv_1778693185806.mp3",
+  "audioDurationSec": 90,
+  "source": "assemblyai-forced-alignment",
+  "captions": [
+    {
+      "index": 0,
+      "text": "GEMINIS DON'T DO THIS BY ACCIDENT.",
+      "type": "hook",
+      "start": 0,
+      "end": 3.8028169014084505,
+      "duration": 3.8028169014084505,
+      "wordCount": 6,
+      "startMs": 0,
+      "endMs": 3802.8169014084506,
+      "words": [
+        {
+          "word": "GEMINIS",
+          "startMs": 70,
+          "endMs": 453
+        },
+        {
+          "word": "DON'T",
+          "startMs": 522,
+          "endMs": 743
+        },
+        {
+          "word": "DO",
+          "startMs": 789,
+          "endMs": 894
+        },
+        {
+          "word": "THIS",
+          "startMs": 964,
+          "endMs": 1091
+        },
+        {
+          "word": "BY",
+          "startMs": 1161,
+          "endMs": 1289
+        },
+        {
+          "word": "ACCIDENT.",
+          "startMs": 1335,
+          "endMs": 2032
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "text": "THERE'S SOMETHING SPECIFIC ABOUT THE WAY THEY LOVE — AND THE WAY THEY PROTECT THEMSELVES FROM IT.",
+      "type": "observation",
+      "start": 3.8028169014084505,
+      "end": 14.577464788732392,
+      "duration": 10.774647887323942,
+      "wordCount": 17,
+      "startMs": 3802.8169014084506,
+      "endMs": 14577.464788732392,
+      "words": [
+        {
+          "word": "THERE'S",
+          "startMs": 2183,
+          "endMs": 2438
+        },
+        {
+          "word": "SOMETHING",
+          "startMs": 2461,
+          "endMs": 2786
+        },
+        {
+          "word": "SPECIFIC",
+          "startMs": 2833,
+          "endMs": 3379
+        },
+        {
+          "word": "ABOUT",
+          "startMs": 3425,
+          "endMs": 3669
+        },
+        {
+          "word": "THE",
+          "startMs": 3704,
+          "endMs": 3773
+        },
+        {
+          "word": "WAY",
+          "startMs": 3831,
+          "endMs": 3982
+        },
+        {
+          "word": "THEY",
+          "startMs": 4040,
+          "endMs": 4156
+        },
+        {
+          "word": "LOVE",
+          "startMs": 4249,
+          "endMs": 4632
+        },
+        {
+          "word": "AND",
+          "startMs": 4888,
+          "endMs": 5004
+        },
+        {
+          "word": "THE",
+          "startMs": 5050,
+          "endMs": 5120
+        },
+        {
+          "word": "WAY",
+          "startMs": 5166,
+          "endMs": 5329
+        },
+        {
+          "word": "THEY",
+          "startMs": 5387,
+          "endMs": 5503
+        },
+        {
+          "word": "PROTECT",
+          "startMs": 5561,
+          "endMs": 5909
+        },
+        {
+          "word": "THEMSELVES",
+          "startMs": 5933,
+          "endMs": 6362
+        },
+        {
+          "word": "FROM",
+          "startMs": 6409,
+          "endMs": 6571
+        },
+        {
+          "word": "IT.",
+          "startMs": 6618,
+          "endMs": 6920
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "text": "MOST PEOPLE SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN EVERYTHING IS MOVING INSIDE THEM.",
+      "type": "observation",
+      "start": 14.577464788732392,
+      "end": 27.25352112676056,
+      "duration": 12.676056338028168,
+      "wordCount": 20,
+      "startMs": 14577.464788732392,
+      "endMs": 27253.52112676056,
+      "words": [
+        {
+          "word": "MOST",
+          "startMs": 7616,
+          "endMs": 7895
+        },
+        {
+          "word": "PEOPLE",
+          "startMs": 7941,
+          "endMs": 8243
+        },
+        {
+          "word": "SEE",
+          "startMs": 8290,
+          "endMs": 8452
+        },
+        {
+          "word": "THE",
+          "startMs": 8498,
+          "endMs": 8568
+        },
+        {
+          "word": "SURFACE.",
+          "startMs": 8626,
+          "endMs": 9265
+        },
+        {
+          "word": "THE",
+          "startMs": 9381,
+          "endMs": 9485
+        },
+        {
+          "word": "SILENCE.",
+          "startMs": 9555,
+          "endMs": 10275
+        },
+        {
+          "word": "THE",
+          "startMs": 10426,
+          "endMs": 10530
+        },
+        {
+          "word": "DISTANCE.",
+          "startMs": 10612,
+          "endMs": 11320
+        },
+        {
+          "word": "THE",
+          "startMs": 11529,
+          "endMs": 11633
+        },
+        {
+          "word": "WAY",
+          "startMs": 11691,
+          "endMs": 11819
+        },
+        {
+          "word": "THEY",
+          "startMs": 11877,
+          "endMs": 11981
+        },
+        {
+          "word": "SEEM",
+          "startMs": 12063,
+          "endMs": 12260
+        },
+        {
+          "word": "UNMOVED",
+          "startMs": 12330,
+          "endMs": 12771
+        },
+        {
+          "word": "WHEN",
+          "startMs": 12887,
+          "endMs": 13061
+        },
+        {
+          "word": "EVERYTHING",
+          "startMs": 13119,
+          "endMs": 13525
+        },
+        {
+          "word": "IS",
+          "startMs": 13572,
+          "endMs": 13641
+        },
+        {
+          "word": "MOVING",
+          "startMs": 13723,
+          "endMs": 14001
+        },
+        {
+          "word": "INSIDE",
+          "startMs": 14048,
+          "endMs": 14431
+        },
+        {
+          "word": "THEM.",
+          "startMs": 14454,
+          "endMs": 14814
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "text": "BUT THE REALITY IS FAR MORE COMPLICATED THAN THAT.",
+      "type": "escalation",
+      "start": 27.25352112676056,
+      "end": 32.95774647887323,
+      "duration": 5.7042253521126725,
+      "wordCount": 9,
+      "startMs": 27253.52112676056,
+      "endMs": 32957.74647887323,
+      "words": [
+        {
+          "word": "BUT",
+          "startMs": 15511,
+          "endMs": 15673
+        },
+        {
+          "word": "THE",
+          "startMs": 15708,
+          "endMs": 15778
+        },
+        {
+          "word": "REALITY",
+          "startMs": 15836,
+          "endMs": 16335
+        },
+        {
+          "word": "IS",
+          "startMs": 16381,
+          "endMs": 16474
+        },
+        {
+          "word": "FAR",
+          "startMs": 16555,
+          "endMs": 16776
+        },
+        {
+          "word": "MORE",
+          "startMs": 16846,
+          "endMs": 17020
+        },
+        {
+          "word": "COMPLICATED",
+          "startMs": 17066,
+          "endMs": 17635
+        },
+        {
+          "word": "THAN",
+          "startMs": 17670,
+          "endMs": 17798
+        },
+        {
+          "word": "THAT.",
+          "startMs": 17844,
+          "endMs": 18274
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "text": "THEY MAKE YOU FEEL LIKE THE MOST INTERESTING PERSON IN THE ROOM. AND YOU SPEND THE REST OF YOUR LIFE TRYING TO GET BACK TO THAT FEELING.",
+      "type": "escalation",
+      "start": 32.95774647887323,
+      "end": 50.070422535211264,
+      "duration": 17.11267605633803,
+      "wordCount": 27,
+      "startMs": 32957.74647887323,
+      "endMs": 50070.42253521126,
+      "words": [
+        {
+          "word": "THEY",
+          "startMs": 18970,
+          "endMs": 19133
+        },
+        {
+          "word": "MAKE",
+          "startMs": 19203,
+          "endMs": 19377
+        },
+        {
+          "word": "YOU",
+          "startMs": 19400,
+          "endMs": 19493
+        },
+        {
+          "word": "FEEL",
+          "startMs": 19574,
+          "endMs": 19806
+        },
+        {
+          "word": "LIKE",
+          "startMs": 19853,
+          "endMs": 20015
+        },
+        {
+          "word": "THE",
+          "startMs": 20038,
+          "endMs": 20108
+        },
+        {
+          "word": "MOST",
+          "startMs": 20166,
+          "endMs": 20410
+        },
+        {
+          "word": "INTERESTING",
+          "startMs": 20468,
+          "endMs": 20944
+        },
+        {
+          "word": "PERSON",
+          "startMs": 21002,
+          "endMs": 21316
+        },
+        {
+          "word": "IN",
+          "startMs": 21362,
+          "endMs": 21420
+        },
+        {
+          "word": "THE",
+          "startMs": 21455,
+          "endMs": 21525
+        },
+        {
+          "word": "ROOM.",
+          "startMs": 21583,
+          "endMs": 22001
+        },
+        {
+          "word": "AND",
+          "startMs": 22511,
+          "endMs": 22662
+        },
+        {
+          "word": "YOU",
+          "startMs": 22697,
+          "endMs": 22778
+        },
+        {
+          "word": "SPEND",
+          "startMs": 22894,
+          "endMs": 23173
+        },
+        {
+          "word": "THE",
+          "startMs": 23196,
+          "endMs": 23266
+        },
+        {
+          "word": "REST",
+          "startMs": 23312,
+          "endMs": 23510
+        },
+        {
+          "word": "OF",
+          "startMs": 23556,
+          "endMs": 23614
+        },
+        {
+          "word": "YOUR",
+          "startMs": 23649,
+          "endMs": 23765
+        },
+        {
+          "word": "LIFE",
+          "startMs": 23823,
+          "endMs": 24183
+        },
+        {
+          "word": "TRYING",
+          "startMs": 24230,
+          "endMs": 24555
+        },
+        {
+          "word": "TO",
+          "startMs": 24601,
+          "endMs": 24659
+        },
+        {
+          "word": "GET",
+          "startMs": 24717,
+          "endMs": 24845
+        },
+        {
+          "word": "BACK",
+          "startMs": 24903,
+          "endMs": 25100
+        },
+        {
+          "word": "TO",
+          "startMs": 25158,
+          "endMs": 25216
+        },
+        {
+          "word": "THAT",
+          "startMs": 25275,
+          "endMs": 25414
+        },
+        {
+          "word": "FEELING.",
+          "startMs": 25472,
+          "endMs": 26018
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "text": "THE PEOPLE WHO SEEM THE HARDEST TO REACH ARE USUALLY THE ONES WHO FELT THINGS SO DEEPLY ONCE — THEY BUILT SOMETHING AROUND IT.",
+      "type": "truth",
+      "start": 50.070422535211264,
+      "end": 65.28169014084507,
+      "duration": 15.211267605633807,
+      "wordCount": 24,
+      "startMs": 50070.42253521126,
+      "endMs": 65281.69014084507,
+      "words": [
+        {
+          "word": "THE",
+          "startMs": 26261,
+          "endMs": 26377
+        },
+        {
+          "word": "PEOPLE",
+          "startMs": 26435,
+          "endMs": 26702
+        },
+        {
+          "word": "WHO",
+          "startMs": 26725,
+          "endMs": 26841
+        },
+        {
+          "word": "SEEM",
+          "startMs": 26911,
+          "endMs": 27085
+        },
+        {
+          "word": "THE",
+          "startMs": 27143,
+          "endMs": 27213
+        },
+        {
+          "word": "HARDEST",
+          "startMs": 27259,
+          "endMs": 27584
+        },
+        {
+          "word": "TO",
+          "startMs": 27619,
+          "endMs": 27677
+        },
+        {
+          "word": "REACH",
+          "startMs": 27747,
+          "endMs": 27991
+        },
+        {
+          "word": "ARE",
+          "startMs": 28235,
+          "endMs": 28432
+        },
+        {
+          "word": "USUALLY",
+          "startMs": 28502,
+          "endMs": 28896
+        },
+        {
+          "word": "THE",
+          "startMs": 28943,
+          "endMs": 29012
+        },
+        {
+          "word": "ONES",
+          "startMs": 29082,
+          "endMs": 29279
+        },
+        {
+          "word": "WHO",
+          "startMs": 29326,
+          "endMs": 29442
+        },
+        {
+          "word": "FELT",
+          "startMs": 29512,
+          "endMs": 29721
+        },
+        {
+          "word": "THINGS",
+          "startMs": 29756,
+          "endMs": 29976
+        },
+        {
+          "word": "SO",
+          "startMs": 30011,
+          "endMs": 30173
+        },
+        {
+          "word": "DEEPLY",
+          "startMs": 30255,
+          "endMs": 30661
+        },
+        {
+          "word": "ONCE",
+          "startMs": 30905,
+          "endMs": 31451
+        },
+        {
+          "word": "THEY",
+          "startMs": 31706,
+          "endMs": 31845
+        },
+        {
+          "word": "BUILT",
+          "startMs": 31927,
+          "endMs": 32159
+        },
+        {
+          "word": "SOMETHING",
+          "startMs": 32205,
+          "endMs": 32507
+        },
+        {
+          "word": "AROUND",
+          "startMs": 32542,
+          "endMs": 32832
+        },
+        {
+          "word": "IT.",
+          "startMs": 32879,
+          "endMs": 33146
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "text": "NOT TO KEEP OTHERS OUT.",
+      "type": "truth",
+      "start": 65.28169014084507,
+      "end": 68.45070422535211,
+      "duration": 3.1690140845070403,
+      "wordCount": 5,
+      "startMs": 65281.69014084507,
+      "endMs": 68450.7042253521,
+      "words": [
+        {
+          "word": "NOT",
+          "startMs": 33320,
+          "endMs": 33517
+        },
+        {
+          "word": "TO",
+          "startMs": 33540,
+          "endMs": 33587
+        },
+        {
+          "word": "KEEP",
+          "startMs": 33633,
+          "endMs": 33807
+        },
+        {
+          "word": "OTHERS",
+          "startMs": 33865,
+          "endMs": 34109
+        },
+        {
+          "word": "OUT.",
+          "startMs": 34156,
+          "endMs": 34527
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "text": "TO KEEP THEMSELVES IN.",
+      "type": "twist",
+      "start": 68.45070422535211,
+      "end": 70.98591549295774,
+      "duration": 2.535211267605632,
+      "wordCount": 4,
+      "startMs": 68450.7042253521,
+      "endMs": 70985.91549295775,
+      "words": [
+        {
+          "word": "TO",
+          "startMs": 34643,
+          "endMs": 34736
+        },
+        {
+          "word": "KEEP",
+          "startMs": 34794,
+          "endMs": 34957
+        },
+        {
+          "word": "THEMSELVES",
+          "startMs": 35003,
+          "endMs": 35468
+        },
+        {
+          "word": "IN.",
+          "startMs": 35514,
+          "endMs": 35886
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "text": "WHEN A GEMINI FINALLY LOWERS THAT WALL — EVEN SLIGHTLY — IT'S NOT WEAKNESS.",
+      "type": "twist",
+      "start": 70.98591549295774,
+      "end": 79.85915492957746,
+      "duration": 8.873239436619713,
+      "wordCount": 14,
+      "startMs": 70985.91549295775,
+      "endMs": 79859.15492957746,
+      "words": [
+        {
+          "word": "WHEN",
+          "startMs": 36582,
+          "endMs": 36768
+        },
+        {
+          "word": "A",
+          "startMs": 36803,
+          "endMs": 36826
+        },
+        {
+          "word": "GEMINI",
+          "startMs": 36896,
+          "endMs": 37256
+        },
+        {
+          "word": "FINALLY",
+          "startMs": 37325,
+          "endMs": 37708
+        },
+        {
+          "word": "LOWERS",
+          "startMs": 37755,
+          "endMs": 38045
+        },
+        {
+          "word": "THAT",
+          "startMs": 38080,
+          "endMs": 38219
+        },
+        {
+          "word": "WALL",
+          "startMs": 38277,
+          "endMs": 38521
+        },
+        {
+          "word": "EVEN",
+          "startMs": 38811,
+          "endMs": 39043
+        },
+        {
+          "word": "SLIGHTLY",
+          "startMs": 39102,
+          "endMs": 39577
+        },
+        {
+          "word": "IT'S",
+          "startMs": 39833,
+          "endMs": 40030
+        },
+        {
+          "word": "NOT",
+          "startMs": 40076,
+          "endMs": 40250
+        },
+        {
+          "word": "WEAKNESS.",
+          "startMs": 40309,
+          "endMs": 40947
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "text": "IT'S THE BRAVEST THING THEY'VE EVER DONE.",
+      "type": "ending",
+      "start": 79.85915492957746,
+      "end": 84.29577464788731,
+      "duration": 4.436619718309856,
+      "wordCount": 7,
+      "startMs": 79859.15492957746,
+      "endMs": 84295.77464788732,
+      "words": [
+        {
+          "word": "IT'S",
+          "startMs": 41063,
+          "endMs": 41249
+        },
+        {
+          "word": "THE",
+          "startMs": 41284,
+          "endMs": 41353
+        },
+        {
+          "word": "BRAVEST",
+          "startMs": 41423,
+          "endMs": 41806
+        },
+        {
+          "word": "THING",
+          "startMs": 41853,
+          "endMs": 42050
+        },
+        {
+          "word": "THEY'VE",
+          "startMs": 42096,
+          "endMs": 42305
+        },
+        {
+          "word": "EVER",
+          "startMs": 42340,
+          "endMs": 42503
+        },
+        {
+          "word": "DONE.",
+          "startMs": 42572,
+          "endMs": 42990
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "text": "AND MOST PEOPLE NEVER REALIZE THEY WERE WITNESSING IT.",
+      "type": "ending",
+      "start": 84.29577464788731,
+      "end": 90,
+      "duration": 5.704225352112687,
+      "wordCount": 9,
+      "startMs": 84295.77464788732,
+      "endMs": 90000,
+      "words": [
+        {
+          "word": "AND",
+          "startMs": 43165,
+          "endMs": 43327
+        },
+        {
+          "word": "MOST",
+          "startMs": 43397,
+          "endMs": 43629
+        },
+        {
+          "word": "PEOPLE",
+          "startMs": 43675,
+          "endMs": 43942
+        },
+        {
+          "word": "NEVER",
+          "startMs": 43989,
+          "endMs": 44186
+        },
+        {
+          "word": "REALIZE",
+          "startMs": 44256,
+          "endMs": 44697
+        },
+        {
+          "word": "THEY",
+          "startMs": 44720,
+          "endMs": 44825
+        },
+        {
+          "word": "WERE",
+          "startMs": 44860,
+          "endMs": 44987
+        },
+        {
+          "word": "WITNESSING",
+          "startMs": 45022,
+          "endMs": 45475
+        },
+        {
+          "word": "IT.",
+          "startMs": 45521,
+          "endMs": 45754
+        }
+      ]
+    }
+  ]
+}
