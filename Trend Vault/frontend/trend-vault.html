@@ -1824,8 +1824,8 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div id="targetDurationRow" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
       <label style="font-size:.65rem;color:var(--muted);display:flex;align-items:center;gap:4px">
         Target
-        <input id="targetDurationInput" type="number" min="5" max="600" value="30" step="1"
-          onchange="state.targetDurationSec=Math.max(5,+this.value||30); markDirty('voice'); refreshDurationBadge(); try{updateScriptMeta?.()}catch{}"
+        <input id="targetDurationInput" type="number" min="5" max="600" value="90" step="1"
+          onchange="state.targetDurationSec=Math.max(5,+this.value||90); markDirty('voice'); refreshDurationBadge(); try{updateScriptMeta?.()}catch{}"
           style="flex:0 0 70px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.75rem;padding:5px 7px;font-family:inherit"/>
         <span style="font-size:.6rem;color:var(--muted)">s</span>
       </label>
@@ -2185,7 +2185,7 @@ const state = {
   // generated narration. 'fixed' = clip is exactly `targetDurationSec`
   // seconds long, with the script timeline rescaled to fit.
   durationMode:        'autoVoice',
-  targetDurationSec:   30,
+  targetDurationSec:   90,
   forceTargetDuration: false,  // autoVoice + this = stretch voice to hit target
   textSyncOffsetMs:    0,      // -300 to +300; shifts caption display relative to audio
   // ── Voice Sample (voice-only preview, kept SEPARATE from timeline audio) ──
@@ -3287,12 +3287,14 @@ async function addScriptLine(){
       const r = await fetch(`${API_BASE}/api/trend-vault/extend-script`,{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          trendVaultSign: state.sign||'Scorpio',
-          category: state.category||'general',
-          prompt: state.promptText,
-          angle: state.promptAngle||'',
-          emotionalTone: state.tone||'mysterious',
-          existingLines: state.script,
+          trendVaultSign: getCurrentNiche?.() || nicheState.selectedNiche || state.subject || state.sign || 'General',
+          niche:          getCurrentNiche?.() || nicheState.selectedNiche || state.subject || 'General',
+          category:       nicheState.selectedCategory || state.category || 'general',
+          trendingTopic:  nicheState.selectedTrendingTopic || '',
+          prompt:         (typeof getActivePremise === 'function') ? getActivePremise() : (state.promptText || state.currentPrompt || ''),
+          angle:          state.promptAngle || '',
+          emotionalTone:  state.tone || 'mysterious',
+          existingLines:  state.script,
           addCount: 4,
         })
       });
@@ -3340,7 +3342,7 @@ function setDurationMode(mode, btn){
   refreshDurationBadge();
 }
 function setTargetDuration(sec){
-  state.targetDurationSec = Math.max(5, +sec || 30);
+  state.targetDurationSec = Math.max(5, +sec || 90);
   const el = document.getElementById('targetDurationInput');
   if(el) el.value = state.targetDurationSec;
   markDirty('voice');
@@ -4461,11 +4463,16 @@ async function exportToCapCut(){
   if(btn){ btn.disabled = true; btn.innerHTML = '📤 Exporting...'; }
   try {
     const settings = {
-      trendVaultSign:  state.sign,
-      fontSize:    state.fontSize,
-      textColor:   state.textColor,
-      colorGrade:  state.colorGrade,
+      trendVaultSign:  getCurrentNiche?.() || nicheState.selectedNiche || state.subject || state.sign || 'General',
+      niche:           getCurrentNiche?.() || nicheState.selectedNiche || state.subject || 'General',
+      category:        nicheState.selectedCategory || state.category || '',
+      trendingTopic:   nicheState.selectedTrendingTopic || '',
+      emotionalTone:   state.tone || 'mysterious',
+      fontSize:        state.fontSize,
+      textColor:       state.textColor,
+      colorGrade:      state.colorGrade,
       backgroundVideo: state.background || 'none',
+      fontFamily:      state.fontFamily || "'Impact', sans-serif",
     };
     // Build a publicly-fetchable URL for any chosen background / current voice
     // (CapCutAPI fetches them itself, so they need to be HTTP-reachable).
@@ -7449,10 +7456,144 @@ function _setRenderBtns(busy){
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// BUILD RENDER PAYLOAD — single source of truth for all render data
+// Reads current UI state and returns the complete settings object.
+// Every render (and CapCut export) must call this instead of building
+// settings inline so state can never silently go stale.
+// ═══════════════════════════════════════════════════════════════════
+function buildRenderPayload(engineOverride) {
+  // ── Identity: niche/subject — prefer nicheState over legacy zodiac ───────
+  const currentNiche    = getCurrentNiche?.() || nicheState.selectedNiche || state.subject || state.sign || 'General';
+  const currentCategory = nicheState.selectedCategory || state.category || '';
+  const currentTopic    = nicheState.selectedTrendingTopic || '';
+  const currentPrompt   = (typeof getActivePremise === 'function') ? getActivePremise() : (state.currentPrompt || state.promptText || '');
+  const currentTone     = state.tone || 'mysterious';
+
+  // ── Script ───────────────────────────────────────────────────────────────
+  const scriptLines         = state.script || [];
+  const scriptSumSec        = scriptLines.reduce((s, l) => s + (l.durationSeconds || 0), 0);
+  const targetDur           = state.targetDurationSec || 90;
+
+  // ── Voice engine ─────────────────────────────────────────────────────────
+  let effectiveEngine = engineOverride || state.voiceEngine || 'auto';
+  if (engineOverride === 'local') {
+    effectiveEngine = (state.voiceEngine && state.voiceEngine !== 'elevenlabs') ? state.voiceEngine : 'auto';
+  }
+
+  // ── Voice params (full) ──────────────────────────────────────────────────
+  const voiceParams = Object.assign(getVoiceParams(), {
+    fishVoice:     state.fishVoice     ?? 'dark_narrator',
+    fishSpeed:     state.fishSpeed     ?? 1.0,
+    fishTemp:      state.fishTemp      ?? 0.70,
+    fishPitch:     state.fishPitch     ?? 0,
+    fishNormalize: state.fishNormalize !== false,
+  });
+
+  // ── Duration policy ──────────────────────────────────────────────────────
+  const durationMode = state.durationMode || 'autoVoice';
+  const durationSeconds = durationMode === 'fixed'
+    ? Math.max(5, targetDur)
+    : (state.forceTargetDuration && targetDur > 0 ? targetDur : scriptSumSec + 2);
+
+  const payload = {
+    // ── Trend Vault identity ──────────────────────────────────────────────
+    trendVaultSign:    currentNiche,          // was: state.sign (zodiac only)
+    trendVaultSymbol:  state.signSymbol || '',
+    niche:             currentNiche,
+    category:          currentCategory,
+    trendingTopic:     currentTopic,
+    storyPrompt:       currentPrompt,
+    emotionalTone:     currentTone,
+
+    // ── Background ────────────────────────────────────────────────────────
+    backgroundVideo:      state.background || 'none',
+    backgroundBlur:       state.bgBlur     ?? 0,
+    backgroundBrightness: (state.bgBrightness ?? 100) / 100,
+
+    // ── Visual effects ────────────────────────────────────────────────────
+    grainIntensity:      state.grainIntensity ?? 0,
+    grainType:           state.grainType      || 'none',
+    fogOverlay:          !!(document.getElementById('fogToggle')?.checked),
+    rainOverlay:         !!(document.getElementById('rainToggle')?.checked),
+    slowZoom:            !!(document.getElementById('zoomToggle')?.checked),
+    vignette:            !!(document.getElementById('vignetteToggle')?.checked),
+    colorGrade:          state.colorGrade          || 'none',
+    colorGradeIntensity: state.colorGradeIntensity ?? 100,
+    saturation:          state.saturation  ?? 100,
+    contrast:            state.contrast    ?? 100,
+    exposure:            state.exposure    ?? 0,
+    highlights:          state.highlights  ?? 0,
+    shadows:             state.shadows     ?? 0,
+
+    // ── Captions / text style ─────────────────────────────────────────────
+    captionTopPct:  state.captionTopPct ?? null,
+    fontFamily:     state.fontFamily    || "'Impact', sans-serif",
+    fontSize:       state.fontSize      || 72,
+    textColor:      state.textColor     || '#FFFFFF',
+    textAnimation:  document.getElementById('textAnimSelect')?.value || 'fade',
+    animSpeed:      state.animSpeed     ?? 1.0,
+    captionBgStyle: state.captionBgStyle || 'none',
+    captionRotate:  state.captionRotate  || 0,
+    textSyncOffsetMs: state.textSyncOffsetMs || 0,
+
+    // ── Render settings ───────────────────────────────────────────────────
+    fps:           state.renderFps     ?? 30,
+    renderQuality: state.renderQuality || 'high',
+    width:         state.renderWidth   ?? 1080,
+    height:        state.renderHeight  ?? 1920,
+
+    // ── Audio / music ─────────────────────────────────────────────────────
+    musicFile:    state.music        || '',
+    musicVolume:  (state.musicVolume ?? 80) / 100,
+    audioFile:    state.customAudio  || '',
+    voiceVolume:  (state.voiceVolume ?? 100) / 100,
+
+    // ── Voice ─────────────────────────────────────────────────────────────
+    voiceEngine:  effectiveEngine,
+    voice:        voiceParams,
+
+    // ── Duration policy ───────────────────────────────────────────────────
+    durationMode,
+    durationSeconds,
+    targetDurationSec:   targetDur,
+    forceTargetDuration: !!state.forceTargetDuration,
+
+    // ── Preview timing (caption sync) ─────────────────────────────────────
+    previewTiming: state.previewTiming || null,
+  };
+
+  console.log('FINAL RENDER PAYLOAD:', {
+    trendVaultSign: payload.trendVaultSign,
+    niche:          payload.niche,
+    category:       payload.category,
+    trendingTopic:  payload.trendingTopic,
+    storyPrompt:    (payload.storyPrompt || '').slice(0, 80),
+    emotionalTone:  payload.emotionalTone,
+    background:     payload.backgroundVideo,
+    music:          payload.musicFile,
+    musicVolume:    payload.musicVolume,
+    voiceEngine:    payload.voiceEngine,
+    fontFamily:     payload.fontFamily,
+    fontSize:       payload.fontSize,
+    textColor:      payload.textColor,
+    textAnimation:  payload.textAnimation,
+    colorGrade:     payload.colorGrade,
+    durationMode:   payload.durationMode,
+    durationSeconds:payload.durationSeconds,
+    targetDur:      payload.targetDurationSec,
+    scriptLines:    scriptLines.length,
+  });
+
+  return payload;
+}
+
 async function renderVideo(engineOverride){
   if(!state.script.length){ showToast('Generate or write a script first','error'); return; }
-  if(!state.subject && !state.sign){ showToast('Select a subject or niche first (click Generate Ideas)','error'); return; }
-  console.log('[Action] renderVideo', { engineOverride, sign: state.sign, category: state.category, voice: state.voice, voiceEngine: state.voiceEngine, scriptLines: state.script.length });
+  // Guard: allow render if nicheState has a niche even if subject chip not clicked
+  const hasIdentity = !!(nicheState.selectedNiche || getCurrentNiche?.() || state.subject || state.sign);
+  if(!hasIdentity){ showToast('Select a niche or subject first (use the Niche Trend Builder or Generate Ideas)','error'); return; }
+  console.log('[Action] renderVideo', { engineOverride, niche: nicheState.selectedNiche || state.sign, category: nicheState.selectedCategory || state.category, voice: state.voice, voiceEngine: state.voiceEngine, scriptLines: state.script.length });
   console.log('[Render] voice/render status: starting', { voice: state.voice, voiceEngine: state.voiceEngine });
 
   // Resolve which voice engine this render will actually use.
@@ -7489,69 +7630,7 @@ async function renderVideo(engineOverride){
   document.getElementById('renderStatusText').textContent='Preparing render...';
   document.getElementById('renderStage').textContent='⚙ Starting pipeline...';
 
-  const settings = {
-    trendVaultSign:       state.sign,
-    trendVaultSymbol:     state.signSymbol,
-    backgroundVideo:  state.background||'none',
-    backgroundBlur:   state.bgBlur,
-    backgroundBrightness: state.bgBrightness/100,
-    grainIntensity:   state.grainIntensity,
-    grainType:        state.grainType,
-    fogOverlay:       document.getElementById('fogToggle').checked,
-    rainOverlay:      document.getElementById('rainToggle').checked,
-    slowZoom:         document.getElementById('zoomToggle').checked,
-    colorGrade:       state.colorGrade,
-    colorGradeIntensity: state.colorGradeIntensity ?? 100,
-    saturation:       state.saturation ?? 100,
-    contrast:         state.contrast   ?? 100,
-    exposure:         state.exposure   ?? 0,
-    highlights:       state.highlights ?? 0,
-    shadows:          state.shadows    ?? 0,
-    captionTopPct:    state.captionTopPct, // null = centered default
-    fps:              state.renderFps    ?? 30,
-    renderQuality:    state.renderQuality ?? 'high',
-    width:            state.renderWidth  ?? 1080,
-    height:           state.renderHeight ?? 1920,
-    voiceEngine:      effectiveEngine,
-    vignette:         document.getElementById('vignetteToggle').checked,
-    fontFamily:       state.fontFamily,
-    fontSize:         state.fontSize,
-    textColor:        state.textColor,
-    textAnimation:    document.getElementById('textAnimSelect').value,
-    animSpeed:        state.animSpeed ?? 1.0,
-    musicFile:        state.music||'',
-    musicVolume:      state.musicVolume/100,
-    audioFile:        state.customAudio||'',
-    // Duration policy is now an explicit user choice. In Auto mode we still
-    // send the legacy "script sum + 2s" so existing renderers (sync worker)
-    // continue to behave the same; in Fixed mode we send exactly the target.
-    durationMode:        state.durationMode || 'autoVoice',
-    // In fixed mode, durationSeconds is the hard target.
-    // In autoVoice mode with forceTargetDuration, send the target so the
-    // server stretches voice to fit. Otherwise send the script sum (existing
-    // legacy behaviour for the sync worker).
-    durationSeconds:     (state.durationMode === 'fixed'
-                            ? Math.max(5, state.targetDurationSec || 30)
-                            : (state.forceTargetDuration && state.targetDurationSec > 0
-                                ? state.targetDurationSec
-                                : state.script.reduce((s,l)=>s+l.durationSeconds,0)+2)),
-    targetDurationSec:   state.targetDurationSec || 30,
-    forceTargetDuration: !!state.forceTargetDuration,
-    textSyncOffsetMs:    state.textSyncOffsetMs || 0,
-    captionBgStyle:   state.captionBgStyle || 'none',
-    captionRotate:    state.captionRotate  || 0,
-    voiceVolume:      (state.voiceVolume ?? 100) / 100,
-    voice:            Object.assign(getVoiceParams(), {
-      fishVoice:     state.fishVoice     ?? 'dark_narrator',
-      fishSpeed:     state.fishSpeed     ?? 1.0,
-      fishTemp:      state.fishTemp      ?? 0.70,
-      fishPitch:     state.fishPitch     ?? 0,
-      fishNormalize: state.fishNormalize !== false,
-    }),
-    // Phase 7: send the canonical timing object so the server can verify the
-    // render is using the same audio + script the preview was built from.
-    previewTiming: state.previewTiming || null,
-  };
+  const settings = buildRenderPayload(effectiveEngine);
 
   try{
     const r = await fetch(`${API_BASE}/api/trend-vault/render`,{

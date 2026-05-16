@@ -461,8 +461,13 @@ async function main() {
   fs.writeFileSync(
     path.join(outDir, 'meta.json'),
     JSON.stringify({
-      trendVaultSign:          settings.trendVaultSign,
-      topic:               settings.trendVaultSign,
+      trendVaultSign:  settings.trendVaultSign,
+      niche:           (settings as Record<string, unknown>).niche || settings.trendVaultSign,
+      category:        (settings as Record<string, unknown>).category || '',
+      trendingTopic:   (settings as Record<string, unknown>).trendingTopic || '',
+      storyPrompt:     (settings as Record<string, unknown>).storyPrompt || '',
+      emotionalTone:   (settings as Record<string, unknown>).emotionalTone || '',
+      topic:           settings.trendVaultSign,
       createdAt:           new Date().toISOString(),
       script:              scriptText,
       scriptLines:         scriptLines.map((l: { text: string; type: string }) => ({ text: l.text, type: l.type })),

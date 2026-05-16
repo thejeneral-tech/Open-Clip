@@ -1,0 +1,35 @@
+[
+  {
+    "id": "1778960435626",
+    "status": "done",
+    "submittedAt": 1778960458139,
+    "pct": 100,
+    "stage": "Done",
+    "outputFolder": "2026-05-16_Human_Psychology_1778960435626",
+    "logs": [
+      "98%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "99%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "100%  (3371/3371 frames)",
+      "✓ Render complete → C:\\Users\\Anton\\OneDrive\\Documents\\GitHub\\TrendVault-Program\\Trend Vault\\trend-vault-output\\2026-05-16_Human_Psychology_1778960435626\\video.mp4",
+      "✓ captionTiming.json written (17 lines, wordTimings=false)",
+      "ok meta.json written"
+    ],
+    "startedAt": 1778960458148,
+    "outputFile": "video.mp4",
+    "finishedAt": 1778963131896
+  }
+]

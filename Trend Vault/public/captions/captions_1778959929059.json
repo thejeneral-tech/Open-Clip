@@ -1,0 +1,194 @@
+{
+  "audioFile": "trend_vault_voice_1778959929059.mp3",
+  "audioDurationSec": 113.449796,
+  "source": "word-proportional",
+  "captions": [
+    {
+      "index": 0,
+      "text": "SCORPIO DOESN'T GO COLD. THEY GO QUIET — AND THAT'S WORSE.",
+      "type": "hook",
+      "start": 0,
+      "end": 4.7614090268199245,
+      "duration": 4.7614090268199245,
+      "wordCount": 11,
+      "startMs": 0,
+      "endMs": 4761.409026819924
+    },
+    {
+      "index": 1,
+      "text": "THEY CAN LAUGH WITH YOU, ANSWER YOUR TEXTS, AND STILL BE QUIETLY DECIDING IF THEY TRUST YOU ANYMORE.",
+      "type": "observation",
+      "start": 4.7614090268199245,
+      "end": 12.58553288888889,
+      "duration": 7.824123862068966,
+      "wordCount": 18,
+      "startMs": 4761.409026819924,
+      "endMs": 12585.53288888889
+    },
+    {
+      "index": 2,
+      "text": "FROM THE OUTSIDE IT LOOKS LIKE INDIFFERENCE. FROM THE INSIDE IT SOUNDS LIKE A COUNTDOWN.",
+      "type": "observation",
+      "start": 12.58553288888889,
+      "end": 19.105636107279697,
+      "duration": 6.5201032183908065,
+      "wordCount": 15,
+      "startMs": 12585.53288888889,
+      "endMs": 19105.636107279697
+    },
+    {
+      "index": 3,
+      "text": "SCORPIO READS EVERY ROOM BEFORE THEY SPEAK. PEOPLE MISTAKE THAT FOR ARROGANCE. IT'S NEITHER.",
+      "type": "observation",
+      "start": 19.105636107279697,
+      "end": 25.191065777777784,
+      "duration": 6.085429670498087,
+      "wordCount": 14,
+      "startMs": 19105.636107279697,
+      "endMs": 25191.065777777785
+    },
+    {
+      "index": 4,
+      "text": "BEHIND EVERY \"I'M FINE\" FROM SCORPIO IS A SENTENCE THEY ALREADY DECIDED YOU WEREN'T READY TO HEAR.",
+      "type": "escalation",
+      "start": 25.191065777777784,
+      "end": 32.580516091954024,
+      "duration": 7.389450314176241,
+      "wordCount": 17,
+      "startMs": 25191.065777777785,
+      "endMs": 32580.516091954025
+    },
+    {
+      "index": 5,
+      "text": "THEY NOTICED. THEY'RE JUST NOT TELLING YOU YET.",
+      "type": "escalation",
+      "start": 32.580516091954024,
+      "end": 36.05790447509579,
+      "duration": 3.477388383141765,
+      "wordCount": 8,
+      "startMs": 32580.516091954025,
+      "endMs": 36057.90447509579
+    },
+    {
+      "index": 6,
+      "text": "SCORPIO DOESN'T LEAVE DURING THE STORM. THEY LEAVE AFTER — QUIETLY, WITHOUT A SCENE, WITH EVERYTHING ALREADY DECIDED.",
+      "type": "escalation",
+      "start": 36.05790447509579,
+      "end": 43.882028337164755,
+      "duration": 7.824123862068966,
+      "wordCount": 18,
+      "startMs": 36057.90447509579,
+      "endMs": 43882.02833716475
+    },
+    {
+      "index": 7,
+      "text": "THE WALL ISN'T THERE TO KEEP YOU OUT. IT'S THERE BECAUSE LAST TIME, NOBODY STOPPED THEM FROM GIVING EVERYTHING.",
+      "type": "truth",
+      "start": 43.882028337164755,
+      "end": 52.14082574712644,
+      "duration": 8.258797409961687,
+      "wordCount": 19,
+      "startMs": 43882.02833716475,
+      "endMs": 52140.825747126444
+    },
+    {
+      "index": 8,
+      "text": "THE PART OF THEM YOU GOT WAS EARNED, NOT GIVEN. NOBODY TOLD YOU WHICH.",
+      "type": "truth",
+      "start": 52.14082574712644,
+      "end": 58.22625541762453,
+      "duration": 6.085429670498087,
+      "wordCount": 14,
+      "startMs": 52140.825747126444,
+      "endMs": 58226.25541762453
+    },
+    {
+      "index": 9,
+      "text": "IT ISN'T TRUST THEY'RE PROTECTING. IT'S THE VERSION OF THEMSELVES THAT STILL BELIEVES IN IT.",
+      "type": "truth",
+      "start": 58.22625541762453,
+      "end": 64.74635863601534,
+      "duration": 6.520103218390815,
+      "wordCount": 15,
+      "startMs": 58226.25541762453,
+      "endMs": 64746.35863601534
+    },
+    {
+      "index": 10,
+      "text": "THEY ARE NOT PULLING AWAY BECAUSE THEY STOPPED CARING. THEY'RE PULLING AWAY BECAUSE STAYING STARTED TO FEEL LIKE BETRAYING THEMSELVES.",
+      "type": "truth",
+      "start": 64.74635863601534,
+      "end": 73.43982959386975,
+      "duration": 8.693470957854402,
+      "wordCount": 20,
+      "startMs": 64746.35863601534,
+      "endMs": 73439.82959386974
+    },
+    {
+      "index": 11,
+      "text": "AND WHEN SCORPIO FINALLY GOES QUIET, THAT SILENCE USUALLY MEANS THE DECISION HAS ALREADY BEEN MADE.",
+      "type": "twist",
+      "start": 73.43982959386975,
+      "end": 80.39460636015328,
+      "duration": 6.95477676628353,
+      "wordCount": 16,
+      "startMs": 73439.82959386974,
+      "endMs": 80394.60636015328
+    },
+    {
+      "index": 12,
+      "text": "MOST PEOPLE SEE THE SURFACE. THE SILENCE. THE DISTANCE. THE WAY THEY SEEM UNMOVED WHEN EVERYTHING IS MOVING INSIDE THEM.",
+      "type": "twist",
+      "start": 80.39460636015328,
+      "end": 89.08807731800768,
+      "duration": 8.693470957854402,
+      "wordCount": 20,
+      "startMs": 80394.60636015328,
+      "endMs": 89088.07731800768
+    },
+    {
+      "index": 13,
+      "text": "IT'S NOT THAT THEY DON'T FEEL IT. IT'S THAT THEY FELT IT FIRST — AND ALONE.",
+      "type": "twist",
+      "start": 89.08807731800768,
+      "end": 96.0428540842912,
+      "duration": 6.95477676628353,
+      "wordCount": 16,
+      "startMs": 89088.07731800768,
+      "endMs": 96042.8540842912
+    },
+    {
+      "index": 14,
+      "text": "WHEN SCORPIO SOFTENS AROUND YOU, YOU'RE NOT WINNING THEM. YOU'RE BEING TRUSTED.",
+      "type": "ending",
+      "start": 96.0428540842912,
+      "end": 101.25893665900385,
+      "duration": 5.216082574712644,
+      "wordCount": 12,
+      "startMs": 96042.8540842912,
+      "endMs": 101258.93665900386
+    },
+    {
+      "index": 15,
+      "text": "BUT THE REALITY IS FAR MORE COMPLICATED THAN THAT.",
+      "type": "ending",
+      "start": 101.25893665900385,
+      "end": 105.17099859003834,
+      "duration": 3.9120619310344864,
+      "wordCount": 9,
+      "startMs": 101258.93665900386,
+      "endMs": 105170.99859003833
+    },
+    {
+      "index": 16,
+      "text": "AND WHEN SCORPIO FINALLY LOWERS THAT WALL — EVEN SLIGHTLY — TREAT IT LIKE THE RARE THING IT IS.",
+      "type": "ending",
+      "start": 105.17099859003834,
+      "end": 113.42979600000001,
+      "duration": 8.258797409961673,
+      "wordCount": 19,
+      "startMs": 105170.99859003833,
+      "endMs": 113429.79600000002
+    }
+  ]
+}

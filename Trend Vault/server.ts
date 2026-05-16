@@ -54,11 +54,13 @@ const PIPER_VOICES  = path.join(PIPER_DIR, 'voices');
 // Older preview payloads referenced this directory under the same name, so
 // existing /outputs-voices URLs continue to resolve after the cleanup.
 const ELEVENLABS_OUT_DIR = path.join(ROOT, 'outputs', 'voices');
-// When set, POST /api/trend-vault/render proxies the Remotion step to the remote
-// worker instead of running it in-process. TTS + alignment still run here.
+// Remote worker render path — disabled for now, always use local in-process render.
+// To re-enable: set USE_RENDER_WORKER=true in .env alongside RENDER_WORKER_URL.
 // Local test: RENDER_WORKER_URL=http://localhost:4000
 // Remote:     RENDER_WORKER_URL=http://192.168.x.x:4000
-const RENDER_WORKER_URL  = (process.env.RENDER_WORKER_URL ?? '').trim();
+const RENDER_WORKER_URL  = (process.env.USE_RENDER_WORKER === 'true')
+  ? (process.env.RENDER_WORKER_URL ?? '').trim()
+  : '';
 
 for (const d of [UPLOADS, FINAL_DIR, BACKGROUNDS, MUSIC_DIR, AUDIO_DIR, TREND_VAULT_OUT, DRAFTS_DIR]) {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
@@ -2853,7 +2855,6 @@ app.post('/api/trend-vault/render', async (req, res) => {
           const aai = new AssemblyAI({ apiKey: aaiKey });
           const transcript = await aai.transcripts.transcribe({
             audio: voicePath,
-            speech_model: 'best',
           });
           if (transcript.status === 'completed' && transcript.words?.length) {
             const norm = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
@@ -3029,12 +3030,31 @@ app.post('/api/trend-vault/render', async (req, res) => {
         }
 
         // 2. POST the job
-        const workerPayload = {
-          jobId,
-          outputFolder: folder,
-          jobFile,
-          settings: JSON.parse(fs.readFileSync(jobFile, 'utf-8')),
+        // Build the worker payload directly from in-scope variables.
+        // NEVER re-read the job file here — JSON.stringify silently drops
+        // undefined values, so if the file parse ever returns jd.settings=undefined
+        // the worker receives a completely empty payload and rejects with 400.
+        // Using the live variables guarantees all three required fields are present.
+        const workerSettings = {
+          ...settings,
+          // Apply the same TTS-step mutations that were written into the job file
+          audioFile:       fs.existsSync(voicePath) ? voiceFile : (settings.audioFile || ''),
+          durationMode:    settings.durationMode    ?? 'autoVoice',
+          durationSeconds: settings.durationSeconds ?? 90,
+          voiceVolume:     settings.voiceVolume     ?? 1,
         };
+        const workerPayload = {
+          settings:     workerSettings,
+          scriptLines:  alignedScriptLines,   // timing-enriched, already in scope
+          outputFolder: folder,               // always a non-empty string
+          jobId,
+        };
+        // Defensive sanity check — log exactly what is being sent so future
+        // failures can be diagnosed from the render log without guessing.
+        pushLog(`[WORKER] Payload sanity: settings=${!!workerPayload.settings} scriptLines=${workerPayload.scriptLines?.length ?? 0} outputFolder="${workerPayload.outputFolder}"`);
+        if (!workerPayload.settings || !workerPayload.scriptLines?.length || !workerPayload.outputFolder) {
+          throw new Error(`Worker payload missing required fields: settings=${!!workerPayload.settings} scriptLines=${!!workerPayload.scriptLines?.length} outputFolder=${!!workerPayload.outputFolder}`);
+        }
         const postRes = await fetch(`${RENDER_WORKER_URL}/api/render/job`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
