@@ -77,7 +77,7 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .preview-wrap{width:320px;min-width:320px;padding:28px 14px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
 
 /* Export / Render side panel */
-.export-panel{width:280px;min-width:280px;padding:28px 24px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
+.export-panel{width:320px;min-width:320px;padding:28px 20px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:16px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
 /* ── Panel children must not shrink so overflow-y:auto actually scrolls ── */
 .preview-wrap>*{flex-shrink:0}
 .export-panel>*{flex-shrink:0}
@@ -86,30 +86,55 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .preview-wrap::-webkit-scrollbar-track,.export-panel::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:999px}
 .preview-wrap::-webkit-scrollbar-thumb,.export-panel::-webkit-scrollbar-thumb{background:rgba(167,139,250,.45);border-radius:999px}
 .preview-wrap::-webkit-scrollbar-thumb:hover,.export-panel::-webkit-scrollbar-thumb:hover{background:rgba(167,139,250,.7)}
-.export-section{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:14px;padding:16px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(167,139,250,.15)}
+.export-section{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:14px;padding:20px;position:relative;overflow:hidden;box-shadow:0 0 10px rgba(167,139,250,.18)}
 .export-section::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
 .export-section::after{display:none}
-.export-label{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin-bottom:12px;font-weight:700}
+.export-label{font-size:.68rem;letter-spacing:2.5px;text-transform:uppercase;color:rgba(167,139,250,.9);margin-bottom:18px;font-weight:800;text-shadow:0 0 8px rgba(167,139,250,.3)}
+
+/* ── Render buttons — side by side, equal width ── */
+.render-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0}
 .btn-render-big{
-  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:14px 18px;background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 100%);
-  border:none;border-radius:11px;color:#0a0614;font-size:.85rem;font-weight:800;letter-spacing:1px;
+  width:100%;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:13px 10px;border:none;border-radius:10px;
+  font-size:.78rem;font-weight:800;letter-spacing:.6px;
   cursor:pointer;font-family:inherit;text-transform:uppercase;
-  box-shadow:0 6px 20px rgba(201,162,39,.35),inset 0 1px 0 rgba(255,255,255,.2);
-  transition:all .2s;
+  transition:transform .18s ease,box-shadow .18s ease,opacity .18s;
+  white-space:nowrap;overflow:hidden;
 }
-.btn-render-big:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(201,162,39,.5)}
-.btn-render-big:disabled{opacity:.6;cursor:not-allowed;transform:none}
-.btn-render-local{background:linear-gradient(135deg,#059669 0%,#047857 100%);color:#fff;box-shadow:0 6px 20px rgba(5,150,105,.3),inset 0 1px 0 rgba(255,255,255,.15)}
-.btn-render-local:hover{box-shadow:0 8px 24px rgba(5,150,105,.5)}
-.export-meta{display:flex;flex-direction:column;gap:6px;margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:9px;font-size:.76rem}
-.export-meta-row{display:flex;justify-content:space-between;color:var(--text2)}
-.export-meta-row strong{color:var(--text2);font-weight:600}
-.save-path{margin-top:10px;padding:10px 12px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:9px}
-.save-path-label{font-size:.7rem;color:var(--purple2);font-weight:700;letter-spacing:1px;margin-bottom:4px}
-.save-path-text{font-size:.74rem;color:var(--text2);font-family:'Space Grotesk',monospace;word-break:break-word;line-height:1.5}
+.btn-render-big:disabled{opacity:.55;cursor:not-allowed;transform:none!important}
+
+/* Local Render — primary/default action (teal-green) */
+.btn-render-local{
+  background:linear-gradient(135deg,#0d9488 0%,#0f766e 100%);
+  color:#e2faf8;
+  box-shadow:0 4px 16px rgba(13,148,136,.28),inset 0 1px 0 rgba(255,255,255,.12);
+}
+.btn-render-local:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 22px rgba(13,148,136,.42)}
+.btn-render-local:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 8px rgba(13,148,136,.3)}
+
+/* ElevenLabs — API/voice action (muted purple-indigo) */
+.btn-render-el{
+  background:linear-gradient(135deg,rgba(124,58,237,.75) 0%,rgba(99,43,200,.85) 100%);
+  color:#e9d5ff;
+  box-shadow:0 4px 16px rgba(124,58,237,.22),inset 0 1px 0 rgba(255,255,255,.08);
+  border:1px solid rgba(167,139,250,.25);
+}
+.btn-render-el:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 22px rgba(124,58,237,.38)}
+.btn-render-el:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 8px rgba(124,58,237,.2)}
+
+/* ── Resolution / Format / Output info box ── */
+.export-meta{display:flex;flex-direction:column;gap:9px;padding:13px 14px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:10px;font-size:.76rem}
+.export-meta-row{display:flex;justify-content:space-between;align-items:center;color:var(--text2);gap:8px}
+.export-meta-row span{color:var(--muted);font-size:.72rem;white-space:nowrap}
+.export-meta-row strong{color:rgba(245,245,255,.88);font-weight:600;font-size:.74rem;text-align:right}
+
+/* ── Save Location box ── */
+.save-path{padding:13px 14px;background:rgba(124,58,237,.05);border:1px solid rgba(124,58,237,.18);border-radius:10px}
+.save-path-label{font-size:.68rem;color:rgba(167,139,250,.9);font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:7px}
+.save-path-text{font-size:.74rem;color:rgba(212,203,236,.85);font-family:'Space Grotesk',monospace;word-break:break-word;line-height:1.75}
 .save-path-text em{color:var(--muted);font-style:italic}
-@media(max-width:1400px){.export-panel{width:240px;min-width:240px}}
+
+@media(max-width:1400px){.export-panel{width:290px;min-width:290px}}
 @media(max-width:1100px){.export-panel{display:none}}
 
 /* ── Cards: solid dark panel + thin animated RGB rim ──────────────────────
@@ -194,8 +219,23 @@ textarea,input,select{ text-shadow:none!important; }
   cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
 }
 .subject-chip:hover{border-color:var(--purple);color:var(--text)}
-.subject-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
+.subject-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.2)}
 /* Trend Vault subject grid */
+
+/* AI-generated category chips (niche idea flow) */
+.ai-cat-grid{display:flex;flex-wrap:wrap;gap:7px}
+.ai-category-chip{
+  padding:6px 13px;border-radius:20px;font-size:.74rem;font-weight:600;
+  background:rgba(20,14,46,.7);border:1px solid rgba(124,58,237,.28);color:rgba(212,203,236,.85);
+  cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
+}
+.ai-category-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(124,58,237,.18)}
+.ai-category-chip.active{
+  background:rgba(124,58,237,.28);border-color:var(--purple2);color:var(--purple2);
+  box-shadow:0 0 10px rgba(124,58,237,.28);font-weight:700;
+}
+/* Haiku badge */
+.haiku-badge{font-size:.57rem;color:rgba(167,139,250,.55);letter-spacing:.8px;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px}
 
 /* Category selector */
 .cat-grid{display:flex;flex-wrap:wrap;gap:8px}
@@ -208,6 +248,28 @@ textarea,input,select{ text-shadow:none!important; }
 .cat-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
 .cat-chip.niche-match{border-color:rgba(245,158,11,.55);box-shadow:0 0 0 1px rgba(245,158,11,.25) inset;color:#fcd34d}
 .cat-chip.niche-match.active{background:rgba(245,158,11,.16);color:#fde68a}
+
+/* Trending topic chips (inside 🎭 Category section) */
+.trending-topic-chip{
+  padding:7px 13px;border-radius:20px;font-size:.74rem;font-weight:600;
+  background:rgba(20,14,46,.7);border:1px solid rgba(124,58,237,.28);
+  color:rgba(212,203,236,.85);cursor:pointer;transition:all .18s;
+  font-family:inherit;white-space:normal;text-align:left;line-height:1.35;
+}
+.trending-topic-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(124,58,237,.18);box-shadow:0 0 8px rgba(124,58,237,.2)}
+.trending-topic-chip.active{background:rgba(124,58,237,.28);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 12px rgba(124,58,237,.32);font-weight:700}
+.btn-gen-topics{
+  padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));
+  border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;
+  font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;
+  letter-spacing:.5px;white-space:nowrap;transition:all .2s;
+}
+.btn-gen-topics:disabled{opacity:.45;cursor:not-allowed}
+.btn-random-topic{
+  padding:6px 12px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.35);
+  border-radius:7px;color:#86efac;font-size:.68rem;font-weight:700;cursor:pointer;
+  font-family:inherit;white-space:nowrap;transition:all .2s;
+}
 
 /* Prompt display */
 .prompt-display{
@@ -797,37 +859,53 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   <div class="card">
     <div class="card-header">
       <div class="card-title"><img src="/vault-icon.svg" width="18" height="18" style="vertical-align:middle;margin-right:2px;filter:drop-shadow(0 0 4px rgba(168,85,247,.5))"> Trend Vault</div>
-      <button class="btn-random" onclick="randomSubject()">⚡ RANDOM</button>
+      <button class="btn-random" onclick="randomNiche(event)" title="Pick a random niche. Hold Shift to also generate categories immediately.">⚡ RANDOM</button>
     </div>
 
-    <!-- ── Niche Trend Builder (inline) ── -->
-    <div style="margin-bottom:12px;padding:10px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px">
-      <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🧠 Niche Trend Builder</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <input id="nicheCustom" placeholder="Type a niche or subject…"
-          oninput="if(this.value.trim()){nicheState.selectedNiche=this.value.trim();resetNicheConfirm()}"
-          onkeydown="if(event.key==='Enter')confirmNiche()"
-          style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
-        <button id="nicheConfirmBtn" onclick="confirmNiche()"
-          style="padding:5px 12px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:7px;color:#86efac;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
-          ✓ Confirm
-        </button>
-        <button onclick="nicheTrendGenerate()"
-          style="padding:5px 12px;background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.25));border:1px solid rgba(124,58,237,.55);border-radius:7px;color:#d8b4fe;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap">
-          ⚡ Generate
-        </button>
-      </div>
-      <div id="nicheConfirmedBadge" style="display:none;margin-top:6px;font-size:.62rem;color:#86efac;font-weight:600;letter-spacing:.5px">
-        ✓ Niche confirmed: <span id="nicheConfirmedLabel"></span>
-      </div>
-    </div>
+    <!-- ── Niche Idea Builder ── -->
+    <div style="margin-bottom:12px;padding:12px 14px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.22);border-radius:10px">
+      <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">🧠 Niche Idea Builder</div>
 
-    <!-- AI-generated subject chips -->
-    <div id="subjectArea" style="margin-top:8px;min-height:0">
-      <div id="subjectLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:4px 0;display:flex;align-items:center;gap:6px">
-        <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating subjects…
+      <!-- Niche input + Generate Ideas button -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
+        <input id="nicheCustom"
+          placeholder="Type any niche… gaming, cars, fitness, horror, money…"
+          oninput="onNicheInputChange(this.value)"
+          onkeydown="if(event.key==='Enter')nicheTrendGenerate()"
+          style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:6px 10px;font-family:inherit;outline:none"/>
+        <button onclick="nicheTrendGenerate()" id="generateIdeasBtn"
+          style="padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
+          ⚡ Generate Ideas
+        </button>
       </div>
-      <div class="subject-grid" id="subjectGrid"></div>
+      <div style="font-size:.59rem;color:var(--muted);letter-spacing:.2px;margin-bottom:10px;line-height:1.5">
+        Pick a preset or type your own. Generate Ideas will build categories from whatever niche you enter.
+      </div>
+
+      <!-- Active niche badge -->
+      <div id="nicheConfirmedBadge" style="display:none;margin-bottom:10px;font-size:.62rem;color:#86efac;font-weight:600;letter-spacing:.5px">
+        ✓ Niche: <span id="nicheConfirmedLabel"></span>
+      </div>
+
+      <!-- ① Category chips (shown after Generate Ideas) -->
+      <div id="categoryArea" style="display:none;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+          <div style="font-size:.6rem;color:var(--muted);font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Categories</div>
+          <span class="haiku-badge">✦ Claude Haiku</span>
+        </div>
+        <div id="categoryLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:3px 0;align-items:center;gap:6px">
+          <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating categories…
+        </div>
+        <div class="ai-cat-grid" id="categoryChipGrid"></div>
+      </div>
+
+      <!-- ② Subject chips (shown after a category is clicked) -->
+      <div id="subjectArea" style="min-height:0">
+        <div id="subjectLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:3px 0;align-items:center;gap:6px">
+          <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating subjects…
+        </div>
+        <div class="subject-grid" id="subjectGrid"></div>
+      </div>
     </div>
 
   </div>
@@ -836,10 +914,25 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   <div class="card">
     <div class="card-header">
       <div class="card-title"><span class="ti">🎭</span> Category</div>
-      <button class="btn-random" onclick="randomCategory()">⚡ RANDOM</button>
+      <button class="btn-random" id="categoryRandomBtn" style="display:none" onclick="randomCategory()">⚡ RANDOM</button>
     </div>
     <div class="cat-grid" id="categoryGrid"></div>
 
+    <!-- Trending topics area — shown after a category is selected -->
+    <div id="categoryTopicsArea" style="display:none;margin-top:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn-gen-topics" id="generateTrendingBtn" onclick="generateTrendingTopics()">⚡ Generate Trending Topics</button>
+        <button class="btn-random-topic" id="randomTopicBtn" style="display:none" onclick="randomTrendingTopic()">🎲 Random Topic</button>
+      </div>
+      <div id="trendingTopicsHeader" style="display:none;align-items:center;gap:7px;margin-bottom:7px">
+        <div style="font-size:.6rem;color:var(--muted);font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Trending Topics</div>
+        <span class="haiku-badge">✦ Claude Haiku</span>
+      </div>
+      <div id="trendingTopicsLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:3px 0;align-items:center;gap:6px">
+        <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating trending topics…
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px" id="trendingTopicsGrid"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -1875,64 +1968,69 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 <!-- ════ Right-Side Export / Render Panel ════ -->
 <div class="export-panel">
   <div class="export-section">
-    <div class="export-label">EXPORT & RENDER</div>
+    <div class="export-label">Export &amp; Render</div>
 
     <!-- Platform presets -->
-    <div style="font-size:.6rem;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:6px">Platform</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px" id="renderPresetGrid">
-      <button class="render-preset-btn active" data-preset="tiktok"    onclick="selectRenderPreset('tiktok')"    style="padding:7px 6px;font-size:.65rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2)">TikTok 9:16</button>
-      <button class="render-preset-btn"        data-preset="ig-reel"   onclick="selectRenderPreset('ig-reel')"   style="padding:7px 6px;font-size:.65rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Reels 9:16</button>
-      <button class="render-preset-btn"        data-preset="ig-square" onclick="selectRenderPreset('ig-square')" style="padding:7px 6px;font-size:.65rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Square 1:1</button>
-      <button class="render-preset-btn"        data-preset="yt-short"  onclick="selectRenderPreset('yt-short')"  style="padding:7px 6px;font-size:.65rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">YT Shorts 9:16</button>
-      <button class="render-preset-btn"        data-preset="yt-wide"   onclick="selectRenderPreset('yt-wide')"   style="grid-column:1/-1;padding:7px 6px;font-size:.65rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">YouTube 16:9</button>
+    <div style="font-size:.62rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;font-weight:700">Platform</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:18px" id="renderPresetGrid">
+      <button class="render-preset-btn active" data-preset="tiktok"    onclick="selectRenderPreset('tiktok')"    style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2)">TikTok 9:16</button>
+      <button class="render-preset-btn"        data-preset="ig-reel"   onclick="selectRenderPreset('ig-reel')"   style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Reels 9:16</button>
+      <button class="render-preset-btn"        data-preset="ig-square" onclick="selectRenderPreset('ig-square')" style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Square 1:1</button>
+      <button class="render-preset-btn"        data-preset="yt-short"  onclick="selectRenderPreset('yt-short')"  style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">YT Shorts 9:16</button>
+      <button class="render-preset-btn"        data-preset="yt-wide"   onclick="selectRenderPreset('yt-wide')"   style="grid-column:1/-1;padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">YouTube 16:9</button>
     </div>
 
     <!-- Quality + FPS row -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
       <div>
-        <div style="font-size:.6rem;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px">Quality</div>
-        <select id="renderQualitySelect" onchange="state.renderQuality=this.value" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.7rem;padding:6px 8px;font-family:inherit;cursor:pointer">
+        <div style="font-size:.62rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-weight:700">Quality</div>
+        <select id="renderQualitySelect" onchange="state.renderQuality=this.value" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.72rem;padding:7px 9px;font-family:inherit;cursor:pointer">
           <option value="standard">Standard</option>
           <option value="high" selected>High</option>
           <option value="ultra">Ultra</option>
         </select>
       </div>
       <div>
-        <div style="font-size:.6rem;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:4px">FPS</div>
-        <select id="renderFpsSelect" onchange="state.renderFps=+this.value" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.7rem;padding:6px 8px;font-family:inherit;cursor:pointer">
+        <div style="font-size:.62rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;font-weight:700">FPS</div>
+        <select id="renderFpsSelect" onchange="state.renderFps=+this.value" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.72rem;padding:7px 9px;font-family:inherit;cursor:pointer">
           <option value="30" selected>30 fps</option>
           <option value="60">60 fps</option>
         </select>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button class="btn-render-big" onclick="renderVideo('elevenlabs')" id="renderBtnEl">
-        <span style="font-size:1rem">⚡</span> ElevenLabs
-      </button>
+    <!-- Render buttons: LOCAL left (primary), ELEVENLABS right (API) -->
+    <div class="render-btn-row" style="margin-bottom:18px">
       <button class="btn-render-big btn-render-local" onclick="renderVideo('local')" id="renderBtnLocal">
-        <span style="font-size:1rem">🎙</span> Local
+        <span style="font-size:.95rem;line-height:1">🎙</span> Local Render
+      </button>
+      <button class="btn-render-big btn-render-el" onclick="renderVideo('elevenlabs')" id="renderBtnEl">
+        <span style="font-size:.95rem;line-height:1">⚡</span> ElevenLabs
       </button>
     </div>
-    <div class="export-meta" style="margin-top:8px">
+
+    <!-- Resolution / Format / Output -->
+    <div class="export-meta" style="margin-bottom:14px">
       <div class="export-meta-row"><span>Resolution</span><strong id="exportResLabel">1080×1920 (9:16)</strong></div>
       <div class="export-meta-row"><span>Format</span><strong>MP4 (H.264)</strong></div>
       <div class="export-meta-row"><span>Output</span><strong id="outputCounter">0 lines</strong></div>
     </div>
-    <div class="save-path">
+
+    <!-- Save Location -->
+    <div class="save-path" style="margin-bottom:14px">
       <div class="save-path-label">📁 Save Location</div>
-      <div class="save-path-text" id="savePathText">Project &gt; trend-vault-output &gt; <em>auto-named on render</em></div>
+      <div class="save-path-text" id="savePathText">Project › trend-vault-output › <em>auto-named on render</em></div>
     </div>
 
-    <!-- Render Sync Panel (Phase 8): proves preview + render are aligned -->
-    <div id="renderSyncPanel" style="margin-top:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:.62rem;line-height:1.7">
-      <div style="font-weight:700;color:var(--text2);font-size:.65rem;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">Render Sync</div>
-      <div>Provider: <strong id="rsProvider">—</strong></div>
-      <div>Audio file: <strong id="rsAudioFile" style="font-family:monospace">—</strong></div>
-      <div>Audio duration: <strong id="rsAudioDur">—</strong></div>
-      <div>Final video duration: <strong id="rsFinalDur">—</strong></div>
-      <div>Lines: <strong id="rsLines">—</strong></div>
-      <div id="rsSyncStatus" style="margin-top:4px">Sync: <strong style="color:#fca5a5">no preview yet</strong></div>
+    <!-- Render Sync Panel -->
+    <div id="renderSyncPanel" style="padding:13px 14px;background:rgba(124,58,237,.05);border:1px solid rgba(124,58,237,.18);border-radius:10px;font-size:.7rem;line-height:1.85">
+      <div style="font-weight:800;color:rgba(167,139,250,.9);font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Render Sync</div>
+      <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Provider</span><strong id="rsProvider" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Audio file</span><strong id="rsAudioFile" style="font-family:monospace;color:rgba(245,245,255,.8);font-weight:600;font-size:.68rem;text-align:right;word-break:break-all">—</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Audio dur.</span><strong id="rsAudioDur" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Video dur.</span><strong id="rsFinalDur" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
+      <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Lines</span><strong id="rsLines" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
+      <div id="rsSyncStatus" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(124,58,237,.15)">Sync: <strong style="color:#fca5a5">no preview yet</strong></div>
     </div>
   </div>
 
@@ -2381,20 +2479,156 @@ function buildStars(){
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SUBJECT GRID  (replaces old zodiac Sign Grid)
+// NICHE → CATEGORY → SUBJECT  (Haiku-powered idea flow)
 // ═══════════════════════════════════════════════════════════════════
 
-async function generateSubjectsForNiche(niche){
-  const grid    = document.getElementById('subjectGrid');
-  const loading = document.getElementById('subjectLoading');
+/** Returns the active niche: custom input → nicheState → fallback */
+function getCurrentNiche(){
+  const custom = document.getElementById('nicheCustom')?.value?.trim();
+  if(custom) return custom;
+  if(nicheState.selectedNiche) return nicheState.selectedNiche;
+  return 'Human Psychology';
+}
+
+/** Called on every keypress in the niche input — clears stale chips */
+function onNicheInputChange(value){
+  resetNicheConfirm();
+  clearCategoryChips();
+  clearSubjectChips();
+}
+
+function clearCategoryChips(){
+  const grid = document.getElementById('categoryChipGrid');
+  if(grid) grid.innerHTML = '';
+  const area = document.getElementById('categoryArea');
+  if(area) area.style.display = 'none';
+  nicheState.selectedCategory = '';
+  nicheState.aiCategories = [];
+  // Also blank the main 🎭 Category section
+  if(typeof clearMainCategorySection === 'function') clearMainCategorySection();
+}
+
+function clearSubjectChips(){
+  const grid = document.getElementById('subjectGrid');
+  if(grid) grid.innerHTML = '';
+}
+
+function resetNicheConfirm(){
+  const badge = document.getElementById('nicheConfirmedBadge');
+  if(badge) badge.style.display = 'none';
+}
+
+// ── nicheTrendGenerate — called by the ⚡ Generate Ideas button ────────────────
+// Reads whatever the user typed in #nicheCustom (or the dropdown), stores it
+// in nicheState, then delegates to generateCategoriesForNiche().
+async function nicheTrendGenerate(){
+  try {
+    const niche = getCurrentNiche();
+    if(!niche){
+      if(typeof showToast === 'function') showToast('Type a niche first.', 'error');
+      return;
+    }
+
+    // Persist the niche so the rest of the pipeline can read it
+    nicheState.selectedNiche = niche;
+
+    // Show confirmed badge
+    const badge = document.getElementById('nicheConfirmedBadge');
+    const label = document.getElementById('nicheConfirmedLabel');
+    if(badge){ badge.style.display = 'block'; }
+    if(label){ label.textContent = niche; }
+
+    console.log('[nicheTrendGenerate] niche:', niche);
+    await generateCategoriesForNiche(niche);
+  } catch(err){
+    console.error('[nicheTrendGenerate] error:', err);
+    if(typeof showToast === 'function') showToast('Could not generate categories. Try again.', 'error');
+  }
+}
+
+// Expose globally so inline onclick="nicheTrendGenerate()" handlers always find it
+window.nicheTrendGenerate        = nicheTrendGenerate;
+window.generateNicheCategories   = generateCategoriesForNiche;
+window.getCurrentNiche           = getCurrentNiche;
+
+// ── Emoji helper for category chip labels ─────────────────────────
+const _CAT_EMOJI_RULES = [
+  [/fail|mistake|wrong|error|bad/i,           '❌'],
+  [/secret|hidden|unknown|untold/i,            '🕵️'],
+  [/tip|hack|trick|guide|how/i,                '💡'],
+  [/mindset|psychology|mental/i,               '🧠'],
+  [/culture|community|scene|world/i,           '🌎'],
+  [/dark|toxic|danger|shadow|evil/i,           '🌑'],
+  [/story|stories|tale|lore/i,                 '📖'],
+  [/beginner|basics|start|intro/i,             '🌱'],
+  [/drama|beef|fight|controversy/i,            '🎭'],
+  [/money|profit|income|wealth|financ/i,       '💰'],
+  [/rage|anger|frustrat/i,                     '😤'],
+  [/anxiety|fear|stress|panic/i,               '😰'],
+  [/comeback|recovery|healing|heal/i,          '🔄'],
+  [/transform|glow|evolut|upgrade/i,           '✨'],
+  [/food|eat|cook|recipe|meal|diet/i,          '🍔'],
+  [/gym|workout|fitness|body|train/i,          '💪'],
+  [/car|vehicle|drive|speed|race/i,            '🚗'],
+  [/tech|ai|digital|code|software/i,           '💻'],
+  [/health|wellness|sleep|medical/i,           '❤️'],
+  [/love|relation|dating|romance/i,            '💔'],
+  [/horror|scare|ghost|paranormal/i,           '👻'],
+  [/history|empire|war|ancient/i,              '⚔️'],
+  [/space|cosmic|galaxy|universe/i,            '🌌'],
+  [/sport|game|team|athlete/i,                 '🏆'],
+  [/music|song|artist|beat/i,                  '🎵'],
+  [/fashion|style|outfit|clothing/i,           '👗'],
+  [/travel|adventure|explore|trip/i,           '✈️'],
+  [/family|parent|child|kid/i,                 '👨‍👩‍👧'],
+  [/friend|social|connect/i,                   '🤝'],
+  [/power|strength|dominan/i,                  '⚡'],
+  [/motivat|inspir|drive|hustle/i,             '🔥'],
+  [/conspir|secret society|cover.?up/i,        '🕳️'],
+  [/surviv|wilderness|emergency/i,             '🛡️'],
+];
+function _emojiForCat(title){
+  for(const [re, emoji] of _CAT_EMOJI_RULES){
+    if(re.test(title)) return emoji;
+  }
+  return '✦';
+}
+
+// ── Step 1: Generate AI categories for the niche ──────────────────
+async function generateCategoriesForNiche(niche){
+  const area    = document.getElementById('categoryArea');
+  const grid    = document.getElementById('categoryChipGrid');
+  const loading = document.getElementById('categoryLoading');
   if(!grid) return;
 
-  // Clear previous chips and show spinner
   grid.innerHTML = '';
-  if(loading){ loading.style.display = 'flex'; }
+  if(area)    area.style.display = 'block';
+  if(loading) loading.style.display = 'flex';
+
+  // Static fallback strings — converted to {emoji,title} objects below
+  const FALLBACK_CATS = {
+    'Gaming':           ['Rage Moments','Hidden Mechanics','Streamer Drama','Ranked Anxiety','Toxic Lobbies','Nostalgic Games','Secret Lore','Games That Died','Gaming Psychology','Clutch Moments'],
+    'Fitness':          ['Gym Fails','Transformation','Cardio Tips','Bulking Mistakes','Mental Toughness','Gym Culture','Training Secrets','Comeback Stories','Body Image Truth','Workout Hacks'],
+    'Human Psychology': ['Hidden Emotions','Self-Sabotage','Trust Issues','Silent Treatment','Emotional Walls','Fake Confidence','People Pleasing','Overthinking','Dark Mindset','Fear of Rejection'],
+    'Business':         ['Startup Failures','Sales Psychology','Scaling Fast','Side Hustles','Cold Calling','Leadership Mistakes','Pricing Secrets','Client Nightmares','Hustle Mindset','Passive Income'],
+    'Horror':           ['True Stories','Urban Legends','Paranormal','Survival Horror','Killer Profiles','Haunted Places','Psychological Dread','Creepy Facts','Dark History','Fear Psychology'],
+    'Relationships':    ['Red Flags','Mixed Signals','Attachment Styles','Ghosting','Toxic Patterns','Trust Issues','Silent Treatment','Falling Too Hard','Heartbreak Truth','Comeback Love'],
+    'Cars':             ['Hidden Features','Dealership Tricks','Maintenance Myths','Dream Builds','Car Culture','Road Rage','Resale Value','Supercar Secrets','Car Fails','Speed Psychology'],
+    'Tech':             ['AI Tools','Hidden Features','Tech Fails','Future Tech','App Hacks','Privacy Issues','Startup Stories','Gadget Reviews','Digital Culture','Tech Psychology'],
+    'Money':            ['Money Mistakes','Investing Early','Side Income','Debt Traps','Wealth Mindset','Frugal Hacks','Passive Income','Financial Freedom','Money Psychology','Secret Wealth'],
+    'Motivation':       ['Comeback Stories','Discipline Habits','Failure Lessons','Mental Strength','Morning Routines','Success Mindset','Setbacks','Quiet Grind','Transformation','Dark Drive'],
+    'Food':             ['Food Fails','Hidden Food Secrets','Food Tips','Food Mindset','Food Culture','Food Mistakes','Dark Side of Food','Food Stories','Food Psychology','Food for Beginners'],
+    'Fashion':          ['Outfit Psychology','Fast Fashion Truth','Style Mistakes','Brand Secrets','Thrift Wins','Celebrity Fails','Trend History','Luxury Lies','Fashion Culture','Style Tips'],
+    'Health':           ['Doctor Secrets','Big Pharma','Sleep Truth','Mental Health Lies','Diet Myths','Supplement Scams','Hidden Cures','Nutrition Facts','Wellness Culture','Health Mindset'],
+    'Sports':           ['Locker Room Drama','Hidden Injuries','Referee Controversies','Career Endings','Underdog Stories','Record Breakers','Dark Side','Comeback Moments','Sports Psychology','Training Secrets'],
+    'History':          ['Forgotten Empires','War Secrets','Historical Lies','Lost Technologies','Secret Societies','Gruesome Facts','Untold Stories','History Mindset','Dark History','Hidden Truth'],
+  };
+
+  // Convert a string array to [{emoji, title}] objects
+  function stringsToObjs(arr){ return arr.map(t => ({ emoji: _emojiForCat(t), title: t })); }
 
   try {
-    const r = await fetch(`${API_BASE}/api/trend-vault/generate-subjects`, {
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-categories`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ niche }),
@@ -2402,20 +2636,79 @@ async function generateSubjectsForNiche(niche){
     const data = await r.json();
     if(loading) loading.style.display = 'none';
 
-    // Use AI subjects if available, otherwise fall back to static nicheMap
+    // API now returns [{emoji, title}]; fall back to static strings converted to objects
+    const cats = (data.ok && data.categories?.length)
+      ? data.categories
+      : stringsToObjs(FALLBACK_CATS[niche] || _generateFallbackCategories(niche));
+
+    nicheState.aiCategories = cats;
+    renderCategoryChips(cats);
+  } catch(e) {
+    if(loading) loading.style.display = 'none';
+    const cats = stringsToObjs(FALLBACK_CATS[niche] || _generateFallbackCategories(niche));
+    nicheState.aiCategories = cats;
+    renderCategoryChips(cats);
+  }
+}
+
+function _generateFallbackCategories(niche){
+  return [
+    niche + ' Fails', 'Hidden ' + niche + ' Secrets', niche + ' Tips',
+    niche + ' Mindset', niche + ' Culture', niche + ' Mistakes',
+    'Dark Side of ' + niche, niche + ' Stories',
+    niche + ' Psychology', niche + ' for Beginners',
+  ];
+}
+
+/** Render category chips — accepts [{emoji,title}] objects or plain strings */
+function renderCategoryChips(categories){
+  const grid = document.getElementById('categoryChipGrid');
+  if(!grid) return;
+  grid.innerHTML = categories.map(cat => {
+    const emoji   = (cat && typeof cat === 'object') ? (cat.emoji || '✦') : _emojiForCat(cat);
+    const title   = (cat && typeof cat === 'object') ? cat.title : cat;
+    const display = emoji + ' ' + title;
+    const safeAttr = title.replace(/"/g,'&quot;');
+    const safeJs   = title.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<button class="ai-category-chip" data-category="${safeAttr}" onclick="selectAiCategory('${safeJs}')">${display}</button>`;
+  }).join('');
+}
+
+/** Step 1b: user clicks a category chip — delegates to onGeneratedCategoryClick */
+function selectAiCategory(category){
+  onGeneratedCategoryClick(category);
+}
+
+// ── Step 2: Generate AI subjects for niche + category ─────────────
+async function generateSubjectsForNiche(niche, category){
+  const grid    = document.getElementById('subjectGrid');
+  const loading = document.getElementById('subjectLoading');
+  if(!grid) return;
+
+  grid.innerHTML = '';
+  if(loading) loading.style.display = 'flex';
+
+  try {
+    const body = category ? { niche, category } : { niche };
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-subjects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if(loading) loading.style.display = 'none';
+
     const subjects = (data.ok && data.subjects?.length)
       ? data.subjects
       : (nicheMap[niche]?.subjects || []);
 
     if(!subjects.length){
-      grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">No subjects found for this niche.</span>';
+      grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">No subjects found — try a different category.</span>';
       return;
     }
-
     renderSubjectChips(subjects);
   } catch(e) {
     if(loading) loading.style.display = 'none';
-    // Server unreachable — fall back to static subjects silently
     const fallback = nicheMap[niche]?.subjects || [];
     if(fallback.length) renderSubjectChips(fallback);
     else grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">Could not load subjects.</span>';
@@ -2426,37 +2719,56 @@ function renderSubjectChips(subjects){
   const grid = document.getElementById('subjectGrid');
   if(!grid) return;
   grid.innerHTML = subjects.map(s => {
-    const safe = s.replace(/'/g, "\\'");
-    return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
+    const safeAttr = s.replace(/"/g,'&quot;');
+    const safeJs   = s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<button class="subject-chip" data-subject="${safeAttr}" onclick="selectSubject('${safeJs}')">${s}</button>`;
   }).join('');
 }
 
 function buildSubjectGrid(subjects){
-  const grid = document.getElementById('subjectGrid');
-  if(!grid) return;
-  if(!subjects || !subjects.length){ grid.innerHTML = ''; return; }
-  grid.innerHTML = subjects.map(s => {
-    const safe = s.replace(/'/g,"\'");
-    return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
-  }).join('');
+  renderSubjectChips(subjects || []);
 }
 
+/** Step 3: user clicks a subject chip — sets premise, wires to script gen */
 function selectSubject(label){
   state.subject    = label;
   state.subjectLabel = label;
-  // Compat: mirror into state.sign so API payloads still have a value
-  state.sign       = label;
+  state.sign       = label;   // compat alias
   state.signSymbol = '';
-  document.querySelectorAll('.subject-chip').forEach(b => b.classList.toggle('active', b.dataset.subject === label));
+
+  document.querySelectorAll('.subject-chip').forEach(b =>
+    b.classList.toggle('active', b.dataset.subject === label)
+  );
+
   const badge = document.getElementById('selectedSignBadge');
   if(badge) badge.textContent = label;
-  console.log('[TrendVault] Selected subject:', label);
+
+  // Build a full premise from niche → category → subject and push into the editor
+  const niche    = nicheState.selectedNiche || getCurrentNiche();
+  const category = nicheState.selectedCategory || '';
+  const parts    = [niche, category, label].filter(Boolean);
+  const fullPremise = parts.join(' — ');
+
+  const editor = document.getElementById('promptMemoryEditor');
+  if(editor){
+    editor.value = fullPremise;
+    state.currentPrompt  = fullPremise;
+    state.originalPrompt = fullPremise;
+    state.promptText     = label;
+    if(typeof refreshPromptMemoryUI === 'function') refreshPromptMemoryUI();
+    if(typeof markDirty === 'function') markDirty('script');
+  }
+
+  console.log('[TrendVault] Selected subject:', label, '| premise:', fullPremise);
   filterPromptsBySign();
   updatePreview();
 }
 
 function randomSubject(){
-  // Prefer AI-generated chips already in the DOM
+  // 1. Active (already selected) subject chip
+  const activeChip = document.querySelector('#subjectGrid .subject-chip.active');
+  if(activeChip){ selectSubject(activeChip.dataset.subject); showToast('Subject: ' + activeChip.dataset.subject,'info'); return; }
+  // 2. Any visible AI-generated subject chip
   const chips = Array.from(document.querySelectorAll('#subjectGrid .subject-chip'));
   if(chips.length){
     const chip = chips[Math.floor(Math.random() * chips.length)];
@@ -2464,11 +2776,18 @@ function randomSubject(){
     showToast('Subject: ' + chip.dataset.subject, 'info');
     return;
   }
-  // Fallback: pick from static nicheMap if chips haven't loaded yet
-  const niche = nicheState.selectedNiche;
+  // 3. Static nicheMap subjects
+  const niche = getCurrentNiche();
   const subjects = (niche && nicheMap[niche]?.subjects) || [];
-  if(!subjects.length){ showToast('Pick a niche first','error'); return; }
-  const subject = subjects[Math.floor(Math.random() * subjects.length)];
+  if(subjects.length){
+    const subject = subjects[Math.floor(Math.random() * subjects.length)];
+    selectSubject(subject);
+    showToast('Subject: ' + subject, 'info');
+    return;
+  }
+  // 4. Generic fallback
+  const generic = ['Hidden Emotions','Trust Issues','Self-Sabotage','Fake Confidence','Silent Treatment','Rage Moments','Dark Side','Hidden Secrets'];
+  const subject = generic[Math.floor(Math.random() * generic.length)];
   selectSubject(subject);
   showToast('Subject: ' + subject, 'info');
 }
@@ -2507,21 +2826,201 @@ async function loadPrompts(){
 }
 
 function buildCategoryGrid(){
+  // Grid starts blank — populated only when user picks from AI-generated categories
   const grid = document.getElementById('categoryGrid');
-  if(!promptsData.categories?.length){ grid.innerHTML='<span style="color:var(--muted);font-size:.78rem">Loading categories...</span>'; return; }
-  grid.innerHTML = promptsData.categories.map(c=>`
-    <button class="cat-chip" data-cat="${c.id}" onclick="selectCategory('${c.id}')">${c.emoji} ${c.label}</button>
-  `).join('');
+  if(grid) grid.innerHTML = '';
 }
 
+/** Clear the main 🎭 Category section back to blank */
+function clearMainCategorySection(){
+  const grid = document.getElementById('categoryGrid');
+  if(grid) grid.innerHTML = '';
+  const btn = document.getElementById('categoryRandomBtn');
+  if(btn) btn.style.display = 'none';
+  const topicsArea = document.getElementById('categoryTopicsArea');
+  if(topicsArea) topicsArea.style.display = 'none';
+  state.category = '';
+  state.aiCategoryLabel = '';
+  nicheState.selectedTrendingTopic = '';
+  nicheState.generatedTopics = [];
+}
+
+/** Show the selected AI-generated category as the sole chip in 🎭 Category */
+function renderMainCategorySelection(categoryObj){
+  const grid = document.getElementById('categoryGrid');
+  if(!grid) return;
+  const emoji   = (categoryObj && typeof categoryObj === 'object') ? (categoryObj.emoji || '') : '';
+  const title   = (categoryObj && typeof categoryObj === 'object') ? categoryObj.title : String(categoryObj);
+  const display = emoji ? emoji + ' ' + title : title;
+  grid.innerHTML = `<button class="cat-chip active" style="cursor:default">${display}</button>`;
+
+  // Reveal the trending topics panel (cleared, ready for generation)
+  const topicsArea = document.getElementById('categoryTopicsArea');
+  if(topicsArea) topicsArea.style.display = 'block';
+  clearTrendingTopics();
+
+  // Reveal RANDOM (picks from AI-generated category chips)
+  const btn = document.getElementById('categoryRandomBtn');
+  if(btn) btn.style.display = '';
+}
+
+/** Called when user clicks an AI-generated category chip in the Niche Idea Builder */
+function onGeneratedCategoryClick(categoryTitle){
+  const cats = nicheState.aiCategories || [];
+  const obj = cats.find(c => (typeof c === 'object' ? c.title : c) === categoryTitle)
+    || { emoji: _emojiForCat(categoryTitle), title: categoryTitle };
+
+  // Highlight chip in the Niche Builder
+  nicheState.selectedCategory = categoryTitle;
+  document.querySelectorAll('#categoryChipGrid .ai-category-chip').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.category === categoryTitle)
+  );
+
+  // Push into the main Category section
+  renderMainCategorySelection(obj);
+
+  // Wire into script/prompt system
+  state.category        = categoryTitle;
+  state.aiCategoryLabel = categoryTitle;
+
+  const niche = getCurrentNiche();
+  console.log('[Action] onGeneratedCategoryClick — niche:', niche, '| category:', categoryTitle);
+  showToast('📂 ' + categoryTitle, 'info');
+  filterPromptsBySign();
+}
+
+// ── Trending Topics (Niche → Category → Topics → Prompt) ─────────────────────
+
+function clearTrendingTopics(){
+  const grid    = document.getElementById('trendingTopicsGrid');
+  const header  = document.getElementById('trendingTopicsHeader');
+  const loading = document.getElementById('trendingTopicsLoading');
+  const randBtn = document.getElementById('randomTopicBtn');
+  const genBtn  = document.getElementById('generateTrendingBtn');
+  if(grid)    grid.innerHTML = '';
+  if(header)  header.style.display = 'none';
+  if(loading) loading.style.display = 'none';
+  if(randBtn) randBtn.style.display = 'none';
+  if(genBtn)  { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Trending Topics'; }
+  nicheState.selectedTrendingTopic = '';
+  nicheState.generatedTopics = [];
+}
+
+async function generateTrendingTopics(){
+  const niche    = getCurrentNiche();
+  const category = nicheState.selectedCategory;
+  if(!niche)    { showToast('Pick a niche first', 'error'); return; }
+  if(!category) { showToast('Pick a category first', 'error'); return; }
+
+  const grid    = document.getElementById('trendingTopicsGrid');
+  const header  = document.getElementById('trendingTopicsHeader');
+  const loading = document.getElementById('trendingTopicsLoading');
+  const genBtn  = document.getElementById('generateTrendingBtn');
+  const randBtn = document.getElementById('randomTopicBtn');
+
+  if(grid)    grid.innerHTML = '';
+  if(header)  header.style.display = 'flex';
+  if(loading) loading.style.display = 'flex';
+  if(randBtn) randBtn.style.display = 'none';
+  if(genBtn)  { genBtn.disabled = true; genBtn.textContent = '⏳ Generating…'; }
+  nicheState.selectedTrendingTopic = '';
+
+  const fallback = () => _generateFallbackTopics(niche, category);
+
+  try {
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-trending-topics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ niche, category }),
+    });
+    const data = await r.json();
+    if(loading) loading.style.display = 'none';
+    if(genBtn)  { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Trending Topics'; }
+    const topics = (data.ok && data.topics?.length) ? data.topics : fallback();
+    nicheState.generatedTopics = topics;
+    renderTrendingTopics(topics);
+    if(randBtn && topics.length) randBtn.style.display = '';
+    showToast('🔥 ' + topics.length + ' trending topics generated', 'info');
+  } catch(e) {
+    if(loading) loading.style.display = 'none';
+    if(genBtn)  { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Trending Topics'; }
+    const topics = fallback();
+    nicheState.generatedTopics = topics;
+    renderTrendingTopics(topics);
+    if(randBtn && topics.length) randBtn.style.display = '';
+  }
+}
+
+function _generateFallbackTopics(niche, category){
+  const base = category || niche;
+  return [
+    { emoji:'💡', title:`The Truth About ${base}` },
+    { emoji:'🕵️', title:`Hidden Secrets of ${base}` },
+    { emoji:'⚠️', title:`Mistakes Everyone Makes With ${base}` },
+    { emoji:'🧠', title:`The Psychology Behind ${base}` },
+    { emoji:'🌑', title:`The Dark Side of ${base}` },
+    { emoji:'📖', title:`${base} Stories Nobody Tells` },
+    { emoji:'🔥', title:`Why ${base} Goes Viral` },
+    { emoji:'🎯', title:`${base}: What They Never Teach You` },
+  ];
+}
+
+function renderTrendingTopics(topics){
+  const grid = document.getElementById('trendingTopicsGrid');
+  if(!grid) return;
+  grid.innerHTML = topics.map(t => {
+    const emoji   = (t && typeof t === 'object') ? (t.emoji || '✦') : '✦';
+    const title   = (t && typeof t === 'object') ? t.title : String(t);
+    const display = emoji + ' ' + title;
+    const safeAttr = title.replace(/"/g,'&quot;');
+    const safeJs   = title.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<button class="trending-topic-chip" data-topic="${safeAttr}" onclick="selectTrendingTopic('${safeJs}')">${display}</button>`;
+  }).join('');
+}
+
+/** User clicks a trending topic chip — wires it into the Story Prompt / script gen */
+function selectTrendingTopic(topicTitle){
+  // Highlight chip
+  nicheState.selectedTrendingTopic = topicTitle;
+  document.querySelectorAll('#trendingTopicsGrid .trending-topic-chip').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.topic === topicTitle)
+  );
+
+  // Push into Current Working Prompt (single source of truth for generateScript)
+  const editor = document.getElementById('promptMemoryEditor');
+  if(editor){
+    editor.value        = topicTitle;
+    state.currentPrompt  = topicTitle;
+    state.originalPrompt = topicTitle;
+    state.promptText     = topicTitle;
+    if(typeof refreshPromptMemoryUI === 'function') refreshPromptMemoryUI();
+    if(typeof markDirty === 'function') markDirty('script');
+  }
+
+  const niche    = getCurrentNiche();
+  const category = nicheState.selectedCategory || '';
+  console.log('[Action] selectTrendingTopic — niche:', niche, '| category:', category, '| topic:', topicTitle);
+  showToast('📝 ' + topicTitle, 'info');
+}
+
+/** Pick a random topic from the currently generated list */
+function randomTrendingTopic(){
+  const topics = nicheState.generatedTopics || [];
+  if(!topics.length){ showToast('Generate trending topics first', 'error'); return; }
+  const t     = topics[Math.floor(Math.random() * topics.length)];
+  const title = typeof t === 'object' ? t.title : t;
+  selectTrendingTopic(title);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function selectCategory(catId){
+  // Kept for internal compatibility — prefer onGeneratedCategoryClick for AI flow
   try {
     state.category = catId;
     document.querySelectorAll('.cat-chip').forEach(c=>c.classList.toggle('active',c.dataset.cat===catId));
     filterPromptsBySign();
-    generateFreshPrompts();
     console.log('[Action] selectCategory', catId);
-    console.log('[State] selectedCategory:', state.category);
   } catch(err){
     console.error('[selectCategory] error:', err);
     showToast('Category select failed: ' + (err.message||err), 'error');
@@ -2530,24 +3029,17 @@ function selectCategory(catId){
 
 function randomCategory(){
   try {
-    const chips = Array.from(document.querySelectorAll('#categoryGrid .cat-chip'));
-    if(!chips.length){ showToast('No categories available', 'error'); return; }
+    // Pick randomly from AI-generated chips in the Niche Idea Builder
+    const chips = Array.from(document.querySelectorAll('#categoryChipGrid .ai-category-chip'));
+    if(!chips.length){ showToast('Generate categories first using ⚡ Generate Ideas', 'error'); return; }
     const chip = chips[Math.floor(Math.random() * chips.length)];
-    const label = chip.dataset.cat;
-    // Detect niche chips: if the label isn't a real category id, use niche handler
-    const isRealCat = !!(promptsData.categories || []).find(c => c.id === label);
-    if(isRealCat){
-      selectCategory(label);
-    } else {
-      selectNicheCategory(chip, label);
-      showToast('Category: ' + label, 'info');
-    }
-    console.log('[Action] randomCategory →', label);
+    onGeneratedCategoryClick(chip.dataset.category);
   } catch(err){
-    console.error('[randomCategory] error:', err);
-    showToast('Random category failed: ' + (err.message||err), 'error');
+    console.error('[randomCategory]', err);
+    showToast('Random category failed', 'error');
   }
 }
+
 
 function filterPromptsBySign(){
   const list = document.getElementById('promptList');
@@ -8540,6 +9032,10 @@ const PREMISE_TEMPLATES = [
 
 const nicheState = {
   selectedNiche: '',
+  selectedCategory: '',
+  aiCategories: [],
+  selectedTrendingTopic: '',
+  generatedTopics: [],
   generatedIdeas: [],
   selectedIdea: null,
   activeNicheCategories: [],
@@ -8564,282 +9060,150 @@ function nichePillUpdate(){
   else if(pill){ pill.style.display = 'none'; }
 }
 
-function nicheTrendRandom(){
+// ── Random Niche Pool (120+ diverse ideas for the ⚡ RANDOM button) ──────────
+const randomNichePool = [
+  // Gaming
+  'Gaming fails','Fortnite rage moments','Streamer drama','Retro gaming secrets',
+  'Speedrunning world records','Game lore nobody reads','Pro gamer origin stories',
+  'Video game glitches that broke everything','Gaming addiction psychology',
+  // Fitness & Gym
+  'Gym transformation stories','Weightlifting secrets','Gym culture drama',
+  'Fitness influencer lies','Home workout fails','Running beginner mistakes',
+  'Body recomposition truth','Steroid truth nobody talks about','Gym fails',
+  // Cars & Trucks
+  'Luxury car secrets','Dealership tricks','Car detailing culture',
+  'Street racing stories','Truck builds','JDM car culture','Budget car builds',
+  'Supercar maintenance costs','Road rage psychology',
+  // Food & Restaurants
+  'Fast food secrets','Restaurant kitchen stories','Food science facts',
+  'Street food culture','Cheap meal prep','Michelin star fails',
+  'Food delivery nightmares','Weird food combinations that work',
+  'Restaurant secrets employees keep','Grocery store tricks',
+  // Money & Investing
+  'Rich people habits','Side hustle ideas','Investing mistakes',
+  'Debt trap stories','Passive income truth','Rich vs broke mindset',
+  'Crypto rise and fall stories','Budget travel secrets',
+  'Money habits nobody teaches you','Real estate investment mistakes',
+  // Business & Sales
+  'Startup failure stories','Sales psychology secrets','Cold calling secrets',
+  'Corporate culture lies','Small business struggles','Amazon seller secrets',
+  'Dropshipping truth','Boss behavior psychology','Phone sales tips',
+  'Freelancer income truth',
+  // Psychology & Mindset
+  'Dark psychology tactics','Manipulation patterns','Body language secrets',
+  'Social anxiety truth','Gaslighting signs','Narcissist behavior explained',
+  'Childhood trauma effects','Human behavior secrets','Overthinking patterns',
+  'Introvert psychology',
+  // Relationships & Dating
+  'Dating red flags','Situationship stories','Dating app confessions',
+  'Breakup psychology','First date mistakes','Cheating psychology',
+  'Attachment style truth','Long distance relationship reality',
+  'Toxic friendship patterns','Friendzone psychology',
+  // Horror & True Crime
+  'Creepy camping stories','Urban legend investigations','True crime cold cases',
+  'Horror survival stories','Haunted location stories','Night shift horror',
+  'Police bodycam stories','Serial killer psychology','Missing persons cases',
+  // History & Mystery
+  'Forgotten empires','War secrets nobody teaches','Ancient civilization mysteries',
+  'Historical figure scandals','WW2 untold stories','Lost cities of the world',
+  'Medieval life truth','Ancient technology secrets','Conspiracy theories',
+  'Unsolved disappearances','Government secrets',
+  // Sports
+  'NBA locker room drama','Athlete transformation stories','Sports betting psychology',
+  'Olympic athlete scandals','College sports corruption','Comeback athlete stories',
+  'Coaching secrets','Underdog sports moments','Sports arguments that never end',
+  // Fashion & Style
+  'Streetwear culture','Sneaker resell market','Thrift flip stories',
+  'Fast fashion dark truth','Luxury brand secrets','Vintage fashion finds',
+  'Style psychology','Sneaker culture','Designer brand quality truth',
+  // Tech & AI
+  'AI tools for students','Tech gadget secrets','Social media algorithm secrets',
+  'Hacker stories','Big tech company secrets','Cybersecurity fails',
+  'Startup tech stories','Programming fails','AI replacing jobs truth',
+  // Travel
+  'Airbnb horror stories','Solo travel stories','Hidden travel destinations',
+  'Travel scam warnings','Digital nomad life','Backpacker stories',
+  'Budget travel hacks','Luxury travel reality','Cruise ship secrets',
+  // Motivation & Success
+  'Success story failures','Morning routine psychology','Discipline over motivation',
+  'Imposter syndrome truth','Comeback stories','Late bloomer wins',
+  'Self-made millionaire stories','Failure before success stories',
+  // Social Media & Creators
+  'Content creator burnout','TikTok algorithm secrets','Instagram vs reality',
+  'YouTube drama','Going viral psychology','Social media addiction truth',
+  'Influencer dark truth','Cancel culture stories','Internet beef history',
+  // School & Work
+  'College dropout success stories','Student loan debt truth',
+  'Toxic workplace stories','Job interview psychology','Career pivot stories',
+  'Salary negotiation secrets','Quitting your job stories','Boss from hell stories',
+  // Local Culture & Storytelling
+  'Barber shop stories','Street interview moments','Small town secrets',
+  'Local business survival stories','Courtroom drama stories',
+  'Emergency room stories','Flight attendant confessions','Hotel staff secrets',
+  'Retail worker confessions','Delivery driver stories',
+  // Survival & Outdoors
+  'Wilderness survival fails','Doomsday prepper truth','Lost in the woods stories',
+  'Natural disaster survival','Survival gear tests','Urban survival skills',
+  'Abandoned places exploration','Extreme weather survival',
+  // Luxury & Lifestyle
+  'Billionaire lifestyle truth','Private jet secrets','Luxury hotel experiences',
+  'Yacht culture secrets','Rich neighborhood stories','Expensive hobby secrets',
+  // Health & Wellness
+  'Pharmaceutical industry secrets','Sleep deprivation effects','Fasting science',
+  'Supplement industry lies','Gut health secrets','Mental health stigma truth',
+  'Stress and body connection','Burnout recovery stories',
+  // Pets & Animals
+  'Dog training secrets','Cat behavior explained','Exotic pet ownership truth',
+  'Vet industry secrets','Rescue dog transformation stories','Animal shelter stories',
+  // Productivity
+  'Productivity hack truth','CEO morning routines','ADHD productivity secrets',
+  'Flow state psychology','Procrastination psychology','Digital minimalism truth',
+];
+
+/**
+ * Picks a random niche, fills the custom niche input, clears all downstream state.
+ * Normal click: fills input only (user then clicks Generate Ideas).
+ * Shift+click: fills input AND immediately generates Haiku categories.
+ */
+function randomNiche(event){
   try {
-    // 1. Pick a random niche
-    const niches = Object.keys(NICHE_TREND_MAP);
-    const picked = _pick(niches);
-    nicheState.selectedNiche = picked;
+    const niche = _pick(randomNichePool);
+
+    // Fill the niche input
     const inp = document.getElementById('nicheCustom');
-    if(inp) inp.value = picked;
-    console.log('[Action] nicheTrendRandom — niche:', picked);
+    if(inp) inp.value = niche;
 
-    // Generate fresh categories and subjects for this niche
-    nicheTrendGenerate();
-    showToast('🎲 ' + picked, 'info');
-  } catch(err){
-    console.error('[NicheTrend] nicheTrendRandom error:', err);
-    showToast('Random failed: ' + (err.message || err), 'error');
-  }
-}
-
-// Emoji lookup for generated niche category chips (legacy, unused after fix)
-const _NICHE_CHIP_EMOJI = {
-  'Emotional Intelligence':'🧠','Overthinking':'🌀','Fear of Rejection':'❌',
-  'Hidden Emotions':'🎭','Being Misunderstood':'💭','Self-Sabotage':'💣',
-  'Testing People':'🧪','Fake Confidence':'🎪','Emotional Walls':'🧱',
-  'Emotional Burnout':'🕯️','Manipulation & Control':'🕸️','Silent Treatment':'🤐',
-  'Protective Personalities':'🛡️','Trust Issues':'🔓','Why They Disappear':'🌑',
-  'Heartbreak & Healing':'💔','Ghosting & Silence':'👻','Jealousy & Insecurity':'💚',
-  'Emotional Detachment':'🧊','Attachment Styles':'🔗','Loyalty & Devotion':'🛡️',
-  'Fear of Intimacy':'🚪','Why They Come Back':'🔄','Deep Attachment':'⚓',
-  'Toxic Attraction':'☠️','Obsession & Fixation':'🔥','Emotionally Addictive':'🧲',
-  'Falling Too Hard':'🌊','Dangerous Independence':'⚔️','Karmic Relationships':'⚡',
-  'Soulmate & Deep Connection':'✨','Hidden Sadness':'🌧️','Revenge Energy':'🗡️',
-  'People Pleasing':'😊','Manipulation':'🕸️','Obsession':'🔥','Toxic Attraction':'☠️',
-  'Silent Judgment':'👁️','Social Masks':'🎭','Attachment Wounds':'💔',
-  'Control Tactics':'⚛️','Power Dynamics':'⚖️','Mind Games':'♟️',
-  'Hidden Motives':'🔍','Fear Tactics':'😰','Reading People':'👁️',
-  'Emotional Regulation':'🎛️','Empathy':'💙','Calm Under Pressure':'🧊',
-  'Silent Strength':'💪','Self-Awareness':'🪞','Emotional Maturity':'🌿',
-  'Boundaries':'🚧','Inner Clarity':'💡','Growth Mindset':'🌱',
-  'Quiet Confidence':'🦁','Resilience':'🔩','Discipline':'⚙️',
-  'Consistency':'📈','Delayed Gratification':'⏳','Ambition':'🏆',
-  'Self-Respect':'👑','No Contact':'🔇','Heartbreak Healing':'💔',
-  'Letting Go':'🕊️','Moving On':'🚶','Karmic Lessons':'⚡',
-  'Intuition':'🔮','Energy Shifts':'✨','Healing Cycles':'🌀',
-  'Inner Peace':'☮️','Shadow Work':'🌑','Divine Timing':'⏰',
-  'Gym Discipline':'🏋️','Mental Toughness':'🔥','Comeback Energy':'💥',
-  'Body Confidence':'💫','Transformation':'🦋','Winning in Silence':'🏆',
-  'Building in Silence':'🔨','Success Habits':'📊','Long-Term Thinking':'🔭',
-};
-
-function _nicheChipEmoji(label){
-  return _NICHE_CHIP_EMOJI[label] || '🔮';
-}
-
-// Refresh the REAL Category grid and apply a "niche-match" highlight to
-// chips whose id is in the active niche. We never replace the grid with
-// niche-only display labels — that broke state.category by storing a
-// label string instead of a real category id, and broke filterPromptsBySign.
-function renderNicheCategories(realCats){
-  // Re-build the canonical Category grid (so any prior niche overlay is
-  // cleared) and add a "niche-match" highlight to chips matching the niche.
-  // We NEVER overwrite the grid with display-only labels — that broke
-  // selectCategory(catId) by replacing real ids with strings.
-  if(typeof buildCategoryGrid === 'function') buildCategoryGrid();
-  const ids = new Set((realCats||[]).filter(Boolean).map(c => c.id));
-  document.querySelectorAll('#categoryGrid .cat-chip').forEach(chip => {
-    chip.classList.toggle('niche-match', ids.has(chip.dataset.cat));
-  });
-  if(state.category){
-    document.querySelectorAll('#categoryGrid .cat-chip').forEach(c =>
-      c.classList.toggle('active', c.dataset.cat === state.category));
-  }
-  console.log('[NicheTrend] niche-match highlighted ids:', [...ids]);
-}
-
-function selectNicheCategory(btn, label){
-  // Legacy entry: resolve display label back to a REAL category id and
-  // delegate so state.category stays a real id (not a display string).
-  const cat = (promptsData.categories || []).find(c => c.label === label || c.id === label);
-  if(cat){ selectCategory(cat.id); }
-  else {
-    console.warn('[Category] no real cat for label:', label);
-    showToast('Category not found: ' + label, 'error');
-  }
-}
-
-function confirmNiche(){
-  const inp = document.getElementById('nicheCustom');
-  const niche = inp?.value?.trim() || nicheState.selectedNiche;
-  if(!niche){ showToast('Type a niche first', 'error'); return; }
-  nicheState.selectedNiche = niche;
-
-  const btn = document.getElementById('nicheConfirmBtn');
-  const badge = document.getElementById('nicheConfirmedBadge');
-  const label = document.getElementById('nicheConfirmedLabel');
-
-  if(btn){ btn.style.background='rgba(34,197,94,.28)'; btn.style.borderColor='rgba(34,197,94,.7)'; btn.textContent='✓ Confirmed'; }
-  if(badge){ badge.style.display='block'; }
-  if(label){ label.textContent=niche; }
-
-  nichePillUpdate();
-  generateSubjectsForNiche(niche);
-  showToast('Niche set: ' + niche, 'info');
-}
-
-function resetNicheConfirm(){
-  const btn = document.getElementById('nicheConfirmBtn');
-  const badge = document.getElementById('nicheConfirmedBadge');
-  if(btn){ btn.style.background='rgba(34,197,94,.12)'; btn.style.borderColor='rgba(34,197,94,.4)'; btn.textContent='✓ Confirm'; }
-  if(badge){ badge.style.display='none'; }
-}
-
-function nicheTrendGenerate(){
-  try {
-    const niche = nicheState.selectedNiche
-      || document.getElementById('nicheCustom')?.value?.trim();
-
-    if(!niche){ showToast('Pick or type a niche first', 'error'); return; }
+    // Update niche state
     nicheState.selectedNiche = niche;
-    console.log('[Action] nicheTrendGenerate — niche:', niche);
 
-    // Generate AI subjects for the selected niche
-    generateSubjectsForNiche(niche);
+    // Clear all downstream state (cascades: AI chips → main section → trending topics)
+    clearCategoryChips();
 
-    // 1. Resolve niche to REAL category objects (id + label + emoji)
-    const realCats = (typeof _nicheRealCats === 'function')
-      ? _nicheRealCats(niche)
-      : (promptsData.categories || []).slice(0, 8);
-    nicheState.activeNicheCategories = realCats.map(c => c.id);
+    // Hide confirmed badge if showing
+    const badge = document.getElementById('nicheConfirmedBadge');
+    if(badge) badge.style.display = 'none';
 
-    // 2. Highlight matching chips in the canonical Category grid
-    renderNicheCategories(realCats);
+    console.log('[Action] randomNiche — picked:', niche);
 
-    // 3. Build 4 ideas — each carries a REAL catId
-    const data = NICHE_TREND_MAP[niche] || NICHE_TREND_MAP['Human Psychology'];
-    const ideas = [];
-    const usedTopics = new Set();
-    const usedSignNames = new Set();
-    const shuffledCats = _shuffle(realCats);
-
-    for(let i = 0; i < 4; i++){
-      let topic, tries = 0;
-      do { topic = _pick(data.topics); tries++; } while(usedTopics.has(topic) && tries < 20);
-      usedTopics.add(topic);
-
-      let signObj;
-      tries = 0;
-      do { signObj = _pick(SIGNS); tries++; } while(usedSignNames.has(signObj.name) && tries < 20);
-      usedSignNames.add(signObj.name);
-
-      const catObj = shuffledCats[i % shuffledCats.length];
-      const tone   = _pick(data.tones);
-      const hook   = HOOK_TEMPLATES[i % HOOK_TEMPLATES.length]
-        .replace(/\{sign\}/g, signObj.name)
-        .replace(/\{topic\}/g, topic);
-      const premise = _pick(PREMISE_TEMPLATES)
-        .replace(/\{sign\}/g, signObj.name)
-        .replace(/\{topic\}/g, topic);
-
-      ideas.push({
-        niche, topic,
-        sign: signObj.name, signSym: signObj.sym,
-        catId: catObj.id, catLabel: catObj.label, catEmoji: catObj.emoji,
-        hook, premise, tone,
-      });
-    }
-
-    nicheState.generatedIdeas = ideas;
-    console.log('[GenerateIdeas] ideas:', ideas);
-    renderNicheIdeas(ideas);
-    showToast('4 ideas generated — click ✓ Use to apply', 'info');
-
-  } catch(err){
-    console.error('[NicheTrend] nicheTrendGenerate error:', err);
-    showToast('Generate ideas failed: ' + (err.message || err), 'error');
-  }
-}
-
-function renderNicheIdeas(ideas){
-  const area = document.getElementById('nicheIdeasArea');
-  const list = document.getElementById('nicheIdeasList');
-  if(!area || !list) return;
-  area.style.display = 'block';
-  list.innerHTML = ideas.map((idea, i) => `
-    <div style="background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:10px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px">
-        <div style="font-size:.76rem;font-weight:700;color:var(--text);line-height:1.35;flex:1">
-          ${idea.signSym||''} ${idea.sign}
-          <span style="color:var(--muted);font-weight:400"> — </span>
-          <span style="color:var(--purple2)">${idea.topic}</span>
-        </div>
-        <button onclick="useNicheIdea(${i})"
-          style="flex-shrink:0;padding:4px 11px;background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(168,85,247,.2));border:1px solid rgba(124,58,237,.5);border-radius:7px;color:#d8b4fe;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;letter-spacing:.3px">
-          ✓ Use This Idea
-        </button>
-      </div>
-      <div style="font-size:.7rem;color:var(--muted);font-style:italic;line-height:1.45;margin-bottom:5px">"${idea.hook}"</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">
-        <span style="font-size:.61rem;padding:2px 8px;background:rgba(124,58,237,.15);border-radius:10px;color:var(--purple2)">${idea.catEmoji||''} ${idea.catLabel}</span>
-        <span style="font-size:.61rem;padding:2px 8px;background:rgba(255,255,255,.04);border-radius:10px;color:var(--text2)">${idea.tone}</span>
-      </div>
-    </div>`).join('');
-}
-
-function useNicheIdea(idx){
-  try {
-    const idea = nicheState.generatedIdeas[idx];
-    if(!idea){ showToast('Idea not found', 'error'); return; }
-    console.log('[Action] useNicheIdea', idx, idea);
-
-    // 1. Sign — canonical selector updates grid, badge, phone preview, filter
-    selectSign(idea.sign);
-    console.log('[State] selectedSign:', state.sign);
-
-    // 2. Category — must be a REAL category id so filterPromptsBySign() and
-    //    the /generate-script server payload stay in sync with everything else.
-    if(idea.catId){
-      selectCategory(idea.catId);
+    if(event && event.shiftKey){
+      // Shift+click: auto-generate categories immediately
+      nicheTrendGenerate();
+      showToast('🎲 ' + niche, 'info');
     } else {
-      const cat = (promptsData.categories || []).find(c => c.label === idea.catLabel);
-      if(cat){ selectCategory(cat.id); }
-      else { console.warn('[Category] idea missing real catId — skipped'); }
-    }
-    console.log('[State] selectedCategory:', state.category);
-
-    // 3. Push the premise into the Prompt Memory editor — generateScript()
-    //    reads via getActivePremise() which prefers state.currentPrompt.
-    const fullPremise = idea.niche + ' — ' + idea.topic + '\n' +
-                        idea.premise + '\n' +
-                        'Hook: "' + idea.hook + '"\n' +
-                        'Tone: ' + idea.tone;
-    const editor = document.getElementById('promptMemoryEditor');
-    if(editor){
-      editor.value = fullPremise;
-      state.currentPrompt = fullPremise;
-      if(!state.originalPrompt) state.originalPrompt = fullPremise;
-      state.promptText = idea.premise;
-      if(typeof refreshPromptMemoryUI === 'function') refreshPromptMemoryUI();
-      if(typeof markDirty === 'function') markDirty('script');
+      showToast('🎲 ' + niche + ' — click ⚡ Generate Ideas', 'info');
     }
 
-    nicheState.selectedIdea = idea;
-    renderCurrentIdeaPreview(idea);
-
-    showToast(idea.signSym + ' ' + idea.sign + ' + ' +
-              (idea.catEmoji || '') + ' ' + idea.catLabel + ' selected', 'info');
-
+    return niche;
   } catch(err){
-    console.error('[NicheTrend] useNicheIdea error:', err);
-    showToast('Failed to apply idea: ' + (err.message || err), 'error');
+    console.error('[randomNiche] error:', err);
+    showToast('Random niche failed: ' + (err.message || err), 'error');
   }
 }
 
-function renderCurrentIdeaPreview(idea){
-  const preview = document.getElementById('currentIdeaPreview');
-  if(!preview) return;
-  preview.style.display = 'block';
-  preview.innerHTML = `
-    <div style="font-size:.62rem;color:#86efac;font-weight:700;letter-spacing:1px;margin-bottom:7px">✓ SELECTED IDEA</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;font-size:.68rem;line-height:1.5">
-      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Niche</span><br/>
-           <span style="color:var(--text2);font-weight:600">${idea.niche}</span></div>
-      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Topic</span><br/>
-           <span style="color:var(--text2);font-weight:600">${idea.topic}</span></div>
-      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Sign</span><br/>
-           <span style="color:var(--purple2);font-weight:700">${idea.signSym} ${idea.sign}</span></div>
-      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Category</span><br/>
-           <span style="color:var(--text2);font-weight:600">${idea.catLabel}</span></div>
-    </div>
-    <div style="margin-top:7px;font-size:.68rem;color:var(--muted);font-style:italic;border-top:1px solid rgba(124,58,237,.15);padding-top:6px">"${idea.hook}"</div>
-    <div style="font-size:.61rem;color:var(--muted);margin-top:3px">Tone: ${idea.tone}</div>`;
+function nicheTrendRandom(){
+  // Legacy alias — delegates to randomNiche
+  randomNiche(null);
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -8876,28 +9240,33 @@ window.addEventListener('unhandledrejection', (ev) => {
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 <!-- STOCK MEDIA BROWSER MODAL                                                 -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<div id="stockModal" style="display:none;position:fixed;inset:0;z-index:9999">
-  <div class="stock-backdrop" onclick="closeStockModal()" style="position:absolute;inset:0;background:rgba(4,2,8,.85);backdrop-filter:blur(8px)"></div>
-  <div class="stock-panel" style="position:relative;max-width:1100px;margin:40px auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;max-height:90vh;display:flex;flex-direction:column">
-    <div class="stock-header" style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-      <span style="font-weight:800;font-size:.95rem;color:var(--text)">🌐 Stock Media Browser</span>
-      <div style="display:flex;gap:6px;margin-left:8px">
-        <button class="stock-tab active" data-tab="videos" onclick="switchStockTab('videos')" style="padding:6px 12px;border-radius:8px;font-size:.72rem;font-weight:700;background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2);cursor:pointer;font-family:inherit">🎬 Videos</button>
-        <button class="stock-tab"        data-tab="audio"  onclick="switchStockTab('audio')"  style="padding:6px 12px;border-radius:8px;font-size:.72rem;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit">🎵 Music</button>
+<div id="stockModal">
+  <div class="stock-backdrop" onclick="closeStockModal()"></div>
+  <div class="stock-panel">
+
+    <!-- Header -->
+    <div class="stock-header">
+      <span class="stock-title">🌐 Stock Media Browser</span>
+      <div class="stock-tabs-row">
+        <button class="stock-tab active" data-tab="videos" onclick="switchStockTab('videos')">🎬 Videos</button>
+        <button class="stock-tab"        data-tab="audio"  onclick="switchStockTab('audio')">🎵 Music</button>
       </div>
-      <button onclick="closeStockModal()" title="Close" style="margin-left:auto;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;font-family:inherit">✕</button>
+      <button class="stock-close-btn" onclick="closeStockModal()" title="Close">✕</button>
     </div>
-    <div class="stock-body" style="overflow-y:auto;flex:1;padding-right:6px">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <input id="stockSearchInp" type="text" placeholder="Search videos…"
-          onkeydown="if(event.key==='Enter')searchStock()"
-          style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.85rem;outline:none"/>
-        <button onclick="searchStock()" style="padding:8px 16px;border-radius:8px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-weight:700;font-size:.78rem;cursor:pointer;font-family:inherit">Search</button>
+
+    <!-- Body -->
+    <div class="stock-body">
+      <div class="stock-search-row">
+        <input id="stockSearchInp" class="stock-search-inp" type="text"
+          placeholder="Search videos…"
+          onkeydown="if(event.key==='Enter')searchStock()"/>
+        <button class="stock-search-btn" onclick="searchStock()">Search</button>
       </div>
-      <div id="stockChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
-      <div id="stockResults"><div style="color:var(--muted);text-align:center;padding:24px">Choose a category or search above ✨</div></div>
-      <div id="stockPagination" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px"></div>
+      <div class="stock-chips-row" id="stockChips"></div>
+      <div id="stockResults"><div class="stock-loading">Choose a category or search above ✨</div></div>
+      <div id="stockPagination"></div>
     </div>
+
   </div>
 </div>
 
@@ -8905,154 +9274,178 @@ window.addEventListener('unhandledrejection', (ev) => {
 // ═══════════════════════════════════════════════════════════════════
 // STOCK MEDIA BROWSER
 // ═══════════════════════════════════════════════════════════════════
+
 const VIDEO_CHIPS = ['cosmos','space','mystical','ocean','fire','forest','rain','city night','abstract','fog','northern lights','smoke'];
 const AUDIO_CHIPS = ['ambient','meditation','cinematic','dark','mystical','epic','lofi','calm','spiritual','dramatic','fantasy','orchestral'];
 
-let _stockTab = 'videos', _stockPage = 1, _stockQ = 'cosmos', _stockAudio = null;
+let _stockTab  = 'videos';
+let _stockPage = 1;
+let _stockQ    = 'cosmos';
+let _stockAudio = null; // current preview HTMLAudioElement
 
 function openStockBrowser(tab){
-  try {
-    _stockTab  = tab || 'videos';
-    _stockPage = 1;
-    _stockQ    = _stockTab === 'videos' ? 'cosmos' : 'ambient';
-    document.getElementById('stockModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
-    _initStockTab(false);
-    searchStock();
-    console.log('[Action] openStockBrowser', tab);
-  } catch(err){
-    console.error('[openStockBrowser] error:', err);
-    showToast('Stock browser failed: ' + (err.message||err), 'error');
-  }
+  _stockTab  = tab || 'videos';
+  _stockPage = 1;
+  _stockQ    = _stockTab === 'videos' ? 'cosmos' : 'ambient';
+  document.getElementById('stockModal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  _initStockTab(false);
+  searchStock();
 }
+
 function closeStockModal(){
-  const m = document.getElementById('stockModal');
-  if(m) m.style.display = 'none';
+  document.getElementById('stockModal').style.display = 'none';
   document.body.style.overflow = '';
   stopStockAudio();
 }
+
 function stopStockAudio(){
-  if(_stockAudio){ try { _stockAudio.pause(); } catch{} _stockAudio = null; }
+  if(_stockAudio){ _stockAudio.pause(); _stockAudio = null; }
   document.querySelectorAll('.stock-prev-btn').forEach(b=>{ b.textContent='▶'; b.classList.remove('playing'); });
 }
+
 function _initStockTab(doSearch){
   const tab = _stockTab;
-  document.querySelectorAll('.stock-tab').forEach(t => {
-    const on = t.dataset.tab === tab;
-    t.classList.toggle('active', on);
-  });
+  document.querySelectorAll('.stock-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   const chips = tab === 'videos' ? VIDEO_CHIPS : AUDIO_CHIPS;
   document.getElementById('stockChips').innerHTML = chips.map(c =>
-    `<button class="stock-chip${_stockQ===c?' active':''}" onclick="stockChipClick('${c}')" style="padding:5px 10px;border-radius:14px;font-size:.7rem;background:${_stockQ===c?'rgba(124,58,237,.25)':'var(--surface2)'};border:1px solid ${_stockQ===c?'var(--purple2)':'var(--border)'};color:${_stockQ===c?'var(--purple2)':'var(--text2)'};cursor:pointer;font-family:inherit">${c}</button>`
+    `<button class="stock-chip${_stockQ===c?' active':''}" onclick="stockChipClick('${c}')">${c}</button>`
   ).join('');
-  const inp = document.getElementById('stockSearchInp');
-  if(inp) inp.placeholder = tab === 'videos' ? 'Search videos…' : 'Search music…';
+  document.getElementById('stockSearchInp').placeholder = tab === 'videos' ? 'Search videos…' : 'Search music…';
   if(doSearch) searchStock();
 }
+
 function switchStockTab(tab){
   stopStockAudio();
   _stockTab  = tab;
   _stockPage = 1;
   _stockQ    = tab === 'videos' ? 'cosmos' : 'ambient';
-  const inp = document.getElementById('stockSearchInp');
-  if(inp) inp.value = '';
+  document.getElementById('stockSearchInp').value = '';
   _initStockTab(true);
 }
+
 function stockChipClick(chip){
-  _stockQ = chip; _stockPage = 1;
-  const inp = document.getElementById('stockSearchInp');
-  if(inp) inp.value = chip;
-  _initStockTab(false);
+  _stockQ = chip;
+  _stockPage = 1;
+  document.getElementById('stockSearchInp').value = chip;
+  document.querySelectorAll('.stock-chip').forEach(c => c.classList.toggle('active', c.textContent === chip));
   searchStock();
 }
+
 async function searchStock(){
-  try {
-    const inp = document.getElementById('stockSearchInp');
-    const v = inp ? inp.value.trim() : '';
-    if(v) _stockQ = v;
-    _stockPage = 1;
-    stopStockAudio();
-    await _doStockFetch();
-  } catch(err){
-    console.error('[searchStock] error:', err);
-    showToast('Stock search failed: ' + (err.message||err), 'error');
-  }
+  const inp = document.getElementById('stockSearchInp').value.trim();
+  if(inp) _stockQ = inp;
+  _stockPage = 1;
+  stopStockAudio();
+  await _doStockFetch();
 }
+
 async function stockGoPage(p){
   _stockPage = p;
   stopStockAudio();
   await _doStockFetch();
+  document.querySelector('.stock-body').scrollTop = 0;
 }
+
 async function _doStockFetch(){
   const res = document.getElementById('stockResults');
-  res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">✨ Searching…</div>';
+  res.innerHTML = '<div class="stock-loading">✨ Searching…</div>';
   document.getElementById('stockPagination').innerHTML = '';
   try {
     if(_stockTab === 'videos'){
-      const r = await fetch(API_BASE+'/api/stock/videos?q='+encodeURIComponent(_stockQ)+'&page='+_stockPage);
+      const r = await fetch(`${API_BASE}/api/stock/videos?q=${encodeURIComponent(_stockQ)}&page=${_stockPage}`);
       const d = await r.json();
       if(d.error === 'no_key'){ _showStockNoKey('pexels'); return; }
       _renderStockVideos(d.videos||[], d.total||0);
     } else {
-      const r = await fetch(API_BASE+'/api/stock/audio?q='+encodeURIComponent(_stockQ)+'&page='+_stockPage);
+      const r = await fetch(`${API_BASE}/api/stock/audio?q=${encodeURIComponent(_stockQ)}&page=${_stockPage}`);
       const d = await r.json();
       if(d.error === 'no_key'){ _showStockNoKey('jamendo'); return; }
       _renderStockAudio(d.tracks||[], d.total||0);
     }
   } catch(e){
-    res.innerHTML = '<div style="color:#f87171;text-align:center;padding:24px">⚠ '+e.message+'</div>';
+    res.innerHTML = `<div class="stock-empty">⚠ ${e.message}</div>`;
   }
 }
+
 function _showStockNoKey(provider){
   const isPexels = provider === 'pexels';
-  document.getElementById('stockResults').innerHTML =
-    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;color:var(--text2)">'
-    + '<h3 style="margin-bottom:10px;color:var(--purple2)">'+(isPexels?'🎬':'🎵')+' Free API Key Needed</h3>'
-    + '<p style="font-size:.85rem;line-height:1.6">Add '+(isPexels?'PEXELS_API_KEY':'JAMENDO_CLIENT_ID')+' to your .env file, then restart the server.</p>'
-    + '</div>';
+  document.getElementById('stockResults').innerHTML = `
+    <div class="stock-no-key">
+      <h3>${isPexels ? '🎬' : '🎵'} Free API Key Needed</h3>
+      <p>${isPexels
+        ? 'Stock videos are powered by <strong>Pexels</strong> — a free, professional video library.'
+        : 'Background music is powered by <strong>Jamendo</strong> — a free Creative Commons music platform.'
+      }</p>
+      <p>
+        <strong>Step 1.</strong> Get your free key at
+        <a href="${isPexels ? 'https://www.pexels.com/api/' : 'https://devportal.jamendo.com/'}" target="_blank">
+          ${isPexels ? 'pexels.com/api' : 'devportal.jamendo.com'}
+        </a> — takes about 1 minute<br/>
+        <strong>Step 2.</strong> Open <code>.env</code> in your Trend Vault Program folder<br/>
+        <strong>Step 3.</strong> Add the line:<br/>
+        <code style="display:inline-block;margin:6px 0">${isPexels ? 'PEXELS_API_KEY=paste_key_here' : 'JAMENDO_CLIENT_ID=paste_client_id_here'}</code><br/>
+        <strong>Step 4.</strong> Restart the server (<code>npm start</code>), then come back here
+      </p>
+      <p style="font-size:.67rem;color:var(--muted)">Both services are 100% free with generous monthly limits.</p>
+    </div>`;
+  document.getElementById('stockPagination').innerHTML = '';
 }
+
 function _renderStockVideos(videos, total){
   const res = document.getElementById('stockResults');
-  if(!videos.length){ res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No results — try different keywords</div>'; return; }
-  res.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">'
-    + videos.map(v =>
-      '<div class="stock-vcard" data-src="'+(v.downloadUrl||'')+'" data-thumb="'+(v.thumb||'').replace(/"/g,'')+'" data-id="'+v.id+'" data-url="'+encodeURIComponent(v.downloadUrl||'')+'" data-name="stock_pexels_'+v.id+'" style="position:relative;background:#000;border-radius:8px;overflow:hidden;cursor:pointer;aspect-ratio:9/16;border:1px solid var(--border)" onmouseenter="_stockVidHover(this)" onmouseleave="_stockVidLeave(this)">'
-      + '<img src="'+(v.thumb||'').replace(/"/g,'')+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>'
-      + '<div style="position:absolute;bottom:0;left:0;right:0;padding:6px;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);display:flex;justify-content:space-between;align-items:center;gap:6px">'
-      + '<span style="font-size:.65rem;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px">'+Math.floor((v.duration||0)/60)+':'+String((v.duration||0)%60).padStart(2,'0')+'</span>'
-      + '<button onclick="event.stopPropagation();_applyStockVid(this)" style="padding:4px 10px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:5px;color:#fff;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">✓ USE</button>'
-      + '</div></div>'
-    ).join('') + '</div>';
+  if(!videos.length){ res.innerHTML = '<div class="stock-empty">No results — try different keywords</div>'; return; }
+  res.innerHTML = `<div class="stock-video-grid">${videos.map(v => `
+    <div class="stock-vcard"
+      data-src="${v.downloadUrl||''}"
+      data-thumb="${(v.thumb||'').replace(/"/g,'')}"
+      data-id="${v.id}"
+      data-url="${encodeURIComponent(v.downloadUrl||'')}"
+      data-name="stock_pexels_${v.id}"
+      data-author="${(v.author||'Pexels').replace(/"/g,'')}"
+      data-dur="${v.duration||0}"
+      onmouseenter="_stockVidHover(this)"
+      onmouseleave="_stockVidLeave(this)">
+      <img src="${(v.thumb||'').replace(/"/g,'')}" alt="" loading="lazy"/>
+      <div class="stock-author-badge">${(v.author||'').replace(/</g,'&lt;')}</div>
+      <div class="stock-vmeta">
+        <span class="stock-dur-badge">${Math.floor((v.duration||0)/60)}:${String((v.duration||0)%60).padStart(2,'0')}</span>
+        <button class="stock-use-btn" id="svub_${v.id}" onclick="event.stopPropagation();_applyStockVid(this)">✓ USE</button>
+      </div>
+    </div>`).join('')}</div>`;
   _renderStockPagination(total, 15);
 }
+
 function _stockVidHover(card){
   if(card.querySelector('video')) return;
-  const src = card.dataset.src; if(!src) return;
+  const src = card.dataset.src;
+  if(!src) return;
   const vid = document.createElement('video');
   vid.muted = true; vid.loop = true; vid.playsInline = true; vid.autoplay = true;
+  vid.poster = card.dataset.thumb || '';
   vid.src = src;
-  vid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
   card.appendChild(vid);
   vid.play().catch(()=>{});
 }
 function _stockVidLeave(card){
   const vid = card.querySelector('video');
-  if(vid){ try { vid.pause(); } catch{} vid.remove(); }
+  if(vid){ vid.pause(); vid.remove(); }
 }
 async function _applyStockVid(btn){
   const card = btn.closest('.stock-vcard');
+  const id   = card.dataset.id;
   const url  = decodeURIComponent(card.dataset.url||'');
   const name = card.dataset.name;
   btn.disabled = true; btn.textContent = '⏳';
   try {
-    const r = await fetch(API_BASE+'/api/stock/download',{
+    const r = await fetch(`${API_BASE}/api/stock/download`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ type:'video', downloadUrl:url, filename:name })
     });
     const d = await r.json();
     if(!d.ok) throw new Error(d.error||'Failed');
-    if(typeof loadBackgrounds === 'function') await loadBackgrounds();
-    if(typeof selectBackground === 'function') selectBackground(d.filename);
+    await loadBackgrounds();
+    selectBackground(d.filename);
     showToast('✓ Background applied!', 'success');
     closeStockModal();
   } catch(e){
@@ -9060,34 +9453,45 @@ async function _applyStockVid(btn){
     btn.disabled = false; btn.textContent = '✓ USE';
   }
 }
+
 function _renderStockAudio(tracks, total){
   stopStockAudio();
   const res = document.getElementById('stockResults');
-  if(!tracks.length){ res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No results — try different keywords</div>'; return; }
-  res.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">'
-    + tracks.map(t =>
-      '<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px">'
-      + '<div style="width:48px;height:48px;border-radius:6px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">'
-      + (t.thumb ? '<img src="'+(t.thumb||'').replace(/"/g,'')+'" alt="" style="width:100%;height:100%;object-fit:cover"/>' : '🎵')
-      + '</div>'
-      + '<div style="flex:1;min-width:0">'
-      + '<div style="font-size:.8rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.title||'Untitled').replace(/</g,'&lt;')+'</div>'
-      + '<div style="font-size:.66rem;color:var(--muted)">'+(t.author||'').replace(/</g,'&lt;')+(t.duration?' · '+Math.floor(t.duration/60)+':'+String(t.duration%60).padStart(2,'0'):'')+'</div>'
-      + '</div>'
-      + '<div style="display:flex;gap:6px;flex-shrink:0">'
-      + '<button class="stock-prev-btn" id="spb_'+t.id+'" onclick="toggleStockAudioPreview(\''+t.id+'\',\''+encodeURIComponent(t.previewUrl||'')+'\')" title="Preview" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">▶</button>'
-      + '<button id="saub_'+t.id+'" data-url="'+encodeURIComponent(t.downloadUrl||t.previewUrl||'')+'" data-name="stock_jamendo_'+t.id+'" onclick="_applyStockAudio(this)" style="padding:6px 10px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">✓ USE</button>'
-      + '</div></div>'
-    ).join('') + '</div>';
+  if(!tracks.length){ res.innerHTML = '<div class="stock-empty">No results — try different keywords</div>'; return; }
+  res.innerHTML = `<div class="stock-audio-list">${tracks.map(t => `
+    <div class="stock-acard">
+      <div class="stock-acard-thumb">
+        ${t.thumb ? `<img src="${(t.thumb||'').replace(/"/g,'')}" alt=""/>` : '🎵'}
+      </div>
+      <div class="stock-ainfo">
+        <div class="stock-ainfo-title" title="${(t.title||'').replace(/"/g,'')}">${(t.title||'Untitled').replace(/</g,'&lt;')}</div>
+        <div class="stock-ainfo-meta">
+          ${(t.author||'').replace(/</g,'&lt;')}
+          ${t.duration ? ' · '+Math.floor(t.duration/60)+':'+String(t.duration%60).padStart(2,'0') : ''}
+          ${t.tags ? ' · '+t.tags.replace(/</g,'&lt;') : ''}
+        </div>
+      </div>
+      <div class="stock-aactions">
+        <button class="stock-prev-btn" id="spb_${t.id}"
+          onclick="toggleStockAudioPreview('${t.id}','${encodeURIComponent(t.previewUrl||'')}')"
+          title="Preview">▶</button>
+        <button class="stock-use-btn" id="saub_${t.id}"
+          data-url="${encodeURIComponent(t.downloadUrl||t.previewUrl||'')}"
+          data-name="stock_jamendo_${t.id}"
+          onclick="_applyStockAudio(this)">✓ USE</button>
+      </div>
+    </div>`).join('')}</div>`;
   _renderStockPagination(total, 20);
 }
+
 function toggleStockAudioPreview(id, urlEnc){
   const btn = document.getElementById('spb_'+id);
   if(_stockAudio && btn && btn.classList.contains('playing')){ stopStockAudio(); return; }
   stopStockAudio();
   const rawUrl = decodeURIComponent(urlEnc);
   if(!rawUrl){ showToast('No preview available','error'); return; }
-  const proxyUrl = API_BASE+'/api/stock/audio-proxy?url='+encodeURIComponent(rawUrl);
+  // Route through server proxy to bypass CORS restrictions on Jamendo CDN
+  const proxyUrl = `${API_BASE}/api/stock/audio-proxy?url=${encodeURIComponent(rawUrl)}`;
   if(btn){ btn.textContent='⏳'; }
   _stockAudio = new Audio(proxyUrl);
   _stockAudio.volume = 0.7;
@@ -9099,6 +9503,7 @@ function toggleStockAudioPreview(id, urlEnc){
     showToast('Preview unavailable: '+e.message, 'error');
   });
 }
+
 async function _applyStockAudio(btn){
   const url  = decodeURIComponent(btn.dataset.url||'');
   const name = btn.dataset.name;
@@ -9106,14 +9511,14 @@ async function _applyStockAudio(btn){
   stopStockAudio();
   btn.disabled = true; btn.textContent = '⏳';
   try {
-    const r = await fetch(API_BASE+'/api/stock/download',{
+    const r = await fetch(`${API_BASE}/api/stock/download`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ type:'audio', downloadUrl:url, filename:name })
     });
     const d = await r.json();
     if(!d.ok) throw new Error(d.error||'Failed');
-    if(typeof loadMusic === 'function') await loadMusic();
-    if(typeof selectMusic === 'function') selectMusic(d.filename);
+    await loadMusic();
+    selectMusic(d.filename);
     showToast('✓ Music applied!', 'success');
     closeStockModal();
   } catch(e){
@@ -9121,9 +9526,16 @@ async function _applyStockAudio(btn){
     btn.disabled = false; btn.textContent = '✓ USE';
   }
 }
+
 function _renderStockPagination(total, perPage){
   const pages = Math.ceil(total / perPage);
   const pg = document.getElementById('stockPagination');
   if(pages <= 1){ pg.innerHTML=''; return; }
-  pg.innerHTML =
-    '<button '+(_stockPage<=1?'disabled':'')+' onclick="stockGoPage('+(_stockPage-1)+')" style="padding:6px 12px;background:var(--surface
+  pg.innerHTML = `
+    <button class="stock-pg-btn" ${_stockPage<=1?'disabled':''} onclick="stockGoPage(${_stockPage-1})">← Prev</button>
+    <span class="stock-pg-info">Page ${_stockPage} of ${pages} &nbsp;·&nbsp; ${total} results</span>
+    <button class="stock-pg-btn" ${_stockPage>=pages?'disabled':''} onclick="stockGoPage(${_stockPage+1})">Next →</button>`;
+}
+</script>
+</body>
+</html>

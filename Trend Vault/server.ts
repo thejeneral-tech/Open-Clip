@@ -1293,31 +1293,135 @@ Use these line types in order: hook, observation, escalation, truth, twist, endi
   }
 });
 
-// ── Generate subjects for a niche ────────────────────────────────────────────
-app.post('/api/trend-vault/generate-subjects', async (req, res) => {
+// ── Generate content categories for a niche (claude-haiku-4-5-20251001) ──────
+app.post('/api/trend-vault/generate-categories', async (req, res) => {
   const { niche } = req.body as { niche?: string };
-  if (!niche) { res.status(400).json({ error: 'niche is required.' }); return; }
+  if (!niche || !niche.trim()) { res.status(400).json({ error: 'niche is required.' }); return; }
+  const cleanNiche = niche.trim().slice(0, 200);
 
-  const prompt = `Generate 10 specific, emotionally punchy subject ideas for the "${niche}" niche on TikTok.
-These topics are for short cinematic storytelling videos — psychological, emotional, and viral.
-Each subject should be 2-5 words, specific and compelling (no generic filler).
+  const prompt =
+`Generate exactly 10 short, punchy short-form content categories for this niche: "${cleanNiche}".
+Return only valid JSON in this exact format — no markdown, no explanation, no extra text:
+[
+  { "emoji": "🍔", "title": "Food Fails" },
+  { "emoji": "🕵️", "title": "Hidden Secrets" }
+]
+Rules:
+- Each category must directly fit the niche.
+- Each title should be under 5 words if possible.
+- Each category must include one matching emoji that fits the theme.
+- Do not include subjects or script ideas — only category names.
+- No zodiac wording unless the niche is actually zodiac.
+- Return only the JSON array, nothing else.`;
+
+  console.log(`[generate-categories] Using claude-haiku-4-5-20251001 — niche: "${cleanNiche}"`);
+  try {
+    const result = await aiComplete({ user: prompt, maxTokens: 600, model: 'claude-haiku-4-5-20251001' });
+    const raw = result.text.trim();
+    console.log('[generate-categories] raw:', raw.slice(0, 400));
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) throw new Error(`No JSON array in response: ${raw.slice(0, 100)}`);
+    const parsed = JSON.parse(arrayMatch[0]);
+    // Normalise: accept [{emoji,title}] or legacy string[]
+    const categories: Array<{ emoji: string; title: string }> = parsed.map((item: unknown) =>
+      typeof item === 'string'
+        ? { emoji: '✦', title: item }
+        : { emoji: (item as { emoji?: string }).emoji || '✦', title: (item as { title?: string }).title || String(item) }
+    );
+    res.json({ ok: true, categories, source: 'claude-haiku-4-5-20251001' });
+  } catch (err) {
+    const msg = (err as Error).message || String(err);
+    console.warn('[generate-categories] error:', msg.slice(0, 200));
+    res.json({ ok: true, categories: [], source: 'error', error: msg.slice(0, 200) });
+  }
+});
+
+// ── Generate subjects for a niche + optional category (claude-haiku-4-5-20251001) ──
+app.post('/api/trend-vault/generate-subjects', async (req, res) => {
+  const { niche, category } = req.body as { niche?: string; category?: string };
+  if (!niche || !niche.trim()) { res.status(400).json({ error: 'niche is required.' }); return; }
+  const cleanNiche    = niche.trim().slice(0, 200);
+  const cleanCategory = (category || '').trim().slice(0, 100);
+
+  const prompt = cleanCategory
+    ? `Generate 10 punchy short-form video subject ideas for this niche: "${cleanNiche}" and this category: "${cleanCategory}".
+Rules:
+- Subjects must clearly combine the niche and category.
+- Make them emotional, curiosity-driven, and specific.
+- Make them usable as TikTok/Reels/Shorts premises.
+- No zodiac wording unless the niche is actually zodiac.
+- Return ONLY a valid JSON array of strings, no markdown, no extra text:
+["Subject One", "Subject Two", ...]`
+    : `Generate 10 punchy short-form video subject ideas for the "${cleanNiche}" niche on TikTok.
+These are for short cinematic storytelling videos — emotional, curiosity-driven, viral.
+Each subject should be 2-8 words, specific and compelling.
 Return ONLY a valid JSON array of strings, no markdown, no extra text:
 ["Subject One", "Subject Two", ...]`;
 
+  console.log(`[generate-subjects] Using claude-haiku-4-5-20251001 — niche: "${cleanNiche}"${cleanCategory ? ` + category: "${cleanCategory}"` : ''}`);
   try {
-    const result = await aiComplete({ user: prompt, maxTokens: 300 });
+    const result = await aiComplete({ user: prompt, maxTokens: 400, model: 'claude-haiku-4-5-20251001' });
     const raw = result.text.trim();
-    console.log('[generate-subjects] raw response:', raw.slice(0, 300));
-
+    console.log('[generate-subjects] raw:', raw.slice(0, 300));
     const arrayMatch = raw.match(/\[[\s\S]*\]/);
-    if (!arrayMatch) throw new Error(`No JSON array found in response: ${raw.slice(0, 100)}`);
+    if (!arrayMatch) throw new Error(`No JSON array in response: ${raw.slice(0, 100)}`);
     const subjects: string[] = JSON.parse(arrayMatch[0]);
-    res.json({ ok: true, subjects, source: result.provider || 'ai' });
+    res.json({ ok: true, subjects, source: 'claude-haiku-4-5-20251001' });
   } catch (err) {
     const msg = (err as Error).message || String(err);
     const isBilling = /credit|billing|balance|quota|429|402|insufficient/i.test(msg);
     console.warn('[generate-subjects] error:', msg.slice(0, 200));
     res.json({ ok: true, subjects: [], source: isBilling ? 'billing' : 'error', error: msg.slice(0, 200) });
+  }
+});
+
+// ── Generate trending topics for a niche + category (claude-haiku-4-5-20251001) ─
+app.post('/api/trend-vault/generate-trending-topics', async (req, res) => {
+  const { niche, category } = req.body as { niche?: string; category?: string };
+  if (!niche || !niche.trim())    { res.status(400).json({ error: 'niche is required.' }); return; }
+  if (!category || !category.trim()) { res.status(400).json({ error: 'category is required.' }); return; }
+  const cleanNiche    = niche.trim().slice(0, 200);
+  const cleanCategory = category.trim().slice(0, 100);
+
+  const prompt =
+`Generate exactly 20 viral short-form trending topic ideas for this niche and category.
+Niche: "${cleanNiche}"
+Category: "${cleanCategory}"
+Return only valid JSON in this exact format — no markdown, no explanation, no extra text:
+[
+  { "emoji": "🍟", "title": "The Secret Behind Fast Food Fries" },
+  { "emoji": "🥫", "title": "Foods That Last Longer Than You Think" }
+]
+Rules:
+- Every topic must directly combine the niche and category.
+- Topics should feel clickable, emotional, curiosity-driven, and TikTok/Reels/Shorts friendly.
+- Make them specific enough to become a story prompt.
+- Avoid generic labels like "Tips" or "Mindset" — these are real video ideas.
+- Each topic should feel like something someone would actually stop scrolling for.
+- Include one matching emoji per topic.
+- Keep titles short and punchy, ideally under 9 words.
+- No zodiac wording unless the niche is actually zodiac.
+- No explanations.
+- Return only the JSON array.`;
+
+  console.log(`[generate-trending-topics] haiku — niche: "${cleanNiche}" | category: "${cleanCategory}"`);
+  try {
+    const result = await aiComplete({ user: prompt, maxTokens: 1200, model: 'claude-haiku-4-5-20251001' });
+    const raw = result.text.trim();
+    console.log('[generate-trending-topics] raw:', raw.slice(0, 400));
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) throw new Error(`No JSON array in response: ${raw.slice(0, 100)}`);
+    const parsed = JSON.parse(arrayMatch[0]);
+    const topics: Array<{ emoji: string; title: string }> = parsed.map((item: unknown) =>
+      typeof item === 'string'
+        ? { emoji: '✦', title: item }
+        : { emoji: (item as { emoji?: string }).emoji || '✦', title: (item as { title?: string }).title || String(item) }
+    );
+    res.json({ ok: true, topics, source: 'claude-haiku-4-5-20251001' });
+  } catch (err) {
+    const msg = (err as Error).message || String(err);
+    console.warn('[generate-trending-topics] error:', msg.slice(0, 200));
+    res.json({ ok: true, topics: [], source: 'error', error: msg.slice(0, 200) });
   }
 });
 

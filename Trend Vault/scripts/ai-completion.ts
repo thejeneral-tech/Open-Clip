@@ -15,6 +15,8 @@ export interface AICompletionRequest {
   user: string;
   maxTokens?: number;
   temperature?: number;
+  /** Override the Anthropic model (e.g. 'claude-haiku-4-5-20251001' for fast/cheap calls) */
+  model?: string;
 }
 
 export interface AICompletionResult {
@@ -31,7 +33,7 @@ async function callAnthropic(req: AICompletionRequest): Promise<string> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const messages = [{ role: 'user' as const, content: req.user }];
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: req.model ?? 'claude-sonnet-4-6',
     max_tokens: req.maxTokens ?? 1024,
     ...(req.system ? { system: req.system } : {}),
     messages,
