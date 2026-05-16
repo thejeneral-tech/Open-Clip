@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>🏦 Trend Vault Mainframe</title>
+<title>Trend Vault Mainframe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -194,7 +194,7 @@ main{
 }
 .tile-desc{font-size:.7rem;color:var(--muted);line-height:1.4}
 .tile-badge{
-  position:absolute;top:10px;right:10px;
+  position:absolute;bottom:10px;right:10px;
   font-size:.55rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;
   padding:2px 7px;border-radius:10px;
   background:rgba(124,58,237,.3);border:1px solid var(--purple);color:var(--purple3);
@@ -533,6 +533,97 @@ input:focus,textarea:focus,select:focus{
 .saved-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:5px 8px 5px 12px;font-size:.68rem;color:#86efac;font-weight:600}
 .saved-chip button{background:none;border:none;color:#6ee7b7;font-size:.72rem;cursor:pointer;padding:0 2px;line-height:1;transition:color .12s}
 .saved-chip button:hover{color:#f87171}
+
+/* ── RGB animated outline on all highlighted panels ── */
+.stat-card,
+.tool-tile,
+.connection-panel,
+#jobsList,
+.ip-card,
+.env-card,
+.actions-card,
+.niche-card {
+  position:relative;
+  overflow:hidden;
+  border:none !important;
+}
+
+/* Shared RGB ::before rule */
+.stat-card::before,
+.connection-panel::before,
+#jobsList::before,
+.ip-card::before,
+.env-card::before,
+.actions-card::before,
+.niche-card::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  padding:1.25px;
+  border-radius:inherit;
+  background:linear-gradient(
+    120deg,
+    rgba(255,255,255,.88),
+    rgba(167,139,250,.72),
+    rgba(96,165,250,.58),
+    rgba(255,255,255,.78),
+    rgba(244,114,182,.55),
+    rgba(255,255,255,.88)
+  );
+  background-size:260% 260%;
+  animation:calmRgbBorderMove 12s linear infinite;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  z-index:2;
+}
+
+/* tool-tile already uses ::before for hover glow — use ::after for RGB border */
+.tool-tile::after {
+  content:'';
+  position:absolute;
+  inset:0;
+  padding:1.25px;
+  border-radius:inherit;
+  background:linear-gradient(
+    120deg,
+    rgba(255,255,255,.88),
+    rgba(167,139,250,.72),
+    rgba(96,165,250,.58),
+    rgba(255,255,255,.78),
+    rgba(244,114,182,.55),
+    rgba(255,255,255,.88)
+  );
+  background-size:260% 260%;
+  animation:calmRgbBorderMove 12s linear infinite;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  z-index:1;
+}
+
+/* Lift all children above the ::before/::after border layer */
+.stat-card>*,
+.tool-tile>*,
+.connection-panel>*,
+#jobsList>*,
+.ip-card>*,
+.env-card>*,
+.actions-card>*,
+.niche-card>* {
+  position:relative;
+  z-index:3;
+}
+
+/* #jobsList needs a border-radius to match surrounding cards */
+#jobsList {
+  border-radius:14px;
+  padding:16px;
+  background:var(--surface);
+  margin-bottom:28px;
+}
 </style>
 </head>
 <body>
@@ -547,7 +638,7 @@ input:focus,textarea:focus,select:focus{
   <header>
     <div class="ping-wrap" style="width:36px;height:36px">
       <div class="ping-ring" id="headerPing"></div>
-      <div class="logo-glyph">🏦</div>
+      <img src="/vault-icon.svg" width="36" height="36" alt="Trend Vault" draggable="false" style="display:block;filter:drop-shadow(0 0 8px rgba(168,85,247,.6))">
     </div>
     <div class="logo-block">
       <div class="logo-name">Trend Vault Mainframe</div>
@@ -619,7 +710,7 @@ input:focus,textarea:focus,select:focus{
       <div class="tools-grid">
         <a href="/trend-vault" class="tool-tile gold">
           <div class="tile-badge gold">Main</div>
-          <div class="tile-icon">🏦</div>
+          <div class="tile-icon"><img src="/vault-icon.svg" width="32" height="32" alt="Trend Vault" draggable="false" style="filter:drop-shadow(0 0 6px rgba(168,85,247,.55))"></div>
           <div class="tile-name">Trend Vault Studio</div>
           <div class="tile-desc">Generate &amp; render trend-vault videos</div>
         </a>

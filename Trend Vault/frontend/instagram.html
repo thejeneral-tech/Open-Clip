@@ -57,7 +57,49 @@ main{flex:1;padding:30px 40px 60px;display:grid;grid-template-columns:1.4fr 1fr;
 
 .section-label{font-family:'Orbitron',sans-serif;font-size:.68rem;letter-spacing:2.5px;color:var(--muted);text-transform:uppercase;margin:4px 2px 12px;font-weight:700}
 
-.card{background:#0b0b12;border:1px solid var(--border2);border-radius:14px;padding:22px;position:relative}
+/* ── RGB animated card border ── */
+@keyframes calmRgbBorderMove{
+  0%   { background-position: 0%   50%; }
+  100% { background-position: 260% 50%; }
+}
+.card{
+  position:relative;
+  overflow:hidden;
+  border:none!important;
+  border-radius:14px;
+  background:#0b0b12;
+  padding:22px;
+}
+.card::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  padding:1.25px;
+  border-radius:inherit;
+  background:linear-gradient(
+    120deg,
+    rgba(255,255,255,.88),
+    rgba(167,139,250,.72),
+    rgba(96,165,250,.58),
+    rgba(255,255,255,.78),
+    rgba(244,114,182,.55),
+    rgba(255,255,255,.88)
+  );
+  background-size:260% 260%;
+  animation:calmRgbBorderMove 12s linear infinite;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  z-index:2;
+}
+.card::after{display:none!important}
+.card>*{position:relative;z-index:3}
+.card:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 32px rgba(124,58,237,.18);
+  transition:transform .2s,box-shadow .2s;
+}
 .card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .card-head .ico{font-size:1.15rem}
 .card-head .ttl{font-family:'Cinzel Decorative',serif;font-size:1rem;letter-spacing:1px;color:var(--text)}
