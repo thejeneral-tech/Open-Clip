@@ -805,7 +805,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🧠 Niche Trend Builder</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <select id="nicheSelect"
-          onchange="nicheState.selectedNiche=this.value;document.getElementById('nicheCustom').value='';nichePillUpdate();if(this.value&&nicheMap[this.value]){buildSubjectGrid(nicheMap[this.value].subjects);console.log('[TrendVault] Selected niche:',this.value)}"
+          onchange="nicheState.selectedNiche=this.value;document.getElementById('nicheCustom').value='';nichePillUpdate();if(this.value){generateSubjectsForNiche(this.value)}"
           style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none">
           <option value="">— Pick Niche —</option>
           <optgroup label="Psychology &amp; Mind">
@@ -857,6 +857,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         </select>
         <input id="nicheCustom" placeholder="or type niche…"
           oninput="if(this.value.trim()){document.getElementById('nicheSelect').value='';nicheState.selectedNiche=this.value.trim();nichePillUpdate()}"
+          onchange="if(this.value.trim())generateSubjectsForNiche(this.value.trim())"
           style="flex:1;min-width:100px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
       </div>
       <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
@@ -871,8 +872,13 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       </div>
     </div>
 
-    <!-- Subject chips rendered here by buildSubjectGrid() -->
-    <div class="subject-grid" id="subjectGrid" style="margin-top:4px"></div>
+    <!-- AI-generated subject chips -->
+    <div id="subjectArea" style="margin-top:8px;min-height:0">
+      <div id="subjectLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:4px 0;display:flex;align-items:center;gap:6px">
+        <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating subjects…
+      </div>
+      <div class="subject-grid" id="subjectGrid"></div>
+    </div>
 
   </div>
 
@@ -2382,6 +2388,39 @@ function buildStars(){
 // SUBJECT GRID  (replaces old zodiac Sign Grid)
 // ═══════════════════════════════════════════════════════════════════
 
+async function generateSubjectsForNiche(niche){
+  const grid    = document.getElementById('subjectGrid');
+  const loading = document.getElementById('subjectLoading');
+  if(!grid) return;
+
+  // Clear previous chips and show spinner
+  grid.innerHTML = '';
+  if(loading){ loading.style.display = 'flex'; }
+
+  try {
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-subjects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ niche }),
+    });
+    const data = await r.json();
+    if(loading) loading.style.display = 'none';
+
+    if(!data.ok || !data.subjects?.length){
+      grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">No subjects returned — pick a niche and try again.</span>';
+      return;
+    }
+
+    grid.innerHTML = data.subjects.map(s => {
+      const safe = s.replace(/'/g, "\\'");
+      return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
+    }).join('');
+  } catch(e) {
+    if(loading) loading.style.display = 'none';
+    grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">Could not reach server.</span>';
+  }
+}
+
 function buildSubjectGrid(subjects){
   const grid = document.getElementById('subjectGrid');
   if(!grid) return;
@@ -2411,11 +2450,21 @@ function selectSubject(label){
 }
 
 function randomSubject(){
-  const chips = Array.from(document.querySelectorAll('.subject-chip'));
-  if(!chips.length){ showToast('Generate subjects first','error'); return; }
-  const chip = chips[Math.floor(Math.random() * chips.length)];
-  selectSubject(chip.dataset.subject);
-  showToast('Subject: ' + chip.dataset.subject, 'info');
+  // Prefer AI-generated chips already in the DOM
+  const chips = Array.from(document.querySelectorAll('#subjectGrid .subject-chip'));
+  if(chips.length){
+    const chip = chips[Math.floor(Math.random() * chips.length)];
+    selectSubject(chip.dataset.subject);
+    showToast('Subject: ' + chip.dataset.subject, 'info');
+    return;
+  }
+  // Fallback: pick from static nicheMap if chips haven't loaded yet
+  const niche = nicheState.selectedNiche;
+  const subjects = (niche && nicheMap[niche]?.subjects) || [];
+  if(!subjects.length){ showToast('Pick a niche first','error'); return; }
+  const subject = subjects[Math.floor(Math.random() * subjects.length)];
+  selectSubject(subject);
+  showToast('Subject: ' + subject, 'info');
 }
 
 // Compat alias — kept so any surviving code that calls selectSign() still works
