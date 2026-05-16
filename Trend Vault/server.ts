@@ -1169,6 +1169,153 @@ app.delete('/api/backgrounds/:filename', (req, res) => {
   res.json({ ok: true });
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STOCK MEDIA BROWSER  — Pexels (video) + Jamendo (audio)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Search stock videos (Pexels) ──────────────────────────────────────────────
+app.get('/api/stock/videos', async (req, res) => {
+  const key = process.env.PEXELS_API_KEY?.trim();
+  if (!key) { res.json({ error: 'no_key' }); return; }
+
+  const q    = String(req.query.q    || 'cosmos stars');
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+
+  try {
+    const apiRes = await fetch(
+      `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=15&page=${page}&orientation=portrait`,
+      { headers: { Authorization: key } }
+    );
+    if (!apiRes.ok) throw new Error(`Pexels ${apiRes.status}`);
+    const data: any = await apiRes.json();
+
+    const videos = (data.videos || []).map((v: any) => {
+      // Prefer a portrait HD file; fall back to any mp4
+      const files: any[] = v.video_files || [];
+      const portrait = files
+        .filter((f: any) => f.file_type === 'video/mp4' && f.height > f.width)
+        .sort((a: any, b: any) => b.height - a.height);
+      const best = portrait[0] || files.find((f: any) => f.file_type === 'video/mp4') || files[0];
+      return {
+        id:          v.id,
+        downloadUrl: best?.link || '',
+        thumb:       v.image   || '',
+        author:      v.user?.name || 'Pexels',
+        duration:    v.duration || 0,
+      };
+    }).filter((v: any) => v.downloadUrl);
+
+    res.json({ videos, total: data.total_results || videos.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Pexels request failed' });
+  }
+});
+
+// ── Search stock audio (Jamendo) ──────────────────────────────────────────────
+app.get('/api/stock/audio', async (req, res) => {
+  const clientId = process.env.JAMENDO_CLIENT_ID?.trim();
+  if (!clientId) { res.json({ error: 'no_key' }); return; }
+
+  const q    = String(req.query.q    || 'ambient');
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+  const limit  = 20;
+  const offset = (page - 1) * limit;
+
+  try {
+    const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${clientId}` +
+      `&format=json&limit=${limit}&offset=${offset}` +
+      `&search=${encodeURIComponent(q)}&imagesize=300&audioformat=mp32` +
+      `&include=musicinfo&boost=popularity_total`;
+
+    const apiRes = await fetch(url);
+    if (!apiRes.ok) throw new Error(`Jamendo ${apiRes.status}`);
+    const data: any = await apiRes.json();
+
+    const tracks = (data.results || []).map((t: any) => {
+      const genres = (t.musicinfo?.tags?.genres || []).slice(0, 3).join(', ');
+      return {
+        id:          t.id,
+        title:       t.name       || 'Untitled',
+        author:      t.artist_name || '',
+        previewUrl:  t.audio       || '',
+        downloadUrl: t.audiodownload || t.audio || '',
+        thumb:       t.image       || '',
+        duration:    t.duration    || 0,
+        tags:        genres,
+      };
+    });
+
+    // Jamendo doesn't return a reliable total; estimate from results length
+    const total = tracks.length === limit
+      ? offset + limit + 1   // at least one more page
+      : offset + tracks.length;
+
+    res.json({ tracks, total });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message || 'Jamendo request failed' });
+  }
+});
+
+// ── Download stock file (video → backgrounds/, audio → music/) ───────────────
+app.post('/api/stock/download', async (req, res) => {
+  const { type, downloadUrl, filename } = req.body as {
+    type: 'video' | 'audio';
+    downloadUrl: string;
+    filename: string;
+  };
+
+  if (!downloadUrl) { res.status(400).json({ error: 'No downloadUrl' }); return; }
+
+  const destDir  = type === 'audio' ? MUSIC_DIR : BACKGROUNDS;
+  const ext      = type === 'audio' ? '.mp3' : '.mp4';
+  const safeName = (filename || `stock_${Date.now()}`).replace(/[^a-z0-9_\-]/gi, '_') + ext;
+  const destPath = path.join(destDir, safeName);
+
+  // Skip re-download if the file already exists
+  if (fs.existsSync(destPath)) {
+    res.json({ ok: true, filename: safeName });
+    return;
+  }
+
+  try {
+    const dlRes = await fetch(downloadUrl);
+    if (!dlRes.ok) throw new Error(`Fetch ${dlRes.status}: ${dlRes.statusText}`);
+    const buf = Buffer.from(await dlRes.arrayBuffer());
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    fs.writeFileSync(destPath, buf);
+    res.json({ ok: true, filename: safeName });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message || 'Download failed' });
+  }
+});
+
+// ── Audio CORS proxy (Jamendo preview streams block direct browser requests) ──
+app.get('/api/stock/audio-proxy', async (req, res) => {
+  const url = String(req.query.url || '');
+  if (!url) { res.status(400).send('Missing url'); return; }
+
+  try {
+    const upstream = await fetch(url, {
+      headers: { 'User-Agent': 'TrendVaultStudio/1.0' },
+    });
+    if (!upstream.ok) { res.status(upstream.status).send('Upstream error'); return; }
+
+    const ct = upstream.headers.get('content-type') || 'audio/mpeg';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'no-store');
+    // Stream the body through
+    const reader = upstream.body as any;
+    if (reader && typeof reader.pipe === 'function') {
+      reader.pipe(res);
+    } else {
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.send(buf);
+    }
+  } catch (e: any) {
+    res.status(500).send(e.message || 'Proxy failed');
+  }
+});
+
 // ── List music ────────────────────────────────────────────────────────────────
 app.get('/api/music', (_req, res) => {
   const files = fs.existsSync(MUSIC_DIR)
@@ -1218,16 +1365,43 @@ app.delete('/api/audio/:filename', (req, res) => {
 // ── Generate script ───────────────────────────────────────────────────────────
 app.post('/api/trend-vault/generate-script', async (req, res) => {
   const niche: string = req.body.niche || req.body.trendVaultSign || req.body.subject || 'General';
-  const { category, prompt, angle, emotionalTone, targetDuration, subject } = req.body;
+  const {
+    category, trendingTopic, prompt, angle, emotionalTone, targetDuration,
+    subject, randomSeed, randomAngle,
+    // storyPrompt is an alias for prompt sent by the new frontend
+    storyPrompt,
+  } = req.body;
 
-  if (!prompt) {
-    res.status(400).json({ error: 'prompt is required.' });
+  // Canonical prompt — prefer storyPrompt (new field) then prompt (legacy)
+  const finalPrompt: string = (storyPrompt || prompt || '').trim();
+
+  // Final subject lock — priority: prompt → trendingTopic → category → niche
+  const finalSubject: string =
+    finalPrompt                           ||
+    (trendingTopic && String(trendingTopic).trim()) ||
+    (category      && String(category).trim())      ||
+    niche;
+
+  console.log('[Generate Script] context received:', {
+    niche, category, trendingTopic,
+    prompt: finalPrompt.slice(0, 80),
+    emotionalTone, randomAngle, randomSeed,
+    finalSubject: finalSubject.slice(0, 80),
+  });
+
+  if (!finalSubject || finalSubject === 'General') {
+    res.status(400).json({ ok: false, error: 'Pick or type a niche/prompt first.' });
     return;
   }
 
   const sendFallback = (notice?: string) => {
     try {
-      const script = generateFallbackScript({ niche, prompt: prompt || '', angle: angle || '' });
+      const script = generateFallbackScript({
+        niche,
+        prompt: finalPrompt || finalSubject,
+        angle: angle || '',
+        emotionalTone: emotionalTone || 'mysterious',
+      });
       res.json({ ok: true, script, source: 'fallback', ...(notice ? { notice } : {}) });
     } catch (fbErr) {
       res.status(500).json({ ok: false, error: 'Script generation failed.' });
@@ -1244,10 +1418,13 @@ app.post('/api/trend-vault/generate-script', async (req, res) => {
       niche,
       subject:        subject || '',
       category:       category || 'general',
-      prompt,
+      trendingTopic:  trendingTopic || '',
+      prompt:         finalPrompt || finalSubject,
       angle:          angle || '',
       emotionalTone:  emotionalTone || 'mysterious',
-      targetDuration: targetDuration || 100,
+      targetDuration: 90, // always 90s
+      randomSeed:     randomSeed || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      randomAngle:    randomAngle || '',
     });
     res.json({ ok: true, script, source: 'claude' });
   } catch (err: unknown) {
@@ -1255,33 +1432,40 @@ app.post('/api/trend-vault/generate-script', async (req, res) => {
     const isBilling = /credit|billing|balance|quota|429|insufficient|402|400/i.test(msg);
     console.warn('[Trend Vault] Anthropic script error:', msg.slice(0, 150));
 
-    // Try OpenAI as fallback when Anthropic fails (especially on billing errors)
+    // Try OpenAI as fallback when Anthropic fails
     if (process.env.OPENAI_API_KEY && isBilling) {
       try {
         const result = await aiComplete({
-          maxTokens: 2048,
-          user: `Write a TikTok trend-vault storytelling script for the "${niche}" niche.
+          maxTokens: 3500,
+          user: `You are generating a 1 minute 30 second short-form video narration script.
 
-Topic: ${prompt}
-Angle: ${angle || ''}
-Tone: ${emotionalTone || 'mysterious'}
-Target duration: ${targetDuration || 100} seconds
+Niche: ${niche}
+Category: ${category || ''}
+Trending Topic: ${trendingTopic || ''}
+Story Prompt: ${finalPrompt || finalSubject}
+Emotional Tone: ${emotionalTone || 'mysterious'}
+Creative Angle: ${randomAngle || 'hidden truth'}
+Random Seed: ${randomSeed || Date.now()}
 
-Return ONLY valid JSON, no other text:
+Final subject: "${finalSubject}"
+You must stay locked to this subject. Do NOT write about love, relationships, heartbreak, or zodiac unless the Story Prompt explicitly asks for it.
+
+Write 18–24 lines, 200–230 words, targeting 90 seconds total duration.
+
+Return ONLY valid JSON:
 {
   "lines": [
-    {"text": "...", "type": "hook", "durationSeconds": 4},
-    {"text": "...", "type": "observation", "durationSeconds": 5}
+    {"text": "...", "type": "hook", "durationSeconds": 3},
+    {"text": "...", "type": "setup", "durationSeconds": 4}
   ],
-  "totalDuration": 95,
+  "totalDuration": 90,
   "title": "Short memorable title",
-  "hook": "Opening line"
-}
-
-Use these line types in order: hook, observation, escalation, truth, twist, ending. 12-18 lines total. Each line 1-2 sentences, 3-8 seconds.`,
+  "hook": "Opening line",
+  "estimatedWords": 215
+}`,
         });
-        const parsed = parseAIJson<{ lines: unknown[]; totalDuration: number; title: string; hook: string }>(result.text);
-        const fullScript = { ...parsed, trendVaultSign: niche, topic: prompt, emotionalTone: emotionalTone || 'mysterious' };
+        const parsed = parseAIJson<{ lines: unknown[]; totalDuration: number; title: string; hook: string; estimatedWords?: number }>(result.text);
+        const fullScript = { ...parsed, trendVaultSign: niche, topic: finalSubject, emotionalTone: emotionalTone || 'mysterious' };
         res.json({ ok: true, script: fullScript, source: 'openai', notice: result.warning || 'Using OpenAI (Anthropic credits exhausted).' });
         return;
       } catch (oaiErr) {
@@ -3436,40 +3620,50 @@ app.post('/api/trend-vault/regenerate-script', async (req, res) => {
     res.status(400).json({ error: 'existingLines required' }); return;
   }
 
-  const targetSec   = targetDurationSec || 90;
+  const targetSec   = 90; // always 90s — 1 minute 30 seconds
   const targetWPM   = 140;
-  const targetWords = Math.round(targetSec * targetWPM / 60); // ≈ 210 at 90 s
+  const wordMin     = 200;
+  const wordMax     = 230;
+  const targetWords = 215; // midpoint of 200-230
 
   // Format source lines so the AI can extract themes & ideas
   const sourceText = existingLines.map((l, i) => `${i + 1}. [${l.type}] "${l.text}"`).join('\n');
 
-  const aiPrompt = `You are rewriting a TikTok zodiac storytelling script for ${trendVaultSign}.
+  const { niche: reframeNiche, category: reframeCategory, trendingTopic: reframeTopic } = req.body as { niche?: string; category?: string; trendingTopic?: string };
+  const nicheCtx    = reframeNiche    || trendVaultSign || 'General';
+  const categoryCtx = reframeCategory || '';
+  const topicCtx    = reframeTopic    || prompt || '';
 
-GOAL: Produce a COMPLETELY REWRITTEN script that:
-- Targets ${targetSec} seconds at ${targetWPM} WPM (≈ ${targetWords} words total)
-- Has 16–22 lines in this arc: hook → observation (×2-3) → escalation (×2) → truth (×3) → twist (×2) → ending (×2)
-- Sounds human, emotional, dramatic, and flows naturally when read aloud
-- Uses the SOURCE MATERIAL below as THEMES and IDEAS — do NOT copy lines word-for-word unless they are already strong
-- Blends any extra user-added lines naturally into the correct arc position
-- Has NO repeated sentences, NO filler phrases, NO bad grammar
+  const aiPrompt = `You are rewriting a short-form video script. The script must stay on the same subject — do NOT change the topic or drift into relationships, zodiac, or generic motivation unless the original is explicitly about those things.
 
-SOURCE MATERIAL (use as thematic seeds — rewrite fully):
+CONTEXT:
+Niche: ${nicheCtx}${categoryCtx ? `\nCategory: ${categoryCtx}` : ''}${topicCtx ? `\nTopic/Prompt: ${topicCtx}` : ''}${angle ? `\nAngle: ${angle}` : ''}
+Emotional Tone: ${emotionalTone || 'mysterious'}
+
+GOAL: Rewrite the script below so it:
+- Stays LOCKED to "${nicheCtx}" — the subject must not change
+- Targets ${targetSec} seconds (1 minute 30 seconds)
+- Has 18–24 lines total
+- Has ${wordMin}–${wordMax} words total (use this as a hard target)
+- Follows this arc: hook → setup → observation (×3) → example (×2) → escalation (×2) → truth (×3) → twist (×2) → takeaway → ending (×2)
+- Improves flow, punch, and clarity without changing the subject
+- Uses the source material below as THEMES — rewrite fully, keep the topic
+- Has NO repeated sentences, NO filler phrases, NO relationship/zodiac drift
+
+SOURCE MATERIAL (rewrite fully, keep the topic locked to "${nicheCtx}"):
 ${sourceText}
-
-Sign: ${trendVaultSign}
-Topic: ${prompt || ''}${angle ? `\nAngle: ${angle}` : ''}
-Tone: ${emotionalTone || 'mysterious'}
 
 WRITING RULES:
 - Each line is 1–2 sentences (8–20 words)
 - Vary sentence length — short lines hit hard, medium lines build tension
-- Speak directly and specifically — no generic astrology clichés
-- The zodiac sign name is exactly: ${trendVaultSign} (never add an extra 's' at the end)
-- Total word count must land between ${targetWords - 20} and ${targetWords + 20} words
+- Speak directly and specifically about "${nicheCtx}"
+- Total word count: ${wordMin} to ${wordMax} words
+- Total duration: 85–95 seconds
 
 Return ONLY a valid JSON array (no markdown, no commentary):
-[{"text":"...","type":"hook","durationSeconds":4}, ...]
+[{"text":"...","type":"hook","durationSeconds":3}, ...]
 
+Valid types: hook, setup, observation, example, escalation, truth, twist, takeaway, ending
 durationSeconds = ceil(word_count_of_line / ${(targetWPM / 60).toFixed(2)}) rounded to nearest integer.`;
 
   // 1. Try cloud AI (Anthropic → OpenAI auto-fallback)
@@ -4022,6 +4216,64 @@ app.get('/api/stock/audio', async (req, res) => {
     res.json({ tracks, page, total: data?.headers?.results_count ?? tracks.length });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// POST /api/stock/download — download a stock video or audio file to disk
+// Body: { type: 'video'|'audio', downloadUrl: string, filename: string }
+// Returns: { ok: true, filename: string } — filename usable by selectBackground / selectMusic
+app.post('/api/stock/download', async (req, res) => {
+  const { type, downloadUrl, filename } = req.body as {
+    type: 'video' | 'audio';
+    downloadUrl: string;
+    filename: string;
+  };
+
+  if (!downloadUrl || !filename) {
+    res.status(400).json({ ok: false, error: 'Missing downloadUrl or filename' });
+    return;
+  }
+
+  // Determine destination directory and file extension
+  const isVideo   = type === 'video';
+  const ext       = isVideo ? '.mp4' : '.mp3';
+  const safeBase  = filename.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const outName   = safeBase.endsWith(ext) ? safeBase : safeBase + ext;
+  const destDir   = isVideo
+    ? path.join(__dirname, 'public', 'backgrounds')
+    : path.join(__dirname, 'public', 'music');
+
+  fs.mkdirSync(destDir, { recursive: true });
+  const destPath = path.join(destDir, outName);
+
+  try {
+    const r = await fetch(downloadUrl);
+    if (!r.ok) throw new Error(`Upstream ${r.status}: ${r.statusText}`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    fs.writeFileSync(destPath, buf);
+    res.json({ ok: true, filename: outName });
+  } catch (e) {
+    console.error('[stock/download]', (e as Error).message);
+    res.status(500).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// GET /api/stock/audio-proxy?url=<encoded> — proxy Jamendo audio to bypass CORS
+app.get('/api/stock/audio-proxy', async (req, res) => {
+  const rawUrl = String(req.query.url || '');
+  if (!rawUrl) { res.status(400).send('Missing url'); return; }
+
+  try {
+    const upstream = await fetch(rawUrl);
+    if (!upstream.ok) throw new Error(`Upstream ${upstream.status}`);
+    const ct = upstream.headers.get('content-type') || 'audio/mpeg';
+    res.setHeader('Content-Type', ct);
+    // Stream the body directly to the client
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.send(buf);
+  } catch (e) {
+    console.error('[stock/audio-proxy]', (e as Error).message);
+    res.status(502).send('Proxy error: ' + (e as Error).message);
   }
 });
 

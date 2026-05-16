@@ -16,7 +16,7 @@ export { MOTIVATIONAL_SCRIPTS, getMotivationalScript, shouldUseMotivationalScrip
 
 export interface GeneratedLine {
   text: string;
-  type: 'hook' | 'observation' | 'escalation' | 'truth' | 'twist' | 'ending';
+  type: 'hook' | 'setup' | 'observation' | 'example' | 'escalation' | 'truth' | 'twist' | 'takeaway' | 'ending';
   durationSeconds: number;
 }
 
@@ -28,6 +28,7 @@ export interface GeneratedScript {
   trendVaultSign: string;
   topic: string;
   emotionalTone: string;
+  estimatedWords?: number;
 }
 
 const TONES = {
@@ -39,18 +40,13 @@ const TONES = {
   intimate:    'Whispered truths. Close and personal. Feels like a private conversation.',
   melancholic: 'Beautiful sadness. Longing and loss. The ache of what was and what could have been.',
   calm:        'Steady and certain. Quiet authority. Truths delivered without performance.',
-  // Cinematic motivational tone — when this is requested, the fallback path
-  // serves a hand-written passionate script from the built-in library
-  // (see scripts/motivational-scripts.ts). The AI generator can also use
-  // this string as a style brief.
   motivational: 'Passionate, cinematic, and motivational. Slow narrator cadence. Hook → Observation → Energy Shift → Strength → Motivation → Deep Truth → Ending. Each sentence on its own line. Affirming, never fear-based. Honors patience, loyalty, discipline, resilience, timing, and growth.',
 };
 
 /**
  * Forces every generated line's display text to UPPERCASE for the TikTok caption
  * aesthetic the project targets. The TTS pipeline still receives the original
- * mixed-case text via textPreprocessor (see scripts/tts/textPreprocessor.ts) so
- * pronunciation is unaffected — this only changes what's drawn on screen.
+ * mixed-case text via textPreprocessor so pronunciation is unaffected.
  */
 export function uppercaseScriptLines(script: GeneratedScript): GeneratedScript {
   return {
@@ -62,11 +58,6 @@ export function uppercaseScriptLines(script: GeneratedScript): GeneratedScript {
 }
 
 // ── Recent-hook history (anti-repetition) ────────────────────────────────────
-// Persist the last 30 hooks we generated to disk. On every new generation we
-// inject them into the prompt with explicit "do not start like any of these"
-// instructions, plus a fresh random seed in the user prompt. Together these
-// kill the "Claude keeps using the same opener" failure mode without changing
-// the structure or tone.
 import * as fsRecent from 'fs';
 import * as pathRecent from 'path';
 const RECENT_HOOKS_PATH = pathRecent.resolve('data', 'recent-hooks.json');
@@ -87,11 +78,7 @@ function appendRecentHook(hook: string): void {
   } catch { /* non-fatal */ }
 }
 
-// ── Diversity dials picked at random each call ──────────────────────────────
-// These force the model into a different corner of the space every call —
-// not by rewriting the system prompt, but by parameterising the user prompt
-// with values the model has to honor. This combined with the recent-hook
-// blocklist is what kills the "same starters every time" complaint.
+// ── Diversity dials ──────────────────────────────────────────────────────────
 const HOOK_STYLES = [
   'a question that lands like an accusation',
   'a quiet statement that sounds like a memory',
@@ -101,29 +88,46 @@ const HOOK_STYLES = [
   'a direct address that doesn\'t feel preachy',
   'something a friend would whisper at 2am',
   'a single image — concrete, specific',
+  'a stat or number that reframes everything',
+  'a "what if" that sounds dangerous',
 ];
-const STORY_ANGLES = [
-  'the moment they almost left and didn\'t',
-  'what they tell themselves vs what they actually do',
-  'the version of themselves the public never sees',
-  'how they protect people from their own intensity',
-  'the contradiction at the center of who they are',
-  'what looks like cruelty but is actually loyalty',
-  'why they stayed when nobody else would have',
-  'the small repeated act that tells you everything',
-];
+
 const ENDING_STYLES = [
-  'a line they could screenshot and use against an ex',
+  'a line they could screenshot and use as a reminder',
   'a hushed, almost-spoken affirmation',
   'a single sentence that flips the whole video',
   'an open-ended question you keep thinking about',
   'a quiet truth, delivered without performance',
+  'a call to action disguised as an observation',
+];
+
+// Creative angle pool — one is picked per call to force fresh framing
+export const ANGLE_POOL = [
+  'hidden truth',
+  'common mistake',
+  'dark side',
+  'beginner trap',
+  'expert secret',
+  'unexpected contradiction',
+  'storytime warning',
+  'myth vs reality',
+  'psychology breakdown',
+  'things nobody tells you',
+  'before you try this',
+  'why people fail at this',
+  'the expensive lesson',
+  'the uncomfortable truth',
+  'what actually works',
+  'what they don\'t show you',
+  'the question nobody asks',
+  'the real reason why',
 ];
 
 function pick<T>(list: T[], rnd: () => number): T {
   return list[Math.floor(rnd() * list.length)];
 }
-// Mulberry32 — small seedable PRNG; default seed = process.hrtime + Math.random
+
+// Mulberry32 seedable PRNG
 function makeRng(seed?: number): () => number {
   let a = (seed ?? (Date.now() ^ Math.floor(Math.random() * 1e9))) >>> 0;
   return function() {
@@ -138,97 +142,133 @@ export async function generateTrendVaultScript(params: {
   niche: string;
   subject?: string;
   category: string;
+  trendingTopic?: string;
   prompt: string;
   angle: string;
   emotionalTone: string;
-  targetDuration: number; // seconds, 90-120
+  targetDuration: number; // always 90
+  randomSeed?: string;
+  randomAngle?: string;
 }): Promise<GeneratedScript> {
-  const { niche, subject, category, prompt, angle, emotionalTone, targetDuration } = params;
+  const { niche, subject, category, trendingTopic, prompt, angle, emotionalTone, targetDuration, randomSeed, randomAngle } = params;
 
   const toneInstruction = TONES[emotionalTone as keyof typeof TONES] || TONES.mysterious;
 
-  // Diversity dials — pick fresh for every call
+  // Always target 90s — 18-24 lines, 200-230 words
+  const lineRange  = '18–24';
+  const wordMin    = 200;
+  const wordMax    = 230;
+
+  // Diversity dials — fresh every call
   const rngSeed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
   const rng = makeRng(rngSeed);
-  const hookStyle    = pick(HOOK_STYLES,    rng);
-  const storyAngle   = pick(STORY_ANGLES,   rng);
-  const endingStyle  = pick(ENDING_STYLES,  rng);
-  const recentHooks  = readRecentHooks();
+  const hookStyle   = pick(HOOK_STYLES,   rng);
+  const endingStyle = pick(ENDING_STYLES, rng);
+  const recentHooks = readRecentHooks();
 
-  const systemPrompt = `You are the creative force behind Trend Vault.Insight3 — a TikTok account with millions of views.
-Your videos are famous because they feel:
-- Emotionally real and psychologically accurate
-- Personal — like the viewer is being seen for the first time
-- Grounded in actual human behavior, not astrology clichés
-- Cinematic in pacing, with tension that builds naturally
+  // Final subject lock — priority order
+  const finalSubject =
+    (prompt && prompt.trim())          ? prompt.trim()         :
+    (trendingTopic && trendingTopic.trim()) ? trendingTopic.trim() :
+    (category && category.trim())      ? category.trim()       :
+    niche.trim();
 
-You NEVER write:
-- Generic horoscope or astrology statements
-- Audience-address openers tied to zodiac signs ("Hey Scorpios...")
-- Spiritual platitudes, fortune-telling, or zodiac stereotypes
-- Hollow niche buzzwords without psychological depth behind them
-- Filler words or explanations of what you're about to say
+  const creativeAngle = randomAngle || pick(ANGLE_POOL, rng);
+  const seedTag       = randomSeed  || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-TONE: ${toneInstruction}
+  const systemPrompt = `You are generating a 1 minute 30 second short-form video narration script for Trend Vault.
 
-Your scripts follow a specific emotional arc:
-1. HOOK (4-6 sec) — Opens an emotional loop. One sentence that stops the scroll. No setup, no explanation.
-2. OBSERVATION (12-18 sec) — A specific, relatable truth about human behavior in this niche. Not generic.
-3. ESCALATION (18-24 sec) — Deepen the psychological tension. Layer in a second truth.
-4. DEEPER TRUTH (18-24 sec) — The real reason behind the behavior. Surprising but immediately recognized.
-5. TWIST (12-18 sec) — Emotional reframe. Changes how they see everything said before.
-6. ENDING (8-12 sec) — One or two unforgettable final lines. The kind people screenshot.
+Your scripts work for ANY niche: travel, crime, finance, fitness, psychology, food, history, relationships, tech, gaming, beauty, health, business — anything.
+The subject is locked to the Story Prompt. You must write about that subject only.
+You NEVER drift into relationships, love, heartbreak, zodiac signs, or generic emotional pain unless the Story Prompt explicitly asks for it.
 
-WRITING RULES:
-- Sentences vary in length. Short sentences hit hard. Medium sentences build. Never use three long sentences in a row.
-- No "And" at the start of every sentence. Vary openings.
-- Speak directly: "You know exactly what you're doing." / "They don't leave because they stopped caring."
-- Never explain the insight — just state it.
-- Avoid "-ing" heavy construction. Be direct.
-- Total word count: 200-280 words
-- Total duration: ${targetDuration - 5} to ${targetDuration + 5} seconds
+TONE FOR THIS SCRIPT: ${toneInstruction}
+The tone controls MOOD and DELIVERY only — not the subject. A "Mysterious" tone on budget travel still produces a script about budget travel.
 
-ANTI-REPETITION (CRITICAL):
-- Do NOT start the script with any of these openers or close paraphrases — they have been used recently and would feel stale:
-${recentHooks.length ? recentHooks.map(h => `  • "${h.replace(/"/g, '\\"')}"`).join('\n') : '  (no prior hooks yet)'}
-- Do NOT reuse the cadence "${recentHooks[0] ?? ''}" — vary sentence rhythm.
+SCRIPT ARC (must follow this order):
+1. HOOK (1 line, 2–3 sec) — One punchy sentence. Stops the scroll. Names the contradiction or truth.
+2. SETUP (1–2 lines) — Establish the world. Specific context about this niche/topic.
+3. OBSERVATION (3–4 lines) — Real, specific details. Not generic self-help.
+4. EXAMPLE (2–3 lines) — Concrete example or scenario from within the niche.
+5. ESCALATION (2–3 lines) — Second layer of truth. Raise the stakes.
+6. TRUTH (3–4 lines) — The core reframe. Surprising but immediately recognized.
+7. TWIST (2–3 lines) — Changes how the viewer sees everything just said.
+8. TAKEAWAY (1–2 lines) — The practical or psychological takeaway.
+9. ENDING (1–2 lines) — Unforgettable final line(s). The kind people screenshot.
 
-DIVERSITY DIALS FOR THIS GENERATION (honor these — they steer the corner of style space):
-- HOOK STYLE: ${hookStyle}.
-- STORY ANGLE: ${storyAngle}.
-- ENDING STYLE: ${endingStyle}.`;
+HARD RULES:
+- Write EXACTLY ${lineRange} lines total.
+- Write between ${wordMin} and ${wordMax} words total.
+- Each line is 1–2 short sentences (8–20 words per line).
+- Total duration must be 85–95 seconds.
+- Do NOT write a 30 second or 55 second script.
+- Vary sentence rhythm — short lines hit hard, medium lines build tension.
+- Be specific to the actual niche and topic. Avoid vague filler.
+- Never explain the insight — state it.
 
-  const userPrompt = `Create a trend-vault storytelling video script for:
-- Niche: ${niche}
-- Subject: ${subject || category}
-- Category: ${category}
-- Core Premise: ${prompt}
-- Emotional Angle: ${angle}
+ANTI-REPETITION:
+- Do NOT open with any of these recently used hooks:
+${recentHooks.length ? recentHooks.map(h => `  • "${h.replace(/"/g, '\\"')}"`).join('\n') : '  (none yet)'}
 
-Return ONLY valid JSON, no other text, in this exact format:
+DIVERSITY DIALS (honor these exactly):
+- HOOK STYLE: ${hookStyle}
+- CREATIVE ANGLE: ${creativeAngle}
+- ENDING STYLE: ${endingStyle}`;
+
+  const userPrompt = `Generate a 1:30 short-form video script using this exact context:
+
+NICHE: ${niche}
+CATEGORY: ${category}${trendingTopic ? `\nTRENDING TOPIC: ${trendingTopic}` : ''}${subject ? `\nSUBJECT: ${subject}` : ''}
+STORY PROMPT (PRIMARY — this is what the script must be about): ${prompt}${angle ? `\nADDITIONAL ANGLE: ${angle}` : ''}
+EMOTIONAL TONE: ${emotionalTone}
+CREATIVE ANGLE: ${creativeAngle}
+
+FINAL SUBJECT LOCK: "${finalSubject}"
+You must stay locked to this subject for the entire script.
+Do NOT write about love, relationships, heartbreak, zodiac, or generic motivation unless the Story Prompt explicitly asks for it.
+
+LENGTH REQUIREMENT:
+- 18 to 24 lines total
+- 200 to 230 words total
+- 85 to 95 seconds total duration
+- Do NOT write a short 30s or 55s script
+
+Random seed: ${seedTag} — use this to create a completely fresh angle, hook, structure, examples, and wording. Do not reuse any lines from previous scripts.
+
+Return ONLY valid JSON, no markdown, no extra text:
 {
+  "title": "Short memorable title about the actual topic",
+  "hook": "The exact opening line",
+  "estimatedWords": 215,
+  "totalDuration": 90,
   "lines": [
-    {"text": "...", "type": "hook", "durationSeconds": 4},
+    {"text": "...", "type": "hook", "durationSeconds": 3},
+    {"text": "...", "type": "setup", "durationSeconds": 4},
     {"text": "...", "type": "observation", "durationSeconds": 5},
-    ...more lines...
-  ],
-  "totalDuration": 95,
-  "title": "Short memorable title",
-  "hook": "The exact opening line"
+    {"text": "...", "type": "observation", "durationSeconds": 5},
+    {"text": "...", "type": "observation", "durationSeconds": 5},
+    {"text": "...", "type": "example", "durationSeconds": 5},
+    {"text": "...", "type": "example", "durationSeconds": 5},
+    {"text": "...", "type": "escalation", "durationSeconds": 5},
+    {"text": "...", "type": "escalation", "durationSeconds": 5},
+    {"text": "...", "type": "truth", "durationSeconds": 4},
+    {"text": "...", "type": "truth", "durationSeconds": 4},
+    {"text": "...", "type": "truth", "durationSeconds": 4},
+    {"text": "...", "type": "twist", "durationSeconds": 4},
+    {"text": "...", "type": "twist", "durationSeconds": 4},
+    {"text": "...", "type": "takeaway", "durationSeconds": 4},
+    {"text": "...", "type": "ending", "durationSeconds": 4},
+    {"text": "...", "type": "ending", "durationSeconds": 4}
+  ]
 }
 
-Each line should be 1-2 sentences max. Include 12-18 lines total to fill ${targetDuration} seconds naturally.
-
-Random seed for this generation: ${rngSeed}. Use this seed mentally to ensure your output is meaningfully different from prior runs — different vocabulary, different sentence shapes, different concrete details, different rhythm.`;
+Write all ${lineRange} lines. Hit ${wordMin}–${wordMax} words. Make every line specific to "${finalSubject}".`;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    // High temperature widens the sampling — combined with the recent-hooks
-    // blocklist and the diversity dials, this is what stops Claude from
-    // recycling its favorite openers.
+    max_tokens: 3500,
     temperature: 1.0,
     top_p: 0.95,
     system: systemPrompt,
@@ -245,10 +285,17 @@ Random seed for this generation: ${rngSeed}. Use this seed mentally to ensure yo
 
   const parsed = JSON.parse(jsonText) as GeneratedScript;
   parsed.trendVaultSign = niche;
-  parsed.topic = prompt;
+  parsed.topic = finalSubject;
   parsed.emotionalTone = emotionalTone;
 
-  // Remember this hook so next call's recent-hook blocklist excludes it.
+  // Clamp totalDuration to actual line sum if the AI over-estimated
+  const lineSum = (parsed.lines || []).reduce((s, l) => s + (l.durationSeconds || 0), 0);
+  if (lineSum > 0) parsed.totalDuration = lineSum;
+
+  // Count words for the meta field
+  parsed.estimatedWords = (parsed.lines || []).reduce((s, l) => s + (l.text || '').split(/\s+/).filter(Boolean).length, 0);
+
+  // Remember this hook so next call's blocklist excludes it
   try { appendRecentHook(parsed.hook || parsed.lines?.[0]?.text || ''); } catch { /* non-fatal */ }
 
   // Force all caption text to UPPERCASE — TikTok storycore aesthetic
@@ -262,17 +309,6 @@ export function calculateFrameTiming(
   fps: number = 30
 ): Array<GeneratedLine & { startFrame: number; endFrame: number }> {
   let currentFrame = 0;
-  // FRAME_PADDING was previously 2 (intended as "overlap for smooth
-  // transitions"), but ScriptLineComp in src/TrendVaultVideo.tsx renders the
-  // outgoing line's fade-out AND the incoming line's fade-in at the same
-  // caption position. During those overlap frames both texts were visible
-  // at low opacity, producing brief "ghost text" / flicker between lines —
-  // exactly the symptom the smoothness check is targeting.
-  //
-  // Setting padding to 0 makes lines strictly sequential: line[i].endFrame
-  // === line[i+1].startFrame. The fade-out and fade-in still produce a
-  // visually smooth handoff via the interpolate() windows already in the
-  // component, but the two strings never share the screen.
   const FRAME_PADDING = 0;
 
   return lines.map((line, i) => {
@@ -285,6 +321,8 @@ export function calculateFrameTiming(
 }
 
 // ─── Fallback: generate script without API ────────────────────────────────────
+// Used only when no API key is configured or all providers fail.
+// Produces a niche-aware 90s / ~210-word script (18 lines).
 
 export function generateFallbackScript(params: {
   niche: string;
@@ -292,123 +330,67 @@ export function generateFallbackScript(params: {
   angle: string;
   emotionalTone?: string;
 }): GeneratedScript {
-  const { niche, prompt, angle, emotionalTone } = params;
+  const { niche, prompt } = params;
 
-  // ── Diverse template pools ────────────────────────────────────────────────
-  // Picks from pools per call, excludes recently-used hooks via the same
-  // recent-hooks blocklist the AI path uses, and rolls a fresh seeded RNG so
-  // output rotates even on rapid repeats.
-  // Same 11-line / ~55s shape is preserved so captions and timing still align.
-
-  const HOOK_POOL: string[] = [
-    `people like this don't do it by accident.`,
-    `you didn't lose them. you lost their patience.`,
-    `the quietest they ever get is right before they're gone.`,
-    `they noticed. they're just not telling you yet.`,
-    `there's a version of them you only see once.`,
-    `you mistook their composure for forgiveness.`,
-    `they don't warn you twice.`,
-    `they stayed longer than you deserved. they remember exactly when that stopped.`,
-    `you keep waiting for them to react. they already did — months ago.`,
-    `the way they love you is rarely the way you'll be able to describe it.`,
-    `everyone misreads the silence.`,
-    `they don't go cold. they go quiet — and that's worse.`,
-    `you weren't ignored. you were observed.`,
-    `you'll know it was over the day you remember a thing you said two weeks ago.`,
-    `they're never confused about how they feel. you are.`,
-    `the moment they decided, the room changed. you just didn't catch it.`,
-    `they're not difficult. you're new to being seen this clearly.`,
-    `the most dangerous thing they can do is finally agree with you.`,
-  ];
-
-  const OBS_POOL: string[] = [
-    `there's something specific about the way they love — and the way they protect themselves from it.`,
-    `most of what they show you is the second draft. you never see the first.`,
-    `they aren't holding back. they're holding something. you just can't tell the difference yet.`,
-    `the part of them you got was earned, not given. nobody told you which.`,
-    `they made it look easy on purpose. that's not the same as easy.`,
-  ];
-
-  const SURFACE_POOL: string[] = [
-    `most people see the surface. the silence. the distance. the way they seem unmoved when everything is moving inside them.`,
-    `from the outside it looks like indifference. from the inside it sounds like a countdown.`,
-    `they read every room before they speak. people mistake that for shyness or arrogance — it's neither.`,
-    `you saw composure and called it coldness. those are not the same thing.`,
-    `they don't perform their feelings. that's not the same as not having any.`,
-  ];
-
-  const TRUTH_POOL: string[] = [
-    `the people who seem the hardest to reach are usually the ones who felt things so deeply once — they built something around it.`,
-    `the wall isn't there to keep you out. it's there because last time, nobody stopped them from giving everything.`,
-    `they learned early that the loudest love in the room is rarely the one that stays.`,
-    `it isn't trust they're protecting. it's the version of themselves that still believes in it.`,
-    `behind every "i'm fine" from them is a sentence they've already decided you're not ready to hear.`,
-  ];
-
-  const TWIST_PAIR_POOL: Array<[string, string]> = [
-    [`not to keep others out.`, `to keep themselves in.`],
-    [`it isn't about you.`, `that's what makes it about you.`],
-    [`they're not pulling away.`, `they're deciding whether to stay.`],
-    [`it's not that they don't feel it.`, `it's that they felt it first, and alone.`],
-    [`they didn't go quiet because you stopped mattering.`, `they went quiet because you started.`],
-  ];
-
-  const RELEASE_POOL: string[] = [
-    `when they finally lower that wall — even slightly — it's not weakness.`,
-    `the day they stop measuring you is the day they've already chosen.`,
-    `when they tell you something true, they've already decided you can carry it.`,
-    `when they stay after seeing you at your worst, that wasn't tolerance — it was a verdict.`,
-    `when they soften around you, you're not winning them. you're being trusted.`,
-  ];
-
-  const ENDING_PAIR_POOL: Array<[string, string]> = [
-    [`it's the bravest thing they've ever done.`, `and most people never realize they were witnessing it.`],
-    [`it cost them more than you'll ever know.`, `and they did it anyway.`],
-    [`that wasn't a small thing.`, `you're just not going to be told that.`],
-    [`it's the closest thing to a confession they have.`, `you only get it once.`],
-    [`it's not the loud kind of love.`, `it's the kind people miss until it's gone.`],
-  ];
-
-  // Seeded RNG + recent-hooks blocklist so the same hook can't fire twice in
-  // a row. Falls back gracefully if every hook is currently on the blocklist.
   const fbSeed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
-  const fbRng = makeRng(fbSeed);
+  const fbRng  = makeRng(fbSeed);
   const recent = new Set(readRecentHooks().map(h => h.toLowerCase().trim()));
-  const eligibleHooks = HOOK_POOL.filter(h => !recent.has(h.toLowerCase().trim()));
-  const hookText = pick(eligibleHooks.length ? eligibleHooks : HOOK_POOL, fbRng);
 
-  const obsText           = pick(OBS_POOL,         fbRng);
-  const surfaceText       = pick(SURFACE_POOL,     fbRng);
-  const truthText         = pick(TRUTH_POOL,       fbRng);
-  const [twistA, twistB]  = pick(TWIST_PAIR_POOL,  fbRng);
-  const releaseText       = pick(RELEASE_POOL,     fbRng);
-  const [endA, endB]      = pick(ENDING_PAIR_POOL, fbRng);
+  const finalSubject = (prompt && prompt.trim()) ? prompt.trim() : niche;
 
-  const lines: GeneratedLine[] = [
-    { text: hookText,                                              type: 'hook',        durationSeconds: 4 },
-    { text: obsText,                                               type: 'observation', durationSeconds: 6 },
-    { text: surfaceText,                                           type: 'observation', durationSeconds: 7 },
-    { text: `but the reality is far more complicated than that.`, type: 'escalation',  durationSeconds: 4 },
-    { text: angle,                                                 type: 'escalation',  durationSeconds: 6 },
-    { text: truthText,                                             type: 'truth',       durationSeconds: 7 },
-    { text: twistA,                                                type: 'truth',       durationSeconds: 3 },
-    { text: twistB,                                                type: 'twist',       durationSeconds: 3 },
-    { text: releaseText,                                           type: 'twist',       durationSeconds: 6 },
-    { text: endA,                                                  type: 'ending',      durationSeconds: 4 },
-    { text: endB,                                                  type: 'ending',      durationSeconds: 5 },
+  // Niche-aware hooks — never relationship/zodiac
+  const GENERIC_HOOKS = [
+    `Nobody tells you the real truth about ${niche}.`,
+    `Everyone gets ${niche} wrong — and the proof is in what they don't say.`,
+    `The thing about ${niche} is that the obvious answer is never the right one.`,
+    `Most people are doing ${niche} the expensive way.`,
+    `The difference between people who win at ${niche} and people who don't isn't what you think.`,
+    `${niche} rewards the people who understand one thing everyone else ignores.`,
+    `You were never taught the real rules of ${niche}.`,
+    `Everything you know about ${niche} was designed to keep you from the shortcut.`,
+    `Here's what ${niche} actually costs — and nobody warns you.`,
+    `The moment you understand this about ${niche}, everything changes.`,
   ];
 
-  // Record this hook so the next call's blocklist excludes it. Non-fatal on
-  // failure (e.g. read-only filesystem in a worker).
+  const eligibleHooks = GENERIC_HOOKS.filter(h => !recent.has(h.toLowerCase().trim()));
+  const hookText = pick(eligibleHooks.length ? eligibleHooks : GENERIC_HOOKS, fbRng);
+  const subjectShort = finalSubject.split(' ').slice(0, 6).join(' ');
+
+  // 18-line fallback targeting ~90s
+  const lines: GeneratedLine[] = [
+    { text: hookText,                                                                                                                  type: 'hook',        durationSeconds: 3 },
+    { text: `This is about ${subjectShort} — and it matters more than you think.`,                                                    type: 'setup',       durationSeconds: 4 },
+    { text: `Most people approach ${niche} the same way. And most people get the same mediocre result.`,                              type: 'observation', durationSeconds: 6 },
+    { text: `They follow the same advice. Read the same guides. And wonder why nothing sticks.`,                                       type: 'observation', durationSeconds: 5 },
+    { text: `The problem isn't effort. The problem is the framework they're using.`,                                                   type: 'observation', durationSeconds: 5 },
+    { text: `Someone who figures out ${niche} early isn't smarter. They just asked a different question.`,                            type: 'example',     durationSeconds: 5 },
+    { text: `Instead of asking how to do more — they asked what to stop doing.`,                                                       type: 'example',     durationSeconds: 5 },
+    { text: `The real edge in ${niche} isn't a secret resource. It's a shift in how you see the problem.`,                           type: 'escalation',  durationSeconds: 6 },
+    { text: `${subjectShort} sounds simple until you realize the conventional approach is the trap.`,                                 type: 'escalation',  durationSeconds: 5 },
+    { text: `The people who figured out ${niche} stopped optimizing for the thing everyone else chases.`,                             type: 'truth',       durationSeconds: 5 },
+    { text: `They optimized for the thing underneath it.`,                                                                             type: 'truth',       durationSeconds: 3 },
+    { text: `In ${niche}, the biggest wins come from choosing what not to spend — time, money, or attention.`,                        type: 'truth',       durationSeconds: 6 },
+    { text: `That single choice separates the people who break through from the ones who stay stuck.`,                                 type: 'truth',       durationSeconds: 5 },
+    { text: `The shortcut isn't a trick.`,                                                                                             type: 'twist',       durationSeconds: 2 },
+    { text: `It's a different question entirely.`,                                                                                     type: 'twist',       durationSeconds: 3 },
+    { text: `Once you see it, you can't unsee it.`,                                                                                    type: 'takeaway',    durationSeconds: 3 },
+    { text: `That's when ${niche} finally starts working.`,                                                                            type: 'ending',      durationSeconds: 4 },
+    { text: `And you'll wonder why it took you this long to ask.`,                                                                     type: 'ending',      durationSeconds: 4 },
+  ];
+
   try { appendRecentHook(hookText); } catch { /* non-fatal */ }
+
+  const totalDuration = lines.reduce((s, l) => s + l.durationSeconds, 0);
+  const estimatedWords = lines.reduce((s, l) => s + l.text.split(/\s+/).filter(Boolean).length, 0);
 
   return uppercaseScriptLines({
     lines,
-    totalDuration: lines.reduce((sum, l) => sum + l.durationSeconds, 0),
-    title: prompt,
-    hook: lines[0].text,
+    totalDuration,
+    title:          `${niche} — The Real Truth`,
+    hook:           hookText,
     trendVaultSign: niche,
-    topic: prompt,
-    emotionalTone: emotionalTone || 'mysterious',
+    topic:          finalSubject,
+    emotionalTone:  params.emotionalTone || 'mysterious',
+    estimatedWords,
   });
 }

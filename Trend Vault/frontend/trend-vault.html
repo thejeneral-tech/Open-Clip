@@ -258,6 +258,29 @@ textarea,input,select{ text-shadow:none!important; }
 }
 .trending-topic-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(124,58,237,.18);box-shadow:0 0 8px rgba(124,58,237,.2)}
 .trending-topic-chip.active{background:rgba(124,58,237,.28);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 12px rgba(124,58,237,.32);font-weight:700}
+/* ── Chip save icon ── */
+.chip-save-btn{display:inline-flex;align-items:center;justify-content:center;margin-left:5px;padding:0 3px;font-size:.65rem;opacity:.45;transition:opacity .15s,color .15s;line-height:1;cursor:pointer;border:none;background:none;color:inherit;vertical-align:middle}
+.chip-save-btn:hover{opacity:1;color:#86efac}
+/* ── Saved Vault Panel ── */
+#savedVaultPanel{background:rgba(15,10,30,.97);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:14px 14px 10px;margin-bottom:12px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+.sv-filter-row{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.sv-filter-btn{padding:4px 10px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.63rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:all .15s}
+.sv-filter-btn.active,.sv-filter-btn:hover{background:rgba(124,58,237,.25);border-color:var(--purple2);color:var(--purple2)}
+.sv-item{background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:8px;padding:9px 11px;margin-bottom:7px;display:flex;flex-direction:column;gap:4px}
+.sv-item-title{font-size:.72rem;color:var(--text2);font-weight:600;word-break:break-word}
+.sv-item-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sv-type-badge{font-size:.57rem;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.35);border-radius:4px;color:var(--purple2);padding:1px 5px;font-weight:700;letter-spacing:.5px}
+.sv-context{font-size:.58rem;color:var(--muted);letter-spacing:.2px}
+.sv-item-actions{display:flex;gap:6px;margin-top:2px}
+.sv-apply-btn{padding:3px 9px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);border-radius:5px;color:#86efac;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.sv-apply-btn:hover{background:rgba(34,197,94,.22);border-color:#86efac}
+.sv-delete-btn{padding:3px 9px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:5px;color:#fca5a5;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.sv-delete-btn:hover{background:rgba(239,68,68,.2);border-color:#fca5a5}
+.sv-panel-title{font-size:.63rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.sv-clear-btn{padding:3px 8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:5px;color:#fca5a5;font-size:.57rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px}
+/* Save buttons (Niche / Category / Topic) */
+.btn-save-vault{padding:5px 11px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#86efac;font-size:.67rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.3px;white-space:nowrap;transition:all .2s}
+.btn-save-vault:hover{background:rgba(34,197,94,.2);border-color:#86efac;transform:scale(1.03)}
 .btn-gen-topics{
   padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));
   border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;
@@ -859,7 +882,25 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   <div class="card">
     <div class="card-header">
       <div class="card-title"><img src="/vault-icon.svg" width="18" height="18" style="vertical-align:middle;margin-right:2px;filter:drop-shadow(0 0 4px rgba(168,85,247,.5))"> Trend Vault</div>
-      <button class="btn-random" onclick="randomNiche(event)" title="Pick a random niche. Hold Shift to also generate categories immediately.">⚡ RANDOM</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn-random" id="savedVaultBtn" onclick="toggleSavedVaultPanel()" title="View saved niches, categories and topics" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">💾 Saved</button>
+        <button class="btn-random" onclick="randomNiche(event)" title="Pick a random niche. Hold Shift to also generate categories immediately.">⚡ RANDOM</button>
+      </div>
+    </div>
+
+    <!-- ── Saved Vault Panel (hidden until 💾 Saved is clicked) ── -->
+    <div id="savedVaultPanel" style="display:none">
+      <div class="sv-panel-title">
+        <span>💾 Saved Vault</span>
+        <button class="sv-clear-btn" onclick="clearAllSavedVaultItems()">🗑 Clear All</button>
+      </div>
+      <div class="sv-filter-row">
+        <button class="sv-filter-btn active" data-filter="all"      onclick="_savedVaultFilter('all')">All</button>
+        <button class="sv-filter-btn"        data-filter="niches"   onclick="_savedVaultFilter('niches')">🎯 Niches</button>
+        <button class="sv-filter-btn"        data-filter="categories" onclick="_savedVaultFilter('categories')">📂 Categories</button>
+        <button class="sv-filter-btn"        data-filter="topics"   onclick="_savedVaultFilter('topics')">🔥 Topics</button>
+      </div>
+      <div id="savedVaultPanelBody"></div>
     </div>
 
     <!-- ── Niche Idea Builder ── -->
@@ -877,6 +918,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
           style="padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
           ⚡ Generate Ideas
         </button>
+        <button class="btn-save-vault" onclick="saveCurrentNiche()" title="Save this niche to your Saved Vault">💾 Save Niche</button>
       </div>
       <div style="font-size:.59rem;color:var(--muted);letter-spacing:.2px;margin-bottom:10px;line-height:1.5">
         Pick a preset or type your own. Generate Ideas will build categories from whatever niche you enter.
@@ -923,6 +965,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <button class="btn-gen-topics" id="generateTrendingBtn" onclick="generateTrendingTopics()">⚡ Generate Trending Topics</button>
         <button class="btn-random-topic" id="randomTopicBtn" style="display:none" onclick="randomTrendingTopic()">🎲 Random Topic</button>
+        <button class="btn-save-vault" id="saveTopicBtn" style="display:none" onclick="saveCurrentTopic()" title="Save selected topic to your Saved Vault">💾 Save Topic</button>
       </div>
       <div id="trendingTopicsHeader" style="display:none;align-items:center;gap:7px;margin-bottom:7px">
         <div style="font-size:.6rem;color:var(--muted);font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Trending Topics</div>
@@ -2670,7 +2713,7 @@ function renderCategoryChips(categories){
     const display = emoji + ' ' + title;
     const safeAttr = title.replace(/"/g,'&quot;');
     const safeJs   = title.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<button class="ai-category-chip" data-category="${safeAttr}" onclick="selectAiCategory('${safeJs}')">${display}</button>`;
+    return `<button class="ai-category-chip" data-category="${safeAttr}" onclick="selectAiCategory('${safeJs}')">${display}<span class="chip-save-btn" title="Save this category" onclick="event.stopPropagation();saveVaultCategoryChip('${safeJs}')">💾</span></button>`;
   }).join('');
 }
 
@@ -2852,7 +2895,8 @@ function renderMainCategorySelection(categoryObj){
   const emoji   = (categoryObj && typeof categoryObj === 'object') ? (categoryObj.emoji || '') : '';
   const title   = (categoryObj && typeof categoryObj === 'object') ? categoryObj.title : String(categoryObj);
   const display = emoji ? emoji + ' ' + title : title;
-  grid.innerHTML = `<button class="cat-chip active" style="cursor:default">${display}</button>`;
+  grid.innerHTML = `<button class="cat-chip active" style="cursor:default">${display}</button>
+    <button class="btn-save-vault" onclick="saveCurrentCategory()" title="Save this category to your Saved Vault" style="margin-top:8px;display:block">💾 Save Category</button>`;
 
   // Reveal the trending topics panel (cleared, ready for generation)
   const topicsArea = document.getElementById('categoryTopicsArea');
@@ -2902,6 +2946,8 @@ function clearTrendingTopics(){
   if(loading) loading.style.display = 'none';
   if(randBtn) randBtn.style.display = 'none';
   if(genBtn)  { genBtn.disabled = false; genBtn.textContent = '⚡ Generate Trending Topics'; }
+  const saveTopicBtn = document.getElementById('saveTopicBtn');
+  if(saveTopicBtn) saveTopicBtn.style.display = 'none';
   nicheState.selectedTrendingTopic = '';
   nicheState.generatedTopics = [];
 }
@@ -2974,7 +3020,7 @@ function renderTrendingTopics(topics){
     const display = emoji + ' ' + title;
     const safeAttr = title.replace(/"/g,'&quot;');
     const safeJs   = title.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<button class="trending-topic-chip" data-topic="${safeAttr}" onclick="selectTrendingTopic('${safeJs}')">${display}</button>`;
+    return `<button class="trending-topic-chip" data-topic="${safeAttr}" onclick="selectTrendingTopic('${safeJs}')">${display}<span class="chip-save-btn" title="Save this topic" onclick="event.stopPropagation();saveVaultTopicChip('${safeJs}')">💾</span></button>`;
   }).join('');
 }
 
@@ -2996,6 +3042,10 @@ function selectTrendingTopic(topicTitle){
     if(typeof refreshPromptMemoryUI === 'function') refreshPromptMemoryUI();
     if(typeof markDirty === 'function') markDirty('script');
   }
+
+  // Reveal Save Topic button
+  const saveTopicBtn = document.getElementById('saveTopicBtn');
+  if(saveTopicBtn) saveTopicBtn.style.display = '';
 
   const niche    = getCurrentNiche();
   const category = nicheState.selectedCategory || '';
@@ -3110,6 +3160,16 @@ function randomTone(){
 // SCRIPT GENERATION
 // ═══════════════════════════════════════════════════════════════════
 
+// ── Creative angle pool (picked randomly each generation for fresh framing) ───
+const SCRIPT_ANGLE_POOL = [
+  'hidden truth', 'common mistake', 'dark side', 'beginner trap',
+  'expert secret', 'unexpected contradiction', 'storytime warning',
+  'myth vs reality', 'psychology breakdown', 'things nobody tells you',
+  'before you try this', 'why people fail at this', 'the expensive lesson',
+  'the uncomfortable truth', 'what actually works', 'what they don\'t show you',
+  'the question nobody asks', 'the real reason why',
+];
+
 async function generateScript(){
   // SINGLE SOURCE OF TRUTH: the premise comes from getActivePremise(), which
   // is the same helper that powers the "Script will use:" preview. This makes
@@ -3122,30 +3182,50 @@ async function generateScript(){
   state.promptUsedForGeneration = promptUsed;
   // Make sure originalPrompt is set so future Apply-AI runs have a baseline
   if(!state.originalPrompt){ state.originalPrompt = promptUsed; state.promptVersion = state.promptVersion || 1; refreshPromptMemoryUI?.(); }
-  console.log('[Generate Script] premise =', promptUsed, '| tone =', state.tone);
+
+  // Fresh randomness every click — kills script repetition
+  const randomSeed  = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const randomAngle = SCRIPT_ANGLE_POOL[Math.floor(Math.random() * SCRIPT_ANGLE_POOL.length)];
+
+  const scriptContext = {
+    niche:           nicheState.selectedNiche         || getCurrentNiche?.() || 'General',
+    category:        nicheState.selectedCategory      || state.category      || 'general',
+    trendingTopic:   nicheState.selectedTrendingTopic || '',
+    storyPrompt:     promptUsed,
+    emotionalTone:   state.tone || 'mysterious',
+    targetDuration:  90,
+    targetWordsMin:  200,
+    targetWordsMax:  230,
+    lineCountMin:    18,
+    lineCountMax:    24,
+    randomSeed,
+    randomAngle,
+  };
+  console.log('SCRIPT CONTEXT SENT:', scriptContext);
 
   const btn = document.getElementById('generateBtn');
   const barBtn = document.getElementById('genBtnBar');
   btn.innerHTML = '<span class="spinner"></span>Generating...';
   barBtn.innerHTML = '<span class="spinner"></span>Generating...';
   btn.disabled = barBtn.disabled = true;
-  document.getElementById('scriptStatus').textContent = '✨ Generating cinematic script with Claude AI...';
+  document.getElementById('scriptStatus').textContent = '✨ Generating 1:30 script with Claude AI...';
 
   try{
     const r = await fetch(`${API_BASE}/api/trend-vault/generate-script`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        trendVaultSign: state.subject||state.sign||'General',
-        category: state.category||'general',
-        // canonical "premise" field per the spec; legacy "prompt" kept too
-        premise: promptUsed,
-        prompt: promptUsed,
-        angle: state.promptAngle,
-        emotionalTone: state.tone,
-        sign: state.subject||state.sign||'General',
-        subject: state.subject||'',
-        niche: nicheState.selectedNiche||'',
+        niche:          scriptContext.niche,
+        trendVaultSign: scriptContext.niche,
+        category:       scriptContext.category,
+        trendingTopic:  scriptContext.trendingTopic,
+        storyPrompt:    promptUsed,
+        prompt:         promptUsed,
+        angle:          state.promptAngle || '',
+        emotionalTone:  scriptContext.emotionalTone,
+        subject:        state.subject || '',
         targetDuration: 90,
+        randomSeed,
+        randomAngle,
       })
     });
     const data = await r.json();
@@ -3154,12 +3234,19 @@ async function generateScript(){
     state.script = (data.script.lines || []).map(l => ({ ...l, text: (l.text || '').toUpperCase() }));
     markDirty('script');
     buildScriptLines();
-    const dur = Math.round(state.script.reduce((s,l)=>s+l.durationSeconds,0));
-    if(data.source==='claude'){
-      document.getElementById('scriptStatus').textContent = `✅ AI script • ${state.script.length} lines • ~${dur}s`;
+    const dur  = Math.round(state.script.reduce((s,l)=>s+l.durationSeconds,0));
+    const mins = Math.floor(dur/60);
+    const secs = String(dur%60).padStart(2,'0');
+    const words = state.script.reduce((s,l)=>s+(l.text||'').split(/\s+/).filter(Boolean).length,0);
+    const durLabel = `${mins}:${secs}`;
+    if(data.source==='claude' || data.source==='openai'){
+      const srcTag = data.source==='openai' ? ' (OpenAI)' : '';
+      document.getElementById('scriptStatus').textContent =
+        `✅ AI Generated${srcTag} • ${durLabel} • ${state.script.length} lines • ${words} words`;
       showToast('AI script generated!','success');
     } else {
-      document.getElementById('scriptStatus').textContent = `⚡ Template script • ${state.script.length} lines • ~${dur}s`;
+      document.getElementById('scriptStatus').textContent =
+        `⚡ Script Ready • ${durLabel} • ${state.script.length} lines • ${words} words`;
       if(data.notice) showToast(data.notice,'info');
       else showToast('Script ready!','success');
     }
@@ -3333,16 +3420,17 @@ function estimateSpeakingSecs(wordCount, wpm){
   return (wordCount / wpm) * 60;
 }
 function getWpmHealthWarning(wordCount, targetSec){
-  if(!targetSec || !wordCount) return '';
-  // Use the brief's "normal" band 130–155 as the safe corridor.
-  const minWords = (130/60) * targetSec;
-  const maxWords = (180/60) * targetSec;
-  const veryLowWords  = (100/60) * targetSec;
-  const veryHighWords = (200/60) * targetSec;
-  if(wordCount < veryLowWords)  return `⚠ Script is likely too short for ${targetSec}s — only ${wordCount} words (need ~${Math.round(minWords)}–${Math.round(maxWords)} at normal pace).`;
-  if(wordCount < minWords)      return `⚠ Script may be too short for ${targetSec}s — ${wordCount} words (need ~${Math.round(minWords)}–${Math.round(maxWords)} at normal pace).`;
-  if(wordCount > veryHighWords) return `⚠ Script is likely too long for ${targetSec}s — ${wordCount} words (need ~${Math.round(minWords)}–${Math.round(maxWords)} at normal pace).`;
-  if(wordCount > maxWords)      return `⚠ Script may be too long for ${targetSec}s — ${wordCount} words (need ~${Math.round(minWords)}–${Math.round(maxWords)} at normal pace).`;
+  if(!wordCount) return '';
+  // Script target is always 90s / 1:30 — ideal range 200-230 words
+  const goodMin  = 200;
+  const goodMax  = 230;
+  const shortCut = 180; // clearly too short
+  const longCut  = 250; // clearly too long
+  if(wordCount < shortCut) return `⚠ Script may be too short for 1:30 — only ${wordCount} words (target: 200–230 words).`;
+  if(wordCount > longCut)  return `⚠ Script may be too long for 1:30 — ${wordCount} words (target: 200–230 words).`;
+  if(wordCount >= goodMin && wordCount <= goodMax) return '';
+  if(wordCount < goodMin)  return `⚠ Script is a bit short — ${wordCount} words (ideal: 200–230 for 1:30).`;
+  if(wordCount > goodMax)  return `⚠ Script is a bit long — ${wordCount} words (ideal: 200–230 for 1:30).`;
   return '';
 }
 
@@ -7686,15 +7774,22 @@ async function regenerateScript(){
   if(btn){ btn.disabled=true; btn.textContent='♻ Reframing...'; }
   document.getElementById('scriptStatus').textContent = '♻ Rewriting script toward 1:30...';
   try{
+    const regenNiche    = nicheState.selectedNiche         || getCurrentNiche?.() || 'General';
+    const regenCat      = nicheState.selectedCategory      || state.category      || 'general';
+    const regenTrending = nicheState.selectedTrendingTopic || '';
+    const regenPrompt   = (typeof getActivePremise === 'function') ? getActivePremise() : (state.promptText || state.currentPrompt || '');
+    console.log('REGEN CONTEXT SENT:', { niche: regenNiche, category: regenCat, trendingTopic: regenTrending, prompt: regenPrompt });
     const r = await fetch(`${API_BASE}/api/trend-vault/regenerate-script`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        trendVaultSign: state.sign||'Scorpio',
-        category: state.category||'general',
-        prompt: state.promptText||'',
-        angle: state.promptAngle||'',
-        emotionalTone: state.tone||'mysterious',
-        existingLines: state.script,
+        trendVaultSign: regenNiche,
+        niche:          regenNiche,
+        category:       regenCat,
+        trendingTopic:  regenTrending,
+        prompt:         regenPrompt,
+        angle:          state.promptAngle || '',
+        emotionalTone:  state.tone || 'mysterious',
+        existingLines:  state.script,
         targetDurationSec: 90,
       })
     });
@@ -7711,14 +7806,17 @@ async function regenerateScript(){
     updatePreview();
     updateOutputCounter();
     const totalDur = Math.round(state.script.reduce((s,l)=>s+l.durationSeconds,0));
+    const regenWords = state.script.reduce((s,l)=>s+(l.text||'').split(/\s+/).filter(Boolean).length,0);
+    const regenMins = Math.floor(totalDur/60);
+    const regenSecs = String(totalDur%60).padStart(2,'0');
     const isLocal = data.source === 'local';
-    const srcTag = data.source==='openai' ? ' (OpenAI)' : data.source==='anthropic' ? ' (Claude)' : '';
+    const srcTag = data.source==='openai' ? ' (OpenAI)' : data.source==='anthropic' || data.source==='claude' ? ' (Claude)' : '';
     document.getElementById('scriptStatus').textContent =
-      `♻ Script reframed${srcTag} • added lines implemented • ~${totalDur}s`;
+      `♻ Reframed${srcTag} • ${regenMins}:${regenSecs} • ${state.script.length} lines • ${regenWords} words`;
     if(data.warning && isLocal){
       showToast(data.warning, 'info');
     } else {
-      showToast('♻ Script reframed • rewritten with added lines', 'success');
+      showToast('♻ Script reframed • 1:30 target • same subject', 'success');
     }
   }catch(e){
     document.getElementById('scriptStatus').textContent = '❌ Reframe failed';
@@ -9216,6 +9314,244 @@ setInterval(()=>{ if(state.grainIntensity>0 && state.grainType!=='none') drawPho
 if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ()=>{};
 
 // ═══════════════════════════════════════════════════════════════════
+// SAVED VAULT SYSTEM
+// Persists niches, categories, and trending topics to localStorage.
+// Key: trendVaultSavedItems
+// ═══════════════════════════════════════════════════════════════════
+
+const SAVED_VAULT_KEY = 'trendVaultSavedItems';
+
+function loadSavedVaultItems(){
+  try { return JSON.parse(localStorage.getItem(SAVED_VAULT_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveVaultItems(items){
+  try { localStorage.setItem(SAVED_VAULT_KEY, JSON.stringify(items)); }
+  catch(e){ console.error('[SaveVault] write error:', e); }
+}
+
+/** Add one item; deduplicates by type+niche+title. Returns true if saved. */
+function addSavedVaultItem(item){
+  const items = loadSavedVaultItems();
+  const key   = (item.type||'') + '|' + (item.niche||'') + '|' + (item.title || item.niche || '');
+  const exists = items.some(i =>
+    ((i.type||'') + '|' + (i.niche||'') + '|' + (i.title || i.niche || '')) === key
+  );
+  if(exists){ if(typeof showToast==='function') showToast('Already saved.', 'info'); return false; }
+  item.id        = 'sv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  item.createdAt = Date.now();
+  items.unshift(item);
+  saveVaultItems(items);
+  if(typeof showToast==='function') showToast('💾 Saved!', 'success');
+  // Refresh the panel live if it is open
+  const panel = document.getElementById('savedVaultPanel');
+  if(panel && panel.style.display !== 'none') renderSavedVaultPanel();
+  return true;
+}
+
+function deleteSavedVaultItem(id){
+  saveVaultItems(loadSavedVaultItems().filter(i => i.id !== id));
+  renderSavedVaultPanel();
+  if(typeof showToast==='function') showToast('Deleted.', 'info');
+}
+
+function clearAllSavedVaultItems(){
+  if(!confirm('Clear all saved items? This cannot be undone.')) return;
+  saveVaultItems([]);
+  renderSavedVaultPanel();
+  if(typeof showToast==='function') showToast('All saved items cleared.', 'info');
+}
+
+/** Show / hide the Saved Vault panel. */
+function toggleSavedVaultPanel(){
+  const panel = document.getElementById('savedVaultPanel');
+  if(!panel) return;
+  const opening = (panel.style.display === 'none' || !panel.style.display);
+  panel.style.display = opening ? 'block' : 'none';
+  const btn = document.getElementById('savedVaultBtn');
+  if(btn){
+    btn.style.background  = opening ? 'rgba(34,197,94,.25)' : 'rgba(34,197,94,.1)';
+    btn.style.borderColor = opening ? '#86efac' : 'rgba(34,197,94,.3)';
+  }
+  if(opening) renderSavedVaultPanel();
+}
+
+/** Switch filter tab. */
+function _savedVaultFilter(type){
+  document.querySelectorAll('.sv-filter-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.filter === type)
+  );
+  renderSavedVaultPanel(type);
+}
+
+/** Render (or refresh) the Saved Vault panel body. */
+function renderSavedVaultPanel(filter){
+  const body = document.getElementById('savedVaultPanelBody');
+  if(!body) return;
+  const items       = loadSavedVaultItems();
+  const activeFilter = filter
+    || document.querySelector('.sv-filter-btn.active')?.dataset.filter
+    || 'all';
+  // map filter label → type string
+  const typeMap = { niches:'niche', categories:'category', topics:'topic' };
+  const typeFilter = typeMap[activeFilter] ?? null;
+  const shown = typeFilter ? items.filter(i => i.type === typeFilter) : items;
+
+  if(!shown.length){
+    body.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:.65rem;padding:18px 0">Nothing saved yet.</div>`;
+    return;
+  }
+
+  body.innerHTML = shown.map(item => {
+    const typeLabel   = item.type === 'niche'    ? '🎯 Niche'
+                      : item.type === 'category' ? '📂 Category'
+                      : '🔥 Topic';
+    const rawTitle    = item.type === 'niche' ? item.niche : (item.title || '');
+    const displayTitle = item.type === 'niche'
+      ? item.niche
+      : ((item.emoji ? item.emoji + ' ' : '') + rawTitle);
+    const context = item.type === 'category' ? `Niche: ${item.niche}`
+                  : item.type === 'topic'    ? `${item.niche} › ${item.category}`
+                  : '';
+    const safeId = (item.id || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `
+      <div class="sv-item">
+        <div class="sv-item-title">${displayTitle}</div>
+        <div class="sv-item-meta">
+          <span class="sv-type-badge">${typeLabel}</span>
+          ${context ? `<span class="sv-context">${context}</span>` : ''}
+        </div>
+        <div class="sv-item-actions">
+          <button class="sv-apply-btn"  onclick="applySavedVaultItemById('${safeId}')">▶ Apply</button>
+          <button class="sv-delete-btn" onclick="deleteSavedVaultItem('${safeId}')">🗑 Delete</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/** Look up an item by id then apply it. */
+function applySavedVaultItemById(id){
+  const item = loadSavedVaultItems().find(i => i.id === id);
+  if(!item){ if(typeof showToast==='function') showToast('Item not found.', 'error'); return; }
+  applySavedVaultItem(item);
+}
+
+/** Restore full niche / category / topic state from a saved item. */
+function applySavedVaultItem(item){
+  const _setNicheInput = (niche) => {
+    const inp = document.getElementById('nicheCustom');
+    if(inp) inp.value = niche;
+    nicheState.selectedNiche = niche;
+    const badge = document.getElementById('nicheConfirmedBadge');
+    const label = document.getElementById('nicheConfirmedLabel');
+    if(badge){ badge.style.display = 'block'; }
+    if(label){ label.textContent = niche; }
+  };
+
+  if(item.type === 'niche'){
+    _setNicheInput(item.niche);
+    clearCategoryChips();
+    clearMainCategorySection();
+    clearTrendingTopics();
+    if(typeof showToast==='function') showToast('🎯 ' + item.niche + ' — click ⚡ Generate Ideas', 'info');
+
+  } else if(item.type === 'category'){
+    _setNicheInput(item.niche);
+    nicheState.selectedCategory = item.title;
+    renderMainCategorySelection({ emoji: item.emoji || '', title: item.title });
+    state.category        = item.title;
+    state.aiCategoryLabel = item.title;
+    if(typeof showToast==='function') showToast('📂 ' + item.title + ' applied', 'info');
+
+  } else if(item.type === 'topic'){
+    _setNicheInput(item.niche);
+    nicheState.selectedCategory = item.category;
+    renderMainCategorySelection({ emoji: '', title: item.category });
+    state.category        = item.category;
+    state.aiCategoryLabel = item.category;
+    selectTrendingTopic(item.title);
+    if(typeof showToast==='function') showToast('🔥 ' + item.title + ' applied', 'info');
+  }
+
+  // Close panel
+  const panel = document.getElementById('savedVaultPanel');
+  if(panel) panel.style.display = 'none';
+  const btn = document.getElementById('savedVaultBtn');
+  if(btn){
+    btn.style.background  = 'rgba(34,197,94,.1)';
+    btn.style.borderColor = 'rgba(34,197,94,.3)';
+  }
+}
+
+// ── Quick-save helpers called from buttons / chip icons ───────────────────────
+
+/** 💾 Save Niche button */
+function saveCurrentNiche(){
+  const niche = getCurrentNiche();
+  if(!niche){ if(typeof showToast==='function') showToast('Type or generate a niche first.', 'error'); return; }
+  addSavedVaultItem({ type: 'niche', niche });
+}
+
+/** 💾 Save Category button (in 🎭 CATEGORY section) */
+function saveCurrentCategory(){
+  const niche    = getCurrentNiche();
+  const category = nicheState.selectedCategory;
+  if(!category){ if(typeof showToast==='function') showToast('Pick a category first.', 'error'); return; }
+  const cats  = nicheState.aiCategories || [];
+  const obj   = cats.find(c => (typeof c==='object' ? c.title : c) === category);
+  const emoji = (obj && typeof obj==='object') ? (obj.emoji || '') : (typeof _emojiForCat==='function' ? _emojiForCat(category) : '');
+  addSavedVaultItem({ type:'category', niche, emoji, title: category });
+}
+
+/** 💾 Save Topic button (in 🎭 CATEGORY section) */
+function saveCurrentTopic(){
+  const niche    = getCurrentNiche();
+  const category = nicheState.selectedCategory || '';
+  const topic    = nicheState.selectedTrendingTopic;
+  if(!topic){ if(typeof showToast==='function') showToast('Pick a topic first.', 'error'); return; }
+  const topics = nicheState.generatedTopics || [];
+  const obj    = topics.find(t => (typeof t==='object' ? t.title : t) === topic);
+  const emoji  = (obj && typeof obj==='object') ? (obj.emoji || '✦') : '✦';
+  addSavedVaultItem({ type:'topic', niche, category, emoji, title: topic });
+}
+
+/** 💾 icon inside a category chip */
+function saveVaultCategoryChip(title){
+  const niche = getCurrentNiche();
+  const cats  = nicheState.aiCategories || [];
+  const obj   = cats.find(c => (typeof c==='object' ? c.title : c) === title);
+  const emoji = (obj && typeof obj==='object') ? (obj.emoji || '') : (typeof _emojiForCat==='function' ? _emojiForCat(title) : '');
+  addSavedVaultItem({ type:'category', niche, emoji, title });
+}
+
+/** 💾 icon inside a trending topic chip */
+function saveVaultTopicChip(title){
+  const niche    = getCurrentNiche();
+  const category = nicheState.selectedCategory || '';
+  const topics   = nicheState.generatedTopics || [];
+  const obj      = topics.find(t => (typeof t==='object' ? t.title : t) === title);
+  const emoji    = (obj && typeof obj==='object') ? (obj.emoji || '✦') : '✦';
+  addSavedVaultItem({ type:'topic', niche, category, emoji, title });
+}
+
+// Expose everything on window so inline handlers always find them
+window.toggleSavedVaultPanel   = toggleSavedVaultPanel;
+window._savedVaultFilter       = _savedVaultFilter;
+window.renderSavedVaultPanel   = renderSavedVaultPanel;
+window.applySavedVaultItemById = applySavedVaultItemById;
+window.applySavedVaultItem     = applySavedVaultItem;
+window.deleteSavedVaultItem    = deleteSavedVaultItem;
+window.clearAllSavedVaultItems = clearAllSavedVaultItems;
+window.saveCurrentNiche        = saveCurrentNiche;
+window.saveCurrentCategory     = saveCurrentCategory;
+window.saveCurrentTopic        = saveCurrentTopic;
+window.saveVaultCategoryChip   = saveVaultCategoryChip;
+window.saveVaultTopicChip      = saveVaultTopicChip;
+window.loadSavedVaultItems     = loadSavedVaultItems;
+window.addSavedVaultItem       = addSavedVaultItem;
+
+// ═══════════════════════════════════════════════════════════════════
 // GLOBAL ERROR SAFETY NET
 // Surfaces uncaught errors as visible toasts so buttons cannot fail
 // silently. Falls back to console if showToast isn't available yet.
@@ -9530,6 +9866,7 @@ async function _applyStockAudio(btn){
 function _renderStockPagination(total, perPage){
   const pages = Math.ceil(total / perPage);
   const pg = document.getElementById('stockPagination');
+  if(!pg) return;
   if(pages <= 1){ pg.innerHTML=''; return; }
   pg.innerHTML = `
     <button class="stock-pg-btn" ${_stockPage<=1?'disabled':''} onclick="stockGoPage(${_stockPage-1})">← Prev</button>
