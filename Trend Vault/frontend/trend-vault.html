@@ -804,71 +804,13 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div style="margin-bottom:12px;padding:10px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px">
       <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🧠 Niche Trend Builder</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <select id="nicheSelect"
-          onchange="nicheState.selectedNiche=this.value;document.getElementById('nicheCustom').value='';nichePillUpdate();if(this.value){generateSubjectsForNiche(this.value)}"
-          style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none">
-          <option value="">— Pick Niche —</option>
-          <optgroup label="Psychology &amp; Mind">
-          <option>Human Psychology</option>
-          <option>Dark Psychology</option>
-          <option>Emotional Intelligence</option>
-          <option>Mindset</option>
-          <option>Overthinking</option>
-          <option>Hidden Truths</option>
-          <option>Mystery &amp; Curiosity</option>
-          </optgroup>
-          <optgroup label="Relationships">
-          <option>Relationships</option>
-          <option>Dating &amp; Attraction</option>
-          <option>Breakups &amp; Healing</option>
-          <option>No Contact</option>
-          <option>Red Flags</option>
-          <option>Loyalty &amp; Trust</option>
-          <option>Communication</option>
-          <option>Friendship</option>
-          <option>Family Dynamics</option>
-          </optgroup>
-          <optgroup label="Self &amp; Growth">
-          <option>Self Improvement</option>
-          <option>Personal Growth</option>
-          <option>Confidence</option>
-          <option>Glow-Up</option>
-          <option>Villain Arc</option>
-          <option>Revenge Success</option>
-          <option>Inner Peace</option>
-          <option>Life Lessons</option>
-          </optgroup>
-          <optgroup label="Success &amp; Discipline">
-          <option>Money &amp; Success</option>
-          <option>Career &amp; Ambition</option>
-          <option>Discipline &amp; Focus</option>
-          <option>Motivation</option>
-          <option>Productivity</option>
-          <option>Habits</option>
-          </optgroup>
-          <optgroup label="Energy &amp; Body">
-          <option>Masculine Energy</option>
-          <option>Feminine Energy</option>
-          <option>Spirituality</option>
-          <option>Health &amp; Wellness</option>
-          <option>Fitness Mindset</option>
-          <option>Social Skills</option>
-          </optgroup>
-        </select>
-        <input id="nicheCustom" placeholder="or type niche…"
-          oninput="if(this.value.trim()){document.getElementById('nicheSelect').value='';nicheState.selectedNiche=this.value.trim();nichePillUpdate()}"
-          onchange="if(this.value.trim())generateSubjectsForNiche(this.value.trim())"
-          style="flex:1;min-width:100px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
-      </div>
-      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
-        <button onclick="nicheTrendRandom()" class="btn-random" style="font-size:.62rem">🎲 Random</button>
+        <input id="nicheCustom" placeholder="Type a niche or subject…"
+          oninput="if(this.value.trim()){nicheState.selectedNiche=this.value.trim()}"
+          style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
         <button onclick="nicheTrendGenerate()"
-          style="flex:1;min-width:100px;padding:5px 10px;background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.25));border:1px solid rgba(124,58,237,.55);border-radius:7px;color:#d8b4fe;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">
-          ⚡ Generate Ideas
+          style="padding:5px 12px;background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.25));border:1px solid rgba(124,58,237,.55);border-radius:7px;color:#d8b4fe;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap">
+          ⚡ Generate
         </button>
-      </div>
-      <div id="nichePill" style="display:none;margin-top:6px;font-size:.65rem;color:var(--purple2);padding:3px 8px;background:rgba(124,58,237,.12);border-radius:20px;width:fit-content">
-        🏷 <span id="nichePillText"></span>
       </div>
     </div>
 
@@ -2424,7 +2366,11 @@ async function generateSubjectsForNiche(niche){
 function buildSubjectGrid(subjects){
   const grid = document.getElementById('subjectGrid');
   if(!grid) return;
-  if(!subjects || !subjects.length){ grid.innerHTML = ''; return; }
+  if(!subjects || !subjects.length){
+    // Default: show subjects for the first niche or a generic set
+    const firstNiche = Object.keys(nicheMap)[0];
+    subjects = nicheMap[firstNiche]?.subjects || [];
+  }
   grid.innerHTML = subjects.map(s => {
     const safe = s.replace(/'/g,"\'");
     return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
@@ -8480,11 +8426,8 @@ function nicheTrendRandom(){
     const niches = Object.keys(NICHE_TREND_MAP);
     const picked = _pick(niches);
     nicheState.selectedNiche = picked;
-    const sel = document.getElementById('nicheSelect');
     const inp = document.getElementById('nicheCustom');
-    if(sel) sel.value = picked;
-    if(inp) inp.value = '';
-    nichePillUpdate();
+    if(inp) inp.value = picked;
     console.log('[Action] nicheTrendRandom — niche:', picked);
 
     // 2-4. Generate 4 fresh ideas for this niche
@@ -8575,12 +8518,10 @@ function selectNicheCategory(btn, label){
 function nicheTrendGenerate(){
   try {
     const niche = nicheState.selectedNiche
-      || document.getElementById('nicheCustom')?.value?.trim()
-      || document.getElementById('nicheSelect')?.value;
+      || document.getElementById('nicheCustom')?.value?.trim();
 
     if(!niche){ showToast('Pick or type a niche first', 'error'); return; }
     nicheState.selectedNiche = niche;
-    nichePillUpdate();
     console.log('[Action] nicheTrendGenerate — niche:', niche);
 
     // 1. Resolve niche to REAL category objects (id + label + emoji)
