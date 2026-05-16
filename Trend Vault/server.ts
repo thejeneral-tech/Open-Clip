@@ -900,6 +900,182 @@ app.get('/api/youtube/recent-jobs', (_req, res) => {
   res.json({ jobs });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+//  INSTAGRAM REELS AUTO-UPLOAD ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+interface InstagramJob {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  logs: string[];
+  error?: string;
+  mediaId?: string;
+  url?: string;
+  startedAt: number;
+  videoPath: string;
+}
+const instagramJobs = new Map<string, InstagramJob>();
+
+interface InstagramAutoPost {
+  enabled: boolean;
+  captionTemplate: string;
+  shareToFeed: boolean;
+}
+const IG_AUTOPOST_FILE = path.join(ROOT, 'data', 'instagram-autopost.json');
+const IG_AUTOPOST_DEFAULT: InstagramAutoPost = {
+  enabled: false,
+  captionTemplate: '{folder}\n\n#reels #trendvault',
+  shareToFeed: true,
+};
+function loadIgAutoPost(): InstagramAutoPost {
+  try {
+    if (fs.existsSync(IG_AUTOPOST_FILE)) {
+      return { ...IG_AUTOPOST_DEFAULT, ...JSON.parse(fs.readFileSync(IG_AUTOPOST_FILE, 'utf8')) };
+    }
+  } catch { /* ignore */ }
+  return { ...IG_AUTOPOST_DEFAULT };
+}
+function saveIgAutoPost(cfg: InstagramAutoPost) {
+  fs.mkdirSync(path.dirname(IG_AUTOPOST_FILE), { recursive: true });
+  fs.writeFileSync(IG_AUTOPOST_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function startInstagramJob(opts: { videoAbs: string; caption: string; shareToFeed: boolean }): string {
+  const id = `ig_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const job: InstagramJob = { id, status: 'running', logs: [], startedAt: Date.now(), videoPath: opts.videoAbs };
+  instagramJobs.set(id, job);
+  (async () => {
+    try {
+      const { uploadReel } = await import('./scripts/instagram-uploader');
+      const result = await uploadReel({
+        videoPath: opts.videoAbs,
+        caption: opts.caption,
+        shareToFeed: opts.shareToFeed,
+        onLog: (line) => {
+          job.logs.push(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
+          if (job.logs.length > 200) job.logs.splice(0, job.logs.length - 200);
+        },
+      });
+      if (result.ok) { job.status = 'done'; job.mediaId = result.mediaId; job.url = result.url; }
+      else { job.status = 'error'; job.error = result.error; }
+    } catch (err: any) {
+      job.status = 'error';
+      job.error = err?.message ?? String(err);
+    }
+  })();
+  return id;
+}
+
+function maybeAutoPostInstagram(folder: string, pushLog: (msg: string, pct?: number) => void) {
+  const cfg = loadIgAutoPost();
+  if (!cfg.enabled) return;
+  const videoAbs = path.join(TREND_VAULT_OUT, folder, 'video.mp4');
+  if (!fs.existsSync(videoAbs)) {
+    pushLog(`⚠ Instagram auto-post skipped — ${videoAbs} not found`);
+    return;
+  }
+  const caption = cfg.captionTemplate.replace(/\{folder\}/g, folder);
+  const id = startInstagramJob({ videoAbs, caption, shareToFeed: cfg.shareToFeed });
+  pushLog(`📸 Auto-posting Reel to Instagram — job ${id}`);
+}
+
+app.get('/instagram', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(ROOT, 'frontend', 'instagram.html'));
+});
+
+app.get('/api/instagram/videos', (_req, res) => {
+  res.json({ videos: recentMp4s().map(v => ({ rel: v.rel, mtime: v.mtime, size: v.size })) });
+});
+
+app.get('/api/instagram/auth-status', async (_req, res) => {
+  try {
+    const { getAuthState } = await import('./scripts/instagram-uploader');
+    res.json(await getAuthState());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-in', express.json(), async (req, res) => {
+  const { username, password } = req.body ?? {};
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    res.status(400).json({ error: 'username and password required' });
+    return;
+  }
+  try {
+    const { signIn } = await import('./scripts/instagram-uploader');
+    const r = await signIn(username, password);
+    res.json(r);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-in/2fa', express.json(), async (req, res) => {
+  const { code } = req.body ?? {};
+  if (typeof code !== 'string') { res.status(400).json({ error: 'code required' }); return; }
+  try {
+    const { submitTwoFactor } = await import('./scripts/instagram-uploader');
+    const r = await submitTwoFactor(code);
+    res.json(r);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-out', async (_req, res) => {
+  try {
+    const { signOut } = await import('./scripts/instagram-uploader');
+    signOut();
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/upload', express.json(), async (req, res) => {
+  const { rel, caption, shareToFeed } = req.body ?? {};
+  if (typeof rel !== 'string' || !rel) { res.status(400).json({ error: 'rel required' }); return; }
+  const safeRel = path.normalize(rel).replace(/^([/\\]+)/, '');
+  const abs = path.join(ROOT, safeRel);
+  if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) { res.status(400).json({ error: 'video not found' }); return; }
+  const cap = typeof caption === 'string' ? caption.slice(0, 2200) : '';
+  const id = startInstagramJob({ videoAbs: abs, caption: cap, shareToFeed: shareToFeed !== false });
+  res.json({ jobId: id });
+});
+
+app.get('/api/instagram/status/:jobId', (req, res) => {
+  const job = instagramJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: 'not found' }); return; }
+  res.json({ id: job.id, status: job.status, logs: job.logs, error: job.error, mediaId: job.mediaId, url: job.url });
+});
+
+app.get('/api/instagram/autopost', (_req, res) => {
+  res.json(loadIgAutoPost());
+});
+
+app.post('/api/instagram/autopost', express.json(), (req, res) => {
+  const incoming = req.body ?? {};
+  const cfg: InstagramAutoPost = {
+    enabled: !!incoming.enabled,
+    captionTemplate: typeof incoming.captionTemplate === 'string'
+      ? incoming.captionTemplate.slice(0, 2200)
+      : IG_AUTOPOST_DEFAULT.captionTemplate,
+    shareToFeed: incoming.shareToFeed !== false,
+  };
+  saveIgAutoPost(cfg);
+  res.json(cfg);
+});
+
+app.get('/api/instagram/recent-jobs', (_req, res) => {
+  const jobs = [...instagramJobs.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 10)
+    .map(j => ({ id: j.id, status: j.status, error: j.error, startedAt: j.startedAt, videoPath: path.basename(j.videoPath), mediaId: j.mediaId, url: j.url }));
+  res.json({ jobs });
+});
+
 // ── List backgrounds ──────────────────────────────────────────────────────────
 app.get('/api/backgrounds', (_req, res) => {
   const files = fs.existsSync(BACKGROUNDS)
@@ -2649,6 +2825,9 @@ app.post('/api/trend-vault/render', async (req, res) => {
 
       try { maybeAutoPostYouTube(folder, pushLog); }
       catch (err) { pushLog(`⚠ YouTube auto-post error: ${(err as Error).message}`); }
+
+      try { maybeAutoPostInstagram(folder, pushLog); }
+      catch (err) { pushLog(`⚠ Instagram auto-post error: ${(err as Error).message}`); }
 
     } catch (err) {
       const msg = (err as Error).message || String(err);
