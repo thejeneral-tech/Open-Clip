@@ -222,6 +222,7 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
 .fmt-btn:hover{border-color:var(--purple);color:var(--purple2)}
 .fmt-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.3)}
 
+<<<<<<< Updated upstream
 /* Voice preset grid – compact list */
 .preset-grid{display:flex;flex-direction:column;gap:3px;margin-bottom:16px}
 .preset-card{
@@ -229,6 +230,15 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
   column-gap:8px;row-gap:0;align-items:center;
   padding:6px 8px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);
   cursor:pointer;transition:all .18s;text-align:left;position:relative;min-height:36px;
+=======
+/* Voice preset grid */
+.preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-bottom:16px}
+@media(max-width:600px){.preset-grid{grid-template-columns:repeat(2,1fr)}}
+.preset-card{
+  padding:8px 7px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);
+  cursor:pointer;transition:all .18s;text-align:center;position:relative;
+  display:flex;flex-direction:column;align-items:center;
+>>>>>>> Stashed changes
 }
 /* SAVED badge sits above content on custom presets */
 .preset-card:has(.preset-del-btn){padding-top:20px}
@@ -239,14 +249,21 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
 .preset-card:hover{border-color:var(--purple);background:rgba(124,58,237,.06);transform:translateY(-1px)}
 .preset-card.active{border-color:var(--purple2);background:rgba(124,58,237,.15);box-shadow:0 0 0 1px rgba(168,85,247,.3)}
 .preset-del-btn{
+<<<<<<< Updated upstream
   position:absolute;top:3px;right:4px;width:15px;height:15px;border-radius:50%;
   background:rgba(220,38,38,.18);border:1px solid rgba(220,38,38,.4);color:#fca5a5;
   font-size:.65rem;font-weight:700;line-height:1;cursor:pointer;
+=======
+  position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;
+  background:rgba(220,38,38,.18);border:1px solid rgba(220,38,38,.4);color:#fca5a5;
+  font-size:.75rem;font-weight:700;line-height:1;cursor:pointer;
+>>>>>>> Stashed changes
   display:flex;align-items:center;justify-content:center;padding:0;
   opacity:.35;transition:all .15s;font-family:inherit;
 }
 .preset-card:hover .preset-del-btn{opacity:1}
 .preset-del-btn:hover{background:rgba(220,38,38,.55);color:#fff;transform:scale(1.1)}
+<<<<<<< Updated upstream
 .preset-icon{grid-column:1;grid-row:1/3;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center;margin-bottom:0}
 .preset-name{grid-column:2;grid-row:1;font-size:.75rem;font-weight:700;color:var(--text);line-height:1.25;word-break:break-word;overflow-wrap:anywhere;margin-bottom:0;min-width:0}
 .preset-desc{grid-column:2;grid-row:2;font-size:.62rem;color:var(--text2);letter-spacing:.2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere;min-width:0}
@@ -255,6 +272,15 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
   padding:4px 7px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
   border-radius:5px;color:var(--purple2);font-size:.56rem;font-weight:700;cursor:pointer;
   transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;
+=======
+.preset-icon{font-size:1.25rem;margin-bottom:3px;display:block;line-height:1}
+.preset-name{font-size:.68rem;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.25;word-break:break-word;overflow-wrap:anywhere;width:100%}
+.preset-desc{font-size:.54rem;color:var(--muted);letter-spacing:.2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere;width:100%}
+.preset-test-btn{
+  margin-top:6px;padding:3px 6px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
+  border-radius:5px;color:var(--purple2);font-size:.56rem;font-weight:700;cursor:pointer;
+  transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;width:100%;
+>>>>>>> Stashed changes
 }
 .preset-test-btn:hover{background:rgba(124,58,237,.4)}
 /* Voice sliders section */
@@ -1055,18 +1081,28 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
     <div class="preset-grid" id="presetGrid"></div>
     <!-- Voice sliders -->
     <div class="voice-sliders" id="voiceSliders">
+<<<<<<< Updated upstream
       <!-- ── Fine-tune toolbar ──────────────────────────────────────── -->
+=======
+      <!-- Fine-tune toolbar: current voice + undo / redo / save -->
+>>>>>>> Stashed changes
       <div style="display:flex;align-items:center;gap:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
         <div style="flex:1;min-width:0">
           <div style="font-size:.55rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px">Fine-tune this preset</div>
           <div id="voiceFineTuneLabel" style="font-size:.8rem;font-weight:700;color:var(--purple2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
         </div>
+<<<<<<< Updated upstream
         <button id="voiceUndoBtn" onclick="undoVoiceSliders()" title="Undo" disabled
           style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4;transition:opacity .15s">↩ Undo</button>
         <button id="voiceRedoBtn" onclick="redoVoiceSliders()" title="Redo" disabled
           style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4;transition:opacity .15s">↪ Redo</button>
         <button onclick="saveCurrentVoiceAsPreset()" title="Save current slider values as a new preset"
           style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">💾 Save</button>
+=======
+        <button onclick="undoVoiceSliders()" id="voiceUndoBtn" title="Undo last slider change" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4" disabled>↩ Undo</button>
+        <button onclick="redoVoiceSliders()" id="voiceRedoBtn" title="Redo last slider change" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4" disabled>↪ Redo</button>
+        <button onclick="saveCurrentVoiceAsPreset()" title="Save current settings as a new preset" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">💾 Save</button>
+>>>>>>> Stashed changes
       </div>
       <div class="voice-slider-row">
         <span class="voice-slider-label">Pitch</span>
@@ -2678,9 +2714,17 @@ function selectPreset(id){
   setSlider('vChamber', ps.chamberSpace ?? 0, 'vChamberVal', v=>v+'%');
   ['vPitch','vRate','vSpeed','vVolume','vIntensity','vThroat','vRasp','vPace','vChamber']
     .forEach(updateSliderTrack);
+<<<<<<< Updated upstream
   // Refresh toolbar label; new preset = fresh history
   _vsUpdateLabel();
   voiceUndoStack.length = 0; voiceRedoStack.length = 0; _vsUpdateBtns();
+=======
+  // Update the fine-tune toolbar label & clear undo/redo history on preset switch
+  updateVoiceFineTuneLabel();
+  if(typeof voiceUndoStack !== 'undefined'){
+    voiceUndoStack.length = 0; voiceRedoStack.length = 0; _updateVoiceHistoryBtns();
+  }
+>>>>>>> Stashed changes
 }
 
 function setSlider(sliderId, value, valId, fmt){
@@ -2762,6 +2806,7 @@ function resetCinematicSliders(){
   showToast('↺ Cinematic sliders reset','info');
 }
 
+<<<<<<< Updated upstream
 // ── Voice slider undo / redo engine ──────────────────────────────────────────
 
 // Maps each slider id → its display label id, format fn, and voiceSliders key
@@ -2822,18 +2867,71 @@ function _vsUpdateLabel(){
   if(!lbl) return;
   const p = VOICE_PRESETS.find(x => x.id === state.voice);
   lbl.textContent = p ? (p.icon ? p.icon + ' ' + p.name : p.name) : (state.voice || '—');
+=======
+// ── Voice Slider Undo / Redo ──────────────────────────────────────────────────
+let voiceUndoStack = [];
+let voiceRedoStack = [];
+let _preSliderSnap = null;
+
+const _VOICE_SLIDER_META = {
+  vPitch:    { valId:'vPitchVal',     fmt:v=>(v>0?'+':'')+v+'st',                    vsKey:'pitch'       },
+  vRate:     { valId:'vRateVal',      fmt:v=>(v>0?'+':'')+v+'%',                     vsKey:'rate'        },
+  vSpeed:    { valId:'vSpeedVal',     fmt:v=>(v/100).toFixed(2)+'x',                 vsKey:'speed'       },
+  vVolume:   { valId:'vVolumeVal',    fmt:v=>(v>0?'+':'')+parseFloat(v).toFixed(1)+'dB', vsKey:'volume'  },
+  vIntensity:{ valId:'vIntensityVal', fmt:v=>v+'%',                                  vsKey:'intensity'   },
+  vThroat:   { valId:'vThroatVal',    fmt:v=>v+'%',                                  vsKey:'throatDepth' },
+  vRasp:     { valId:'vRaspVal',      fmt:v=>v+'%',                                  vsKey:'ancientRasp' },
+  vPace:     { valId:'vPaceVal',      fmt:v=>v+'%',                                  vsKey:'royalPace'   },
+  vChamber:  { valId:'vChamberVal',   fmt:v=>v+'%',                                  vsKey:'chamberSpace'},
+};
+
+function captureVoiceSnapshot(){
+  return Object.fromEntries(
+    Object.keys(_VOICE_SLIDER_META).map(id=>{
+      const el = document.getElementById(id);
+      return [id, el ? parseFloat(el.value) : 0];
+    })
+  );
+}
+
+function applyVoiceSnapshot(snap){
+  Object.entries(snap).forEach(([id, val])=>{
+    const meta = _VOICE_SLIDER_META[id]; if(!meta) return;
+    const el  = document.getElementById(id);
+    const lbl = document.getElementById(meta.valId);
+    if(el){ el.value = val; updateSliderTrack(id); }
+    if(lbl) lbl.textContent = meta.fmt(val);
+    voiceSliders[meta.vsKey] = val;
+  });
+  try { markDirty?.('voice'); }      catch{}
+  try { refreshTimingBadge?.(); }    catch{}
+}
+
+function _updateVoiceHistoryBtns(){
+  const u = document.getElementById('voiceUndoBtn');
+  const r = document.getElementById('voiceRedoBtn');
+  if(u){ u.disabled = !voiceUndoStack.length; u.style.opacity = voiceUndoStack.length ? '1' : '0.4'; }
+  if(r){ r.disabled = !voiceRedoStack.length;  r.style.opacity = voiceRedoStack.length ? '1' : '0.4'; }
+>>>>>>> Stashed changes
 }
 
 function undoVoiceSliders(){
   if(!voiceUndoStack.length) return;
+<<<<<<< Updated upstream
   voiceRedoStack.push(_vsCapture());
   _vsApply(voiceUndoStack.pop());
   _vsUpdateBtns();
+=======
+  voiceRedoStack.push(captureVoiceSnapshot());
+  applyVoiceSnapshot(voiceUndoStack.pop());
+  _updateVoiceHistoryBtns();
+>>>>>>> Stashed changes
   showToast('↩ Undo','info');
 }
 
 function redoVoiceSliders(){
   if(!voiceRedoStack.length) return;
+<<<<<<< Updated upstream
   voiceUndoStack.push(_vsCapture());
   _vsApply(voiceRedoStack.pop());
   _vsUpdateBtns();
@@ -2866,6 +2964,45 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   });
 });
+=======
+  voiceUndoStack.push(captureVoiceSnapshot());
+  applyVoiceSnapshot(voiceRedoStack.pop());
+  _updateVoiceHistoryBtns();
+  showToast('↪ Redo','info');
+}
+
+function updateVoiceFineTuneLabel(){
+  const lbl = document.getElementById('voiceFineTuneLabel');
+  if(!lbl) return;
+  const p = VOICE_PRESETS.find(x=>x.id===state.voice);
+  lbl.textContent = p ? (p.icon ? p.icon+' '+p.name : p.name) : (state.voice || '—');
+}
+
+// Wire drag-start capture for undo on the voice sliders container
+(function initVoiceUndoCapture(){
+  function wire(){
+    const container = document.getElementById('voiceSliders');
+    if(!container) return;
+    // Capture state before the drag begins
+    container.addEventListener('pointerdown', e=>{
+      if(e.target.tagName==='INPUT' && e.target.type==='range'){
+        _preSliderSnap = captureVoiceSnapshot();
+      }
+    });
+    // Push to undo stack once the drag/click ends and value has committed
+    container.addEventListener('change', e=>{
+      if(e.target.tagName==='INPUT' && e.target.type==='range' && _preSliderSnap){
+        voiceUndoStack.push(_preSliderSnap);
+        voiceRedoStack.length = 0;
+        _preSliderSnap = null;
+        _updateVoiceHistoryBtns();
+      }
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();
+>>>>>>> Stashed changes
 
 // Save the currently-selected voice + slider tweaks as a new custom preset.
 async function saveCurrentVoiceAsPreset(){

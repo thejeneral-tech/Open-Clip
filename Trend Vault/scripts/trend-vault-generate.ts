@@ -315,6 +315,11 @@ export function generateFallbackScript(params: {
   // and roll a fresh seeded RNG so output rotates even on rapid repeats.
   // Same 11-line / ~55s shape is preserved so captions and timing still align.
   const signLower = trendVaultSign.toLowerCase();
+<<<<<<< Updated upstream
+=======
+  // Smart pluralization — signs that already end in 's' must NOT get another 's'
+  // e.g. Sagittarius → sagittarius (not sagittariuss), Pisces → pisces (not piscess)
+>>>>>>> Stashed changes
   const signsLower = signLower.endsWith('s') ? signLower : `${signLower}s`;
 
   const HOOK_POOL: string[] = [

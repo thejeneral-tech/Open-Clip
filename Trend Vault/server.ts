@@ -2644,16 +2644,27 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
   }
 });
 
+<<<<<<< Updated upstream
 // ── Local (no-API) script reframe engine — full rewrite, no filler ───────────
 // Completely rewrites the script from scratch using source lines as thematic
 // seeds. Targets ~90 seconds / 190-230 words with 16-20 unique lines.
+=======
+// ── Local (no-API) script reframe engine ─────────────────────────────────────
+// Fully rewrites the script from scratch using the source lines as thematic
+// seeds. Targets ~90 seconds / 190-230 words. Does NOT apply word-swaps that
+// produce filler text. Each output line is unique.
+>>>>>>> Stashed changes
 function localReframe(
   lines: { text: string; type: string; durationSeconds: number }[],
   trendVaultSign: string,
   _emotionalTone: string
 ): { text: string; type: string; durationSeconds: number }[] {
 
+<<<<<<< Updated upstream
   // ── 1. Canonical zodiac name (guards against double-s and other mangling) ─
+=======
+  // ── 1. Fix zodiac sign name (guard against double-s mangling) ────────────
+>>>>>>> Stashed changes
   const CORRECT_SIGN: Record<string, string> = {
     aries: 'Aries', ariess: 'Aries',
     taurus: 'Taurus', tauruss: 'Taurus',
@@ -2670,6 +2681,7 @@ function localReframe(
   };
   const sign = CORRECT_SIGN[trendVaultSign.toLowerCase().trim()] ?? trendVaultSign.trim();
 
+<<<<<<< Updated upstream
   // ── 2. Strip filler injected by the OLD engine; collect clean user text ───
   const FILLER_RE = [
     /something deeper/gi, /most souls never once see/gi, /never once\b/gi,
@@ -2697,19 +2709,55 @@ function localReframe(
     let s = (seed ^ 0xdeadbeef) >>> 0;
     return () => {
       s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0;
+=======
+  // ── 2. Extract clean source themes from existing lines ───────────────────
+  const FILLER_PHRASES = [
+    /something deeper/gi, /most souls never once see/gi, /never once see/gi,
+    /can actually/gi, /will inevitably/gi, /absolutely everything/gi,
+    /without exception, always/gi, /desperately need/gi,
+    /understand on a level words can't reach/gi,
+    /feels deep in their bones/gi, /entire existence/gi,
+  ];
+  const cleanLine = (t: string): string => {
+    let s = t.trim().toUpperCase() === t.trim() ? t.trim().toLowerCase() : t.trim();
+    // strip filler injected by the old engine
+    for (const pat of FILLER_PHRASES) s = s.replace(pat, '');
+    return s.replace(/\s{2,}/g, ' ').replace(/[.!?]+$/, '').trim();
+  };
+
+  const sourceTexts = lines
+    .map(l => cleanLine(l.text))
+    .filter(t => t.length > 8);
+
+  // Seed a simple deterministic-ish shuffle based on source content length
+  const seed = sourceTexts.join('').length;
+  const rng = (() => {
+    let s = (seed ^ 0xdeadbeef) >>> 0;
+    return () => {
+      s = (Math.imul(s ^ (s >>> 15), s | 1) ^ (s + Math.imul(s ^ (s >>> 7), s | 61))) >>> 0;
+>>>>>>> Stashed changes
       return s / 4294967296;
     };
   })();
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
+<<<<<<< Updated upstream
   const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => rng() - 0.5);
 
   // ── 4. Template pools — clean, emotional, no filler ──────────────────────
+=======
+
+  // ── 3. Template pools — clean, human, emotional, no filler ───────────────
+>>>>>>> Stashed changes
   const HOOKS = [
     `Most people think ${sign} moves on fast. They don't.`,
     `There's a version of ${sign} you only get to see once.`,
     `${sign} doesn't go cold. They go quiet — and that's worse.`,
     `You didn't lose a ${sign}. You lost their patience.`,
+<<<<<<< Updated upstream
     `The quietest ${sign} ever gets is right before they're gone.`,
+=======
+    `The quietest a ${sign} ever gets is right before they're gone.`,
+>>>>>>> Stashed changes
     `${sign} noticed. They're just not telling you yet.`,
     `You mistook ${sign}'s composure for forgiveness. Those aren't the same thing.`,
     `${sign} never warns you twice. The first time is the only time.`,
@@ -2771,6 +2819,7 @@ function localReframe(
     `When ${sign} tells you something true, they've already decided you can carry it.`,
   ];
 
+<<<<<<< Updated upstream
   // ── 5. Build arc — shuffle each pool for variety ─────────────────────────
   const sHooks   = shuffle(HOOKS);
   const sObs     = shuffle(OBSERVATIONS);
@@ -2784,10 +2833,30 @@ function localReframe(
     .filter(t => t.length > 20)
     .slice(0, 4)
     .map(t => {
+=======
+  // ── 4. Build the full arc (16-20 lines, ~90 seconds) ────────────────────
+  // Shuffle each pool so lines come out in different order each call
+  const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => rng() - 0.5);
+
+  const sHooks    = shuffle(HOOKS);
+  const sObs      = shuffle(OBSERVATIONS);
+  const sEsc      = shuffle(ESCALATIONS);
+  const sTruths   = shuffle(TRUTHS);
+  const sTwists   = shuffle(TWISTS);
+  const sEndings  = shuffle(ENDINGS);
+
+  // Blend user-added ideas into a couple of truth/escalation slots if available
+  const extraIdeas = sourceTexts
+    .filter(t => t.length > 20)
+    .slice(0, 4)
+    .map(t => {
+      // Capitalise cleanly and ensure proper punctuation
+>>>>>>> Stashed changes
       const s = t.charAt(0).toUpperCase() + t.slice(1);
       return s.endsWith('.') || s.endsWith('!') || s.endsWith('?') ? s : s + '.';
     });
 
+<<<<<<< Updated upstream
   const arcLines: { text: string; type: string; durationSeconds: number }[] = [];
   const addLine = (text: string, type: string) => {
     const words = text.trim().split(/\s+/).length;
@@ -2817,11 +2886,57 @@ function localReframe(
   // ── 6. Deduplicate ────────────────────────────────────────────────────────
   const seen = new Set<string>();
   return arcLines.filter(l => {
+=======
+  // Arc plan: hook × 1, obs × 3, esc × 2, truth × 3, twist × 2, ending × 2
+  // Inject up to 2 user ideas into the truth/escalation zone
+  const arcLines: { text: string; type: string; durationSeconds: number }[] = [];
+
+  const addLine = (text: string, type: string) => {
+    const words = text.trim().split(/\s+/).length;
+    const dur = Math.max(3, Math.min(9, Math.round(words / 2.5)));
+    arcLines.push({ text, type, durationSeconds: dur });
+  };
+
+  // hook
+  addLine(sHooks[0], 'hook');
+
+  // observations
+  addLine(sObs[0], 'observation');
+  addLine(sObs[1], 'observation');
+  addLine(sObs[2] || sObs[0], 'observation');
+
+  // escalations — inject a user idea here if available
+  addLine(sEsc[0], 'escalation');
+  if (extraIdeas[0]) addLine(extraIdeas[0], 'escalation');
+  addLine(sEsc[1], 'escalation');
+
+  // truths — inject another user idea here if available
+  addLine(sTruths[0], 'truth');
+  if (extraIdeas[1]) addLine(extraIdeas[1], 'truth');
+  addLine(sTruths[1], 'truth');
+  addLine(sTruths[2] || sTruths[0], 'truth');
+
+  // twists
+  addLine(sTwists[0], 'twist');
+  if (extraIdeas[2]) addLine(extraIdeas[2], 'twist');
+  addLine(sTwists[1], 'twist');
+
+  // endings
+  addLine(sEndings[0], 'ending');
+  if (extraIdeas[3]) addLine(extraIdeas[3], 'ending');
+  addLine(sEndings[1], 'ending');
+
+  // ── 5. Deduplicate — remove any lines with identical text ────────────────
+  const seen = new Set<string>();
+  const deduped = arcLines.filter(l => {
+>>>>>>> Stashed changes
     const key = l.text.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+
+  return deduped;
 }
 
 // ── Regenerate / reframe — full rewrite toward 1:30 target ───────────────────
