@@ -2644,188 +2644,253 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
   }
 });
 
-// ── Local (no-API) script reframe engine ─────────────────────────────────────
+// ── Local (no-API) script reframe engine — full rewrite, no filler ───────────
+// Completely rewrites the script from scratch using source lines as thematic
+// seeds. Targets ~90 seconds / 190-230 words with 16-20 unique lines.
 function localReframe(
   lines: { text: string; type: string; durationSeconds: number }[],
   trendVaultSign: string,
-  emotionalTone: string
+  _emotionalTone: string
 ): { text: string; type: string; durationSeconds: number }[] {
 
-  // Power word substitutions — makes language more vivid and punchy
-  const swaps: [RegExp, string][] = [
-    [/\bpeople\b/gi,           'souls'],
-    [/\bperson\b/gi,           'soul'],
-    [/\bfeel\b/gi,             'sense'],
-    [/\bfeels\b/gi,            'feels deep in their bones'],
-    [/\bknow\b/gi,             'understand on a level words can\'t reach'],
-    [/\bthink\b/gi,            'sense'],
-    [/\bvery\b/gi,             'deeply'],
-    [/\breally\b/gi,           'truly'],
-    [/\bgood\b/gi,             'powerful'],
-    [/\bbad\b/gi,              'destructive'],
-    [/\blove\b/gi,             'deeply crave'],
-    [/\bhate\b/gi,             'can\'t stand'],
-    [/\bsad\b/gi,              'hollow'],
-    [/\bhappy\b/gi,            'at peace'],
-    [/\banger\b/gi,            'silent rage'],
-    [/\bangry\b/gi,            'consumed'],
-    [/\balone\b/gi,            'completely isolated'],
-    [/\bstrong\b/gi,           'unbreakable'],
-    [/\bweak\b/gi,             'vulnerable'],
-    [/\btrue\b/gi,             'undeniable'],
-    [/\btrying\b/gi,           'fighting'],
-    [/\bstop\b/gi,             'can\'t keep'],
-    [/\bstart\b/gi,            'finally begin to'],
-    [/\bchange\b/gi,           'transform'],
-    [/\bsay\b/gi,              'admit'],
-    [/\btalk\b/gi,             'open up'],
-    [/\bhelp\b/gi,             'heal'],
-    [/\bhard\b/gi,             'exhausting'],
-    [/\beasy\b/gi,             'effortless'],
-    [/\bimportant\b/gi,        'everything'],
-    [/\bwant\b/gi,             'crave'],
-    [/\bneed\b/gi,             'desperately need'],
-    [/\btime\b/gi,             'moment'],
-    [/\blife\b/gi,             'entire existence'],
-    [/\bworld\b/gi,            'universe'],
-    [/\bthings\b/gi,           'truths'],
-    [/\bsomething\b/gi,        'something deeper'],
-    [/\beverything\b/gi,       'absolutely everything'],
-    [/\bnothing\b/gi,          'nothing at all'],
-    [/\balways\b/gi,           'without exception, always'],
-    [/\bnever\b/gi,            'never once'],
-    [/\beveryone\b/gi,         'every single person'],
-    [/\bno one\b/gi,           'not a soul'],
-    [/\bsomeone\b/gi,          'the one person'],
-    [/\bcan\b/g,               'can actually'],
-    [/\bwill\b/g,              'will inevitably'],
+  // ── 1. Canonical zodiac name (guards against double-s and other mangling) ─
+  const CORRECT_SIGN: Record<string, string> = {
+    aries: 'Aries', ariess: 'Aries',
+    taurus: 'Taurus', tauruss: 'Taurus',
+    gemini: 'Gemini', geminis: 'Gemini',
+    cancer: 'Cancer', cancers: 'Cancer',
+    leo: 'Leo', leos: 'Leo',
+    virgo: 'Virgo', virgos: 'Virgo',
+    libra: 'Libra', libras: 'Libra',
+    scorpio: 'Scorpio', scorpios: 'Scorpio',
+    sagittarius: 'Sagittarius', sagittariuss: 'Sagittarius',
+    capricorn: 'Capricorn', capricorns: 'Capricorn',
+    aquarius: 'Aquarius', aquariuss: 'Aquarius',
+    pisces: 'Pisces', piscess: 'Pisces',
+  };
+  const sign = CORRECT_SIGN[trendVaultSign.toLowerCase().trim()] ?? trendVaultSign.trim();
+
+  // ── 2. Strip filler injected by the OLD engine; collect clean user text ───
+  const FILLER_RE = [
+    /something deeper/gi, /most souls never once see/gi, /never once\b/gi,
+    /can actually\b/gi, /will inevitably\b/gi, /absolutely everything/gi,
+    /without exception,?\s*always/gi, /desperately need/gi,
+    /understand on a level words can'?t reach/gi,
+    /feels deep in their bones/gi, /entire existence/gi,
+    /specific about the way/gi,
+  ];
+  const cleanLine = (t: string): string => {
+    // normalise UPPERCASE lines from the caption engine
+    let s = t.trim().toUpperCase() === t.trim() ? t.trim().toLowerCase() : t.trim();
+    for (const re of FILLER_RE) s = s.replace(re, '');
+    return s.replace(/\s{2,}/g, ' ').replace(/[.!?]+$/, '').trim();
+  };
+
+  // Lines that are actual user text (not placeholder or blank)
+  const userThemes = lines
+    .map(l => cleanLine(l.text))
+    .filter(t => t.length > 10);
+
+  // ── 3. Seeded RNG so each call is deterministic-ish but varied ───────────
+  const seed = userThemes.join('').length ^ (trendVaultSign.length * 31);
+  const rng = (() => {
+    let s = (seed ^ 0xdeadbeef) >>> 0;
+    return () => {
+      s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0;
+      return s / 4294967296;
+    };
+  })();
+  const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
+  const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => rng() - 0.5);
+
+  // ── 4. Template pools — clean, emotional, no filler ──────────────────────
+  const HOOKS = [
+    `Most people think ${sign} moves on fast. They don't.`,
+    `There's a version of ${sign} you only get to see once.`,
+    `${sign} doesn't go cold. They go quiet — and that's worse.`,
+    `You didn't lose a ${sign}. You lost their patience.`,
+    `The quietest ${sign} ever gets is right before they're gone.`,
+    `${sign} noticed. They're just not telling you yet.`,
+    `You mistook ${sign}'s composure for forgiveness. Those aren't the same thing.`,
+    `${sign} never warns you twice. The first time is the only time.`,
+    `Here's what no one tells you about ${sign}: they remember everything.`,
+    `You kept waiting for ${sign} to react. They already decided — weeks ago.`,
   ];
 
-  // Dramatic openers for each line type
-  const openers: Record<string, string[]> = {
-    hook:        ['Here\'s what no one tells you about {sign}.', 'This is the part {sign} never shows anyone.', 'Most people miss this about {sign}.', '{sign} doesn\'t need to say a word for you to feel it.'],
-    observation: ['What {sign} does instead is', 'The thing about {sign} is', 'Behind closed doors, {sign}', '{sign} carries something most people never see —'],
-    escalation:  ['And the deeper truth?', 'But here\'s where it gets real.', 'This is where it shifts.', 'What most people don\'t realize is —'],
-    truth:       ['The truth is,', 'What {sign} really needs is', 'Beneath it all,', 'At their core,'],
-    twist:       ['And yet —', 'But somehow,', 'Here\'s the twist:', 'What no one expected —'],
-    ending:      ['{sign} will always find a way.', 'That\'s what makes {sign} unforgettable.', 'And that\'s why {sign} is different.', 'That\'s the thing about {sign} — they never stop.'],
+  const OBSERVATIONS = [
+    `They can laugh with you, answer your texts, and still be quietly deciding if they trust you anymore.`,
+    `What you see on the surface with ${sign} is the edited version. The first draft would stop you cold.`,
+    `They aren't holding back. They're holding something. Most people can't tell the difference.`,
+    `${sign} reads every room before they speak. People mistake that for arrogance. It's neither.`,
+    `They made it look easy on purpose. That is not the same as easy.`,
+    `The part of ${sign} you got was earned, not given. Nobody told you which category you fell into.`,
+    `They don't perform their feelings. That's not the same as not having any.`,
+    `${sign} has a version of themselves the public never sees — and they guard it carefully.`,
+    `You saw composure and called it coldness. Those are not the same thing at all.`,
+    `From the outside it looks like indifference. From the inside it sounds like a countdown.`,
+  ];
+
+  const ESCALATIONS = [
+    `They can be fully present with you and still be somewhere else entirely.`,
+    `Behind every "I'm fine" from ${sign} is a sentence they already decided you weren't ready to hear.`,
+    `The more comfortable you get, the more ${sign} is paying attention. Not relaxing. Watching.`,
+    `${sign} doesn't leave during the storm. They leave after — quietly, without a scene, with everything already decided.`,
+    `They've been measuring you from the beginning. You just didn't know there was a test.`,
+    `When ${sign} goes silent, that silence has a shape to it. Learn the difference.`,
+    `The loyalty you saw wasn't naive. It was a choice they made every single day — until they stopped.`,
+    `They stayed longer than they should have. They remember exactly when that changed.`,
+  ];
+
+  const TRUTHS = [
+    `The wall isn't there to keep you out. It's there because last time, nobody stopped them from giving everything.`,
+    `${sign} learned early that the loudest love in the room is rarely the one that stays.`,
+    `Behind every layer of distance is someone who felt things so deeply once — they built something around it.`,
+    `It isn't trust they're protecting. It's the version of themselves that still believes in it.`,
+    `They are not pulling away because they stopped caring. They're pulling away because staying started to feel like betraying themselves.`,
+    `What looks like detachment is actually a very deliberate kind of protection.`,
+    `The people who seem the hardest to reach are usually the ones who felt things the most, once.`,
+    `${sign} doesn't need you to understand all of it. They just need you not to make them regret showing you any of it.`,
+  ];
+
+  const TWISTS = [
+    `And when ${sign} finally goes quiet, that silence usually means the decision has already been made.`,
+    `They didn't go quiet because you stopped mattering. They went quiet because you started.`,
+    `The version of ${sign} you lost wasn't who they were at their lowest. It was who they were at their most open.`,
+    `It's not that they don't feel it. It's that they felt it first — and alone.`,
+    `What looked like indifference was actually the last form of dignity they had left to give.`,
+    `They're not difficult to love. You're just new to being seen this clearly.`,
+    `The most dangerous thing ${sign} can do is finally agree with you. That means they've stopped fighting for something.`,
+  ];
+
+  const ENDINGS = [
+    `And when ${sign} finally lowers that wall — even slightly — treat it like the rare thing it is.`,
+    `When ${sign} softens around you, you're not winning them. You're being trusted.`,
+    `That's what makes ${sign} different. Not the distance — what's behind it.`,
+    `If ${sign} is still here, it's not because they have to be. Remember that.`,
+    `${sign} will find their way through anything. The question is whether you'll still be there when they do.`,
+    `When ${sign} tells you something true, they've already decided you can carry it.`,
+  ];
+
+  // ── 5. Build arc — shuffle each pool for variety ─────────────────────────
+  const sHooks   = shuffle(HOOKS);
+  const sObs     = shuffle(OBSERVATIONS);
+  const sEsc     = shuffle(ESCALATIONS);
+  const sTruths  = shuffle(TRUTHS);
+  const sTwists  = shuffle(TWISTS);
+  const sEndings = shuffle(ENDINGS);
+
+  // Prepare any user-supplied themes as extra lines to blend in
+  const extras = userThemes
+    .filter(t => t.length > 20)
+    .slice(0, 4)
+    .map(t => {
+      const s = t.charAt(0).toUpperCase() + t.slice(1);
+      return s.endsWith('.') || s.endsWith('!') || s.endsWith('?') ? s : s + '.';
+    });
+
+  const arcLines: { text: string; type: string; durationSeconds: number }[] = [];
+  const addLine = (text: string, type: string) => {
+    const words = text.trim().split(/\s+/).length;
+    arcLines.push({ text, type, durationSeconds: Math.max(3, Math.min(9, Math.round(words / 2.4))) });
   };
 
-  // Duration targets per type (seconds)
-  const durTarget: Record<string, number> = {
-    hook: 4, observation: 5, escalation: 5, truth: 5, twist: 4, ending: 4,
-  };
+  // Arc: hook × 1, obs × 3, esc × 2, truth × 3, twist × 2, ending × 2
+  // Extras blended into escalation, truth, twist, and ending slots
+  addLine(sHooks[0],  'hook');
+  addLine(sObs[0],    'observation');
+  addLine(sObs[1],    'observation');
+  addLine(sObs[2] ?? sObs[0], 'observation');
+  addLine(sEsc[0],    'escalation');
+  if (extras[0]) addLine(extras[0], 'escalation');
+  addLine(sEsc[1],    'escalation');
+  addLine(sTruths[0], 'truth');
+  if (extras[1]) addLine(extras[1], 'truth');
+  addLine(sTruths[1], 'truth');
+  addLine(sTruths[2] ?? sTruths[0], 'truth');
+  addLine(sTwists[0], 'twist');
+  if (extras[2]) addLine(extras[2], 'twist');
+  addLine(sTwists[1], 'twist');
+  addLine(sEndings[0],'ending');
+  if (extras[3]) addLine(extras[3], 'ending');
+  addLine(sEndings[1],'ending');
 
-  const applySwaps = (text: string): string => {
-    let t = text.trim();
-    // Apply power word swaps (limit to avoid over-transformation)
-    let swapCount = 0;
-    for (const [pat, rep] of swaps) {
-      if (swapCount >= 3) break;
-      if (pat.test(t)) {
-        t = t.replace(pat, rep);
-        swapCount++;
-      }
-      pat.lastIndex = 0; // reset global regex
-    }
-    // Ensure sentence ends properly
-    t = t.replace(/\s+/g, ' ').trim();
-    if (t && !/[.!?…]$/.test(t)) t += '.';
-    // Capitalise first letter
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    return t;
-  };
-
-  const pickOpener = (type: string): string => {
-    const list = openers[type] || openers.observation;
-    const pick  = list[Math.floor(Math.random() * list.length)];
-    return pick.replace(/\{sign\}/g, trendVaultSign || 'This sign');
-  };
-
-  // Assign proper arc type sequence if all types are the same
-  const allSame = lines.every(l => l.type === lines[0].type);
-  const arcTypes = ['hook', 'observation', 'observation', 'escalation', 'truth', 'twist', 'ending'];
-
-  return lines.map((line, i) => {
-    let type = allSame ? (arcTypes[Math.min(i, arcTypes.length - 1)]) : line.type;
-    let text = applySwaps(line.text);
-
-    // For hook: optionally prepend a dramatic opener if the line is short
-    if (type === 'hook' && text.length < 60) {
-      const opener = pickOpener('hook');
-      // Only prepend if it won't duplicate meaning
-      if (!text.toLowerCase().includes('no one') && !text.toLowerCase().includes(trendVaultSign.toLowerCase())) {
-        text = opener + ' ' + text;
-      }
-    }
-
-    // For ending: ensure it ends on a high note
-    if (type === 'ending' && !text.includes(trendVaultSign) && !text.match(/always|never|that'?s/i)) {
-      text = text.replace(/\.$/, '') + ` — that\'s ${trendVaultSign}.`;
-    }
-
-    // Normalise duration
-    const dur = durTarget[type] || 5;
-    // Adjust based on text length (longer text → more time)
-    const wordCount  = text.split(' ').length;
-    const calcDur    = Math.max(3, Math.min(8, Math.round(wordCount / 2.2)));
-    const finalDur   = Math.round((dur + calcDur) / 2);
-
-    return { text, type, durationSeconds: finalDur };
+  // ── 6. Deduplicate ────────────────────────────────────────────────────────
+  const seen = new Set<string>();
+  return arcLines.filter(l => {
+    const key = l.text.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
-// ── Regenerate / reframe a full script (preserves meaning, fixes structure) ───
+// ── Regenerate / reframe — full rewrite toward 1:30 target ───────────────────
 app.post('/api/trend-vault/regenerate-script', async (req, res) => {
-  const { trendVaultSign, prompt, angle, emotionalTone, existingLines } = req.body as {
+  const { trendVaultSign, prompt, angle, emotionalTone, existingLines, targetDurationSec } = req.body as {
     trendVaultSign: string; category?: string; prompt: string; angle: string;
     emotionalTone: string; existingLines: { text: string; type: string; durationSeconds: number }[];
+    targetDurationSec?: number;
   };
   if (!existingLines?.length) {
     res.status(400).json({ error: 'existingLines required' }); return;
   }
 
-  const existingText = existingLines.map((l, i) => `${i + 1}. [${l.type}] "${l.text}"`).join('\n');
-  const aiPrompt = `Reframe and clean up this trend-vault TikTok script. Improve EACH line in place — do NOT reorder, move, or renumber them.
+  const targetSec   = targetDurationSec || 90;
+  const targetWPM   = 140;
+  const targetWords = Math.round(targetSec * targetWPM / 60); // ≈ 210 at 90 s
 
-Rules:
-- Return lines in the EXACT same order as the input, line 1 stays line 1, line 2 stays line 2, etc.
-- Fix awkward phrasing and tighten language so it flows
-- Normalize timing (3-8 sec per line based on word count)
-- Keep the same number of lines (only merge two lines if they are near-identical duplicates)
-- Keep the same [type] for each line unless it is clearly wrong
-- Tone: ${emotionalTone || 'mysterious'}
+  // Format source lines so the AI can extract themes & ideas
+  const sourceText = existingLines.map((l, i) => `${i + 1}. [${l.type}] "${l.text}"`).join('\n');
 
-Sign: ${trendVaultSign}, Topic: ${prompt}${angle ? `, Angle: ${angle}` : ''}
+  const aiPrompt = `You are rewriting a TikTok zodiac storytelling script for ${trendVaultSign}.
 
-CURRENT SCRIPT (improve each line in place, same order):
-${existingText}
+GOAL: Produce a COMPLETELY REWRITTEN script that:
+- Targets ${targetSec} seconds at ${targetWPM} WPM (≈ ${targetWords} words total)
+- Has 16–22 lines in this arc: hook → observation (×2-3) → escalation (×2) → truth (×3) → twist (×2) → ending (×2)
+- Sounds human, emotional, dramatic, and flows naturally when read aloud
+- Uses the SOURCE MATERIAL below as THEMES and IDEAS — do NOT copy lines word-for-word unless they are already strong
+- Blends any extra user-added lines naturally into the correct arc position
+- Has NO repeated sentences, NO filler phrases, NO bad grammar
 
-Return ONLY a JSON array with the same number of elements as the input (no other text):
-[{"text":"...","type":"hook","durationSeconds":4}, ...]`;
+SOURCE MATERIAL (use as thematic seeds — rewrite fully):
+${sourceText}
+
+Sign: ${trendVaultSign}
+Topic: ${prompt || ''}${angle ? `\nAngle: ${angle}` : ''}
+Tone: ${emotionalTone || 'mysterious'}
+
+WRITING RULES:
+- Each line is 1–2 sentences (8–20 words)
+- Vary sentence length — short lines hit hard, medium lines build tension
+- Speak directly and specifically — no generic astrology clichés
+- The zodiac sign name is exactly: ${trendVaultSign} (never add an extra 's' at the end)
+- Total word count must land between ${targetWords - 20} and ${targetWords + 20} words
+
+Return ONLY a valid JSON array (no markdown, no commentary):
+[{"text":"...","type":"hook","durationSeconds":4}, ...]
+
+durationSeconds = ceil(word_count_of_line / ${(targetWPM / 60).toFixed(2)}) rounded to nearest integer.`;
 
   // 1. Try cloud AI (Anthropic → OpenAI auto-fallback)
   if (process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) {
     try {
-      const result = await aiComplete({ maxTokens: 2048, user: aiPrompt });
+      const result = await aiComplete({ maxTokens: 3000, user: aiPrompt });
       const lines  = parseAIJson<{ text: string; type: string; durationSeconds: number }[]>(result.text);
-      res.json({ ok: true, lines, source: result.provider, warning: result.warning });
+      const totalWords = lines.reduce((s, l) => s + (l.text || '').split(/\s+/).length, 0);
+      res.json({ ok: true, lines, source: result.provider, warning: result.warning, meta: { totalWords, targetWords } });
       return;
     } catch (aiErr) {
-      // Both providers failed — log and fall through to local engine
       const msg = (aiErr as Error).message || String(aiErr);
-      console.warn('[Reframe] Cloud AI unavailable, using local engine:', msg.slice(0, 120));
+      console.warn('[Reframe] Cloud AI unavailable, falling back to local engine:', msg.slice(0, 120));
     }
   }
 
-  // 2. Local reframe engine — zero API calls, always works
+  // 2. Local engine — always works, no API required
   try {
     const lines = localReframe(existingLines, trendVaultSign || 'Scorpio', emotionalTone || 'mysterious');
     res.json({
-      ok: true,
-      lines,
-      source: 'local',
-      warning: '⚡ Reframed locally (AI credits exhausted) — results are good but not AI-generated.',
+      ok: true, lines, source: 'local',
+      warning: '⚡ Reframed locally (no API key configured).',
     });
   } catch (localErr) {
     res.status(500).json({ ok: false, error: (localErr as Error).message });
@@ -2970,7 +3035,7 @@ Return ONLY this JSON, nothing else:
     console.warn('[improve-prompt] AI failed:', msg.slice(0, 400));
     // Local heuristic so the button never silently no-ops — user asked for the
     // Apply AI button to ACTUALLY DO something even when both providers fail.
-    const local = _localHeuristicImprove(current, sign, toneStr, emotionalToneApplied);
+    const local = _localHeuristicImprove(current, sign, toneStr);
     res.json({
       ok: true,
       success: true,
@@ -3429,8 +3494,6 @@ app.post('/api/stock/download', async (req, res) => {
 app.get('/api/health', async (_req, res) => {
   type ComponentStatus = { status: 'ok' | 'warning' | 'failed'; message: string };
   const components: Record<string, ComponentStatus> = {};
-  const rank = { ok: 0, warning: 1, failed: 2 };
-
   function check(name: string, status: 'ok' | 'warning' | 'failed', message: string) {
     components[name] = { status, message };
   }
@@ -3514,106 +3577,36 @@ app.get('/api/health', async (_req, res) => {
     await import('@remotion/renderer');
     check('remotion', 'ok', '@remotion/renderer module loaded');
   } catch {
-    check('remotion', 'failed', '@remotion/renderer missing — run npm install');
+    check('remotion', 'warning', '@remotion/renderer not installed — video render disabled');
   }
 
-  // 7. Environment variables
-  const envWarnings: string[] = [];
-  if (!process.env.ANTHROPIC_API_KEY) envWarnings.push('ANTHROPIC_API_KEY not set (script generation disabled)');
-  if (!process.env.PEXELS_API_KEY)    envWarnings.push('PEXELS_API_KEY not set (stock video search disabled)');
-  if (!process.env.JAMENDO_CLIENT_ID) envWarnings.push('JAMENDO_CLIENT_ID not set (stock audio search disabled)');
-  if (envWarnings.length === 0) {
-    check('env_vars', 'ok', 'All optional API keys configured');
+  // 7. Anthropic / OpenAI keys
+  const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY);
+  const hasOpenAI    = !!(process.env.OPENAI_API_KEY);
+  if (hasAnthropic || hasOpenAI) {
+    check('ai_keys', 'ok', `Keys present: ${[hasAnthropic && 'Anthropic', hasOpenAI && 'OpenAI'].filter(Boolean).join(', ')}`);
   } else {
-    check('env_vars', 'warning', envWarnings.join('; '));
+    check('ai_keys', 'warning', 'No AI API keys — local reframe fallback active');
   }
 
-  // 8. Trend Vault output folder write test
-  try {
-    const probe = path.join(TREND_VAULT_OUT, `.health_probe_${Date.now()}`);
-    fs.writeFileSync(probe, '1');
-    fs.unlinkSync(probe);
-    check('output_writable', 'ok', 'trend-vault-output is writable');
-  } catch (e) {
-    check('output_writable', 'failed', `trend-vault-output not writable: ${(e as Error).message}`);
-  }
+  // 8. Jamendo
+  const hasJamendo = !!(process.env.JAMENDO_CLIENT_ID);
+  check('jamendo', hasJamendo ? 'ok' : 'warning', hasJamendo ? 'Client ID present' : 'No client ID — music search disabled');
 
-  // 9. Active render count
-  const activeCount = [...activeTrendVaultRenders.values()].filter(j => j.status === 'running').length;
-  if (activeCount === 0) {
-    check('render_queue', 'ok', 'No renders in progress — ready for new job');
-  } else {
-    check('render_queue', 'warning', `${activeCount} render(s) currently in progress`);
-  }
+  // Overall rollup
+  const statuses = Object.values(components).map(c => c.status);
+  const overall  = statuses.includes('failed') ? 'failed' : statuses.includes('warning') ? 'warning' : 'ok';
 
-  // Aggregate top-level status
-  const worstRank = Object.values(components).reduce(
-    (max, c) => Math.max(max, rank[c.status]),
-    0
-  );
-  const topStatus: 'ok' | 'warning' | 'failed' =
-    worstRank === 2 ? 'failed' : worstRank === 1 ? 'warning' : 'ok';
-
-  res.json({
-    status:     topStatus,
-    version:    '2.0.0',
-    timestamp:  new Date().toISOString(),
-    port:       PORT,
-    components,
-  });
+  res.json({ overall, components });
 });
 
-// ─── Start ──────────────────────────────────────────────────────────────────
-
-const server = app.listen(PORT, () => {
-  console.log('');
-  console.log('  ╔══════════════════════════════════════╗');
-  console.log('  ║   🔮  Trend Vault Program  —  Ready!      ║');
-  console.log(`  ║   Trend Vault Studio : /trend-vault             ║`);
-  console.log(`  ║   http://localhost:${PORT}             ║`);
-  console.log('  ╚══════════════════════════════════════╝');
-  console.log('');
-  console.log('  Trend Vault videos → trend-vault-output/<folder>/');
-  console.log('  Clip tool     → output/final/<VideoName>/');
-  console.log('');
-
-  // Auto-resume if server was restarted mid-job
-  const saved = loadJobState();
-  if (saved) {
-    const { videoPath, job } = saved;
-    const clipsDir      = path.join(FINAL_DIR, job.folder);
-    const existingClips = fs.existsSync(clipsDir)
-      ? fs.readdirSync(clipsDir).filter(f => f.endsWith('.mp4')).sort()
-      : [];
-    const allDone = existingClips.length >= (job.totalClips || 10);
-
-    if (!allDone && fs.existsSync(videoPath)) {
-      console.log(`  ↺ Resuming interrupted job: ${job.filename}`);
-      console.log(`    (${existingClips.length} of ${job.totalClips || 10} clips already done)\n`);
-      job.status        = 'running';
-      job.clipsFinished = existingClips;
-      job.startTime     = Date.now();
-      activeJob = job;
-      runPipeline(videoPath, activeJob);
-    } else {
-      clearJobState();
-      if (allDone) console.log(`  ✓ Previous job already complete (${existingClips.length} clips).\n`);
-    }
-  }
+// ─── SPA Catch-All ───────────────────────────────────────────────────────────
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'frontend', 'trend-vault.html'));
 });
 
-server.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error('');
-    console.error('  ══════════════════════════════════════════════════');
-    console.error(`  ERROR: Port ${PORT} is already in use.`);
-    console.error('  An old Trend Vault window is still running in the background.');
-    console.error('');
-    console.error('  Fix: run  stop_trend_vault_system.bat  then try again.');
-    console.error('  Or close all Trend Vault windows in the taskbar first.');
-    console.error('  ════════════════════════════════════════════════════');
-    process.exit(1);
-  } else {
-    throw err;
-  }
+// ─── Start Server ─────────────────────────────────────────────────────────────
+const PORT_NUM = typeof PORT === 'string' ? parseInt(PORT, 10) : (PORT as number);
+app.listen(PORT_NUM, () => {
+  console.log(`\n  🔐 Trend Vault Studio running at http://localhost:${PORT_NUM}/trend-vault\n`);
 });
