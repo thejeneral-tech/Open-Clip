@@ -187,18 +187,15 @@ textarea,input,select{ text-shadow:none!important; }
 .btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(201,162,39,.5)}
 .btn-gold:active{transform:translateY(0)}
 
-/* Trend Vault sign grid */
-.sign-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-.sign-btn{
-  padding:10px 4px;border-radius:10px;font-size:.75rem;font-weight:600;text-align:center;
+.subject-grid{display:flex;flex-wrap:wrap;gap:8px}
+.subject-chip{
+  padding:6px 13px;border-radius:20px;font-size:.75rem;font-weight:600;
   background:var(--surface2);border:1px solid var(--border);color:var(--text2);
-  cursor:pointer;transition:all .18s;display:flex;flex-direction:column;align-items:center;gap:3px;
-  font-family:inherit;
+  cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
 }
-.sign-btn .sym{font-size:1.4rem;line-height:1}
-.sign-btn .lbl{font-size:.65rem;letter-spacing:.5px;text-transform:uppercase;color:var(--text2)}
-.sign-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.1)}
-.sign-btn.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.08));border-color:var(--purple2);color:var(--purple2)}
+.subject-chip:hover{border-color:var(--purple);color:var(--text)}
+.subject-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
+/* Trend Vault subject grid */
 
 /* Category selector */
 .cat-grid{display:flex;flex-wrap:wrap;gap:8px}
@@ -209,6 +206,8 @@ textarea,input,select{ text-shadow:none!important; }
 }
 .cat-chip:hover{border-color:var(--purple);color:var(--text)}
 .cat-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
+.cat-chip.niche-match{border-color:rgba(245,158,11,.55);box-shadow:0 0 0 1px rgba(245,158,11,.25) inset;color:#fcd34d}
+.cat-chip.niche-match.active{background:rgba(245,158,11,.16);color:#fde68a}
 
 /* Prompt display */
 .prompt-display{
@@ -265,22 +264,33 @@ textarea,input,select{ text-shadow:none!important; }
 .fmt-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.3)}
 
 /* Voice preset grid */
-.preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-bottom:16px}
-@media(max-width:600px){.preset-grid{grid-template-columns:repeat(2,1fr)}}
+.preset-grid{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
 .preset-card{
-  padding:8px 7px 9px;border-radius:9px;background:#0b0b12!important;border:none;
-  cursor:pointer;transition:all .18s;text-align:center;position:relative;isolation:isolate;
-  display:flex;flex-direction:column;align-items:center;
-overflow:hidden;}
-/* SAVED badge sits above content on custom presets */
-.preset-card:has(.preset-del-btn){padding-top:20px}
+  padding:9px 12px;border-radius:9px;background:#0b0b12!important;border:none;
+  cursor:pointer;transition:all .18s;text-align:left;position:relative;isolation:isolate;
+  display:flex;flex-direction:row;align-items:center;gap:10px;
+  overflow:hidden;}
 /* Preset cards — same mask technique, thinner 1.5px rim */
 .preset-card::before{content:'';position:absolute;inset:0;padding:1px;border-radius:9px;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
 .preset-card::after{display:none}
 .preset-card:hover{transform:translateY(-1px)}
 .preset-card:hover::after{opacity:.3;filter:blur(12px)}
-.preset-card.active{background:rgba(124,58,237,.12)}
+.preset-card.active{
+  background:rgba(124,58,237,.18)!important;
+  box-shadow:inset 3px 0 0 var(--purple),0 0 0 1px rgba(124,58,237,.35);
+}
+.preset-card.active .preset-name{color:var(--purple2)}
+.preset-card.active .preset-icon{filter:drop-shadow(0 0 4px rgba(168,85,247,.7))}
+.preset-card.active .preset-test-btn{
+  background:rgba(124,58,237,.4);border-color:rgba(124,58,237,.7);
+}
 .preset-card.active::after{opacity:.35;filter:blur(12px)}
+.preset-selected-dot{
+  display:none;width:8px;height:8px;border-radius:50%;
+  background:var(--purple);flex-shrink:0;
+  box-shadow:0 0 6px rgba(168,85,247,.8);
+}
+.preset-card.active .preset-selected-dot{display:block}
 .preset-del-btn{
   position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;
   background:rgba(220,38,38,.18);border:1px solid rgba(220,38,38,.4);color:#fca5a5;
@@ -290,13 +300,14 @@ overflow:hidden;}
 }
 .preset-card:hover .preset-del-btn{opacity:1}
 .preset-del-btn:hover{background:rgba(220,38,38,.55);color:#fff;transform:scale(1.1)}
-.preset-icon{font-size:1.25rem;margin-bottom:3px;display:block;line-height:1}
-.preset-name{font-size:.68rem;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.25;word-break:break-word;overflow-wrap:anywhere;width:100%}
-.preset-desc{font-size:.54rem;color:var(--muted);letter-spacing:.2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere;width:100%}
+.preset-icon{font-size:1.4rem;display:block;line-height:1;flex-shrink:0;width:2rem;text-align:center}
+.preset-name{font-size:.74rem;font-weight:700;color:var(--text);margin-bottom:1px;line-height:1.25;white-space:normal;word-break:break-word}
+.preset-desc{font-size:.58rem;color:var(--muted);letter-spacing:.2px;line-height:1.3;word-break:break-word}
 .preset-test-btn{
-  margin-top:6px;padding:3px 6px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
-  border-radius:5px;color:var(--purple2);font-size:.56rem;font-weight:700;cursor:pointer;
-  transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;width:100%;
+  padding:4px 9px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
+  border-radius:6px;color:var(--purple2);font-size:.58rem;font-weight:700;cursor:pointer;
+  transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;
+  flex-shrink:0;white-space:nowrap;
 }
 .preset-test-btn:hover{background:rgba(124,58,237,.4)}
 /* Voice sliders section */
@@ -788,13 +799,87 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 <!-- ════ Controls Column ════ -->
 <div class="controls">
 
-  <!-- 1. Trend Vault Sign -->
+  <!-- 1. Trend Vault Subject -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title"><span class="ti">♈</span> Trend Vault Sign</div>
-      <button class="btn-random" onclick="randomSign()">⚡ RANDOM</button>
+      <div class="card-title"><img src="/vault-icon.svg" width="18" height="18" style="vertical-align:middle;margin-right:2px;filter:drop-shadow(0 0 4px rgba(168,85,247,.5))"> Trend Vault</div>
+      <button class="btn-random" onclick="randomSubject()">⚡ RANDOM</button>
     </div>
-    <div class="sign-grid" id="signGrid"></div>
+
+    <!-- ── Niche Trend Builder (inline) ── -->
+    <div style="margin-bottom:12px;padding:10px 12px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px">
+      <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🧠 Niche Trend Builder</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <select id="nicheSelect"
+          onchange="nicheState.selectedNiche=this.value;document.getElementById('nicheCustom').value='';nichePillUpdate();if(this.value&&nicheMap[this.value]){buildSubjectGrid(nicheMap[this.value].subjects);console.log('[TrendVault] Selected niche:',this.value)}"
+          style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none">
+          <option value="">— Pick Niche —</option>
+          <optgroup label="Psychology &amp; Mind">
+          <option>Human Psychology</option>
+          <option>Dark Psychology</option>
+          <option>Emotional Intelligence</option>
+          <option>Mindset</option>
+          <option>Overthinking</option>
+          <option>Hidden Truths</option>
+          <option>Mystery &amp; Curiosity</option>
+          </optgroup>
+          <optgroup label="Relationships">
+          <option>Relationships</option>
+          <option>Dating &amp; Attraction</option>
+          <option>Breakups &amp; Healing</option>
+          <option>No Contact</option>
+          <option>Red Flags</option>
+          <option>Loyalty &amp; Trust</option>
+          <option>Communication</option>
+          <option>Friendship</option>
+          <option>Family Dynamics</option>
+          </optgroup>
+          <optgroup label="Self &amp; Growth">
+          <option>Self Improvement</option>
+          <option>Personal Growth</option>
+          <option>Confidence</option>
+          <option>Glow-Up</option>
+          <option>Villain Arc</option>
+          <option>Revenge Success</option>
+          <option>Inner Peace</option>
+          <option>Life Lessons</option>
+          </optgroup>
+          <optgroup label="Success &amp; Discipline">
+          <option>Money &amp; Success</option>
+          <option>Career &amp; Ambition</option>
+          <option>Discipline &amp; Focus</option>
+          <option>Motivation</option>
+          <option>Productivity</option>
+          <option>Habits</option>
+          </optgroup>
+          <optgroup label="Energy &amp; Body">
+          <option>Masculine Energy</option>
+          <option>Feminine Energy</option>
+          <option>Spirituality</option>
+          <option>Health &amp; Wellness</option>
+          <option>Fitness Mindset</option>
+          <option>Social Skills</option>
+          </optgroup>
+        </select>
+        <input id="nicheCustom" placeholder="or type niche…"
+          oninput="if(this.value.trim()){document.getElementById('nicheSelect').value='';nicheState.selectedNiche=this.value.trim();nichePillUpdate()}"
+          style="flex:1;min-width:100px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+        <button onclick="nicheTrendRandom()" class="btn-random" style="font-size:.62rem">🎲 Random</button>
+        <button onclick="nicheTrendGenerate()"
+          style="flex:1;min-width:100px;padding:5px 10px;background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.25));border:1px solid rgba(124,58,237,.55);border-radius:7px;color:#d8b4fe;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">
+          ⚡ Generate Ideas
+        </button>
+      </div>
+      <div id="nichePill" style="display:none;margin-top:6px;font-size:.65rem;color:var(--purple2);padding:3px 8px;background:rgba(124,58,237,.12);border-radius:20px;width:fit-content">
+        🏷 <span id="nichePillText"></span>
+      </div>
+    </div>
+
+    <!-- Subject chips rendered here by buildSubjectGrid() -->
+    <div class="subject-grid" id="subjectGrid" style="margin-top:4px"></div>
+
   </div>
 
   <!-- 2. Category + Prompt -->
@@ -804,6 +889,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <button class="btn-random" onclick="randomCategory()">⚡ RANDOM</button>
     </div>
     <div class="cat-grid" id="categoryGrid"></div>
+
   </div>
 
   <div class="card">
@@ -1923,7 +2009,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 <!-- ── Action Bar ────────────────────────────────────────────────────── -->
 <div class="action-bar">
   <div class="action-status">
-    <strong id="selectedSignBadge">No sign selected</strong>
+    <strong id="selectedSignBadge">No subject selected</strong>
     <span id="selectedPromptBadge"></span>
   </div>
   <button class="btn-primary" onclick="generateScript()" id="genBtnBar">✨ Generate Script</button>
@@ -1946,8 +2032,10 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 // ═══════════════════════════════════════════════════════════════════
 
 const state = {
-  sign: null,
-  signSymbol: '♈',
+  sign: null,         // compat alias — mirrors state.subject
+  signSymbol: '',     // compat — kept for API payloads
+  subject: null,      // NEW: selected subject/angle
+  subjectLabel: '',   // NEW: display label
   category: null,
   promptId: null,
   promptText: '',
@@ -2049,12 +2137,53 @@ const state = {
 // DATA
 // ═══════════════════════════════════════════════════════════════════
 
+// SIGNS kept for any zodiac-mode compat (e.g. draft restore, server payloads)
 const SIGNS = [
   {name:'Aries',sym:'♈'},{name:'Taurus',sym:'♉'},{name:'Gemini',sym:'♊'},
   {name:'Cancer',sym:'♋'},{name:'Leo',sym:'♌'},{name:'Virgo',sym:'♍'},
   {name:'Libra',sym:'♎'},{name:'Scorpio',sym:'♏'},{name:'Sagittarius',sym:'♐'},
   {name:'Capricorn',sym:'♑'},{name:'Aquarius',sym:'♒'},{name:'Pisces',sym:'♓'},
 ];
+
+// ── Niche → subjects + categories (editable) ─────────────────────────────────
+const nicheMap = {
+  'Human Psychology':       { subjects: ['Hidden Insecurity','Social Masks','Emotional Triggers','Fear of Rejection','Attention Patterns','Silent Judgment','Overthinking','Self-Sabotage','Confidence Issues','Attachment Wounds','Power Dynamics','Trust Issues'], categories: ['Emotional Intelligence','Being Misunderstood','Fake Confidence','Emotional Burnout','Protective Personalities','Testing People','Hidden Emotions','Fear of Rejection','Silent Treatment','Manipulation & Control'] },
+  'Dark Psychology':        { subjects: ['Manipulation','Control','Mind Games','Obsession','Power Dynamics','Silent Judgment','Toxic Attraction','Hidden Motives','Social Masks','Emotional Triggers','Fear Tactics','Testing People'], categories: ['Manipulation & Control','Toxic Attraction','Obsession & Fixation','Silent Treatment','Testing People','Hidden Emotions','Fake Confidence','Fear of Rejection','Emotionally Addictive','Trust Issues'] },
+  'Emotional Intelligence': { subjects: ['Reading People','Emotional Regulation','Empathy','Knowing When to Walk Away','Calm Under Pressure','High EQ Habits','Silent Strength','Self-Awareness','Emotional Maturity','Boundaries','Inner Clarity','Deep Understanding'], categories: ['Emotional Intelligence','Self-Awareness','Boundaries','Silent Strength','Calm Under Pressure','Protective Personalities','Being Misunderstood','Hidden Emotions','Overthinking','Trust Issues'] },
+  'Mindset':                { subjects: ['Growth Mindset','Reframing Failure','Abundance Thinking','Identity Shift','Breaking Limits','Quiet Confidence','Mental Rewiring','Resilience','Self-Belief','Inner Narrative','Perspective Shift','Fixed Mindset'], categories: ['Self-Sabotage','Overthinking','Fake Confidence','Emotional Burnout','Identity Change','Mindset Shift','Personal Standards','Comfort Zone','Fear of Rejection','Testing People'] },
+  'Overthinking':           { subjects: ['3AM Spiraling','Replaying Conversations','Catastrophizing','Decision Paralysis','Analysis Paralysis','Fear Disguised as Logic','Mental Loops','Anxiety Patterns','What-If Thinking','Rumination','Mind Chatter','Overthinking vs Intuition'], categories: ['Overthinking','Hidden Sadness','Emotional Burnout','Fear of Rejection','Self-Sabotage','Being Misunderstood','Fake Confidence','Silent Treatment','Anxiety Patterns','Emotional Triggers'] },
+  'Hidden Truths':          { subjects: ['Unspoken Agreements','The Lies We Tell Ourselves','What Silence Really Means','Truth About Human Nature','Things That Go Unsaid','Hidden Motivations','Double Standards','What Nobody Admits','Suppressed Reality','The Quiet Truth','Invisible Patterns','Surface vs Depth'], categories: ['Hidden Emotions','Being Misunderstood','Silent Treatment','Manipulation & Control','Trust Issues','Fake Confidence','Emotional Intelligence','Self-Sabotage','Fear of Rejection','Protective Personalities'] },
+  'Mystery & Curiosity':    { subjects: ['Hidden Motivations','Psychological Patterns','What Makes Someone Unforgettable','The Quiet Ones','Unseen Forces','Unexplained Attraction','Silent Observers','What People Hide','The Unknown Side','Curiosity Loops','Invisible Influence','Deep Fascination'], categories: ['Hidden Emotions','Obsession & Fixation','Being Misunderstood','Testing People','Emotional Intelligence','Toxic Attraction','Silent Treatment','Trust Issues','Protective Personalities','Fake Confidence'] },
+  'Relationships':          { subjects: ['Mixed Signals','Trust Issues','No Contact','Emotional Walls','Fear of Intimacy','Attachment Styles','Hidden Feelings','Loyalty Tests','Ghosting','Why They Come Back','Jealousy','Communication Problems'], categories: ['Why They Disappear','Heartbreak & Healing','Ghosting & Silence','Jealousy & Insecurity','Emotional Detachment','Attachment Styles','Loyalty & Devotion','Trust Issues','Fear of Intimacy','Emotional Walls'] },
+  'Dating & Attraction':    { subjects: ['What Actually Attracts People','Red Flags vs Green Flags','Chemistry vs Compatibility','The Chase Dynamic','Hard to Get Psychology','Magnetic Personalities','Polarity','Love Bombing','Standards','Testing Interest'], categories: ['Toxic Attraction','Emotionally Addictive','Obsession & Fixation','Fear of Rejection','Testing People','Trust Issues','Hidden Emotions','Fake Confidence','Attachment Styles','Jealousy & Insecurity'] },
+  'Breakups & Healing':     { subjects: ['Silent Treatment','Emotional Detachment','Revenge Glow-Up','Fear of Rejection','Karmic Relationships','Hidden Sadness','Why They Disappear','Moving On vs Giving Up','No Contact','Why They Come Back','Healing Process','Letting Go'], categories: ['Why They Disappear','Heartbreak & Healing','Emotional Detachment','Fear of Rejection','Hidden Sadness','Karmic Relationships','Ghosting & Silence','Self-Respect','Moving On','Revenge Energy'] },
+  'No Contact':             { subjects: ['Why Silence Works','The Urge to Reach Out','Healing in Quiet','They Notice When You Stop','What No Contact Reveals','Moving in Silence','Power of Disappearing','Emotional Reset','Reclaiming Power','Detachment','Self-Preservation','Quiet Strength'], categories: ['Silent Treatment','Why They Disappear','Ghosting & Silence','Emotional Detachment','Trust Issues','Protective Personalities','Hidden Emotions','Fear of Rejection','Emotional Walls','Moving On'] },
+  'Red Flags':              { subjects: ['Love Bombing','Hot and Cold Behavior','Isolation Tactics','Gaslighting','Charm as a Weapon','The Signs You Ignored','Breadcrumbing','Intermittent Reinforcement','Emotional Unavailability','Double Standards','Control Patterns','The Moment You Knew'], categories: ['Manipulation & Control','Toxic Attraction','Trust Issues','Obsession & Fixation','Testing People','Hidden Emotions','Emotionally Addictive','Fear of Rejection','Silent Treatment','Fake Confidence'] },
+  'Loyalty & Trust':        { subjects: ['Who Stays When Things Break','Testing Loyalty','Earned Trust','Betrayal Patterns','The Cost of Being Reliable','Real Loyalty','One-Sided Effort','Trust After Betrayal','Proving Loyalty','Silent Devotion','Tested Love','Conditional Trust'], categories: ['Loyalty & Devotion','Trust Issues','Testing People','Hidden Emotions','Protective Personalities','Emotional Walls','Fear of Rejection','Being Misunderstood','Self-Sabotage','Emotional Intelligence'] },
+  'Communication':          { subjects: ['What People Mean vs What They Say','Conflict Avoidance','Silent Treatment','Passive Aggression','Asking for What You Need','Hard Conversations','Unspoken Expectations','Reading Between the Lines','Emotional Expression','Communication Breakdown','Words vs Actions','Saying No'], categories: ['Silent Treatment','Being Misunderstood','Emotional Intelligence','Hidden Emotions','Trust Issues','Emotional Walls','Manipulation & Control','Fear of Rejection','Overthinking','Protective Personalities'] },
+  'Friendship':             { subjects: ['One-Sided Friendships','Outgrowing People','Fake Loyalty','Why Friendships Fade','The Friend Who Disappears','Real vs Surface Friends','Parasocial Dynamics','Energy Drain','Competitive Friendships','Growing Apart','Chosen Family','Loyalty Patterns'], categories: ['Loyalty & Devotion','Trust Issues','Testing People','Why They Disappear','Ghosting & Silence','Being Misunderstood','Hidden Emotions','Emotional Detachment','Emotional Burnout','Fear of Rejection'] },
+  'Family Dynamics':        { subjects: ['Toxic Family Patterns','Parental Wounds','Emotional Inheritance','Black Sheep Syndrome','Family Pressure','Love With Conditions','Generational Trauma','Enmeshment','The Scapegoat','Unspoken Family Rules','Emotional Neglect','Breaking the Cycle'], categories: ['Protective Personalities','Emotional Burnout','Self-Sabotage','Fear of Rejection','Hidden Emotions','Being Misunderstood','Trust Issues','Manipulation & Control','Emotional Walls','People Pleasing'] },
+  'Self Improvement':       { subjects: ['Discipline','Consistency','Identity Change','Personal Standards','Delayed Gratification','Confidence','Overthinking','People Pleasing','Emotional Burnout','Self-Sabotage','Mindset Shift','Comfort Zone'], categories: ['Self-Sabotage','Overthinking','Fake Confidence','People Pleasing','Emotional Burnout','Fear of Rejection','Testing People','Dangerous Independence','Emotional Intelligence','Protective Personalities'] },
+  'Personal Growth':        { subjects: ['Identity Shifts','Shedding Old Versions','Uncomfortable Growth','The Person You Are Becoming','Letting Go of Who You Were','Growth That Hurts','Evolving in Silence','Chapter Closing','Becoming Unrecognizable','Inner Work','Shadow Work','Transformation Pain'], categories: ['Identity Change','Self-Sabotage','Emotional Burnout','Being Misunderstood','Fake Confidence','Personal Standards','Fear of Rejection','Overthinking','Hidden Emotions','Protective Personalities'] },
+  'Confidence':             { subjects: ['Real Confidence vs Performance','Building Self-Trust','Confidence After Failure','Unshakeable Self-Image','Not Needing Approval','Quiet Confidence','Inner Certainty','Walking Away with Confidence','Imposter Syndrome','Self-Worth','Validation Independence','Confidence Triggers'], categories: ['Fake Confidence','Self-Sabotage','Fear of Rejection','Testing People','Emotional Intelligence','Protective Personalities','Hidden Emotions','Being Misunderstood','Emotional Burnout','Personal Standards'] },
+  'Glow-Up':                { subjects: ['Silent Transformation','Becoming Unrecognizable','Outgrowing Your Old Self','Glow-Up They Did Not See Coming','Leveling Up Alone','Post-Heartbreak Glow','Healing Into Strength','Upgrade Energy','New Version of You','Glow-Up Process','Rising in Silence','Physical and Mental Shift'], categories: ['Revenge Energy','Emotional Burnout','Self-Sabotage','Fake Confidence','Dangerous Independence','People Pleasing','Hidden Emotions','Falling Too Hard','Personal Standards','Identity Change'] },
+  'Villain Arc':            { subjects: ['Choosing Yourself Ruthlessly','Cold Strategy Over Emotion','Cutting People Off With Peace','No Explanations Just Results','The Shift That Changed Everything','Unbothered Mode','Detachment as Power','Ruthless Clarity','Zero Tolerance','Accountability to Self','No More Explaining','Silent Revenge'], categories: ['Dangerous Independence','Self-Sabotage','Manipulation & Control','Emotional Detachment','Protective Personalities','Hidden Emotions','Testing People','Trust Issues','Personal Standards','Revenge Energy'] },
+  'Revenge Success':        { subjects: ['Winning in Silence','Building While They Watched','Success as the Response','What They Lost When They Left','The Best Revenge Is Becoming','Soft Life After Hard Times','Silent Victory','Proving Them Wrong Quietly','Outgrowing Your Pain','Rising Without Noise','Leveling Up After Betrayal','The Outcome They Did Not Expect'], categories: ['Revenge Energy','Dangerous Independence','Emotional Burnout','Fake Confidence','Self-Sabotage','Hidden Emotions','Personal Standards','Testing People','Emotional Detachment','Identity Change'] },
+  'Inner Peace':            { subjects: ['Detaching From Outcomes','Unbothered Energy','Letting Go Without Closure','Healing Without an Apology','What Peace Actually Looks Like','Choosing Calm','No Longer Proving Yourself','Emotional Freedom','Contentment','Living Quietly','Releasing Resentment','Stillness'], categories: ['Emotional Burnout','Emotional Detachment','Emotional Walls','People Pleasing','Hidden Sadness','Being Misunderstood','Trust Issues','Self-Sabotage','Overthinking','Protective Personalities'] },
+  'Life Lessons':           { subjects: ['What They Do Not Teach You','Lessons Learned Too Late','The Hard Truths Everyone Avoids','What Maturity Actually Looks Like','Patterns You Only See in Hindsight','Real Wisdom','The Price of Ignorance','Learning the Hard Way','Truth Over Comfort','Wisdom Through Pain','Earned Knowledge','Perspective With Age'], categories: ['Hidden Emotions','Being Misunderstood','Emotional Intelligence','Trust Issues','Emotional Walls','Self-Sabotage','Fear of Rejection','Overthinking','Protective Personalities','Testing People'] },
+  'Money & Success':        { subjects: ['Broke Mindset','Delayed Gratification','Success Habits','Discipline','Risk Taking','Long-Term Thinking','Focus','Ambition','Quiet Pressure','Winner Mentality','Self-Sabotage','Confidence Under Pressure'], categories: ['Self-Sabotage','Fake Confidence','Overthinking','Emotional Burnout','Dangerous Independence','Testing People','Hidden Emotions','Discipline','Confidence','Quiet Ambition'] },
+  'Career & Ambition':      { subjects: ['Building in Silence','Career Self-Sabotage','Outworking Your Doubts','The Grind No One Sees','Ambition vs Burnout','Proving Yourself Quietly','Knowing Your Worth','Professional Mask','Underestimated Energy','Rising Through Work','Opportunity Mindset','Hidden Potential'], categories: ['Self-Sabotage','Emotional Burnout','Fake Confidence','Dangerous Independence','Testing People','Hidden Emotions','Personal Standards','Overthinking','Being Misunderstood','Trust Issues'] },
+  'Discipline & Focus':     { subjects: ['Delayed Gratification','Routine Over Motivation','The Cost of Distraction','Mental Toughness','Building When You Do Not Feel Like It','No Days Off Energy','Process Over Results','Long Game','Eliminating Distractions','Intentional Living','Controlled Focus','Consistent Action'], categories: ['Emotional Burnout','Self-Sabotage','Fake Confidence','Dangerous Independence','Overthinking','Testing People','People Pleasing','Personal Standards','Discipline','Identity Change'] },
+  'Motivation':             { subjects: ['Why Motivation Fades','Action Before Feeling Ready','Discipline When Motivation Dies','Starting Before You Are Ready','What Drives the Ones Who Do Not Stop','Showing Up Anyway','The Real Source of Drive','Inner Fire','Purpose Over Mood','Staying the Course','Resilient Drive','Unstoppable Mentality'], categories: ['Emotional Burnout','Self-Sabotage','Fake Confidence','Overthinking','Fear of Rejection','People Pleasing','Hidden Emotions','Testing People','Dangerous Independence','Personal Standards'] },
+  'Productivity':           { subjects: ['Deep Work','Protecting Your Time','Saying No as a Strategy','Energy Management','Doing Less With More Focus','Priority Clarity','Time Blocking','Eliminating Noise','Output Over Activity','Focused Execution','Leverage','Single-Tasking'], categories: ['Emotional Burnout','Self-Sabotage','Overthinking','People Pleasing','Fear of Rejection','Dangerous Independence','Personal Standards','Testing People','Fake Confidence','Identity Change'] },
+  'Habits':                 { subjects: ['Identity-Based Habits','The Compound Effect','Small Actions Over Time','The Habit Loop','Why Habits Break','Environment Design','Daily Rituals','Stacking Habits','Habit vs Motivation','The 1 Percent Rule','Invisible Progress','Automatic Excellence'], categories: ['Self-Sabotage','Emotional Burnout','Overthinking','Fake Confidence','Fear of Rejection','People Pleasing','Dangerous Independence','Personal Standards','Testing People','Identity Change'] },
+  'Masculine Energy':       { subjects: ['Direction and Purpose','Provider Mindset','Emotional Control','Protecting What Matters','Silent Strength','Leadership Without Ego','Accountability','Decisiveness','Stoic Discipline','Building Without Noise','Self-Mastery','Earned Respect'], categories: ['Dangerous Independence','Protective Personalities','Emotional Walls','Emotional Intelligence','Trust Issues','Loyalty & Devotion','Self-Sabotage','Fake Confidence','Testing People','Hidden Emotions'] },
+  'Feminine Energy':        { subjects: ['Softness as Strength','Receiving vs Chasing','Feminine Intuition','Knowing Your Worth','The Magnetic Woman','Nurturing Without Losing Yourself','Sacred Boundaries','Emotional Flow','Feminine Power','Allure','Authentic Femininity','Graceful Confidence'], categories: ['Protective Personalities','Fear of Intimacy','People Pleasing','Emotional Walls','Falling Too Hard','Emotional Intelligence','Hidden Emotions','Trust Issues','Fake Confidence','Personal Standards'] },
+  'Spirituality':           { subjects: ['Intuition','Energy Shifts','Karmic Lessons','Signs From The Universe','Emotional Alignment','Detachment','Healing Cycles','Inner Peace','Shadow Work','Divine Timing','Soul Lessons','Protection Energy'], categories: ['Karmic Relationships','Soulmate & Deep Connection','Emotional Detachment','Hidden Emotions','Being Misunderstood','Trust Issues','Emotional Walls','Protective Personalities','Self-Sabotage','Overthinking'] },
+  'Health & Wellness':      { subjects: ['Nervous System Regulation','Emotional Eating','Body Image Truth','Sleep and Emotional Health','Stress and the Body','Healing From the Inside','Rest as Resistance','Mind-Body Connection','Somatic Healing','Energy Depletion','Burnout Recovery','Emotional Release'], categories: ['Emotional Burnout','Overthinking','People Pleasing','Hidden Sadness','Emotional Walls','Emotional Intelligence','Self-Sabotage','Fear of Rejection','Being Misunderstood','Protective Personalities'] },
+  'Fitness Mindset':        { subjects: ['Gym Discipline','Mental Toughness','Comeback Energy','Consistency','Body Confidence','Routine Building','Self-Respect','No Excuses','Transformation','Discipline Under Pressure','Confidence','Burnout'], categories: ['Self-Sabotage','Fake Confidence','Emotional Burnout','Overthinking','Testing People','Dangerous Independence','Self-Respect','Discipline','Comeback Energy','Mental Toughness'] },
+  'Social Skills':          { subjects: ['Reading the Room','Charisma vs Manipulation','Why Quiet People Are Powerful','Conversational Intelligence','Social Anxiety Patterns','Likability vs Authenticity','First Impressions','Body Language','Presence','Making People Feel Seen','Social Confidence','The Art of Listening'], categories: ['Emotional Intelligence','Fake Confidence','Being Misunderstood','Hidden Emotions','Manipulation & Control','Fear of Rejection','Social Masks','Trust Issues','Protective Personalities','Overthinking'] },
+};
 
 const TONES = [
   {id:'mysterious',label:'Mysterious',emoji:'🌑'},
@@ -2112,7 +2241,7 @@ async function init(){
   // light up + sliders show the right values right away.
   _safe('autosaveRestore', autosaveRestore);
   _safe('buildStars',         buildStars);
-  _safe('buildSignGrid',      buildSignGrid);
+  _safe('buildSubjectGrid',   buildSubjectGrid);
   _safe('buildToneGrid',      buildToneGrid);
   _safe('buildColorSwatches', buildColorSwatches);
   _safe('buildFontGrid',      buildFontGrid);
@@ -2124,7 +2253,7 @@ async function init(){
   _safe('loadOutputs',        loadOutputs);
   _safe('loadDrafts',         loadDrafts);
   _safe('refreshDownloadQueue', refreshDownloadQueue);
-  _safe('selectSign',         () => selectSign('Scorpio'));
+  // Subject selected via Niche Trend Builder — no default zodiac sign
   _safe('updateOutputCounter', updateOutputCounter);
   _safe('refreshTimelineSlider', refreshTimelineSlider);
   _safe('grainSlider track',     () => updateSliderTrack('grainSlider'));
@@ -2256,34 +2385,60 @@ function buildStars(){
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SIGN GRID
+// SUBJECT GRID  (replaces old zodiac Sign Grid)
 // ═══════════════════════════════════════════════════════════════════
 
-function buildSignGrid(){
-  const grid = document.getElementById('signGrid');
-  grid.innerHTML = SIGNS.map(s=>`
-    <button class="sign-btn" data-sign="${s.name}" onclick="selectSign('${s.name}')">
-      <span class="sym">${s.sym}</span>
-      <span class="lbl">${s.name}</span>
-    </button>`).join('');
+function buildSubjectGrid(subjects){
+  const grid = document.getElementById('subjectGrid');
+  if(!grid) return;
+  if(!subjects || !subjects.length){
+    // Default: show subjects for the first niche or a generic set
+    const firstNiche = Object.keys(nicheMap)[0];
+    subjects = nicheMap[firstNiche]?.subjects || [];
+  }
+  grid.innerHTML = subjects.map(s => {
+    const safe = s.replace(/'/g,"\'");
+    return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
+  }).join('');
 }
 
-function selectSign(name){
-  state.sign = name;
-  const s = SIGNS.find(x=>x.name===name);
-  if(s){ state.signSymbol = s.sym; const ps=document.getElementById('phoneSign'); if(ps) ps.textContent=s.sym; }
-  document.querySelectorAll('.sign-btn').forEach(b=>b.classList.toggle('active',b.dataset.sign===name));
-  document.getElementById('selectedSignBadge').textContent = name+' '+state.signSymbol;
+function selectSubject(label){
+  state.subject    = label;
+  state.subjectLabel = label;
+  // Compat: mirror into state.sign so API payloads still have a value
+  state.sign       = label;
+  state.signSymbol = '';
+  document.querySelectorAll('.subject-chip').forEach(b => b.classList.toggle('active', b.dataset.subject === label));
+  const badge = document.getElementById('selectedSignBadge');
+  if(badge) badge.textContent = label;
+  console.log('[TrendVault] Selected subject:', label);
   filterPromptsBySign();
-  generateFreshPrompts();
   updatePreview();
 }
 
-function randomSign(){
-  const s = SIGNS[Math.floor(Math.random()*SIGNS.length)];
-  selectSign(s.name);
-  showToast('Sign: '+s.name+' '+s.sym,'info');
+function randomSubject(){
+  const chips = Array.from(document.querySelectorAll('.subject-chip'));
+  if(!chips.length){ showToast('Generate subjects first','error'); return; }
+  const chip = chips[Math.floor(Math.random() * chips.length)];
+  selectSubject(chip.dataset.subject);
+  showToast('Subject: ' + chip.dataset.subject, 'info');
 }
+
+// Compat alias — kept so any surviving code that calls selectSign() still works
+function selectSign(nameOrLabel){
+  // If it's a zodiac name, keep compat; otherwise treat as subject
+  selectSubject(nameOrLabel);
+}
+function randomSign(){
+  try {
+    randomSubject();
+    console.log('[Action] randomSign — delegated to randomSubject, state.sign=', state.sign);
+  } catch(err){
+    console.error('[randomSign] error:', err);
+    showToast('Random sign failed: ' + (err.message||err), 'error');
+  }
+}
+function buildSignGrid(){ buildSubjectGrid(); }
 
 // ═══════════════════════════════════════════════════════════════════
 // PROMPTS
@@ -2311,23 +2466,46 @@ function buildCategoryGrid(){
 }
 
 function selectCategory(catId){
-  state.category = catId;
-  document.querySelectorAll('.cat-chip').forEach(c=>c.classList.toggle('active',c.dataset.cat===catId));
-  filterPromptsBySign();
-  generateFreshPrompts();
+  try {
+    state.category = catId;
+    document.querySelectorAll('.cat-chip').forEach(c=>c.classList.toggle('active',c.dataset.cat===catId));
+    filterPromptsBySign();
+    generateFreshPrompts();
+    console.log('[Action] selectCategory', catId);
+    console.log('[State] selectedCategory:', state.category);
+  } catch(err){
+    console.error('[selectCategory] error:', err);
+    showToast('Category select failed: ' + (err.message||err), 'error');
+  }
 }
 
 function randomCategory(){
-  const cats = promptsData.categories;
-  if(!cats?.length)return;
-  const c = cats[Math.floor(Math.random()*cats.length)];
-  selectCategory(c.id);
+  try {
+    const chips = Array.from(document.querySelectorAll('#categoryGrid .cat-chip'));
+    if(!chips.length){ showToast('No categories available', 'error'); return; }
+    const chip = chips[Math.floor(Math.random() * chips.length)];
+    const label = chip.dataset.cat;
+    // Detect niche chips: if the label isn't a real category id, use niche handler
+    const isRealCat = !!(promptsData.categories || []).find(c => c.id === label);
+    if(isRealCat){
+      selectCategory(label);
+    } else {
+      selectNicheCategory(chip, label);
+      showToast('Category: ' + label, 'info');
+    }
+    console.log('[Action] randomCategory →', label);
+  } catch(err){
+    console.error('[randomCategory] error:', err);
+    showToast('Random category failed: ' + (err.message||err), 'error');
+  }
 }
 
 function filterPromptsBySign(){
   const list = document.getElementById('promptList');
   const prompts = promptsData.prompts?.filter(p=>{
-    const signMatch = !state.sign || p.sign===state.sign || p.sign==='All';
+    const _zodiacNames = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
+    const _isZodiac = _zodiacNames.includes(state.sign);
+    const signMatch = !state.sign || !_isZodiac || p.sign===state.sign || p.sign==='All';
     const catMatch = !state.category || p.category===state.category;
     return signMatch && catMatch;
   }) ?? [];
@@ -2349,12 +2527,12 @@ function selectPrompt(id){
   document.getElementById('promptAngle').textContent = p.angle.toUpperCase();
   document.getElementById('selectedPromptBadge').textContent = ' — '+p.prompt.toUpperCase().slice(0,50)+(p.prompt.length>50?'...':'');
   document.querySelectorAll('.prompt-item').forEach(el=>el.classList.toggle('active',+el.dataset.pid===id));
-  if(!state.sign && p.sign!=='All') selectSign(p.sign);
+  // Subject is driven by niche, not auto-set from prompt zodiac field
 }
 
 function randomPrompt(){
   const filtered = promptsData.prompts?.filter(p=>
-    (!state.sign || p.sign===state.sign || p.sign==='All') &&
+    (!state.sign || !['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'].includes(state.sign) || p.sign===state.sign || p.sign==='All') &&
     (!state.category || p.category===state.category)
   ) ?? [];
   if(!filtered.length){ showToast('No prompts match current filters','error'); return; }
@@ -2416,14 +2594,16 @@ async function generateScript(){
     const r = await fetch(`${API_BASE}/api/trend-vault/generate-script`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        trendVaultSign: state.sign||'Scorpio',
+        trendVaultSign: state.subject||state.sign||'General',
         category: state.category||'general',
         // canonical "premise" field per the spec; legacy "prompt" kept too
         premise: promptUsed,
         prompt: promptUsed,
         angle: state.promptAngle,
         emotionalTone: state.tone,
-        sign: state.sign||'Scorpio',
+        sign: state.subject||state.sign||'General',
+        subject: state.subject||'',
+        niche: nicheState.selectedNiche||'',
         targetDuration: 90,
       })
     });
@@ -2682,20 +2862,23 @@ function buildPresetGrid(){
   g.innerHTML = gridPresets.map(p=>{
     const isCustom = p.custom === true || p.category === 'custom';
     const safeName = (p.name||'').replace(/'/g,"\\'");
-    const deleteBtn = isCustom
-      ? `<button class="preset-del-btn" onclick="event.stopPropagation();deleteCustomPreset('${p.id}','${safeName}')" title="Delete this custom preset">×</button>`
+    const savedBadge = isCustom
+      ? `<span style="font-size:.52rem;background:rgba(34,197,94,.18);color:#86efac;padding:2px 7px;border-radius:4px;letter-spacing:.5px;font-weight:700;white-space:nowrap;flex-shrink:0">SAVED</span>`
       : '';
-    const customBadge = isCustom
-      ? `<span style="position:absolute;top:6px;left:6px;font-size:.55rem;background:rgba(34,197,94,.18);color:#86efac;padding:2px 6px;border-radius:4px;letter-spacing:.5px;font-weight:700">SAVED</span>`
+    const deleteBtn = isCustom
+      ? `<button class="preset-del-btn" style="position:static;opacity:.55;flex-shrink:0" onclick="event.stopPropagation();deleteCustomPreset('${p.id}','${safeName}')" title="Delete">×</button>`
       : '';
     return `
-    <div class="preset-card${p.id===state.voice?' active':''}" data-preset="${p.id}" onclick="selectPreset('${p.id}')" style="position:relative">
-      ${customBadge}
-      ${deleteBtn}
+    <div class="preset-card${p.id===state.voice?' active':''}" data-preset="${p.id}" onclick="selectPreset('${p.id}')">
+      ${savedBadge}
       <span class="preset-icon">${p.icon}</span>
-      <div class="preset-name">${p.name}</div>
-      <div class="preset-desc">${p.description}</div>
+      <div style="flex:1;min-width:0">
+        <div class="preset-name">${p.name}</div>
+        <div class="preset-desc">${p.description}</div>
+      </div>
       <button class="preset-test-btn" onclick="event.stopPropagation();testPreset('${p.id}')">▶ TEST</button>
+      ${deleteBtn}
+      <span class="preset-selected-dot" title="Selected"></span>
     </div>`;
   }).join('');
 }
@@ -2825,8 +3008,8 @@ function resetCinematicSliders(){
 }
 
 // ── Voice Slider Undo / Redo ──────────────────────────────────────────────────
-let voiceUndoStack = [];
-let voiceRedoStack = [];
+voiceUndoStack = [];
+voiceRedoStack = [];
 let _preSliderSnap = null;
 
 const _VOICE_SLIDER_META = {
@@ -3027,6 +3210,7 @@ function previewVoice(){
   // captions/timeline are also generated. The old code routed Fish Speech to
   // the raw bridge endpoint which returned binary audio without captions,
   // leaving the preview timeline stuck on the previous voice/script.
+  console.log('[Action] previewVoice', { engine: state.voiceEngine, voice: state.voice, scriptLines: state.script?.length||0 });
   if(state.voiceEngine === 'fish-speech'){
     if(!state.script?.length){ showToast('Generate a script first','info'); return; }
     generateVoicePreview();
@@ -3036,6 +3220,7 @@ function previewVoice(){
   if(!state.voice){ showToast('Select a voice preset first','error'); return; }
   const line = state.script[state.voicePreviewLine%Math.max(1,state.script.length)]?.text
     || "The truth they never say out loud.";
+  console.log('[Voice] previewing line with voice preset:', state.voice, '— text:', line);
   generateAndPlayVoice(line, true);
 }
 
@@ -6535,6 +6720,7 @@ function autosaveSnapshot(){
   try {
     const snap = {
       sign: state.sign, signSymbol: state.signSymbol,
+      subject: state.subject, subjectLabel: state.subjectLabel,
       category: state.category, promptId: state.promptId,
       promptText: state.promptText, promptAngle: state.promptAngle,
       tone: state.tone, script: state.script,
@@ -6636,7 +6822,9 @@ function _setRenderBtns(busy){
 
 async function renderVideo(engineOverride){
   if(!state.script.length){ showToast('Generate or write a script first','error'); return; }
-  if(!state.sign){ showToast('Select a trend-vault sign first','error'); return; }
+  if(!state.subject && !state.sign){ showToast('Select a subject or niche first (click Generate Ideas)','error'); return; }
+  console.log('[Action] renderVideo', { engineOverride, sign: state.sign, category: state.category, voice: state.voice, voiceEngine: state.voiceEngine, scriptLines: state.script.length });
+  console.log('[Render] voice/render status: starting', { voice: state.voice, voiceEngine: state.voiceEngine });
 
   // Resolve which voice engine this render will actually use.
   // 'local' means: use whatever non-ElevenLabs engine is currently selected
@@ -7617,7 +7805,9 @@ async function applyAIToPrompt(){
         // New canonical fields requested by the spec
         prompt:         state.currentPrompt,
         emotionalTone:  toneFlag,         // boolean — true means "be dramatic"
-        currentSign:    state.sign || null,
+        currentSign:    state.subject || state.sign || null,
+        subject:        state.subject || null,
+        niche:          nicheState.selectedNiche || null,
         scriptStyle:    state.scriptStyle || null,
         // Legacy fields kept for backward compat with the existing route
         originalPrompt: state.originalPrompt,
@@ -7807,7 +7997,7 @@ async function generateFreshPrompts(){
       headers:{'Content-Type':'application/json'},
       signal,
       body: JSON.stringify({
-        trendVaultSign: state.sign||'All',
+        trendVaultSign: (nicheState.selectedNiche||state.sign||'All'),
         category:   state.category||'general',
         count: 4,
         exclude,
@@ -7906,9 +8096,897 @@ const _origFilterPrompts = filterPromptsBySign;
 filterPromptsBySign = function(){
   const list = document.getElementById('promptList');
   const prompts = promptsData.prompts?.filter(p=>{
-    const signMatch = !state.sign || p.sign===state.sign || p.sign==='All';
+    const _zodiacNames = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
+    const _isZodiac = _zodiacNames.includes(state.sign);
+    const signMatch = !state.sign || !_isZodiac || p.sign===state.sign || p.sign==='All';
     const catMatch = !state.category || p.category===state.category;
     return signMatch && catMatch;
   }) ?? [];
   list.innerHTML = prompts.slice(0,30).map(p=>`
-    <li class="prompt-item${p.id===state.promptId?' active':''}" data-p
+    <li class="prompt-item${p.id===state.promptId?' active':''}" data-pid="${p.id}" style="list-style:none;display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface2);border:1px solid ${p.id===state.promptId?'var(--purple)':'var(--border)'};border-radius:9px;cursor:pointer;margin-bottom:5px">
+      <div style="flex:1" onclick="selectPrompt(${p.id})">
+        <div class="pi-text" style="font-size:.78rem;color:var(--text2)">${p.prompt}</div>
+        <div class="pi-cat" style="font-size:.65rem;color:var(--muted);margin-top:2px">${p.category.replace(/_/g,' ')} ${p.sign!=='All'?'• '+p.sign:''}</div>
+      </div>
+      <button onclick="toggleFavoritePrompt(${p.id},${JSON.stringify(p.prompt).replace(/'/g,'&apos;')},event)" style="background:none;border:none;cursor:pointer;font-size:.85rem;flex-shrink:0;opacity:.7" title="${savedFavPrompts.find(x=>x.id===p.id)?'Remove from saved':'Save'}">${savedFavPrompts.find(x=>x.id===p.id)?'❤️':'🤍'}</button>
+    </li>`).join('');
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// DRAFT SAVE / LOAD
+// ═══════════════════════════════════════════════════════════════════
+
+async function saveDraft(){
+  const name = prompt('Name this draft:', state.sign ? `${state.sign} — ${(state.promptText||'Draft').slice(0,30)}` : 'My Draft');
+  if(!name) return;
+  try{
+    const draftState = {
+      sign: state.sign, subject: state.subject, category: state.category, promptId: state.promptId,
+      promptText: state.promptText, promptAngle: state.promptAngle,
+      tone: state.tone, voice: state.voice, script: state.script,
+      background: state.background, music: state.music,
+      colorGrade: state.colorGrade, grainType: state.grainType,
+      grainIntensity: state.grainIntensity, fontFamily: state.fontFamily,
+      fontSize: state.fontSize, textColor: state.textColor,
+    };
+    const r = await fetch(`${API_BASE}/api/trend-vault/drafts`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, state: draftState })
+    });
+    const data = await r.json();
+    if(!data.ok) throw new Error('Save failed');
+    showToast('💾 Draft saved: '+name,'success');
+    loadDrafts();
+  }catch(e){ showToast('Save failed: '+e.message,'error'); }
+}
+
+async function loadDrafts(){
+  try{
+    const r = await fetch(`${API_BASE}/api/trend-vault/drafts`);
+    const {drafts} = await r.json();
+    const el = document.getElementById('draftsList');
+    if(!drafts.length){
+      el.innerHTML='<div style="font-size:.75rem;color:var(--muted)">No saved drafts yet — save your current project to resume later.</div>';
+      return;
+    }
+    el.innerHTML = drafts.map(d=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
+        <div style="flex:1">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text)">${d.name}</div>
+          <div style="font-size:.65rem;color:var(--muted)">${new Date(d.savedAt).toLocaleDateString()} · ${d.state?.script?.length||0} lines</div>
+        </div>
+        <button onclick="loadDraft(${JSON.stringify(d).replace(/"/g,'&quot;')})" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Load</button>
+        <button onclick="deleteDraft('${d.id}')" style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#f87171;border-radius:7px;padding:5px 7px;font-size:.7rem;cursor:pointer">✕</button>
+      </div>`).join('');
+  }catch(e){ console.warn('loadDrafts error',e); }
+}
+
+function loadDraft(d){
+  if(!confirm(`Load draft "${d.name}"? Current work will be replaced.`)) return;
+  const s = d.state;
+  if(s.subject) selectSubject(s.subject); else if(s.sign) selectSubject(s.sign);
+  if(s.category) selectCategory(s.category);
+  state.promptText = s.promptText || '';
+  state.promptAngle = s.promptAngle || '';
+  state.promptId = s.promptId || null;
+  if(state.promptText){
+    document.getElementById('promptDisplay').style.display='flex';
+    document.getElementById('promptMain').textContent = state.promptText;
+    document.getElementById('promptAngle').textContent = state.promptAngle;
+    document.getElementById('selectedPromptBadge').textContent = ' — '+state.promptText.slice(0,50);
+  }
+  if(s.tone) selectTone(s.tone);
+  if(s.voice) selectPreset(s.voice);
+  if(s.script?.length){ state.script = s.script; buildScriptLines(); updatePreview(); }
+  if(s.background) selectBackground(s.background);
+  if(s.music) selectMusic(s.music);
+  if(s.colorGrade) setColorGrade(s.colorGrade, null);
+  if(s.grainType) setGrainType(s.grainType, null);
+  if(s.grainIntensity !== undefined){
+    state.grainIntensity = s.grainIntensity;
+    const gs = document.getElementById('grainSlider'); if(gs) gs.value = s.grainIntensity;
+  }
+  if(s.fontFamily){ state.fontFamily = s.fontFamily; }
+  if(s.fontSize){ state.fontSize = s.fontSize; }
+  if(s.textColor){ state.textColor = s.textColor; }
+  updatePreview();
+  showToast('Draft loaded: '+d.name,'success');
+}
+
+async function deleteDraft(id){
+  if(!confirm('Delete this draft?')) return;
+  await fetch(`${API_BASE}/api/trend-vault/drafts/${id}`,{method:'DELETE'});
+  loadDrafts();
+  showToast('Draft deleted','info');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// URL IMPORTER (YouTube / TikTok via yt-dlp)
+// ═══════════════════════════════════════════════════════════════════
+
+async function importUrl(type){
+  const inputId = type==='video' ? 'bgUrlInput' : 'musicUrlInput';
+  const statusId = type==='video' ? 'bgImportStatus' : 'musicImportStatus';
+  const url = document.getElementById(inputId)?.value?.trim();
+  const status = document.getElementById(statusId);
+  if(!url){ showToast('Paste a URL first','error'); return; }
+  if(status) status.textContent = `⬇ Queued — downloading in background…`;
+  try{
+    const r = await fetch(`${API_BASE}/api/trend-vault/import-url`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url, type})
+    });
+    const data = await r.json();
+    if(!data.ok) throw new Error(data.error||'Import failed');
+    if(status) status.textContent = '✅ Queued! Watch progress in the right panel.';
+    document.getElementById(inputId).value = '';
+    showToast(`⬇ Download queued — keep working!`,'success');
+    startDownloadQueuePolling();
+    setTimeout(()=>{ if(status) status.textContent=''; }, 5000);
+  }catch(e){
+    const msg = e.message||'Import failed';
+    if(status) status.textContent = '❌ '+msg;
+    if(msg.includes('yt-dlp not installed')){
+      showToast('Install yt-dlp first: pip install yt-dlp','error');
+    } else {
+      showToast('Import failed: '+msg.slice(0,60),'error');
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════════
+
+function showToast(msg,type='info'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type}`;
+  setTimeout(()=>t.classList.add('show'),10);
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function showHelp(){
+  showToast('Set sign → pick prompt → generate script → choose voice + BG → render 🔮','info');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NICHE TREND BUILDER
+// Local-first — no API key needed. Works immediately on first run.
+// ═══════════════════════════════════════════════════════════════════
+
+const NICHE_TREND_MAP = {
+  'Human Psychology':      { topics: ['why people pull away','hidden insecurity','fear of rejection','attention patterns','emotional triggers','silent judgment','social masks','why people lie to themselves'], tones: ['Dark, psychological','Curious, analytical','Cinematic, real'] },
+  'Dark Psychology':       { topics: ['manipulation and control','obsession and fixation','toxic attraction','self-sabotage','testing people','dangerous independence','social engineering','covert influence'], tones: ['Dark, psychological','Unsettling, cinematic','Cold, analytical'] },
+  'Emotional Intelligence':{ topics: ['reading people accurately','emotional regulation','empathy vs manipulation','knowing when to walk away','staying calm under pressure','high EQ habits','silent strength'], tones: ['Insightful, calm','Deep, psychological','Real, direct'] },
+  'Mindset':               { topics: ['fixed vs growth mindset','reframing failure','scarcity vs abundance','identity shifts','breaking mental limits','rewiring thoughts','quiet confidence'], tones: ['Motivational, direct','Dark honest','Cinematic, introspective'] },
+  'Overthinking':          { topics: ['3am spiraling','replaying conversations','catastrophizing','decision paralysis','analysis paralysis','fear disguised as logic','overthinking vs intuition'], tones: ['Relatable, real','Dark, quiet','Emotional, honest'] },
+  'Hidden Truths':         { topics: ['what people never say out loud','the lies we tell ourselves','unspoken agreements','things that go unsaid','what silence really means','truth about human nature'], tones: ['Mysterious, revealing','Dark, honest','Cinematic, thought-provoking'] },
+  'Mystery & Curiosity':   { topics: ['psychological patterns nobody talks about','why people do what they do','hidden motivations','what makes someone unforgettable','the quiet ones','unseen forces'], tones: ['Curious, cinematic','Mysterious, dark','Thought-provoking, calm'] },
+  'Relationships':         { topics: ['avoidant attachment','mixed signals','hidden feelings','loyalty tests','emotional walls','fear of intimacy','why they come back','situationships'], tones: ['Dark, emotional, cinematic','Mysterious, psychological','Emotional, curiosity-based'] },
+  'Dating & Attraction':   { topics: ['what actually attracts people','red flags vs green flags','chemistry vs compatibility','the chase dynamic','why hard to get works','magnetic personalities','polarity'], tones: ['Direct, psychological','Dark, real','Cinematic, relatable'] },
+  'Breakups & Healing':    { topics: ['silent treatment','emotional detachment','revenge glow-up','fear of rejection','karmic relationships','hidden sadness','why they disappear','moving on vs giving up'], tones: ['Dark, emotional','Cinematic, raw','Reflective, painful'] },
+  'No Contact':            { topics: ['why silence works','the urge to reach out','healing in quiet','they notice when you stop','what no contact reveals','moving in silence','power of disappearing'], tones: ['Dark, emotional','Quiet, powerful','Psychological, real'] },
+  'Red Flags':             { topics: ['the signs you ignored','love bombing patterns','hot and cold behavior','isolation tactics','gaslighting patterns','charm as a weapon','the moment you knew'], tones: ['Warning, direct','Dark, psychological','Cinematic, real'] },
+  'Loyalty & Trust':       { topics: ['who stays when things break','testing loyalty in silence','earned trust vs assumed trust','betrayal patterns','the cost of being reliable','real loyalty vs performance'], tones: ['Emotional, deep','Dark, honest','Cinematic, serious'] },
+  'Communication':         { topics: ['what people mean vs what they say','conflict avoidance','the silent treatment','passive aggression','asking for what you need','hard conversations','unspoken expectations'], tones: ['Direct, real','Psychological, calm','Honest, cinematic'] },
+  'Friendship':            { topics: ['one-sided friendships','outgrowing people','fake loyalty','why friendships fade','the friend who disappears','real vs surface friends'], tones: ['Honest, real','Dark, emotional','Relatable, direct'] },
+  'Family Dynamics':       { topics: ['toxic family patterns','parental wounds','emotional inheritance','black sheep syndrome','family pressure','love with conditions','generational trauma'], tones: ['Deep, honest','Dark, emotional','Cinematic, heavy'] },
+  'Self Improvement':      { topics: ['emotional burnout','fake confidence','people pleasing','falling too hard','overthinking','hidden sadness','becoming who you were meant to be'], tones: ['Reflective, motivational','Dark honest','Cinematic, introspective'] },
+  'Personal Growth':       { topics: ['identity shifts','shedding old versions','uncomfortable growth','the person you are becoming','letting go of who you were','growth that hurts','evolving in silence'], tones: ['Inspiring, deep','Honest, dark','Cinematic, personal'] },
+  'Confidence':            { topics: ['real confidence vs performance','building self-trust','confidence after failure','unshakeable self-image','not needing approval','quiet confidence'], tones: ['Empowering, direct','Dark, real','Cinematic, strong'] },
+  'Glow-Up':               { topics: ['healing through ambition','becoming unrecognizable','the silent transformation','outgrowing your old self','glow-up they did not see coming','leveling up alone'], tones: ['Empowering, dark','Cinematic, triumphant','Real, motivational'] },
+  'Villain Arc':           { topics: ['the moment you stopped caring what they think','choosing yourself ruthlessly','the shift that changed everything','cold strategy over emotion','cutting people off with peace','no explanations just results'], tones: ['Dark, powerful','Cold, cinematic','Ruthless, real'] },
+  'Revenge Success':       { topics: ['winning in silence','building while they watched','the best revenge is becoming','success as the response','what they lost when they left'], tones: ['Triumphant, dark','Empowering, cinematic','Cold, satisfying'] },
+  'Inner Peace':           { topics: ['detaching from outcomes','unbothered energy','what peace actually looks like','letting go without closure','healing without an apology'], tones: ['Calm, deep','Spiritual, real','Quiet, powerful'] },
+  'Life Lessons':          { topics: ['what they do not teach you','lessons learned too late','the hard truths everyone avoids','what maturity actually looks like','patterns you only see in hindsight'], tones: ['Wise, cinematic','Dark, honest','Reflective, real'] },
+  'Money & Success':       { topics: ['discipline','delayed gratification','broke mindset','success habits','risk taking','confidence under pressure','long-term thinking','the cost of comfort'], tones: ['Direct, powerful','Dark, motivational','Cinematic, ambitious'] },
+  'Career & Ambition':     { topics: ['building in silence','career self-sabotage','outworking your doubts','the grind no one sees','ambition vs burnout','proving yourself quietly','knowing your worth'], tones: ['Ambitious, real','Dark, driven','Cinematic, focused'] },
+  'Discipline & Focus':    { topics: ['delayed gratification','routine over motivation','the cost of distraction','what discipline actually feels like','mental toughness','building when you do not feel like it'], tones: ['Direct, powerful','Cold, cinematic','Dark, motivational'] },
+  'Motivation':            { topics: ['why motivation fades','action before feeling ready','the myth of waiting','discipline when motivation dies','starting before you are ready'], tones: ['Energetic, real','Dark, honest','Cinematic, fired-up'] },
+  'Productivity':          { topics: ['doing less with more focus','deep work','protecting your time','saying no as a strategy','energy management over time management'], tones: ['Clear, direct','Dark, honest','Real, cinematic'] },
+  'Habits':                { topics: ['identity-based habits','the compound effect','small actions over time','the habit loop','why habits break','environment design'], tones: ['Practical, dark','Motivational, real','Cinematic, grounded'] },
+  'Masculine Energy':      { topics: ['direction and purpose','provider mindset','emotional control','protecting what matters','silent strength','leadership without ego','accountability'], tones: ['Strong, direct','Dark, powerful','Cinematic, grounded'] },
+  'Feminine Energy':       { topics: ['softness as strength','receiving vs chasing','feminine intuition','knowing your worth','the magnetic woman','nurturing without losing yourself'], tones: ['Soft, powerful','Emotional, real','Dark, cinematic'] },
+  'Spirituality':          { topics: ['intuition','energy shifts','karmic lessons','signs from the universe','emotional alignment','detachment','healing cycles','what the universe removes for you'], tones: ['Mystical, deep','Spiritual, cinematic','Quiet, powerful'] },
+  'Health & Wellness':     { topics: ['nervous system regulation','emotional eating','body image truth','sleep and emotional health','stress and the body','healing from the inside'], tones: ['Real, honest','Cinematic, calm','Deep, relatable'] },
+  'Fitness Mindset':       { topics: ['consistency over motivation','gym discipline','body confidence','mental toughness','comeback energy','self-respect through fitness','routine building'], tones: ['Energetic, raw','Dark, motivational','Cinematic, driven'] },
+  'Social Skills':         { topics: ['reading the room','charisma vs manipulation','why quiet people are powerful','conversational intelligence','social anxiety patterns','likability vs authenticity'], tones: ['Psychological, real','Dark, insightful','Cinematic, social'] },
+};
+
+// ── Niche → real category IDs (must exist inside promptsData.categories) ────
+// These IDs match INLINE_PROMPTS_DATA.categories[].id — using them keeps
+// state.category a REAL category id so filterPromptsBySign / generateScript /
+// render all stay in sync. Display labels come from promptsData (no duplicates).
+const NICHE_TO_REAL_CATS = {
+  'Human Psychology':       ['walls','hidden','rejection','obsession','misunderstood','manipulation','emotional_iq','overthinking'],
+  'Dark Psychology':        ['manipulation','obsession','toxic','sabotage','testing','independence','revenge','silent'],
+  'Emotional Intelligence': ['emotional_iq','walls','hidden','protective','trust','misunderstood','detachment'],
+  'Mindset':                ['sabotage','fake_confidence','burnout','walls','falling_hard','overthinking','independence'],
+  'Overthinking':           ['overthinking','hidden_sadness','walls','rejection','burnout','sabotage'],
+  'Hidden Truths':          ['hidden','hidden_sadness','misunderstood','walls','manipulation','emotional_iq'],
+  'Mystery & Curiosity':    ['hidden','obsession','misunderstood','testing','karmic','soulmate'],
+  'Relationships':          ['avoidant','hidden','loyalty','intimacy','walls','comeback','attachment','disappearing'],
+  'Dating & Attraction':    ['addictive','toxic','attachment','falling_hard','testing','independence','obsession'],
+  'Breakups & Healing':     ['silent','detachment','revenge','rejection','karmic','hidden_sadness','disappearing','heartbreak'],
+  'No Contact':             ['silent','disappearing','walls','detachment','comeback','hidden'],
+  'Red Flags':              ['manipulation','toxic','testing','walls','trust','obsession'],
+  'Loyalty & Trust':        ['loyalty','testing','trust','protective','hidden','walls'],
+  'Communication':          ['silent','emotional_iq','misunderstood','hidden','walls','people_pleasing'],
+  'Friendship':             ['loyalty','testing','disappearing','misunderstood','hidden','burnout'],
+  'Family Dynamics':        ['people_pleasing','walls','burnout','sabotage','rejection','protective'],
+  'Self Improvement':       ['burnout','fake_confidence','people_pleasing','falling_hard','overthinking','hidden_sadness'],
+  'Personal Growth':        ['walls','burnout','sabotage','falling_hard','misunderstood','fake_confidence'],
+  'Confidence':             ['fake_confidence','protective','trust','walls','independence','people_pleasing'],
+  'Glow-Up':                ['revenge','burnout','fake_confidence','independence','people_pleasing','falling_hard'],
+  'Villain Arc':            ['independence','revenge','walls','detachment','protective','sabotage'],
+  'Revenge Success':        ['revenge','independence','comeback','walls','hidden','fake_confidence'],
+  'Inner Peace':            ['burnout','detachment','walls','people_pleasing','hidden_sadness','intimacy'],
+  'Life Lessons':           ['hidden','misunderstood','emotional_iq','karmic','trust','walls'],
+  'Money & Success':        ['independence','fake_confidence','sabotage','burnout','testing','walls'],
+  'Career & Ambition':      ['independence','burnout','fake_confidence','sabotage','protective','walls'],
+  'Discipline & Focus':     ['burnout','sabotage','fake_confidence','independence','walls','falling_hard'],
+  'Motivation':             ['burnout','sabotage','fake_confidence','independence','overthinking'],
+  'Productivity':           ['burnout','sabotage','independence','walls','people_pleasing','overthinking'],
+  'Habits':                 ['sabotage','burnout','fake_confidence','falling_hard','overthinking','walls'],
+  'Masculine Energy':       ['independence','protective','walls','emotional_iq','trust','loyalty'],
+  'Feminine Energy':        ['protective','intimacy','people_pleasing','walls','falling_hard','emotional_iq'],
+  'Spirituality':           ['karmic','soulmate','burnout','detachment','walls','deep_attachment'],
+  'Health & Wellness':      ['burnout','overthinking','people_pleasing','hidden_sadness','walls','emotional_iq'],
+  'Fitness Mindset':        ['burnout','fake_confidence','independence','sabotage','walls','falling_hard'],
+  'Social Skills':          ['emotional_iq','manipulation','hidden','misunderstood','walls','fake_confidence'],
+};
+
+// Resolve a niche to {id,label,emoji} category objects that actually exist
+// in the live promptsData. Filters out anything missing so we never produce
+// a "ghost" category that doesn't render or filter anything.
+function _nicheRealCats(niche){
+  const ids = NICHE_TO_REAL_CATS[niche] || [];
+  const cats = ids
+    .map(id => promptsData.categories.find(c => c.id === id))
+    .filter(Boolean);
+  // Fallback: if the niche has no map or no real matches, use the first 8 cats.
+  return cats.length ? cats : (promptsData.categories || []).slice(0, 8);
+}
+
+const nicheCategoryMap_LEGACY_UNUSED = {
+  'Human Psychology':      ['Hidden Insecurity','Overthinking','Fear of Rejection','Emotional Triggers','Social Masks','Silent Judgment','Self-Sabotage','Emotional Intelligence','Being Misunderstood','Testing People','Protective Personality','Attachment Wounds'],
+  'Dark Psychology':       ['Manipulation','Control Tactics','Obsession','Power Dynamics','Silent Judgment','Emotional Triggers','Testing People','Toxic Attraction','Mind Games','Hidden Motives','Fear Tactics','Social Masks'],
+  'Emotional Intelligence':['Reading People','Emotional Regulation','Empathy','Knowing When to Walk Away','Calm Under Pressure','High EQ Habits','Silent Strength','Self-Awareness','Emotional Maturity','Boundaries','Inner Clarity','Deep Understanding'],
+  'Mindset':               ['Growth Mindset','Reframing Failure','Abundance Thinking','Identity Shift','Breaking Limits','Quiet Confidence','Mental Rewiring','Resilience','Self-Belief','Inner Narrative','Perspective Shift','Positive Detachment'],
+  'Overthinking':          ['3AM Spiraling','Replaying Conversations','Catastrophizing','Decision Paralysis','Analysis Paralysis','Fear Disguised as Logic','Mental Loops','Anxiety Patterns','What-If Thinking','Rumination','Mind Chatter','Overthinking vs Intuition'],
+  'Hidden Truths':         ['Unspoken Agreements','The Lies We Tell Ourselves','What Silence Really Means','Truth About Human Nature','Things That Go Unsaid','Hidden Motivations','Double Standards','What Nobody Admits','Suppressed Reality','The Quiet Truth','Invisible Patterns','Surface vs Depth'],
+  'Mystery & Curiosity':   ['Hidden Motivations','Psychological Patterns','What Makes Someone Unforgettable','The Quiet Ones','Unseen Forces','Unexplained Attraction','Silent Observers','What People Hide','The Unknown Side','Curiosity Loops','Invisible Influence','Deep Fascination'],
+  'Relationships':         ['Mixed Signals','Trust Issues','Fear of Intimacy','Emotional Walls','Loyalty Tests','Silent Treatment','Why They Pull Away','Hidden Feelings','Attachment Styles','No Contact','Jealousy','Commitment Fear'],
+  'Dating & Attraction':   ['Red Flags','Emotional Availability','Chasing Energy','Magnetic Confidence','Mixed Signals','First Impression','Chemistry','Toxic Attraction','Standards','Testing Interest','Flirting Psychology','Attraction Triggers'],
+  'Breakups & Healing':    ['No Contact','Heartbreak Healing','Revenge Glow-Up','Hidden Sadness','Emotional Detachment','Why They Come Back','Letting Go','Fear of Rejection','Silent Pain','Karmic Lessons','Self-Respect','Moving On'],
+  'No Contact':            ['Why Silence Works','The Urge to Reach Out','Healing in Quiet','Power of Disappearing','What No Contact Reveals','They Notice When You Stop','Moving in Silence','Emotional Reset','Reclaiming Power','Detachment','Self-Preservation','Quiet Strength'],
+  'Red Flags':             ['Love Bombing','Hot and Cold Behavior','Isolation Tactics','Gaslighting','Charm as a Weapon','The Signs You Ignored','Breadcrumbing','Intermittent Reinforcement','Emotional Unavailability','Double Standards','Control Patterns','The Moment You Knew'],
+  'Loyalty & Trust':       ['Who Stays When Things Break','Testing Loyalty','Earned Trust','Betrayal Patterns','The Cost of Being Reliable','Real Loyalty','One-Sided Effort','Trust After Betrayal','Proving Loyalty','Silent Devotion','Tested Love','Conditional Trust'],
+  'Communication':         ['What People Mean vs What They Say','Conflict Avoidance','Silent Treatment','Passive Aggression','Asking for What You Need','Hard Conversations','Unspoken Expectations','Reading Between the Lines','Emotional Expression','Communication Breakdown','Words vs Actions','Saying No'],
+  'Friendship':            ['One-Sided Friendships','Outgrowing People','Fake Loyalty','Why Friendships Fade','The Friend Who Disappears','Real vs Surface Friends','Parasocial Dynamics','Energy Drain','Competitive Friendships','Growing Apart','Chosen Family','Loyalty Patterns'],
+  'Family Dynamics':       ['Toxic Family Patterns','Parental Wounds','Emotional Inheritance','Black Sheep Syndrome','Family Pressure','Love With Conditions','Generational Trauma','Enmeshment','The Scapegoat','Unspoken Family Rules','Emotional Neglect','Breaking the Cycle'],
+  'Self Improvement':      ['Discipline','Consistency','Self-Sabotage','Delayed Gratification','Building Confidence','Overthinking','Emotional Burnout','Fake Confidence','People Pleasing','Mindset Shift','Identity Change','Personal Standards'],
+  'Personal Growth':       ['Identity Shifts','Shedding Old Versions','Uncomfortable Growth','The Person You Are Becoming','Letting Go of Who You Were','Growth That Hurts','Evolving in Silence','Chapter Closing','Becoming Unrecognizable','Inner Work','Shadow Work','Transformation Pain'],
+  'Confidence':            ['Real Confidence vs Performance','Building Self-Trust','Confidence After Failure','Unshakeable Self-Image','Not Needing Approval','Quiet Confidence','Inner Certainty','Walking Away with Confidence','Confidence Triggers','Imposter Syndrome','Self-Worth','Validation Independence'],
+  'Glow-Up':               ['Silent Transformation','Becoming Unrecognizable','Outgrowing Your Old Self','Glow-Up They Did Not See Coming','Leveling Up Alone','Post-Heartbreak Glow','Healing Into Strength','Upgrade Energy','New Version of You','Glow-Up Process','Physical and Mental Shift','Rising in Silence'],
+  'Villain Arc':           ['Choosing Yourself Ruthlessly','Cold Strategy Over Emotion','Cutting People Off With Peace','No Explanations Just Results','The Shift That Changed Everything','Unbothered Mode','Detachment as Power','Ruthless Clarity','Zero Tolerance','Accountability to Self','No More Explaining','Silent Revenge'],
+  'Revenge Success':       ['Winning in Silence','Building While They Watched','Success as the Response','What They Lost When They Left','The Best Revenge Is Becoming','Soft Life After Hard Times','Silent Victory','Proving Them Wrong Quietly','Outgrowing Your Pain','Rising Without Noise','Leveling Up After Betrayal','The Outcome They Did Not Expect'],
+  'Inner Peace':           ['Detaching From Outcomes','Unbothered Energy','Letting Go Without Closure','Healing Without an Apology','What Peace Actually Looks Like','Choosing Calm','No Longer Proving Yourself','Emotional Freedom','Contentment','Living Quietly','Releasing Resentment','Stillness'],
+  'Life Lessons':          ['What They Do Not Teach You','Lessons Learned Too Late','The Hard Truths Everyone Avoids','What Maturity Actually Looks Like','Patterns You Only See in Hindsight','Real Wisdom','The Price of Ignorance','Learning the Hard Way','Truth Over Comfort','Wisdom Through Pain','Earned Knowledge','Perspective With Age'],
+  'Money & Success':       ['Delayed Gratification','Broke Mindset','Success Habits','Risk Taking','Confidence Under Pressure','Long-Term Thinking','Discipline','Self-Sabotage','Ambition','Quiet Pressure','Focus','Winner Mentality'],
+  'Career & Ambition':     ['Building in Silence','Career Self-Sabotage','Outworking Your Doubts','The Grind No One Sees','Ambition vs Burnout','Proving Yourself Quietly','Knowing Your Worth','Professional Mask','Underestimated Energy','Rising Through Work','Opportunity Mindset','Hidden Potential'],
+  'Discipline & Focus':    ['Delayed Gratification','Routine Over Motivation','The Cost of Distraction','Mental Toughness','Building When You Do Not Feel Like It','No Days Off Energy','Process Over Results','Long Game','Eliminating Distractions','Intentional Living','Controlled Focus','Consistent Action'],
+  'Motivation':            ['Why Motivation Fades','Action Before Feeling Ready','Discipline When Motivation Dies','Starting Before You Are Ready','What Drives the Ones Who Do Not Stop','Showing Up Anyway','The Real Source of Drive','Inner Fire','Purpose Over Mood','Staying the Course','Resilient Drive','Unstoppable Mentality'],
+  'Productivity':          ['Deep Work','Protecting Your Time','Saying No as a Strategy','Energy Management','Doing Less With More Focus','Priority Clarity','Time Blocking','Eliminating Noise','Output Over Activity','Focused Execution','Leverage','Single-Tasking'],
+  'Habits':                ['Identity-Based Habits','The Compound Effect','Small Actions Over Time','The Habit Loop','Why Habits Break','Environment Design','Daily Rituals','Stacking Habits','Habit vs Motivation','The 1 Percent Rule','Invisible Progress','Automatic Excellence'],
+  'Masculine Energy':      ['Direction and Purpose','Provider Mindset','Emotional Control','Protecting What Matters','Silent Strength','Leadership Without Ego','Accountability','Decisiveness','Stoic Discipline','Building Without Noise','Self-Mastery','Earned Respect'],
+  'Feminine Energy':       ['Softness as Strength','Receiving vs Chasing','Feminine Intuition','Knowing Your Worth','The Magnetic Woman','Nurturing Without Losing Yourself','Sacred Boundaries','Emotional Flow','Feminine Power','Allure','Authentic Femininity','Graceful Confidence'],
+  'Spirituality':          ['Intuition','Energy Shifts','Karmic Lessons','Signs From The Universe','Emotional Alignment','Detachment','Healing Cycles','Inner Peace','Shadow Work','Divine Timing','Soul Lessons','Protection Energy'],
+  'Health & Wellness':     ['Nervous System Regulation','Emotional Eating','Body Image Truth','Sleep and Emotional Health','Stress and the Body','Healing From the Inside','Rest as Resistance','Mind-Body Connection','Somatic Healing','Energy Depletion','Burnout Recovery','Emotional Release'],
+  'Fitness Mindset':       ['Gym Discipline','Mental Toughness','Comeback Energy','Consistency','Body Confidence','Self-Respect','Routine Building','Discipline Under Pressure','Emotional Burnout','No Excuses','Transformation','Training Through Pain'],
+  'Social Skills':         ['Reading the Room','Charisma vs Manipulation','Why Quiet People Are Powerful','Conversational Intelligence','Social Anxiety Patterns','Likability vs Authenticity','First Impressions','Body Language','Presence','Making People Feel Seen','Social Confidence','The Art of Listening'],
+};
+
+const HOOK_TEMPLATES = [
+  '{sign} does not always {topic} because they stopped caring.',
+  'Why {sign} goes quiet when the connection starts feeling real.',
+  '{sign} acts detached — but remembers every single thing.',
+  'The moment {sign} shuts down — and what it actually means.',
+  'Why {sign} keeps testing people before letting anyone in.',
+  '{sign} will never say this out loud — but the silence does.',
+  'Why {sign} disappears right when things start getting real.',
+  'The side of {sign} no one talks about — and why.',
+  '{sign} pushes people away before they get the chance to leave.',
+  'What {sign} never admits — even to themselves.',
+];
+
+const PREMISE_TEMPLATES = [
+  'Why {sign} {topic} — and what it says about who they really are.',
+  'The truth behind {sign} and {topic} — what it actually costs them.',
+  'What {topic} reveals about {sign} and the fear they never talk about.',
+  'How {sign} uses {topic} to protect the part of them that was hurt first.',
+  'The psychology behind why {sign} {topic} — even when they do not want to.',
+];
+
+const nicheState = {
+  selectedNiche: '',
+  generatedIdeas: [],
+  selectedIdea: null,
+  activeNicheCategories: [],
+};
+
+function _pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+function _shuffle(arr){
+  const a = [...arr];
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function nichePillUpdate(){
+  const niche = nicheState.selectedNiche;
+  const pill = document.getElementById('nichePill');
+  const txt  = document.getElementById('nichePillText');
+  if(niche && pill && txt){ pill.style.display = 'block'; txt.textContent = niche; }
+  else if(pill){ pill.style.display = 'none'; }
+}
+
+function nicheTrendRandom(){
+  try {
+    // 1. Pick a random niche
+    const niches = Object.keys(NICHE_TREND_MAP);
+    const picked = _pick(niches);
+    nicheState.selectedNiche = picked;
+    const sel = document.getElementById('nicheSelect');
+    const inp = document.getElementById('nicheCustom');
+    if(sel) sel.value = picked;
+    if(inp) inp.value = '';
+    nichePillUpdate();
+    console.log('[Action] nicheTrendRandom — niche:', picked);
+
+    // 2-4. Generate 4 fresh ideas for this niche
+    nicheTrendGenerate();
+
+    // 5-7. Auto-apply the FIRST idea so sign + category + prompt all change
+    //      visibly on every Random click. Real state, real UI.
+    const ideas = nicheState.generatedIdeas;
+    if(ideas && ideas.length){
+      useNicheIdea(0);
+      showToast('🎲 ' + picked + ' — first idea applied', 'info');
+    } else {
+      showToast('🎲 ' + picked, 'info');
+    }
+  } catch(err){
+    console.error('[NicheTrend] nicheTrendRandom error:', err);
+    showToast('Random failed: ' + (err.message || err), 'error');
+  }
+}
+
+// Emoji lookup for generated niche category chips (legacy, unused after fix)
+const _NICHE_CHIP_EMOJI = {
+  'Emotional Intelligence':'🧠','Overthinking':'🌀','Fear of Rejection':'❌',
+  'Hidden Emotions':'🎭','Being Misunderstood':'💭','Self-Sabotage':'💣',
+  'Testing People':'🧪','Fake Confidence':'🎪','Emotional Walls':'🧱',
+  'Emotional Burnout':'🕯️','Manipulation & Control':'🕸️','Silent Treatment':'🤐',
+  'Protective Personalities':'🛡️','Trust Issues':'🔓','Why They Disappear':'🌑',
+  'Heartbreak & Healing':'💔','Ghosting & Silence':'👻','Jealousy & Insecurity':'💚',
+  'Emotional Detachment':'🧊','Attachment Styles':'🔗','Loyalty & Devotion':'🛡️',
+  'Fear of Intimacy':'🚪','Why They Come Back':'🔄','Deep Attachment':'⚓',
+  'Toxic Attraction':'☠️','Obsession & Fixation':'🔥','Emotionally Addictive':'🧲',
+  'Falling Too Hard':'🌊','Dangerous Independence':'⚔️','Karmic Relationships':'⚡',
+  'Soulmate & Deep Connection':'✨','Hidden Sadness':'🌧️','Revenge Energy':'🗡️',
+  'People Pleasing':'😊','Manipulation':'🕸️','Obsession':'🔥','Toxic Attraction':'☠️',
+  'Silent Judgment':'👁️','Social Masks':'🎭','Attachment Wounds':'💔',
+  'Control Tactics':'⚛️','Power Dynamics':'⚖️','Mind Games':'♟️',
+  'Hidden Motives':'🔍','Fear Tactics':'😰','Reading People':'👁️',
+  'Emotional Regulation':'🎛️','Empathy':'💙','Calm Under Pressure':'🧊',
+  'Silent Strength':'💪','Self-Awareness':'🪞','Emotional Maturity':'🌿',
+  'Boundaries':'🚧','Inner Clarity':'💡','Growth Mindset':'🌱',
+  'Quiet Confidence':'🦁','Resilience':'🔩','Discipline':'⚙️',
+  'Consistency':'📈','Delayed Gratification':'⏳','Ambition':'🏆',
+  'Self-Respect':'👑','No Contact':'🔇','Heartbreak Healing':'💔',
+  'Letting Go':'🕊️','Moving On':'🚶','Karmic Lessons':'⚡',
+  'Intuition':'🔮','Energy Shifts':'✨','Healing Cycles':'🌀',
+  'Inner Peace':'☮️','Shadow Work':'🌑','Divine Timing':'⏰',
+  'Gym Discipline':'🏋️','Mental Toughness':'🔥','Comeback Energy':'💥',
+  'Body Confidence':'💫','Transformation':'🦋','Winning in Silence':'🏆',
+  'Building in Silence':'🔨','Success Habits':'📊','Long-Term Thinking':'🔭',
+};
+
+function _nicheChipEmoji(label){
+  return _NICHE_CHIP_EMOJI[label] || '🔮';
+}
+
+// Refresh the REAL Category grid and apply a "niche-match" highlight to
+// chips whose id is in the active niche. We never replace the grid with
+// niche-only display labels — that broke state.category by storing a
+// label string instead of a real category id, and broke filterPromptsBySign.
+function renderNicheCategories(realCats){
+  // Re-build the canonical Category grid (so any prior niche overlay is
+  // cleared) and add a "niche-match" highlight to chips matching the niche.
+  // We NEVER overwrite the grid with display-only labels — that broke
+  // selectCategory(catId) by replacing real ids with strings.
+  if(typeof buildCategoryGrid === 'function') buildCategoryGrid();
+  const ids = new Set((realCats||[]).filter(Boolean).map(c => c.id));
+  document.querySelectorAll('#categoryGrid .cat-chip').forEach(chip => {
+    chip.classList.toggle('niche-match', ids.has(chip.dataset.cat));
+  });
+  if(state.category){
+    document.querySelectorAll('#categoryGrid .cat-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.cat === state.category));
+  }
+  console.log('[NicheTrend] niche-match highlighted ids:', [...ids]);
+}
+
+function selectNicheCategory(btn, label){
+  // Legacy entry: resolve display label back to a REAL category id and
+  // delegate so state.category stays a real id (not a display string).
+  const cat = (promptsData.categories || []).find(c => c.label === label || c.id === label);
+  if(cat){ selectCategory(cat.id); }
+  else {
+    console.warn('[Category] no real cat for label:', label);
+    showToast('Category not found: ' + label, 'error');
+  }
+}
+
+function nicheTrendGenerate(){
+  try {
+    const niche = nicheState.selectedNiche
+      || document.getElementById('nicheCustom')?.value?.trim()
+      || document.getElementById('nicheSelect')?.value;
+
+    if(!niche){ showToast('Pick or type a niche first', 'error'); return; }
+    nicheState.selectedNiche = niche;
+    nichePillUpdate();
+    console.log('[Action] nicheTrendGenerate — niche:', niche);
+
+    // 1. Resolve niche to REAL category objects (id + label + emoji)
+    const realCats = (typeof _nicheRealCats === 'function')
+      ? _nicheRealCats(niche)
+      : (promptsData.categories || []).slice(0, 8);
+    nicheState.activeNicheCategories = realCats.map(c => c.id);
+
+    // 2. Highlight matching chips in the canonical Category grid
+    renderNicheCategories(realCats);
+
+    // 3. Build 4 ideas — each carries a REAL catId
+    const data = NICHE_TREND_MAP[niche] || NICHE_TREND_MAP['Human Psychology'];
+    const ideas = [];
+    const usedTopics = new Set();
+    const usedSignNames = new Set();
+    const shuffledCats = _shuffle(realCats);
+
+    for(let i = 0; i < 4; i++){
+      let topic, tries = 0;
+      do { topic = _pick(data.topics); tries++; } while(usedTopics.has(topic) && tries < 20);
+      usedTopics.add(topic);
+
+      let signObj;
+      tries = 0;
+      do { signObj = _pick(SIGNS); tries++; } while(usedSignNames.has(signObj.name) && tries < 20);
+      usedSignNames.add(signObj.name);
+
+      const catObj = shuffledCats[i % shuffledCats.length];
+      const tone   = _pick(data.tones);
+      const hook   = HOOK_TEMPLATES[i % HOOK_TEMPLATES.length]
+        .replace(/\{sign\}/g, signObj.name)
+        .replace(/\{topic\}/g, topic);
+      const premise = _pick(PREMISE_TEMPLATES)
+        .replace(/\{sign\}/g, signObj.name)
+        .replace(/\{topic\}/g, topic);
+
+      ideas.push({
+        niche, topic,
+        sign: signObj.name, signSym: signObj.sym,
+        catId: catObj.id, catLabel: catObj.label, catEmoji: catObj.emoji,
+        hook, premise, tone,
+      });
+    }
+
+    nicheState.generatedIdeas = ideas;
+    console.log('[GenerateIdeas] ideas:', ideas);
+    renderNicheIdeas(ideas);
+    showToast('4 ideas generated — click ✓ Use to apply', 'info');
+
+  } catch(err){
+    console.error('[NicheTrend] nicheTrendGenerate error:', err);
+    showToast('Generate ideas failed: ' + (err.message || err), 'error');
+  }
+}
+
+function renderNicheIdeas(ideas){
+  const area = document.getElementById('nicheIdeasArea');
+  const list = document.getElementById('nicheIdeasList');
+  if(!area || !list) return;
+  area.style.display = 'block';
+  list.innerHTML = ideas.map((idea, i) => `
+    <div style="background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px">
+        <div style="font-size:.76rem;font-weight:700;color:var(--text);line-height:1.35;flex:1">
+          ${idea.signSym||''} ${idea.sign}
+          <span style="color:var(--muted);font-weight:400"> — </span>
+          <span style="color:var(--purple2)">${idea.topic}</span>
+        </div>
+        <button onclick="useNicheIdea(${i})"
+          style="flex-shrink:0;padding:4px 11px;background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(168,85,247,.2));border:1px solid rgba(124,58,237,.5);border-radius:7px;color:#d8b4fe;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;letter-spacing:.3px">
+          ✓ Use This Idea
+        </button>
+      </div>
+      <div style="font-size:.7rem;color:var(--muted);font-style:italic;line-height:1.45;margin-bottom:5px">"${idea.hook}"</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <span style="font-size:.61rem;padding:2px 8px;background:rgba(124,58,237,.15);border-radius:10px;color:var(--purple2)">${idea.catEmoji||''} ${idea.catLabel}</span>
+        <span style="font-size:.61rem;padding:2px 8px;background:rgba(255,255,255,.04);border-radius:10px;color:var(--text2)">${idea.tone}</span>
+      </div>
+    </div>`).join('');
+}
+
+function useNicheIdea(idx){
+  try {
+    const idea = nicheState.generatedIdeas[idx];
+    if(!idea){ showToast('Idea not found', 'error'); return; }
+    console.log('[Action] useNicheIdea', idx, idea);
+
+    // 1. Sign — canonical selector updates grid, badge, phone preview, filter
+    selectSign(idea.sign);
+    console.log('[State] selectedSign:', state.sign);
+
+    // 2. Category — must be a REAL category id so filterPromptsBySign() and
+    //    the /generate-script server payload stay in sync with everything else.
+    if(idea.catId){
+      selectCategory(idea.catId);
+    } else {
+      const cat = (promptsData.categories || []).find(c => c.label === idea.catLabel);
+      if(cat){ selectCategory(cat.id); }
+      else { console.warn('[Category] idea missing real catId — skipped'); }
+    }
+    console.log('[State] selectedCategory:', state.category);
+
+    // 3. Push the premise into the Prompt Memory editor — generateScript()
+    //    reads via getActivePremise() which prefers state.currentPrompt.
+    const fullPremise = idea.niche + ' — ' + idea.topic + '\n' +
+                        idea.premise + '\n' +
+                        'Hook: "' + idea.hook + '"\n' +
+                        'Tone: ' + idea.tone;
+    const editor = document.getElementById('promptMemoryEditor');
+    if(editor){
+      editor.value = fullPremise;
+      state.currentPrompt = fullPremise;
+      if(!state.originalPrompt) state.originalPrompt = fullPremise;
+      state.promptText = idea.premise;
+      if(typeof refreshPromptMemoryUI === 'function') refreshPromptMemoryUI();
+      if(typeof markDirty === 'function') markDirty('script');
+    }
+
+    nicheState.selectedIdea = idea;
+    renderCurrentIdeaPreview(idea);
+
+    showToast(idea.signSym + ' ' + idea.sign + ' + ' +
+              (idea.catEmoji || '') + ' ' + idea.catLabel + ' selected', 'info');
+
+  } catch(err){
+    console.error('[NicheTrend] useNicheIdea error:', err);
+    showToast('Failed to apply idea: ' + (err.message || err), 'error');
+  }
+}
+
+function renderCurrentIdeaPreview(idea){
+  const preview = document.getElementById('currentIdeaPreview');
+  if(!preview) return;
+  preview.style.display = 'block';
+  preview.innerHTML = `
+    <div style="font-size:.62rem;color:#86efac;font-weight:700;letter-spacing:1px;margin-bottom:7px">✓ SELECTED IDEA</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;font-size:.68rem;line-height:1.5">
+      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Niche</span><br/>
+           <span style="color:var(--text2);font-weight:600">${idea.niche}</span></div>
+      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Topic</span><br/>
+           <span style="color:var(--text2);font-weight:600">${idea.topic}</span></div>
+      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Sign</span><br/>
+           <span style="color:var(--purple2);font-weight:700">${idea.signSym} ${idea.sign}</span></div>
+      <div><span style="color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.5px">Category</span><br/>
+           <span style="color:var(--text2);font-weight:600">${idea.catLabel}</span></div>
+    </div>
+    <div style="margin-top:7px;font-size:.68rem;color:var(--muted);font-style:italic;border-top:1px solid rgba(124,58,237,.15);padding-top:6px">"${idea.hook}"</div>
+    <div style="font-size:.61rem;color:var(--muted);margin-top:3px">Tone: ${idea.tone}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', init);
+
+// Animate grain on preview loop
+// Also guard grainType !== 'none': when type is 'none' drawPhoneGrain() only
+// runs ctx.clearRect and returns — wasted work every 120ms.
+setInterval(()=>{ if(state.grainIntensity>0 && state.grainType!=='none') drawPhoneGrain(); }, 120);
+
+// Load browser voices once available
+if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ()=>{};
+
+// ═══════════════════════════════════════════════════════════════════
+// GLOBAL ERROR SAFETY NET
+// Surfaces uncaught errors as visible toasts so buttons cannot fail
+// silently. Falls back to console if showToast isn't available yet.
+// ═══════════════════════════════════════════════════════════════════
+window.addEventListener('error', (ev) => {
+  try {
+    const msg = (ev && ev.error && ev.error.message) || ev.message || 'Unknown error';
+    console.error('[Global error]', msg, ev.error || '');
+    if(typeof showToast === 'function') showToast('Error: ' + msg, 'error');
+  } catch { /* ignore */ }
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  try {
+    const r = ev && ev.reason;
+    const msg = (r && r.message) || (typeof r === 'string' ? r : 'Unknown async error');
+    console.error('[Unhandled rejection]', msg, r || '');
+    if(typeof showToast === 'function') showToast('Async error: ' + msg, 'error');
+  } catch { /* ignore */ }
+});
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- STOCK MEDIA BROWSER MODAL                                                 -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div id="stockModal" style="display:none;position:fixed;inset:0;z-index:9999">
+  <div class="stock-backdrop" onclick="closeStockModal()" style="position:absolute;inset:0;background:rgba(4,2,8,.85);backdrop-filter:blur(8px)"></div>
+  <div class="stock-panel" style="position:relative;max-width:1100px;margin:40px auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="stock-header" style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <span style="font-weight:800;font-size:.95rem;color:var(--text)">🌐 Stock Media Browser</span>
+      <div style="display:flex;gap:6px;margin-left:8px">
+        <button class="stock-tab active" data-tab="videos" onclick="switchStockTab('videos')" style="padding:6px 12px;border-radius:8px;font-size:.72rem;font-weight:700;background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2);cursor:pointer;font-family:inherit">🎬 Videos</button>
+        <button class="stock-tab"        data-tab="audio"  onclick="switchStockTab('audio')"  style="padding:6px 12px;border-radius:8px;font-size:.72rem;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-family:inherit">🎵 Music</button>
+      </div>
+      <button onclick="closeStockModal()" title="Close" style="margin-left:auto;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;font-family:inherit">✕</button>
+    </div>
+    <div class="stock-body" style="overflow-y:auto;flex:1;padding-right:6px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input id="stockSearchInp" type="text" placeholder="Search videos…"
+          onkeydown="if(event.key==='Enter')searchStock()"
+          style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.85rem;outline:none"/>
+        <button onclick="searchStock()" style="padding:8px 16px;border-radius:8px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-weight:700;font-size:.78rem;cursor:pointer;font-family:inherit">Search</button>
+      </div>
+      <div id="stockChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+      <div id="stockResults"><div style="color:var(--muted);text-align:center;padding:24px">Choose a category or search above ✨</div></div>
+      <div id="stockPagination" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// STOCK MEDIA BROWSER
+// ═══════════════════════════════════════════════════════════════════
+const VIDEO_CHIPS = ['cosmos','space','mystical','ocean','fire','forest','rain','city night','abstract','fog','northern lights','smoke'];
+const AUDIO_CHIPS = ['ambient','meditation','cinematic','dark','mystical','epic','lofi','calm','spiritual','dramatic','fantasy','orchestral'];
+
+let _stockTab = 'videos', _stockPage = 1, _stockQ = 'cosmos', _stockAudio = null;
+
+function openStockBrowser(tab){
+  try {
+    _stockTab  = tab || 'videos';
+    _stockPage = 1;
+    _stockQ    = _stockTab === 'videos' ? 'cosmos' : 'ambient';
+    document.getElementById('stockModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    _initStockTab(false);
+    searchStock();
+    console.log('[Action] openStockBrowser', tab);
+  } catch(err){
+    console.error('[openStockBrowser] error:', err);
+    showToast('Stock browser failed: ' + (err.message||err), 'error');
+  }
+}
+function closeStockModal(){
+  const m = document.getElementById('stockModal');
+  if(m) m.style.display = 'none';
+  document.body.style.overflow = '';
+  stopStockAudio();
+}
+function stopStockAudio(){
+  if(_stockAudio){ try { _stockAudio.pause(); } catch{} _stockAudio = null; }
+  document.querySelectorAll('.stock-prev-btn').forEach(b=>{ b.textContent='▶'; b.classList.remove('playing'); });
+}
+function _initStockTab(doSearch){
+  const tab = _stockTab;
+  document.querySelectorAll('.stock-tab').forEach(t => {
+    const on = t.dataset.tab === tab;
+    t.classList.toggle('active', on);
+  });
+  const chips = tab === 'videos' ? VIDEO_CHIPS : AUDIO_CHIPS;
+  document.getElementById('stockChips').innerHTML = chips.map(c =>
+    `<button class="stock-chip${_stockQ===c?' active':''}" onclick="stockChipClick('${c}')" style="padding:5px 10px;border-radius:14px;font-size:.7rem;background:${_stockQ===c?'rgba(124,58,237,.25)':'var(--surface2)'};border:1px solid ${_stockQ===c?'var(--purple2)':'var(--border)'};color:${_stockQ===c?'var(--purple2)':'var(--text2)'};cursor:pointer;font-family:inherit">${c}</button>`
+  ).join('');
+  const inp = document.getElementById('stockSearchInp');
+  if(inp) inp.placeholder = tab === 'videos' ? 'Search videos…' : 'Search music…';
+  if(doSearch) searchStock();
+}
+function switchStockTab(tab){
+  stopStockAudio();
+  _stockTab  = tab;
+  _stockPage = 1;
+  _stockQ    = tab === 'videos' ? 'cosmos' : 'ambient';
+  const inp = document.getElementById('stockSearchInp');
+  if(inp) inp.value = '';
+  _initStockTab(true);
+}
+function stockChipClick(chip){
+  _stockQ = chip; _stockPage = 1;
+  const inp = document.getElementById('stockSearchInp');
+  if(inp) inp.value = chip;
+  _initStockTab(false);
+  searchStock();
+}
+async function searchStock(){
+  try {
+    const inp = document.getElementById('stockSearchInp');
+    const v = inp ? inp.value.trim() : '';
+    if(v) _stockQ = v;
+    _stockPage = 1;
+    stopStockAudio();
+    await _doStockFetch();
+  } catch(err){
+    console.error('[searchStock] error:', err);
+    showToast('Stock search failed: ' + (err.message||err), 'error');
+  }
+}
+async function stockGoPage(p){
+  _stockPage = p;
+  stopStockAudio();
+  await _doStockFetch();
+}
+async function _doStockFetch(){
+  const res = document.getElementById('stockResults');
+  res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">✨ Searching…</div>';
+  document.getElementById('stockPagination').innerHTML = '';
+  try {
+    if(_stockTab === 'videos'){
+      const r = await fetch(API_BASE+'/api/stock/videos?q='+encodeURIComponent(_stockQ)+'&page='+_stockPage);
+      const d = await r.json();
+      if(d.error === 'no_key'){ _showStockNoKey('pexels'); return; }
+      _renderStockVideos(d.videos||[], d.total||0);
+    } else {
+      const r = await fetch(API_BASE+'/api/stock/audio?q='+encodeURIComponent(_stockQ)+'&page='+_stockPage);
+      const d = await r.json();
+      if(d.error === 'no_key'){ _showStockNoKey('jamendo'); return; }
+      _renderStockAudio(d.tracks||[], d.total||0);
+    }
+  } catch(e){
+    res.innerHTML = '<div style="color:#f87171;text-align:center;padding:24px">⚠ '+e.message+'</div>';
+  }
+}
+function _showStockNoKey(provider){
+  const isPexels = provider === 'pexels';
+  document.getElementById('stockResults').innerHTML =
+    '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;color:var(--text2)">'
+    + '<h3 style="margin-bottom:10px;color:var(--purple2)">'+(isPexels?'🎬':'🎵')+' Free API Key Needed</h3>'
+    + '<p style="font-size:.85rem;line-height:1.6">Add '+(isPexels?'PEXELS_API_KEY':'JAMENDO_CLIENT_ID')+' to your .env file, then restart the server.</p>'
+    + '</div>';
+}
+function _renderStockVideos(videos, total){
+  const res = document.getElementById('stockResults');
+  if(!videos.length){ res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No results — try different keywords</div>'; return; }
+  res.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">'
+    + videos.map(v =>
+      '<div class="stock-vcard" data-src="'+(v.downloadUrl||'')+'" data-thumb="'+(v.thumb||'').replace(/"/g,'')+'" data-id="'+v.id+'" data-url="'+encodeURIComponent(v.downloadUrl||'')+'" data-name="stock_pexels_'+v.id+'" style="position:relative;background:#000;border-radius:8px;overflow:hidden;cursor:pointer;aspect-ratio:9/16;border:1px solid var(--border)" onmouseenter="_stockVidHover(this)" onmouseleave="_stockVidLeave(this)">'
+      + '<img src="'+(v.thumb||'').replace(/"/g,'')+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>'
+      + '<div style="position:absolute;bottom:0;left:0;right:0;padding:6px;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);display:flex;justify-content:space-between;align-items:center;gap:6px">'
+      + '<span style="font-size:.65rem;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px">'+Math.floor((v.duration||0)/60)+':'+String((v.duration||0)%60).padStart(2,'0')+'</span>'
+      + '<button onclick="event.stopPropagation();_applyStockVid(this)" style="padding:4px 10px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:5px;color:#fff;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">✓ USE</button>'
+      + '</div></div>'
+    ).join('') + '</div>';
+  _renderStockPagination(total, 15);
+}
+function _stockVidHover(card){
+  if(card.querySelector('video')) return;
+  const src = card.dataset.src; if(!src) return;
+  const vid = document.createElement('video');
+  vid.muted = true; vid.loop = true; vid.playsInline = true; vid.autoplay = true;
+  vid.src = src;
+  vid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+  card.appendChild(vid);
+  vid.play().catch(()=>{});
+}
+function _stockVidLeave(card){
+  const vid = card.querySelector('video');
+  if(vid){ try { vid.pause(); } catch{} vid.remove(); }
+}
+async function _applyStockVid(btn){
+  const card = btn.closest('.stock-vcard');
+  const url  = decodeURIComponent(card.dataset.url||'');
+  const name = card.dataset.name;
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const r = await fetch(API_BASE+'/api/stock/download',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ type:'video', downloadUrl:url, filename:name })
+    });
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error||'Failed');
+    if(typeof loadBackgrounds === 'function') await loadBackgrounds();
+    if(typeof selectBackground === 'function') selectBackground(d.filename);
+    showToast('✓ Background applied!', 'success');
+    closeStockModal();
+  } catch(e){
+    showToast('Download failed: '+e.message, 'error');
+    btn.disabled = false; btn.textContent = '✓ USE';
+  }
+}
+function _renderStockAudio(tracks, total){
+  stopStockAudio();
+  const res = document.getElementById('stockResults');
+  if(!tracks.length){ res.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">No results — try different keywords</div>'; return; }
+  res.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">'
+    + tracks.map(t =>
+      '<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px">'
+      + '<div style="width:48px;height:48px;border-radius:6px;background:var(--surface3);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">'
+      + (t.thumb ? '<img src="'+(t.thumb||'').replace(/"/g,'')+'" alt="" style="width:100%;height:100%;object-fit:cover"/>' : '🎵')
+      + '</div>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:.8rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.title||'Untitled').replace(/</g,'&lt;')+'</div>'
+      + '<div style="font-size:.66rem;color:var(--muted)">'+(t.author||'').replace(/</g,'&lt;')+(t.duration?' · '+Math.floor(t.duration/60)+':'+String(t.duration%60).padStart(2,'0'):'')+'</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:6px;flex-shrink:0">'
+      + '<button class="stock-prev-btn" id="spb_'+t.id+'" onclick="toggleStockAudioPreview(\''+t.id+'\',\''+encodeURIComponent(t.previewUrl||'')+'\')" title="Preview" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">▶</button>'
+      + '<button id="saub_'+t.id+'" data-url="'+encodeURIComponent(t.downloadUrl||t.previewUrl||'')+'" data-name="stock_jamendo_'+t.id+'" onclick="_applyStockAudio(this)" style="padding:6px 10px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;border-radius:6px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">✓ USE</button>'
+      + '</div></div>'
+    ).join('') + '</div>';
+  _renderStockPagination(total, 20);
+}
+function toggleStockAudioPreview(id, urlEnc){
+  const btn = document.getElementById('spb_'+id);
+  if(_stockAudio && btn && btn.classList.contains('playing')){ stopStockAudio(); return; }
+  stopStockAudio();
+  const rawUrl = decodeURIComponent(urlEnc);
+  if(!rawUrl){ showToast('No preview available','error'); return; }
+  const proxyUrl = API_BASE+'/api/stock/audio-proxy?url='+encodeURIComponent(rawUrl);
+  if(btn){ btn.textContent='⏳'; }
+  _stockAudio = new Audio(proxyUrl);
+  _stockAudio.volume = 0.7;
+  _stockAudio.play().then(()=>{
+    if(btn){ btn.textContent='⏹'; btn.classList.add('playing'); }
+    _stockAudio.onended = ()=>{ if(btn){ btn.textContent='▶'; btn.classList.remove('playing'); } };
+  }).catch(e => {
+    if(btn){ btn.textContent='▶'; btn.classList.remove('playing'); }
+    showToast('Preview unavailable: '+e.message, 'error');
+  });
+}
+async function _applyStockAudio(btn){
+  const url  = decodeURIComponent(btn.dataset.url||'');
+  const name = btn.dataset.name;
+  if(!url){ showToast('No download URL','error'); return; }
+  stopStockAudio();
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const r = await fetch(API_BASE+'/api/stock/download',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ type:'audio', downloadUrl:url, filename:name })
+    });
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error||'Failed');
+    if(typeof loadMusic === 'function') await loadMusic();
+    if(typeof selectMusic === 'function') selectMusic(d.filename);
+    showToast('✓ Music applied!', 'success');
+    closeStockModal();
+  } catch(e){
+    showToast('Download failed: '+e.message, 'error');
+    btn.disabled = false; btn.textContent = '✓ USE';
+  }
+}
+function _renderStockPagination(total, perPage){
+  const pages = Math.ceil(total / perPage);
+  const pg = document.getElementById('stockPagination');
+  if(pages <= 1){ pg.innerHTML=''; return; }
+  pg.innerHTML =
+    '<button '+(_stockPage<=1?'disabled':'')+' onclick="stockGoPage('+(_stockPage-1)+')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">← Prev</button>'
+    + '<span style="font-size:.78rem;color:var(--muted)">Page '+_stockPage+' of '+pages+' · '+total+' results</span>'
+    + '<button '+(_stockPage>=pages?'disabled':'')+' onclick="stockGoPage('+(_stockPage+1)+')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">Next →</button>';
+}
+</script>
+</body>
+</html>
+                         

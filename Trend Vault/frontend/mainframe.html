@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>The Vault — Mainframe</title>
+<title>🔮 Trend Vault Mainframe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -156,68 +156,50 @@ main{
 .card:hover{border-color:var(--border2)}
 
 /* ── Tool tiles ── */
-/* ── Tool tiles — compact icon boxes ── */
 .tools-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-  gap:12px;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:14px;
   margin-bottom:28px;
 }
 .tool-tile{
-  background:#0b0b12!important;
-  border:none!important;
-  border-radius:14px;
-  padding:22px 12px 16px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:20px 16px;
   cursor:pointer;
   text-decoration:none;
-  display:flex;flex-direction:column;align-items:center;
-  gap:10px;
-  transition:transform .18s ease,box-shadow .25s ease;
+  display:flex;flex-direction:column;gap:8px;
+  transition:all .22s;
   position:relative;
   overflow:hidden;
-  box-shadow:0 0 10px rgba(167,139,250,.13);
-  min-height:110px;
-  justify-content:center;
 }
-.tool-tile::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.tool-tile::after{display:none!important}
-.tool-tile>*{position:relative;z-index:3}
+.tool-tile::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(124,58,237,.08),transparent);
+  opacity:0;transition:opacity .22s;
+}
 .tool-tile:hover{
-  transform:translateY(-4px);
-  box-shadow:0 0 20px rgba(167,139,250,.32),0 0 36px rgba(96,165,250,.14);
+  border-color:var(--purple);
+  transform:translateY(-2px);
+  box-shadow:0 8px 28px rgba(124,58,237,.2);
 }
-.tool-tile.gold:hover{
-  box-shadow:0 0 20px rgba(201,162,39,.3),0 0 36px rgba(201,162,39,.12);
-}
-/* Gold tile gets warm gradient rim on hover */
-.tool-tile.gold::before{
-  background:linear-gradient(120deg,rgba(255,255,255,.9),rgba(240,192,64,.8),
-    rgba(255,255,255,.8),rgba(201,162,39,.6),rgba(255,255,255,.9));
-  background-size:260% 260%;
-}
-.tile-icon{
-  font-size:2.2rem;line-height:1;
-  filter:drop-shadow(0 0 6px rgba(167,139,250,.5));
-  transition:filter .2s,transform .2s;
-}
-.tool-tile:hover .tile-icon{
-  filter:drop-shadow(0 0 10px rgba(167,139,250,.8));
-  transform:scale(1.1);
-}
+.tool-tile:hover::before{opacity:1}
+.tool-tile.gold:hover{border-color:var(--gold);box-shadow:0 8px 28px rgba(201,162,39,.2)}
+.tool-tile.gold::before{background:linear-gradient(135deg,rgba(201,162,39,.08),transparent)}
+.tile-icon{font-size:2rem;line-height:1}
 .tile-name{
-  font-size:.72rem;font-weight:700;
-  color:rgba(240,236,255,.92);
-  letter-spacing:.5px;
-  text-align:center;line-height:1.3;
-  text-shadow:0 0 4px rgba(167,139,250,.3);
+  font-size:.82rem;font-weight:700;color:var(--text);
+  letter-spacing:.3px;
 }
-.tile-desc{display:none}
+.tile-desc{font-size:.7rem;color:var(--muted);line-height:1.4}
 .tile-badge{
-  position:absolute;top:8px;right:8px;
-  font-size:.5rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;
-  padding:2px 6px;border-radius:8px;
-  background:rgba(201,162,39,.25);border:1px solid rgba(201,162,39,.5);color:var(--gold2);
+  position:absolute;top:10px;right:10px;
+  font-size:.55rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  padding:2px 7px;border-radius:10px;
+  background:rgba(124,58,237,.3);border:1px solid var(--purple);color:var(--purple3);
 }
+.tile-badge.gold{background:rgba(201,162,39,.2);border-color:var(--gold);color:var(--gold2)}
 
 /* ── Connection panel ── */
 .connection-panel{
@@ -528,234 +510,29 @@ input:focus,textarea:focus,select:focus{
 }
 
 
-/* ══ Mainframe page — specific element overrides ══════════════════════ */
-
-/* .card — override old definition sitting earlier in the file */
-.card{
-  background:#0b0b12!important;background-image:none!important;
-  border:none!important;border-radius:14px;padding:20px;
-  position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.14);
-  transition:transform .12s ease,box-shadow .3s ease;
-}
-.card::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.card::after{display:none!important}
-.card>*{position:relative;z-index:3}
-.card:hover{transform:translateY(-1px);box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.12)}
-
-/* tool-tile: see definition above */
-
-/* Stat cards */
-.stat-card{
-  background:#0b0b12!important;border:none!important;
-  border-radius:12px;padding:16px;text-align:center;
-  position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.12);
-}
-.stat-card::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.stat-card::after{display:none!important}
-.stat-card>*{position:relative;z-index:3}
-
-/* Job items */
-.job-item{
-  background:#0b0b12!important;border:none!important;
-  border-radius:10px;padding:12px;
-  position:relative;overflow:hidden;
-  transition:box-shadow .2s;
-  box-shadow:0 0 6px rgba(167,139,250,.1);
-}
-.job-item::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.job-item::after{display:none!important}
-.job-item>*{position:relative;z-index:3}
-.job-item:hover{box-shadow:0 0 12px rgba(167,139,250,.22)}
-
-/* IP card, Env card, Actions card */
-.ip-card,.env-card,.actions-card{
-  background:#0b0b12!important;border:none!important;
-  border-radius:14px;padding:20px;
-  position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.12);
-}
-.ip-card::before,.env-card::before,.actions-card::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.ip-card::after,.env-card::after,.actions-card::after{display:none!important}
-.ip-card>*,.env-card>*,.actions-card>*{position:relative;z-index:3}
-
-
-/* Section labels */
-.section-title,.conn-name,.sys-label{
-  color:rgba(245,245,255,.92);
-  text-shadow:0 0 3px rgba(255,255,255,.3),0 0 7px rgba(167,139,250,.22);
-}
-
-/* Fine print brighter */
-.job-meta,.job-id,.ip-hint,.conn-url,.conn-subtitle,.stat-lbl,
-.logo-sub,.env-key,.env-val{color:#a099c4!important;font-size:.7rem!important}
-
-
-/* ══ Mainframe — missing element fixes ══════════════════════════════════ */
-
-/* Connection panel */
-.connection-panel{
-  background:#0b0b12!important;border:none!important;
-  border-radius:14px;padding:20px;margin-bottom:28px;
-  position:relative;overflow:hidden;
-  box-shadow:0 0 10px rgba(167,139,250,.15);
-}
-.connection-panel::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.connection-panel::after{display:none!important}
-.connection-panel>*{position:relative;z-index:3}
-
-/* Log card */
-.log-card{
-  background:#0b0b12!important;border:none!important;
-  border-radius:14px;padding:20px;
-  position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.12);
-}
-.log-card::before{content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
-.log-card::after{display:none!important}
-.log-card>*{position:relative;z-index:3}
-
-/* Action buttons — dark + purple accent rim on hover */
-.action-btn{
-  display:flex;align-items:center;gap:12px;
-  width:100%;padding:12px 16px;
-  background:#0f0f1c!important;
-  border:1px solid rgba(167,139,250,.25)!important;
-  border-radius:10px;
-  color:var(--text)!important;font-size:.8rem;font-weight:600;
-  cursor:pointer;font-family:'Space Grotesk',sans-serif;
-  margin-bottom:8px;text-align:left;
-  transition:all .2s;text-decoration:none;
-  position:relative;
-}
-.action-btn:last-child{margin-bottom:0}
-.action-btn:hover{
-  background:#17142a!important;
-  border-color:rgba(167,139,250,.6)!important;
-  transform:translateX(4px);
-  box-shadow:0 0 12px rgba(167,139,250,.2);
-}
-.action-btn.gold{border-color:rgba(201,162,39,.35)!important}
-.action-btn.gold:hover{border-color:rgba(201,162,39,.7)!important;box-shadow:0 0 12px rgba(201,162,39,.2)}
-.action-icon{font-size:1.1rem;flex-shrink:0;filter:drop-shadow(0 0 4px rgba(167,139,250,.4))}
-.action-text{flex:1;color:rgba(240,236,255,.92)}
-.action-arrow{
-  color:#a099c4;font-size:.85rem;
-  transition:transform .2s,color .2s;
-}
-.action-btn:hover .action-arrow{transform:translateX(3px);color:#c4b8f0}
-
-/* Section labels — upgrade to glowing headers */
-.section-label{
-  font-family:'Orbitron',sans-serif;
-  font-size:.6rem;letter-spacing:3px;text-transform:uppercase;
-  color:#c4b8f0!important;
-  margin-bottom:14px;
-  display:flex;align-items:center;gap:12px;
-  text-shadow:0 0 6px rgba(167,139,250,.5),0 0 12px rgba(96,165,250,.2);
-}
-.section-label::after{
-  content:'';flex:1;height:1px;
-  background:linear-gradient(90deg,rgba(167,139,250,.4),transparent);
-}
-
-/* Sysbar — cleaner, more readable */
-.sysbar{
-  display:flex;align-items:center;gap:0;
-  padding:8px 40px;
-  background:rgba(6,4,14,.9);
-  border-bottom:1px solid rgba(167,139,250,.15);
-  font-family:'Orbitron',sans-serif;
-  font-size:.62rem;letter-spacing:1.5px;
-  overflow-x:auto;
-}
-.sys-item{
-  display:flex;align-items:center;gap:8px;
-  padding:5px 22px;
-  border-right:1px solid rgba(167,139,250,.12);
-  white-space:nowrap;
-}
-.sys-label{color:#9890ba!important;text-transform:uppercase;font-size:.58rem}
-.sys-val{color:#e8e2ff!important;font-weight:700;text-shadow:0 0 6px rgba(167,139,250,.3)}
-
-/* Connection card inner elements */
-.conn-header{
-  display:flex;align-items:center;gap:12px;
-  margin-bottom:16px;padding-bottom:14px;
-  border-bottom:1px solid rgba(167,139,250,.15);
-}
-.conn-icon{font-size:1.6rem;filter:drop-shadow(0 0 6px rgba(167,139,250,.5))}
-.conn-title{
-  font-size:.88rem;font-weight:700;color:rgba(245,245,255,.95);
-  text-shadow:0 0 4px rgba(167,139,250,.3);
-}
-.conn-subtitle{font-size:.68rem!important;color:#a099c4!important;margin-top:3px}
-.conn-row{
-  display:flex;align-items:center;gap:12px;
-  padding:11px 0;
-  border-bottom:1px solid rgba(167,139,250,.1);
-  font-size:.8rem;
-}
-.conn-row:last-child{border-bottom:none}
-.conn-name{flex:1;color:rgba(235,228,255,.9);font-weight:600}
-.conn-url{font-size:.65rem!important;color:#9890ba!important;margin-top:3px;letter-spacing:.5px}
-
-/* IP display inner box */
-.ip-display{
-  font-family:'Orbitron',sans-serif;
-  font-size:1.15rem;font-weight:700;
-  color:var(--purple3);
-  letter-spacing:2px;margin:10px 0;
-  text-align:center;padding:14px;
-  background:rgba(167,139,250,.06)!important;
-  border:1px solid rgba(167,139,250,.2)!important;
-  border-radius:10px;
-  text-shadow:0 0 10px rgba(167,139,250,.5);
-}
-.ip-hint{font-size:.66rem!important;color:#a099c4!important;text-align:center;margin-top:8px}
-
-/* Env card inner rows */
-.env-row{
-  display:flex;align-items:center;gap:8px;
-  padding:9px 0;
-  border-bottom:1px solid rgba(167,139,250,.1);
-  font-size:.72rem;
-}
-.env-row:last-child{border-bottom:none}
-.env-key{color:#c084fc!important;font-family:'Orbitron',sans-serif;font-size:.63rem!important}
-.env-val{color:#d4cbec!important;font-family:monospace}
-
-/* Nav buttons */
-.nav-btn{
-  padding:7px 16px;border-radius:8px;font-size:.76rem;font-weight:600;
-  text-decoration:none;color:#c4b8f0;
-  border:1px solid rgba(167,139,250,.25);
-  transition:all .2s;letter-spacing:.5px;font-family:'Space Grotesk',sans-serif;
-  cursor:pointer;background:transparent;
-}
-.nav-btn:hover{
-  border-color:rgba(167,139,250,.6);
-  color:#e8e2ff;
-  background:rgba(167,139,250,.1);
-  box-shadow:0 0 10px rgba(167,139,250,.18);
-}
-.nav-btn.active{
-  background:rgba(167,139,250,.18);
-  border-color:rgba(167,139,250,.6);
-  color:#e8e2ff;
-  box-shadow:0 0 10px rgba(167,139,250,.2);
-}
-
-/* Log body terminal */
-.log-body{
-  background:rgba(0,0,0,.5)!important;
-  border:1px solid rgba(167,139,250,.15)!important;
-  border-radius:8px;padding:14px;
-  font-family:monospace;font-size:.7rem;color:#a0a0c8;
-  line-height:1.8;max-height:220px;overflow-y:auto;
-}
-
+/* ── Niche Trend Builder ── */
+.niche-card{background:rgba(10,6,22,.85)!important;border:1px solid rgba(167,139,250,.22)!important;border-radius:16px;padding:18px 16px;box-shadow:0 0 24px rgba(124,58,237,.12)}
+.niche-select{flex:1;background:#0d0820;border:1px solid rgba(167,139,250,.3);border-radius:8px;color:#e8e2ff;font-size:.75rem;padding:8px 10px;font-family:'Space Grotesk',sans-serif;cursor:pointer;outline:none;min-width:0}
+.niche-select:focus{border-color:rgba(167,139,250,.7)}
+.nb-btn{padding:7px 13px;border-radius:8px;font-size:.72rem;font-weight:700;border:1px solid rgba(167,139,250,.35);color:#c4b5fd;cursor:pointer;background:rgba(124,58,237,.15);font-family:'Space Grotesk',sans-serif;letter-spacing:.4px;transition:all .18s;white-space:nowrap}
+.nb-btn:hover{background:rgba(124,58,237,.3);border-color:rgba(167,139,250,.6);color:#e8e2ff}
+.nb-btn.gold{background:rgba(201,162,39,.18);border-color:rgba(201,162,39,.5);color:#ffe500}
+.nb-btn.gold:hover{background:rgba(201,162,39,.32);color:#fff}
+.nb-btn.green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#86efac}
+.nb-btn.green:hover{background:rgba(34,197,94,.25)}
+.nb-btn.sm{padding:4px 9px;font-size:.65rem}
+.idea-grid{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.35) transparent;padding-right:2px;margin-top:2px}
+.idea-grid::-webkit-scrollbar{width:4px}
+.idea-grid::-webkit-scrollbar-thumb{background:rgba(167,139,250,.35);border-radius:4px}
+.idea-pill{display:flex;align-items:flex-start;gap:8px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.13);border-radius:10px;padding:9px 11px;font-size:.74rem;color:#d4cbec;line-height:1.4;transition:border-color .15s}
+.idea-pill:hover{background:rgba(167,139,250,.11);border-color:rgba(167,139,250,.28)}
+.pill-text{flex:1}
+.pill-tag{font-size:.56rem;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:20px;flex-shrink:0;background:rgba(124,58,237,.25);color:#c4b5fd;margin-top:1px}
+.pill-save{background:none;border:1px solid rgba(167,139,250,.2);border-radius:6px;color:rgba(167,139,250,.5);font-size:.68rem;padding:3px 8px;cursor:pointer;transition:all .15s;font-family:inherit;flex-shrink:0;white-space:nowrap}
+.pill-save:hover,.pill-save.saved{background:rgba(34,197,94,.15);border-color:#4ade80;color:#86efac}
+.saved-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:5px 8px 5px 12px;font-size:.68rem;color:#86efac;font-weight:600}
+.saved-chip button{background:none;border:none;color:#6ee7b7;font-size:.72rem;cursor:pointer;padding:0 2px;line-height:1;transition:color .12s}
+.saved-chip button:hover{color:#f87171}
 </style>
 </head>
 <body>
@@ -770,7 +547,7 @@ input:focus,textarea:focus,select:focus{
   <header>
     <div class="ping-wrap" style="width:36px;height:36px">
       <div class="ping-ring" id="headerPing"></div>
-      <div class="logo-glyph" style="animation:none;filter:none"><img src="/vault-icon.svg" width="40" height="40" alt="The Vault" style="vertical-align:middle;filter:drop-shadow(0 0 10px rgba(167,139,250,.8))" draggable="false"></div>
+      <div class="logo-glyph">🔮</div>
     </div>
     <div class="logo-block">
       <div class="logo-name">Trend Vault Mainframe</div>
@@ -840,32 +617,39 @@ input:focus,textarea:focus,select:focus{
       <div class="tools-grid">
         <a href="/trend-vault" class="tool-tile gold">
           <div class="tile-badge gold">Main</div>
-          <div class="tile-icon"><img src="/vault-icon.svg" width="38" height="38" alt="The Vault" style="vertical-align:middle;filter:drop-shadow(0 0 8px rgba(167,139,250,.7))" draggable="false"></div>
-          <div class="tile-name">The Vault</div>
+          <div class="tile-icon">🔮</div>
+          <div class="tile-name">Trend Vault Studio</div>
+          <div class="tile-desc">Generate &amp; render trend-vault videos</div>
         </a>
         <a href="/voice-lab" class="tool-tile">
           <div class="tile-icon">🎙️</div>
           <div class="tile-name">Voice Lab</div>
+          <div class="tile-desc">Preview &amp; test TTS voices</div>
         </a>
         <a href="/voice-editor" class="tool-tile">
           <div class="tile-icon">🎚️</div>
           <div class="tile-name">Voice Editor</div>
+          <div class="tile-desc">Fine-tune voice settings</div>
         </a>
         <a href="/" class="tool-tile">
           <div class="tile-icon">✂️</div>
           <div class="tile-name">Clip Tool</div>
+          <div class="tile-desc">Cut &amp; extract video clips</div>
         </a>
         <a href="/tiktok" class="tool-tile">
           <div class="tile-icon">📤</div>
-          <div class="tile-name">TikTok</div>
+          <div class="tile-name">TikTok Auto-Upload</div>
+          <div class="tile-desc">Post renders to TikTok (drafts or live)</div>
         </a>
         <div class="tool-tile" onclick="refreshAll()" style="cursor:pointer">
           <div class="tile-icon">🔄</div>
-          <div class="tile-name">Refresh</div>
+          <div class="tile-name">Refresh Status</div>
+          <div class="tile-desc">Re-ping all systems now</div>
         </div>
         <div class="tool-tile" onclick="openLogs()">
           <div class="tile-icon">📋</div>
           <div class="tile-name">System Log</div>
+          <div class="tile-desc">View live connection log</div>
         </div>
       </div>
 
@@ -959,6 +743,68 @@ input:focus,textarea:focus,select:focus{
           <span class="action-text">Refresh All Status</span>
           <span class="action-arrow">→</span>
         </button>
+      </div>
+
+
+      <!-- ── Niche Trend Builder ── -->
+      <div class="niche-card" id="nicheTrendBuilder">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div class="section-label" style="margin-bottom:0">🧠 Niche Trend Builder</div>
+          <button class="nb-btn sm" onclick="nbRandomAll()">⚡ RANDOM ALL</button>
+        </div>
+
+        <!-- Niche picker row -->
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <select class="niche-select" id="nicheSelect">
+            <option value="">— Pick Niche —</option>
+            <option>Human Psychology</option><option>Dark Psychology</option>
+            <option>Emotional Intelligence</option><option>Mindset</option>
+            <option>Overthinking</option><option>Hidden Truths</option>
+            <option>Mystery &amp; Curiosity</option><option>Relationships</option>
+            <option>Dating &amp; Attraction</option><option>Breakups &amp; Healing</option>
+            <option>No Contact</option><option>Red Flags</option>
+            <option>Loyalty &amp; Trust</option><option>Communication</option>
+            <option>Friendship</option><option>Family Dynamics</option>
+            <option>Self Improvement</option><option>Personal Growth</option>
+            <option>Confidence</option><option>Glow-Up</option>
+            <option>Villain Arc</option><option>Revenge</option>
+            <option>Success</option><option>Inner Peace</option>
+            <option>Life Lessons</option><option>Money &amp; Success</option>
+            <option>Career &amp; Ambition</option><option>Discipline &amp; Focus</option>
+            <option>Motivation</option><option>Productivity</option>
+            <option>Habits</option><option>Masculine Energy</option>
+            <option>Feminine Energy</option><option>Spirituality</option>
+            <option>Health &amp; Wellness</option><option>Fitness Mindset</option>
+            <option>Social Skills</option>
+          </select>
+          <button class="nb-btn sm" onclick="nbRandomNiche()">🎲 Random</button>
+        </div>
+
+        <button class="nb-btn gold" style="width:100%;margin-bottom:14px;padding:10px 0" onclick="nbGenerate()">
+          ⚡ Generate Ideas
+        </button>
+
+        <!-- Output -->
+        <div id="nbOutput" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:.6rem;letter-spacing:1.5px;color:rgba(167,139,250,.6);text-transform:uppercase;font-weight:700">🎭 Categories</div>
+            <div style="display:flex;gap:6px">
+              <button class="nb-btn sm" onclick="nbRandomSpotlight()">⚡ Random Pick</button>
+              <button class="nb-btn sm green" onclick="nbSaveAll()">💾 Save All</button>
+            </div>
+          </div>
+          <div id="nbSpotlight" style="display:none;background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:10px;padding:12px 14px;font-size:.8rem;color:#ffe500;font-weight:700;margin-bottom:10px;line-height:1.5"></div>
+          <div id="nbPills" class="idea-grid"></div>
+        </div>
+
+        <!-- Saved -->
+        <div id="nbSavedSection" style="display:none;margin-top:14px;border-top:1px solid rgba(167,139,250,.12);padding-top:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:.6rem;letter-spacing:1.5px;color:rgba(34,197,94,.6);text-transform:uppercase;font-weight:700">💾 Saved Ideas</div>
+            <button class="nb-btn sm" onclick="nbClearSaved()" style="color:#f87171;border-color:rgba(248,113,113,.25)">✕ Clear All</button>
+          </div>
+          <div id="nbSavedWrap" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
       </div>
 
       <!-- Live log -->
@@ -1184,6 +1030,349 @@ async function loadEnvStatus(){
 }
 
 // ── Refresh all ───────────────────────────────────────────────────────────
+
 async function refreshAll(){
   addLog('info','Refreshing all system checks…');
-  renderLog()
+  renderLog();
+  await Promise.allSettled([checkWorker(), checkTts(), loadJobs(), loadStats(), loadEnvStatus()]);
+  renderLog();
+  addLog('ok','Status refresh complete');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  refreshAll();
+  nbRenderSaved();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// NICHE TREND BUILDER
+// ════════════════════════════════════════════════════════════════════════════
+const NB_POOL = {
+  'Human Psychology': [
+    'Why your brain lies to you about what you actually want','The mirror effect: how you attract what you fear most',
+    'Signs someone is mentally stronger than they appear','The real reason people self-sabotage right before success',
+    'Why humans need to feel understood more than loved','The dark truth about why people stay in bad situations',
+    'What your anger is actually trying to tell you','Why you repeat the same mistakes with different people',
+    'The psychology of why you cannot stop thinking about someone','How the brain confuses familiarity with love',
+    'Why smart people overthink themselves into paralysis','The subconscious patterns that run your entire life',
+    'Why people with trauma avoid the things they actually need','The real reason humans crave chaos when life gets too good',
+    'How childhood wounds show up in adult relationships','Why your mind creates problems when there are none',
+    'The hidden reason people ghost instead of having conversations','What happens to your brain when you feel rejected',
+    'Why you feel empty after getting what you wanted','The psychology of why people need to win arguments',
+    'Signs you have anxious attachment and do not know it','Why your perception changes the moment someone wants you back',
+    'The real reason some people cannot accept compliments','How your ego keeps you stuck and calls it protection',
+    'Why humans are wired to fear success more than failure','The loop your nervous system runs when it feels unsafe',
+  ],
+  'Dark Psychology': [
+    'The manipulation tactic so subtle you think it is your own thought','How narcissists make you question your own memory',
+    'The 6 words that make anyone feel instantly inferior','Why toxic people target the most empathetic in the room',
+    'The silent treatment: why it is emotional warfare not space','How people use your kindness as a weapon against you',
+    'Signs someone is mirroring you to gain your trust','The love-bombing cycle and why it always ends the same way',
+    'How gaslighting gets installed so slowly you never notice','The one thing every manipulator needs you to believe',
+    'Why toxic people always play the victim so perfectly','The psychology behind why you keep going back to them',
+    'How controllers isolate you without you ever realising it','The trauma bond: why leaving feels like losing yourself',
+    'Signs someone is conditioning you to need their approval','How people weaponize your insecurities in arguments',
+    'The reason manipulators are always the most charming in the room','Why they only show their true self after you are attached',
+    'How to spot covert aggression disguised as helpfulness','The discard phase and why it always blindsides you',
+    'Why flying monkeys exist and how they are recruited','The DARVO move: deny attack reverse victim and offender',
+    'How toxic relationships rewire your nervous system over time','Why you apologise for things you did not do',
+  ],
+  'Emotional Intelligence': [
+    'The emotion under the emotion you are actually feeling','Why high EQ people never try to win arguments',
+    'Signs someone has mastered emotional regulation','How to feel your feelings without becoming them',
+    'The difference between reacting and responding','Why emotionally intelligent people are comfortable with silence',
+    'How to stop letting other people moods control yours','The art of setting limits without guilt or explanation',
+    'Why you do not have to attend every argument you are invited to','How people with high EQ process pain differently',
+    'Signs your emotional intelligence is above average','The reason self-awareness is the rarest human skill',
+    'How to stop taking things personally without becoming cold','Why the most emotionally intelligent people cry more not less',
+    'The difference between empathy and absorbing other people pain','Why feeling nothing is more dangerous than feeling everything',
+    'How emotional intelligence changes the way you argue','The trait that makes you impossible to manipulate',
+    'Why naming your emotions literally reduces their power','How to respond instead of react when someone triggers you',
+  ],
+  'Mindset': [
+    'The belief quietly capping your potential','Why your comfort zone expands or shrinks based on your thoughts',
+    'The mindset shift that separates people who succeed','Why suffering without growth is just suffering',
+    'How your inner monologue creates your outer reality','The one question that changes how you see every obstacle',
+    'Why identity-level change is the only permanent change','The difference between a growth mindset and toxic positivity',
+    'How to reprogram the story you tell yourself','Why winners think about problems differently',
+    'The mindset that turns failure into data instead of identity','How to stop being a prisoner of what other people think',
+    'Why your brain resists change even when you desperately want it','The subtle difference between confidence and ego',
+    'How to think longer term than your emotions want you to','Why the people who seem lucky all think the same way',
+    'The mindset shift that makes discipline feel effortless','How to stay mentally strong when life does not make sense',
+    'Why you need to get comfortable being misunderstood','The difference between a fixed story and a flexible identity',
+  ],
+  'Overthinking': [
+    'Why your brain stays up rehearsing conversations that never happen','The overthinking spiral and how to break out of it',
+    'Signs you are living in your head instead of your life','Why overthinkers are actually the most creative people',
+    'How to stop catastrophizing every situation','The real reason you replay embarrassing moments at 2am',
+    'Why your brain turns small problems into existential threats','How to quiet your mind without numbing yourself',
+    'The truth about why you cannot turn your brain off','Signs your overthinking is actually anxiety in disguise',
+    'Why overthinking never gives you the answers you want','How to make decisions when your mind gives you 47 options',
+    'The difference between thinking things through and obsessing','Why your thoughts at 3am are not your real thoughts',
+    'How to stop replaying what you should have said','The pattern that keeps overthinkers stuck in the same loop',
+    'Why the worst-case scenario your brain invented never happens','How overthinking destroys relationships before they start',
+    'The overthinking trait that is secretly a superpower','Why you feel exhausted even when you did nothing all day',
+  ],
+  'Relationships': [
+    'The moment a relationship goes from growth to survival mode','Signs you are loving someone at the expense of yourself',
+    'Why good people attract emotionally unavailable partners','The silent phase in relationships that predicts everything',
+    'How you show love tells you more about you than them','Why couples stop being friends and how to fix it',
+    'The real reason you feel alone while in a relationship','Signs someone loves the idea of you more than actually you',
+    'How resentment builds without a single argument','Why relationships do not fail overnight they fail quietly over time',
+    'The thing you need to stop tolerating if you want real love','Why the people who need love most often push it away',
+    'How to tell if someone is emotionally mature before you attach','The difference between growing together and growing apart',
+    'Why compatible people still destroy each other peace','The communication habit that kills attraction slowly',
+    'Signs a relationship is built on anxiety not love','How to stop trying to earn someone consistency',
+    'Why vulnerability is the real foundation of connection','The unspoken contract every relationship secretly runs on',
+  ],
+  'Breakups & Healing': [
+    'Why healing from a breakup is not linear and that is okay','The reason you miss someone who was bad for you',
+    'Why the rebound feels so intense and falls apart so fast','Signs you are healing even when it does not feel like it',
+    'The grief that comes with loving someone you cannot have','Why you keep checking their social media and how to stop',
+    'How to rebuild your identity after a relationship ends','The difference between closure and acceptance',
+    'Why some breakups hurt more than the loss of the person','How your body stores heartbreak and what it does to you',
+    'The stages of grief nobody tells you about after a relationship','Why you feel worse right before you feel better',
+    'How breakups reveal who you actually are','The real reason you want them back even knowing it was wrong',
+    'Why moving on does not mean forgetting and that is okay','Signs you are holding on out of fear not love',
+    'How to stop making someone the answer to your loneliness','Why the version of them you miss does not exist anymore',
+    'The unexpected gifts breakups leave if you let them','How to love yourself when you do not feel loveable',
+  ],
+  'No Contact': [
+    'What actually happens to a narcissist when you go no contact','Why breaking no contact resets everything you built',
+    'The urge to reach out and why you must not give in','Signs no contact is actually working even when it hurts',
+    'Why they only come back when you have almost moved on','The hoovering tactic and what it really means',
+    'How to respond when they reach out after months of silence','Why no contact is about healing not winning',
+    'The hardest part of no contact nobody prepares you for','How your nervous system adjusts when you stop the cycle',
+    'Why you feel like you are punishing them when you are saving yourself','The reason they always come back and what to do',
+    'Signs you are ready to enforce no contact for real','Why checking on them defeats the entire point',
+    'The psychological shift that happens after 30 days of no contact','Why they test you with small messages first',
+    'How no contact rewires your attachment system','What they tell mutual friends during your silence',
+    'Why the silence hurts more than the breakup did','How 90 days of no contact changes your entire nervous system',
+  ],
+  'Red Flags': [
+    'The red flag hiding inside what seems like a compliment','Why you ignored every sign and what that says about you',
+    'The subtle behaviours that tell you everything on the first date','Signs someone has a secret life they protect at all costs',
+    'How controlling people start: it always begins here','The small thing someone says that reveals their entire character',
+    'Why how they treat service workers is the only test you need','Signs someone lacks empathy even when they seem kind',
+    'The way someone handles your no tells you everything','Why love bombing is a red flag not a green one',
+    'How people show disrespect without saying it','The one text pattern that signals emotional immaturity',
+    'Signs you are being kept as a backup plan','Why their reaction to your success tells you who they really are',
+    'How to tell the difference between private and secretive','The red flag in how quickly they want to be serious',
+    'Signs someone only listens to respond not to understand','Why being too available too fast is not always flattering',
+    'How to read what someone does versus what they say','The pattern in their dating history that predicts your future',
+  ],
+  'Confidence': [
+    'Why real confidence has nothing to do with how you look','The confidence killer hiding in your daily habits',
+    'Signs someone is deeply insecure disguised as arrogant','Why confidence is built in the moments nobody claps for',
+    'How to speak up when your voice shakes and do it anyway','The difference between faking confidence and building it',
+    'Why the most confident people were once the most afraid','How to stop apologising for taking up space',
+    'The body language shift that instantly changes how people treat you','Why confidence is not about having no fear',
+    'Signs your confidence is conditional and what to do about it','How to rebuild confidence after someone destroyed it',
+    'The confidence secret nobody wants to admit','Why you should stop waiting to feel ready',
+    'How other people opinions of you become your opinion of yourself','The habits of people who are quietly confident in every room',
+    'Why confidence without self-awareness is just arrogance','How to stop needing external validation to feel okay',
+    'The question that reveals whether your confidence is real','Why confidence grows from doing hard things not thinking about them',
+  ],
+  'Self Improvement': [
+    'The hardest version of self-improvement nobody talks about','Why most self-improvement fails before it starts',
+    'The habits you need to break before building new ones','How to improve yourself without losing who you are',
+    'Signs you are growing even when it does not feel like it','Why the first step toward change is the most uncomfortable',
+    'How to measure growth when you cannot see progress','The self-improvement trap that keeps people stuck forever',
+    'Why you keep quitting right before the breakthrough','How to be honest with yourself without tearing yourself apart',
+    'The difference between improving yourself and escaping yourself','Why lasting change requires changing your environment',
+    'How to stop using self-improvement to avoid your feelings','The identity shift that makes all other changes easier',
+    'Why discipline is a form of self-love not punishment','How to turn your weaknesses into your most interesting qualities',
+    'The self-improvement advice that actually makes things worse','Why being consistent beats being perfect every single time',
+    'How to grow without abandoning the parts of yourself that matter','The overlooked part of self-improvement that changes everything',
+  ],
+  'Money & Success': [
+    'Why your relationship with money started before you earned any','The money belief keeping you exactly where you are',
+    'Why broke people and wealthy people think differently about time','How to build wealth when nobody taught you how money works',
+    'The real cost of staying in a job you hate for the security','Why most people confuse income with wealth and stay broke',
+    'Signs your money mindset is working against you','How successful people handle failure differently',
+    'Why the gap between where you are and where you want to be is a mindset problem','The money conversation nobody has with their kids',
+    'Why people who grew up with lack often sabotage abundance','How to stop trading time for money and start building assets',
+    'The financial habit that separates the wealthy from everyone else','Why you are one skill away from a completely different income',
+    'How successful people make decisions versus how struggling people do','The uncomfortable truth about why most people stay broke',
+    'Why the rich get richer and how to understand the actual mechanism','How to build a second income without quitting your first',
+    'The mindset that turns every setback into a setup','Why your network literally determines your net worth',
+  ],
+  'Discipline & Focus': [
+    'Why motivation is a lie and discipline is the only answer','How to do the work when you absolutely do not feel like it',
+    'The focus killer hiding in your daily routine','Why the people who seem to have it together just say no more',
+    'How to build discipline when you have no one holding you accountable','The difference between being busy and being disciplined',
+    'Why your phone is the biggest enemy of your potential','How to train your brain to focus for longer periods',
+    'The discipline habit that changes your entire day','Why willpower runs out but systems do not',
+    'How to create an environment that makes discipline automatic','The mental trick for starting when you do not want to',
+    'Why disciplined people are not more motivated they are just better structured','How to break the procrastination loop once and for all',
+    'The morning routine that builds unshakeable mental strength','Why you need to be ruthless about protecting your focus',
+    'How to stay consistent when results are nowhere in sight','The thing every high performer eliminates from their day',
+    'Why your future self is counting on decisions you make right now','How to stop starting over and finally finish something',
+  ],
+  'Spirituality': [
+    'Why your intuition has been right this entire time','The spiritual meaning behind why you keep meeting the same type of person',
+    'Signs you are going through a spiritual awakening','Why the universe removes people from your life right on time',
+    'The moment your soul stops pretending to be okay','Why everything falling apart might be falling into place',
+    'Signs you are meant for something you have not stepped into yet','How to hear your intuition over the noise of anxiety',
+    'Why the darkest seasons always precede the biggest growth','The spiritual lesson hidden inside what hurt you most',
+    'Why you keep being guided back to the same lesson','Signs your energy is misaligned with what you say you want',
+    'How to trust the timing of your life when nothing makes sense','Why some people are sent to teach you and not stay',
+    'The connection between your physical body and spiritual state','Why rest is not laziness it is spiritual preparation',
+    'How to protect your energy without closing your heart','Signs you have outgrown an old version of yourself',
+    'Why the thing you fear most is often the path forward','How to surrender control without giving up on your vision',
+  ],
+};
+
+// Alias niches that share a pool
+const NB_ALIAS = {
+  'Personal Growth':'Self Improvement','Glow-Up':'Confidence','Villain Arc':'Dark Psychology',
+  'Revenge':'No Contact','Inner Peace':'Spirituality','Life Lessons':'Mindset',
+  'Career & Ambition':'Money & Success','Motivation':'Discipline & Focus',
+  'Productivity':'Discipline & Focus','Habits':'Self Improvement',
+  'Masculine Energy':'Confidence','Feminine Energy':'Emotional Intelligence',
+  'Health & Wellness':'Self Improvement','Fitness Mindset':'Mindset',
+  'Social Skills':'Emotional Intelligence','Dating & Attraction':'Relationships',
+  'Loyalty & Trust':'Relationships','Communication':'Emotional Intelligence',
+  'Friendship':'Relationships','Family Dynamics':'Human Psychology',
+  'Hidden Truths':'Human Psychology','Mystery & Curiosity':'Human Psychology',
+  'Success':'Money & Success','Overthinking':'Overthinking',
+};
+
+const NB_TAGS = ['Hook','Story','Truth','Warning','Growth','Pattern','Reality','Shift','Twist','Secret'];
+const NB_NICHES = [
+  'Human Psychology','Dark Psychology','Emotional Intelligence','Mindset','Overthinking',
+  'Hidden Truths','Mystery & Curiosity','Relationships','Dating & Attraction','Breakups & Healing',
+  'No Contact','Red Flags','Loyalty & Trust','Communication','Friendship','Family Dynamics',
+  'Self Improvement','Personal Growth','Confidence','Glow-Up','Villain Arc','Revenge','Success',
+  'Inner Peace','Life Lessons','Money & Success','Career & Ambition','Discipline & Focus',
+  'Motivation','Productivity','Habits','Masculine Energy','Feminine Energy','Spirituality',
+  'Health & Wellness','Fitness Mindset','Social Skills',
+];
+
+let nbSaved = JSON.parse(localStorage.getItem('tv_niche_saved') || '[]');
+let nbCurrent = [];
+
+function nbShuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b; }
+function nbPool(niche){ return NB_POOL[niche] || NB_POOL[NB_ALIAS[niche]] || NB_POOL['Human Psychology']; }
+
+function nbRandomNiche(){
+  const sel = document.getElementById('nicheSelect');
+  sel.value = NB_NICHES[Math.floor(Math.random() * NB_NICHES.length)];
+}
+
+function nbGenerate(){
+  let niche = document.getElementById('nicheSelect').value;
+  if(!niche){ nbRandomNiche(); niche = document.getElementById('nicheSelect').value; }
+
+  const pool = nbPool(niche);
+  // Always shuffle differently — take up to 22 ideas
+  const shuffled = nbShuffle(pool);
+  // Create variations on the last few by prefixing them differently
+  const PREFIXES = [
+    'The truth about ','Signs that ','Why most people never realize ',
+    'What nobody tells you about ','How to spot when ','The real reason ',
+    'What happens when you finally understand ','The hidden pattern behind ',
+  ];
+  const count = Math.min(22, shuffled.length);
+  const base22 = shuffled.slice(0, count);
+  // Add 5 remixed variants for extra variety
+  const remixed = nbShuffle(pool).slice(0, 5).map(idea => {
+    const p = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
+    const core = idea.replace(/^(Why |How |Signs |The |What |When |The truth|Signs that )/i,'');
+    return p + core.charAt(0).toLowerCase() + core.slice(1);
+  });
+
+  nbCurrent = nbShuffle([...base22, ...remixed]);
+  nbRenderPills();
+  document.getElementById('nbOutput').style.display = 'block';
+  document.getElementById('nbSpotlight').style.display = 'none';
+  // Scroll builder into view
+  document.getElementById('nicheTrendBuilder').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function nbRenderPills(){
+  const grid = document.getElementById('nbPills');
+  grid.innerHTML = '';
+  nbCurrent.forEach((text, i) => {
+    const isSaved = nbSaved.includes(text);
+    const tag = NB_TAGS[i % NB_TAGS.length];
+    const div = document.createElement('div');
+    div.className = 'idea-pill';
+    div.innerHTML =
+      '<span class="pill-text">' + text + '</span>' +
+      '<span class="pill-tag">' + tag + '</span>' +
+      '<button class="pill-save' + (isSaved?' saved':'') + '" data-idx="' + i + '" onclick="nbToggle(this)">' +
+      (isSaved ? '✓ Saved' : '💾 Save') + '</button>';
+    grid.appendChild(div);
+  });
+}
+
+function nbToggle(btn){
+  const text = btn.closest('.idea-pill').querySelector('.pill-text').textContent;
+  const idx = nbSaved.indexOf(text);
+  if(idx > -1){
+    nbSaved.splice(idx,1);
+    btn.textContent = '💾 Save';
+    btn.classList.remove('saved');
+  } else {
+    nbSaved.push(text);
+    btn.textContent = '✓ Saved';
+    btn.classList.add('saved');
+  }
+  localStorage.setItem('tv_niche_saved', JSON.stringify(nbSaved));
+  nbRenderSaved();
+}
+
+function nbSaveAll(){
+  document.querySelectorAll('#nbPills .pill-text').forEach(el => {
+    if(!nbSaved.includes(el.textContent)) nbSaved.push(el.textContent);
+  });
+  localStorage.setItem('tv_niche_saved', JSON.stringify(nbSaved));
+  document.querySelectorAll('#nbPills .pill-save').forEach(b => { b.textContent='✓ Saved'; b.classList.add('saved'); });
+  nbRenderSaved();
+}
+
+function nbRenderSaved(){
+  const sec = document.getElementById('nbSavedSection');
+  const wrap = document.getElementById('nbSavedWrap');
+  if(!sec || !wrap) return;
+  if(!nbSaved.length){ sec.style.display='none'; return; }
+  sec.style.display = 'block';
+  wrap.innerHTML = nbSaved.map((idea,i) =>
+    '<div class="saved-chip"><span>' + idea + '</span>' +
+    '<button onclick="nbRemoveSaved(' + i + ')" title="Remove">✕</button></div>'
+  ).join('');
+}
+
+function nbRemoveSaved(i){
+  nbSaved.splice(i,1);
+  localStorage.setItem('tv_niche_saved', JSON.stringify(nbSaved));
+  nbRenderSaved();
+  nbRenderPills();
+}
+
+function nbClearSaved(){
+  nbSaved = [];
+  localStorage.setItem('tv_niche_saved', JSON.stringify(nbSaved));
+  nbRenderSaved();
+  nbRenderPills();
+}
+
+function nbRandomSpotlight(){
+  if(!nbCurrent.length) return;
+  const pick = nbCurrent[Math.floor(Math.random() * nbCurrent.length)];
+  const el = document.getElementById('nbSpotlight');
+  el.style.display = 'block';
+  el.textContent = '⚡ ' + pick;
+}
+
+function nbRandomAll(){
+  nbRandomNiche();
+  nbGenerate();
+}
+// ════════════════════════════════════════════════════════════════════════════
+
+</script>
+</body>
+</html>
