@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>🔮 Trend Vault Insight Studio</title>
+<title>The Vault — Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Inter:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600;700&family=Bowlby+One&family=Archivo+Black&family=Permanent+Marker&family=Caveat:wght@400;700&family=Shadows+Into+Light&family=Pacifico&family=Special+Elite&family=Creepster&family=Nosifer&family=Cormorant+Garamond:wght@400;700&family=Playfair+Display:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Lora:wght@400;700&family=Merriweather:wght@400;700;900&family=Bangers&family=Fredoka+One&family=Press+Start+2P&family=VT323&family=Major+Mono+Display&family=Russo+One&family=Black+Ops+One&family=Audiowide&family=Orbitron:wght@400;700;900&family=Righteous&family=Staatliches&family=Yeseva+One&family=Abril+Fatface&family=Crimson+Text:wght@400;600;700&family=Montserrat:wght@400;600;700;800;900&family=Poppins:wght@400;600;700;800;900&family=League+Spartan:wght@400;700;800;900&family=Barlow+Condensed:wght@700;800;900&family=Teko:wght@600;700&family=DM+Sans:wght@400;700;900&family=Manrope:wght@400;700;800&display=swap" rel="stylesheet"/>
@@ -74,10 +74,18 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .controls{flex:1;padding:28px 24px 100px 36px;display:flex;flex-direction:column;gap:18px;max-width:760px}
 
 /* Preview panel */
-.preview-wrap{width:320px;min-width:320px;padding:28px 14px 28px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+.preview-wrap{width:320px;min-width:320px;padding:28px 14px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
 
 /* Export / Render side panel */
-.export-panel{width:280px;min-width:280px;padding:28px 24px 28px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+.export-panel{width:280px;min-width:280px;padding:28px 24px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
+/* ── Panel children must not shrink so overflow-y:auto actually scrolls ── */
+.preview-wrap>*{flex-shrink:0}
+.export-panel>*{flex-shrink:0}
+/* ── Thin purple scrollbar for both sticky panels ── */
+.preview-wrap::-webkit-scrollbar,.export-panel::-webkit-scrollbar{width:6px}
+.preview-wrap::-webkit-scrollbar-track,.export-panel::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:999px}
+.preview-wrap::-webkit-scrollbar-thumb,.export-panel::-webkit-scrollbar-thumb{background:rgba(167,139,250,.45);border-radius:999px}
+.preview-wrap::-webkit-scrollbar-thumb:hover,.export-panel::-webkit-scrollbar-thumb:hover{background:rgba(167,139,250,.7)}
 .export-section{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:14px;padding:16px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(167,139,250,.15)}
 .export-section::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
 .export-section::after{display:none}
@@ -765,10 +773,11 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   </div>
   <nav>
     <a href="/" class="nav-link">🎬 Clip Tool</a>
-    <a href="/trend-vault" class="nav-link active">🔮 Trend Vault Studio</a>
+    <a href="/trend-vault" class="nav-link active"><img src="/vault-icon.svg" width="20" height="20" alt="The Vault" style="vertical-align:middle;margin-right:4px" draggable="false">The Vault</a>
     <a href="/voice-lab" class="nav-link">🎙️ Voice Lab</a>
     <a href="/voice-editor" class="nav-link">🎤 MP3 Editor</a>
     <a href="/tiktok" class="nav-link">📤 TikTok</a>
+    <a href="/mainframe" class="nav-link">⚡ Mainframe</a>
   </nav>
   <span class="badge-pro">PRO</span>
 </header>
@@ -1019,7 +1028,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
           <option value="emotional_male">🎭 Emotional Male — expressive range</option>
           <option value="soft_whisper">🌙 Soft Whisper — gentle, intimate</option>
           <option value="deep_cinematic">🎬 Deep Cinematic — booming bass</option>
-          <option value="mysterious_voice">🔮 Mysterious Voice — enigmatic</option>
+          <option value="mysterious_voice">🌑 Mysterious Voice — enigmatic</option>
         </select>
       </div>
 
@@ -1239,7 +1248,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         <span class="cin-preset-name">Rain Horror</span>
       </button>
       <button class="cin-preset-card" data-preset="dark-prophecy" onclick="applyPreset('dark-prophecy')">
-        <span class="cin-preset-icon">🔮</span>
+        <span class="cin-preset-icon">🌑</span>
         <span class="cin-preset-name">Dark Prophecy</span>
       </button>
       <button class="cin-preset-card" data-preset="blood-ritual" onclick="applyPreset('blood-ritual')">

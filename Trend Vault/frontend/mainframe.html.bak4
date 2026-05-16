@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🔮 Trend Vault Mainframe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020108;
+  --surface:#08050f;
+  --surface2:#0f0c1c;
+  --surface3:#161228;
+  --border:#1e1535;
+  --border2:#2d2050;
+  --accent:#9b59b6;
+  --purple:#7c3aed;
+  --purple2:#a855f7;
+  --purple3:#c084fc;
+  --gold:#c9a227;
+  --gold2:#f0c040;
+  --green:#22c55e;
+  --red:#ef4444;
+  --yellow:#eab308;
+  --text:#ede8f5;
+  --text2:#b8a8d8;
+  --muted:#9890ba;
+  --online:#22c55e;
+  --offline:#ef4444;
+  --warn:#eab308;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Space Grotesk',sans-serif;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── Starfield ── */
+#stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
+@keyframes twinkle{from{opacity:var(--lo,.05)}to{opacity:var(--hi,.7)}}
+
+/* Nebula glow */
+.nebula{
+  position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(120px);opacity:0.07;
+}
+.nebula1{width:600px;height:600px;background:radial-gradient(circle,#7c3aed,transparent);top:-200px;left:-200px}
+.nebula2{width:500px;height:500px;background:radial-gradient(circle,#c9a227,transparent);bottom:-200px;right:-100px}
+.nebula3{width:400px;height:400px;background:radial-gradient(circle,#a855f7,transparent);top:40%;left:50%}
+
+/* ── Layout ── */
+.app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Header ── */
+header{
+  display:flex;align-items:center;gap:16px;
+  padding:18px 40px;
+  background:rgba(2,1,8,.95);
+  backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border2);
+  position:sticky;top:0;z-index:100;
+}
+.logo-glyph{
+  font-size:2.2rem;
+  filter:drop-shadow(0 0 14px rgba(168,85,247,.9));
+  animation:pulse-glow 3s ease-in-out infinite alternate;
+}
+@keyframes pulse-glow{
+  from{filter:drop-shadow(0 0 8px rgba(168,85,247,.6))}
+  to{filter:drop-shadow(0 0 22px rgba(201,162,39,.9))}
+}
+.logo-block{display:flex;flex-direction:column;gap:1px}
+.logo-name{
+  font-family:'Cinzel Decorative',serif;font-size:1.3rem;font-weight:900;
+  background:linear-gradient(135deg,var(--purple3),var(--gold2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:2px;
+}
+.logo-sub{font-size:.58rem;color:var(--muted);letter-spacing:4px;text-transform:uppercase;font-family:'Orbitron',sans-serif}
+
+header nav{margin-left:auto;display:flex;align-items:center;gap:10px}
+.nav-btn{
+  padding:7px 16px;border-radius:8px;font-size:.75rem;font-weight:600;
+  text-decoration:none;color:var(--text2);border:1px solid var(--border2);
+  transition:all .2s;letter-spacing:.5px;font-family:'Space Grotesk',sans-serif;
+  cursor:pointer;background:transparent;
+}
+.nav-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.12)}
+.nav-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple);color:var(--purple3)}
+
+/* ── System Bar ── */
+.sysbar{
+  display:flex;align-items:center;gap:0;
+  padding:10px 40px;
+  background:rgba(8,5,15,.8);
+  border-bottom:1px solid var(--border);
+  font-family:'Orbitron',sans-serif;
+  font-size:.65rem;letter-spacing:1.5px;
+  overflow-x:auto;
+}
+.sys-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 20px;
+  border-right:1px solid var(--border);
+  white-space:nowrap;
+}
+.sys-item:first-child{padding-left:0}
+.sys-label{color:var(--muted);text-transform:uppercase}
+.sys-val{color:var(--text);font-weight:600}
+.dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--warn);
+  box-shadow:0 0 6px var(--warn);
+  animation:blink 1.4s ease-in-out infinite;
+}
+.dot.online{background:var(--online);box-shadow:0 0 8px var(--online);animation:none}
+.dot.offline{background:var(--offline);box-shadow:0 0 6px var(--offline);animation:none}
+.dot.checking{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Main grid ── */
+main{
+  flex:1;
+  padding:32px 40px 60px;
+  display:grid;
+  grid-template-columns:1fr 340px;
+  gap:28px;
+  max-width:1400px;
+  margin:0 auto;
+  width:100%;
+}
+
+/* ── Section headers ── */
+.section-label{
+  font-family:'Orbitron',sans-serif;
+  font-size:.58rem;letter-spacing:3px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── Cards ── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+  transition:border-color .2s;
+}
+.card:hover{border-color:var(--border2)}
+
+/* ── Tool tiles ── */
+.tools-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:14px;
+  margin-bottom:28px;
+}
+.tool-tile{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:20px 16px;
+  cursor:pointer;
+  text-decoration:none;
+  display:flex;flex-direction:column;gap:8px;
+  transition:all .22s;
+  position:relative;
+  overflow:hidden;
+}
+.tool-tile::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(124,58,237,.08),transparent);
+  opacity:0;transition:opacity .22s;
+}
+.tool-tile:hover{
+  border-color:var(--purple);
+  transform:translateY(-2px);
+  box-shadow:0 8px 28px rgba(124,58,237,.2);
+}
+.tool-tile:hover::before{opacity:1}
+.tool-tile.gold:hover{border-color:var(--gold);box-shadow:0 8px 28px rgba(201,162,39,.2)}
+.tool-tile.gold::before{background:linear-gradient(135deg,rgba(201,162,39,.08),transparent)}
+.tile-icon{font-size:2rem;line-height:1}
+.tile-name{
+  font-size:.82rem;font-weight:700;color:var(--text);
+  letter-spacing:.3px;
+}
+.tile-desc{font-size:.7rem;color:var(--muted);line-height:1.4}
+.tile-badge{
+  position:absolute;top:10px;right:10px;
+  font-size:.55rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  padding:2px 7px;border-radius:10px;
+  background:rgba(124,58,237,.3);border:1px solid var(--purple);color:var(--purple3);
+}
+.tile-badge.gold{background:rgba(201,162,39,.2);border-color:var(--gold);color:var(--gold2)}
+
+/* ── Connection panel ── */
+.connection-panel{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+  margin-bottom:28px;
+}
+.conn-header{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.conn-icon{font-size:1.5rem}
+.conn-title{font-size:.85rem;font-weight:700;color:var(--text)}
+.conn-subtitle{font-size:.65rem;color:var(--muted);margin-top:2px}
+.conn-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 0;
+  border-bottom:1px solid var(--border);
+  font-size:.78rem;
+}
+.conn-row:last-child{border-bottom:none}
+.conn-name{flex:1;color:var(--text2)}
+.conn-status{
+  font-size:.65rem;font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:1px;
+  padding:3px 10px;border-radius:20px;
+}
+.conn-status.online{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.conn-status.offline{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.conn-status.checking{background:rgba(234,179,8,.12);color:var(--yellow);border:1px solid rgba(234,179,8,.25)}
+.conn-url{font-size:.6rem;color:var(--muted);font-family:'Orbitron',sans-serif;margin-top:2px}
+
+/* ── Stats row ── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+  margin-bottom:28px;
+}
+.stat-card{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+}
+.stat-num{
+  font-family:'Orbitron',sans-serif;
+  font-size:1.8rem;font-weight:700;
+  background:linear-gradient(135deg,var(--purple2),var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  line-height:1;margin-bottom:6px;
+}
+.stat-lbl{font-size:.6rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Orbitron',sans-serif}
+
+/* ── Jobs panel ── */
+.jobs-panel{display:flex;flex-direction:column;gap:28px}
+
+.job-item{
+  display:flex;gap:12px;align-items:flex-start;
+  padding:12px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  transition:border-color .2s;
+}
+.job-item:hover{border-color:var(--border2)}
+.job-dot{
+  width:9px;height:9px;border-radius:50%;margin-top:4px;flex-shrink:0;
+}
+.job-dot.complete{background:var(--green);box-shadow:0 0 6px var(--green)}
+.job-dot.pending{background:var(--yellow);box-shadow:0 0 6px var(--yellow);animation:blink 1.2s infinite}
+.job-dot.failed{background:var(--red);box-shadow:0 0 6px var(--red)}
+.job-info{flex:1;min-width:0}
+.job-id{font-size:.65rem;font-family:'Orbitron',sans-serif;color:var(--purple3);font-weight:600;letter-spacing:.5px}
+.job-sign{font-size:.8rem;font-weight:600;color:var(--text);margin:2px 0}
+.job-meta{font-size:.65rem;color:var(--muted)}
+.job-status{
+  font-size:.6rem;font-family:'Orbitron',sans-serif;font-weight:700;
+  padding:3px 9px;border-radius:10px;white-space:nowrap;
+}
+.job-status.complete{background:rgba(34,197,94,.15);color:var(--green)}
+.job-status.pending{background:rgba(234,179,8,.12);color:var(--yellow)}
+.job-status.failed{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* ── Right column ── */
+.right-col{display:flex;flex-direction:column;gap:28px}
+
+/* ── IP / Sync card ── */
+.ip-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+.ip-display{
+  font-family:'Orbitron',sans-serif;
+  font-size:1.15rem;font-weight:700;
+  color:var(--purple3);
+  letter-spacing:2px;
+  margin:10px 0;
+  text-align:center;
+  padding:12px;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  border-radius:10px;
+}
+.ip-hint{font-size:.65rem;color:var(--muted);text-align:center;margin-top:6px}
+
+/* ── Env vars card ── */
+.env-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+.env-row{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 0;
+  border-bottom:1px solid var(--border);
+  font-size:.7rem;
+}
+.env-row:last-child{border-bottom:none}
+.env-key{color:var(--purple3);font-family:'Orbitron',sans-serif;font-size:.62rem;flex-shrink:0}
+.env-val{color:var(--text2);font-family:monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.env-tick{color:var(--green);font-size:.85rem;flex-shrink:0}
+.env-cross{color:var(--red);font-size:.85rem;flex-shrink:0}
+
+/* ── Quick actions ── */
+.actions-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+.action-btn{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:11px 14px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:9px;
+  color:var(--text);font-size:.78rem;font-weight:600;
+  cursor:pointer;font-family:'Space Grotesk',sans-serif;
+  margin-bottom:8px;text-align:left;
+  transition:all .2s;text-decoration:none;
+}
+.action-btn:last-child{margin-bottom:0}
+.action-btn:hover{border-color:var(--purple);background:rgba(124,58,237,.1);transform:translateX(3px)}
+.action-btn.gold:hover{border-color:var(--gold);background:rgba(201,162,39,.08)}
+.action-icon{font-size:1.1rem;flex-shrink:0}
+.action-text{flex:1}
+.action-arrow{color:var(--muted);font-size:.8rem}
+
+/* ── Terminal log ── */
+.log-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+}
+.log-body{
+  background:rgba(0,0,0,.4);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:14px;
+  font-family:monospace;
+  font-size:.68rem;
+  color:#a0a0c0;
+  line-height:1.7;
+  max-height:180px;
+  overflow-y:auto;
+}
+.log-line.ok{color:var(--green)}
+.log-line.warn{color:var(--yellow)}
+.log-line.err{color:var(--red)}
+.log-line.info{color:#7090d0}
+.log-line.dim{color:#555}
+
+/* ── Pulse ring ── */
+@keyframes ping{
+  0%{transform:scale(1);opacity:.6}
+  70%{transform:scale(2.2);opacity:0}
+  100%{transform:scale(1);opacity:0}
+}
+.ping-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.ping-ring{
+  position:absolute;width:100%;height:100%;border-radius:50%;
+  background:var(--green);opacity:.4;
+  animation:ping 2s cubic-bezier(0,0,.2,1) infinite;
+}
+.ping-ring.offline{background:var(--red)}
+.ping-ring.checking{background:var(--yellow)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+
+/* ══════════════════════════════════════════════════════════════
+   TREND VAULT — Shared dark-panel + calm RGB rim styling
+   Injected across all pages for visual consistency
+   ══════════════════════════════════════════════════════════════ */
+
+/* Calm silver-white RGB border animation */
+@keyframes calmRgbBorderMove{
+  0%  {background-position:0%   50%}
+  100%{background-position:260% 50%}
+}
+
+/* ── Card base: solid dark, no gradient bleed ── */
+.card{
+  background:#0b0b12!important;
+  background-image:none!important;
+  border:none!important;
+  border-radius:14px;
+  padding:20px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:0 0 8px rgba(167,139,250,.14);
+  transition:transform .12s ease,box-shadow .3s ease;
+}
+/* RGB rim — mask cuts out interior, only 1.5px border visible */
+.card::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  padding:1.5px;
+  border-radius:inherit;
+  background:linear-gradient(120deg,
+    rgba(255,255,255,.88),
+    rgba(167,139,250,.72),
+    rgba(96,165,250,.58),
+    rgba(255,255,255,.78),
+    rgba(244,114,182,.55),
+    rgba(255,255,255,.88)
+  );
+  background-size:260% 260%;
+  animation:calmRgbBorderMove 12s linear infinite;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  z-index:2;
+}
+/* No ::after — was causing interior color bleed */
+.card::after{display:none!important}
+/* Content always above the rim layer */
+.card>*{position:relative;z-index:3}
+.card:hover{
+  transform:translateY(-1px);
+  box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.12);
+}
+
+/* ── Section/card headers ── */
+.card-title,.section-head-label,.tile-title,.conn-name,
+.panel-title,.tab-title,.section-title{
+  color:rgba(245,245,255,.95);
+  text-shadow:
+    0 0 3px rgba(255,255,255,.35),
+    0 0 7px rgba(167,139,250,.28),
+    0 0 12px rgba(96,165,250,.16);
+}
+/* Icon/emoji glow */
+.card-title .ti,.section-head-icon,.tile-icon,.section-icon{
+  filter:
+    drop-shadow(0 0 3px rgba(255,255,255,.4))
+    drop-shadow(0 0 6px rgba(167,139,250,.25));
+}
+
+/* ── Fine print / muted text — brighter, still calm ── */
+.muted,[class*="muted"],[class*="-sub"],[class*="sub-"],
+.tile-desc,.conn-subtitle,.conn-url,.stat-lbl,.job-meta,
+.ip-hint,.logo-sub,.sys-label,.small,.hint,.help-text,
+small,[style*="color:var(--muted)"]{
+  color:#a099c4!important;
+  text-shadow:0 0 4px rgba(160,153,196,.3);
+}
+/* Links / anchor fine-print */
+a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
+a[style*="font-size:.7"],a[href*="localhost"]{
+  color:#c4b8f0!important;
+  text-decoration:none;
+  text-shadow:0 0 5px rgba(167,139,250,.35);
+  transition:color .2s,text-shadow .2s;
+}
+a.small:hover,a[href*="localhost"]:hover{
+  color:#e2d9ff!important;
+  text-shadow:0 0 8px rgba(167,139,250,.55);
+}
+
+/* ── General fine print size bump ── */
+[style*="font-size:.6rem"]{font-size:.68rem!important}
+[style*="font-size:.62rem"]{font-size:.7rem!important}
+[style*="font-size:.65rem"]{font-size:.72rem!important}
+
+/* ── Inputs dark and clean ── */
+input,textarea,select{
+  background:#11111a!important;
+  color:#f0ecff!important;
+  border-color:rgba(167,139,250,.3)!important;
+  text-shadow:none!important;
+}
+input:focus,textarea:focus,select:focus{
+  border-color:rgba(167,139,250,.65)!important;
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(167,139,250,.12)!important;
+}
+
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="nebula nebula1"></div>
+<div class="nebula nebula2"></div>
+<div class="nebula nebula3"></div>
+
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="ping-wrap" style="width:36px;height:36px">
+      <div class="ping-ring" id="headerPing"></div>
+      <div class="logo-glyph">🔮</div>
+    </div>
+    <div class="logo-block">
+      <div class="logo-name">Trend Vault Mainframe</div>
+      <div class="logo-sub">Command &amp; Control</div>
+    </div>
+    <nav>
+      <a href="/trend-vault" class="nav-btn">🎬 Studio</a>
+      <a href="/voice-lab" class="nav-btn">🎙️ Voice Lab</a>
+      <a href="/" class="nav-btn">✂️ Clip Tool</a>
+      <a href="/tiktok" class="nav-btn">📤 TikTok</a>
+      <a href="/mainframe" class="nav-btn active">⚡ Mainframe</a>
+    </nav>
+  </header>
+
+  <!-- ── System bar ── -->
+  <div class="sysbar">
+    <div class="sys-item">
+      <div class="dot online"></div>
+      <span class="sys-label">Dashboard</span>
+      <span class="sys-val" id="sysPort">localhost:3000</span>
+    </div>
+    <div class="sys-item">
+      <div class="dot checking" id="workerDot"></div>
+      <span class="sys-label">Render Worker</span>
+      <span class="sys-val" id="sysWorker">Checking…</span>
+    </div>
+    <div class="sys-item">
+      <div class="dot checking" id="ttsDot"></div>
+      <span class="sys-label">TTS Engine</span>
+      <span class="sys-val" id="sysTts">Checking…</span>
+    </div>
+    <div class="sys-item">
+      <span class="sys-label">AI Provider</span>
+      <span class="sys-val" id="sysAi">—</span>
+    </div>
+    <div class="sys-item">
+      <span class="sys-label">Time</span>
+      <span class="sys-val" id="sysClock">—</span>
+    </div>
+  </div>
+
+  <!-- ── Main ── -->
+  <main>
+
+    <!-- ── Left column ── -->
+    <div>
+
+      <!-- Stats -->
+      <div class="section-label">System Overview</div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statJobs">—</div>
+          <div class="stat-lbl">Jobs Run</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statBg">—</div>
+          <div class="stat-lbl">Backgrounds</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statAudio">—</div>
+          <div class="stat-lbl">Voice Files</div>
+        </div>
+      </div>
+
+      <!-- Tools -->
+      <div class="section-label">Launch Tools</div>
+      <div class="tools-grid">
+        <a href="/trend-vault" class="tool-tile gold">
+          <div class="tile-badge gold">Main</div>
+          <div class="tile-icon">🔮</div>
+          <div class="tile-name">Trend Vault Studio</div>
+          <div class="tile-desc">Generate &amp; render trend-vault videos</div>
+        </a>
+        <a href="/voice-lab" class="tool-tile">
+          <div class="tile-icon">🎙️</div>
+          <div class="tile-name">Voice Lab</div>
+          <div class="tile-desc">Preview &amp; test TTS voices</div>
+        </a>
+        <a href="/voice-editor" class="tool-tile">
+          <div class="tile-icon">🎚️</div>
+          <div class="tile-name">Voice Editor</div>
+          <div class="tile-desc">Fine-tune voice settings</div>
+        </a>
+        <a href="/" class="tool-tile">
+          <div class="tile-icon">✂️</div>
+          <div class="tile-name">Clip Tool</div>
+          <div class="tile-desc">Cut &amp; extract video clips</div>
+        </a>
+        <a href="/tiktok" class="tool-tile">
+          <div class="tile-icon">📤</div>
+          <div class="tile-name">TikTok Auto-Upload</div>
+          <div class="tile-desc">Post renders to TikTok (drafts or live)</div>
+        </a>
+        <div class="tool-tile" onclick="refreshAll()" style="cursor:pointer">
+          <div class="tile-icon">🔄</div>
+          <div class="tile-name">Refresh Status</div>
+          <div class="tile-desc">Re-ping all systems now</div>
+        </div>
+        <div class="tool-tile" onclick="openLogs()">
+          <div class="tile-icon">📋</div>
+          <div class="tile-name">System Log</div>
+          <div class="tile-desc">View live connection log</div>
+        </div>
+      </div>
+
+      <!-- Connection status -->
+      <div class="section-label">Connections</div>
+      <div class="connection-panel">
+        <div class="conn-header">
+          <div class="conn-icon">🔗</div>
+          <div>
+            <div class="conn-title">Laptop ↔ Home Computer Link</div>
+            <div class="conn-subtitle">Work laptop → Render Worker → Home PC renders</div>
+          </div>
+        </div>
+        <div class="conn-row">
+          <div class="dot online" style="margin:0;flex-shrink:0"></div>
+          <div class="conn-name">
+            Dashboard Server
+            <div class="conn-url" id="dashUrl">localhost:3000</div>
+          </div>
+          <div class="conn-status online">ONLINE</div>
+        </div>
+        <div class="conn-row">
+          <div class="dot checking" id="workerConnDot" style="margin:0;flex-shrink:0"></div>
+          <div class="conn-name">
+            Render Worker (Home PC)
+            <div class="conn-url" id="workerUrl">Detecting…</div>
+          </div>
+          <div class="conn-status checking" id="workerConnStatus">CHECKING</div>
+        </div>
+        <div class="conn-row">
+          <div class="dot checking" id="ttsConnDot" style="margin:0;flex-shrink:0"></div>
+          <div class="conn-name">
+            Kokoro TTS Engine
+            <div class="conn-url">localhost:5070</div>
+          </div>
+          <div class="conn-status checking" id="ttsConnStatus">CHECKING</div>
+        </div>
+      </div>
+
+      <!-- Recent jobs -->
+      <div class="section-label">Recent Jobs</div>
+      <div id="jobsList">
+        <div style="color:var(--muted);font-size:.75rem;padding:20px;text-align:center;">Loading jobs…</div>
+      </div>
+
+    </div>
+
+    <!-- ── Right column ── -->
+    <div class="right-col">
+
+      <!-- Home computer IP -->
+      <div class="ip-card">
+        <div class="section-label" style="margin-bottom:10px">Home Computer IP</div>
+        <div class="ip-display" id="homeIpDisplay">—</div>
+        <div class="ip-hint">Synced from CURRENT_HOME_IP.txt via OneDrive</div>
+      </div>
+
+      <!-- API key status -->
+      <div class="env-card">
+        <div class="section-label" style="margin-bottom:14px">API Keys</div>
+        <div id="envRows">
+          <div style="color:var(--muted);font-size:.7rem;padding:10px 0;text-align:center;">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="actions-card">
+        <div class="section-label" style="margin-bottom:14px">Quick Actions</div>
+        <a href="/trend-vault" class="action-btn gold">
+          <span class="action-icon">✨</span>
+          <span class="action-text">New Trend Vault Video</span>
+          <span class="action-arrow">→</span>
+        </a>
+        <a href="/voice-lab" class="action-btn">
+          <span class="action-icon">🎙️</span>
+          <span class="action-text">Preview a Voice</span>
+          <span class="action-arrow">→</span>
+        </a>
+        <a href="/" class="action-btn">
+          <span class="action-icon">🎬</span>
+          <span class="action-text">Clip a Video</span>
+          <span class="action-arrow">→</span>
+        </a>
+        <a href="/tiktok" class="action-btn">
+          <span class="action-icon">📤</span>
+          <span class="action-text">Post to TikTok</span>
+          <span class="action-arrow">→</span>
+        </a>
+        <button class="action-btn" onclick="refreshAll()">
+          <span class="action-icon">🔄</span>
+          <span class="action-text">Refresh All Status</span>
+          <span class="action-arrow">→</span>
+        </button>
+      </div>
+
+      <!-- Live log -->
+      <div class="log-card" id="logCard" style="display:none">
+        <div class="section-label" style="margin-bottom:12px">System Log</div>
+        <div class="log-body" id="logBody"></div>
+      </div>
+
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ── Stars ──────────────────────────────────────────────────────────────────
+(function(){
+  const c=document.getElementById('stars');
+  for(let i=0;i<120;i++){
+    const s=document.createElement('div');
+    s.className='star';
+    const size=Math.random()*2.5+0.5;
+    s.style.cssText=`
+      width:${size}px;height:${size}px;
+      top:${Math.random()*100}%;left:${Math.random()*100}%;
+      --dur:${(Math.random()*4+2).toFixed(1)}s;
+      --lo:${(Math.random()*0.1).toFixed(2)};
+      --hi:${(Math.random()*0.7+0.2).toFixed(2)};
+      animation-delay:${(Math.random()*4).toFixed(1)}s;
+    `;
+    c.appendChild(s);
+  }
+})();
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateClock(){
+  const now=new Date();
+  document.getElementById('sysClock').textContent=
+    now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ── Log ──────────────────────────────────────────────────────────────────
+const logs=[];
+function addLog(cls,msg){
+  const ts=new Date().toLocaleTimeString('en-US',{hour12:false});
+  logs.unshift({cls,msg,ts});
+  if(logs.length>40)logs.pop();
+}
+function renderLog(){
+  const b=document.getElementById('logBody');
+  b.innerHTML=logs.map(l=>`<div class="log-line ${l.cls}">[${l.ts}] ${l.msg}</div>`).join('');
+}
+function openLogs(){
+  const c=document.getElementById('logCard');
+  c.style.display=c.style.display==='none'?'block':'none';
+  renderLog();
+}
+
+// ── Status fetch ─────────────────────────────────────────────────────────
+async function checkWorker(){
+  const dot=document.getElementById('workerDot');
+  const cDot=document.getElementById('workerConnDot');
+  const cSt=document.getElementById('workerConnStatus');
+  const sysW=document.getElementById('sysWorker');
+  const wUrl=document.getElementById('workerUrl');
+
+  try{
+    const r=await fetch('/api/trend-vault/engine-status',{signal:AbortSignal.timeout(6000)});
+    const d=await r.json();
+    const url=d.workerUrl||d.renderWorkerUrl||'';
+    if(url)wUrl.textContent=url;
+    document.getElementById('workerUrl').textContent=url||'Connected';
+
+    const alive=d.workerOnline||d.renderWorkerOnline||d.workerReachable||false;
+    if(alive){
+      setDot(dot,'online'); setDot(cDot,'online');
+      cSt.className='conn-status online'; cSt.textContent='ONLINE';
+      sysW.textContent='Connected';
+      document.getElementById('headerPing').className='ping-ring';
+      addLog('ok','Render worker reachable');
+    } else {
+      setDot(dot,'offline'); setDot(cDot,'offline');
+      cSt.className='conn-status offline'; cSt.textContent='OFFLINE';
+      sysW.textContent='Unreachable';
+      document.getElementById('headerPing').className='ping-ring offline';
+      addLog('warn','Render worker not reachable — run START_RENDER_WORKER.bat on home PC');
+    }
+
+    // AI provider
+    if(d.aiProvider)document.getElementById('sysAi').textContent=d.aiProvider;
+    if(d.provider)document.getElementById('sysAi').textContent=d.provider;
+  }catch(e){
+    setDot(dot,'offline'); setDot(cDot,'offline');
+    cSt.className='conn-status offline'; cSt.textContent='ERROR';
+    sysW.textContent='Error';
+    addLog('err','Engine status check failed: '+e.message);
+  }
+}
+
+async function checkTts(){
+  const dot=document.getElementById('ttsDot');
+  const cDot=document.getElementById('ttsConnDot');
+  const cSt=document.getElementById('ttsConnStatus');
+  const sT=document.getElementById('sysTts');
+  try{
+    const r=await fetch('/api/trend-vault/tts-status',{signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+    const ok=d.local||d.localOnline||d.kokoro||d.status==='ok'||false;
+    const engine=d.engine||d.localEngine||'TTS';
+    if(ok){
+      setDot(dot,'online'); setDot(cDot,'online');
+      cSt.className='conn-status online'; cSt.textContent='ONLINE';
+      sT.textContent=engine;
+      addLog('ok','TTS engine online: '+engine);
+    } else {
+      setDot(dot,'offline'); setDot(cDot,'offline');
+      cSt.className='conn-status offline'; cSt.textContent='OFFLINE';
+      sT.textContent='Offline';
+      addLog('warn','TTS offline — run start-kokoro.bat');
+    }
+  }catch(e){
+    setDot(dot,'offline'); setDot(cDot,'offline');
+    cSt.className='conn-status offline'; cSt.textContent='OFFLINE';
+    sT.textContent='Offline';
+    addLog('warn','TTS check failed — Kokoro may not be running');
+  }
+}
+
+function setDot(el,state){
+  el.className='dot '+state;
+}
+
+// ── Jobs ─────────────────────────────────────────────────────────────────
+async function loadJobs(){
+  try{
+    const r=await fetch('/api/trend-vault/outputs',{signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+    const outputs=(d.outputs||d.jobs||d||[]).slice(0,6);
+    const el=document.getElementById('jobsList');
+    if(!outputs.length){
+      el.innerHTML='<div style="color:var(--muted);font-size:.75rem;padding:20px;text-align:center;">No jobs yet — create your first video in Trend Vault Studio</div>';
+      document.getElementById('statJobs').textContent='0';
+      return;
+    }
+    document.getElementById('statJobs').textContent=outputs.length;
+    el.innerHTML=outputs.map(j=>{
+      const status=j.status||'complete';
+      const sign=j.trendVaultSign||j.sign||j.folder||j.id||'Unknown';
+      const ts=j.createdAt||j.timestamp||j.date||'';
+      const tsFmt=ts?new Date(typeof ts==='number'?ts:ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      const dotCls=status==='failed'?'failed':status==='pending'?'pending':'complete';
+      const stCls=dotCls;
+      return `<div class="job-item">
+        <div class="job-dot ${dotCls}"></div>
+        <div class="job-info">
+          <div class="job-id">${j.jobId||j.id||'JOB'}</div>
+          <div class="job-sign">${sign}</div>
+          ${tsFmt?`<div class="job-meta">${tsFmt}</div>`:''}
+        </div>
+        <div class="job-status ${stCls}">${status.toUpperCase()}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('jobsList').innerHTML='<div style="color:var(--muted);font-size:.75rem;padding:20px;text-align:center;">Could not load jobs</div>';
+    addLog('warn','Jobs load failed: '+e.message);
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────
+async function loadStats(){
+  try{
+    const [bgs,audio]=await Promise.allSettled([
+      fetch('/api/backgrounds').then(r=>r.json()),
+      fetch('/api/audio').then(r=>r.json()),
+    ]);
+    if(bgs.status==='fulfilled'){
+      const arr=bgs.value.backgrounds||bgs.value||[];
+      document.getElementById('statBg').textContent=arr.length;
+    }
+    if(audio.status==='fulfilled'){
+      const arr=audio.value.files||audio.value||[];
+      document.getElementById('statAudio').textContent=arr.length;
+    }
+  }catch(_){}
+}
+
+// ── Engine status (env/api keys) ──────────────────────────────────────────
+async function loadEnvStatus(){
+  try{
+    const r=await fetch('/api/trend-vault/engine-status',{signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+
+    const keys=[
+      {key:'ANTHROPIC',label:'Anthropic',val:d.anthropicKey||d.hasAnthropic},
+      {key:'OPENAI',label:'OpenAI',val:d.openaiKey||d.hasOpenai},
+      {key:'ELEVENLABS',label:'ElevenLabs',val:d.elevenLabsKey||d.hasElevenLabs},
+      {key:'ASSEMBLYAI',label:'AssemblyAI',val:d.assemblyaiKey||d.hasAssemblyai},
+      {key:'PEXELS',label:'Pexels',val:d.pexelsKey||d.hasPexels},
+    ];
+
+    const el=document.getElementById('envRows');
+    el.innerHTML=keys.map(k=>{
+      const has=k.val===true||k.val==='set'||(typeof k.val==='string'&&k.val.length>4);
+      return `<div class="env-row">
+        <div class="env-key">${k.label}</div>
+        <div class="env-val">${has?'••••••••••••':'Not set'}</div>
+        <div class="${has?'env-tick':'env-cross'}">${has?'✓':'✗'}</div>
+      </div>`;
+    }).join('');
+
+    // Worker URL
+    const wu=d.workerUrl||d.renderWorkerUrl||'';
+    if(wu){
+      document.getElementById('workerUrl').textContent=wu;
+      // Extract IP from URL
+      const m=wu.match(/\d+\.\d+\.\d+\.\d+/);
+      if(m)document.getElementById('homeIpDisplay').textContent=m[0];
+    }
+  }catch(e){
+    addLog('err','Engine status failed: '+e.message);
+  }
+}
+
+// ── Refresh all ───────────────────────────────────────────────────────────
+async function refreshAll(){
+  addLog('info','Refreshing all system checks…');
+  renderLog()
