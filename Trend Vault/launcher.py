@@ -31,7 +31,7 @@ SERVICES = [
         'name': 'Render Worker',
         'desc': 'Remotion worker  •  port 4000',
         'port': 4000,
-        'cmd':  ['npx', 'tsx', 'render-worker.ts'],
+        'cmd':  ['npm', 'run', 'start:worker'],
         'url':  None,
     },
 ]
@@ -254,11 +254,35 @@ class TrendVaultLauncher(tk.Tk):
         for svc in SERVICES:
             threading.Thread(target=self._kill, args=(svc,), daemon=True).start()
 
+    def _ensure_node_modules(self):
+        """Run npm install if any key dependency is missing."""
+        checks = [
+            os.path.join(ROOT, 'node_modules', 'dotenv'),
+            os.path.join(ROOT, 'node_modules', 'express'),
+            os.path.join(ROOT, 'node_modules', 'tsx'),
+        ]
+        if all(os.path.isdir(p) for p in checks):
+            return  # all present, skip
+        self._log_line('Dependencies incomplete — running npm install…', AMBER)
+        self._set_status('npm install…')
+        try:
+            result = subprocess.run(
+                'npm install', cwd=ROOT, shell=True,
+                capture_output=True, text=True, timeout=180,
+            )
+            if result.returncode == 0:
+                self._log_line('npm install complete.', GREEN)
+            else:
+                self._log_line(f'npm install failed:\n{result.stderr[:400]}', RED)
+        except Exception as e:
+            self._log_line(f'npm install error: {e}', RED)
+
     def _launch(self, svc: dict):
         key = svc['key']
         if port_in_use(svc['port']):
             self._log_line(f'{svc["name"]} already on :{svc["port"]}', AMBER)
             return
+        self._ensure_node_modules()
         self._log_line(f'Starting {svc["name"]}…', TEXT)
         self._set_status(f'Starting {svc["name"]}…')
         try:
