@@ -8982,11 +8982,4 @@ function _renderStockPagination(total, perPage){
   const pg = document.getElementById('stockPagination');
   if(pages <= 1){ pg.innerHTML=''; return; }
   pg.innerHTML =
-    '<button '+(_stockPage<=1?'disabled':'')+' onclick="stockGoPage('+(_stockPage-1)+')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">← Prev</button>'
-    + '<span style="font-size:.78rem;color:var(--muted)">Page '+_stockPage+' of '+pages+' · '+total+' results</span>'
-    + '<button '+(_stockPage>=pages?'disabled':'')+' onclick="stockGoPage('+(_stockPage+1)+')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:6px;cursor:pointer;font-family:inherit">Next →</button>';
-}
-</script>
-</body>
-</html>
-                         
+    '<button '+(_stockPage<=1?'disabled':'')+' onclick="stockGoPage('+(_stockPage-1)+')" style="padding:6px 12px;background:var(--surface

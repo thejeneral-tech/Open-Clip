@@ -705,6 +705,377 @@ app.get('/api/tiktok/recent-jobs', (_req, res) => {
   res.json({ jobs });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+//  YOUTUBE SHORTS AUTO-UPLOAD ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+interface YouTubeJob {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  logs: string[];
+  error?: string;
+  videoId?: string;
+  url?: string;
+  startedAt: number;
+  videoPath: string;
+}
+const youTubeJobs = new Map<string, YouTubeJob>();
+
+interface YouTubeAutoPost {
+  enabled: boolean;
+  titleTemplate: string;
+  descriptionTemplate: string;
+  tags: string;
+  privacy: 'public' | 'unlisted' | 'private';
+  madeForKids: boolean;
+}
+const YT_AUTOPOST_FILE = path.join(ROOT, 'data', 'youtube-autopost.json');
+const YT_AUTOPOST_DEFAULT: YouTubeAutoPost = {
+  enabled: false,
+  titleTemplate: '{folder} #Shorts',
+  descriptionTemplate: 'Generated with Trend Vault.\n\n#Shorts #trendvault',
+  tags: 'shorts,trendvault,fyp',
+  privacy: 'public',
+  madeForKids: false,
+};
+function loadYtAutoPost(): YouTubeAutoPost {
+  try {
+    if (fs.existsSync(YT_AUTOPOST_FILE)) {
+      return { ...YT_AUTOPOST_DEFAULT, ...JSON.parse(fs.readFileSync(YT_AUTOPOST_FILE, 'utf8')) };
+    }
+  } catch { /* ignore */ }
+  return { ...YT_AUTOPOST_DEFAULT };
+}
+function saveYtAutoPost(cfg: YouTubeAutoPost) {
+  fs.mkdirSync(path.dirname(YT_AUTOPOST_FILE), { recursive: true });
+  fs.writeFileSync(YT_AUTOPOST_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function startYouTubeJob(opts: { videoAbs: string; title: string; description: string; tags: string[]; privacy: YouTubeAutoPost['privacy']; madeForKids: boolean }): string {
+  const id = `yt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const job: YouTubeJob = { id, status: 'running', logs: [], startedAt: Date.now(), videoPath: opts.videoAbs };
+  youTubeJobs.set(id, job);
+  (async () => {
+    try {
+      const { uploadShort } = await import('./scripts/youtube-uploader');
+      const result = await uploadShort({
+        videoPath: opts.videoAbs,
+        title: opts.title,
+        description: opts.description,
+        tags: opts.tags,
+        privacy: opts.privacy,
+        madeForKids: opts.madeForKids,
+        onLog: (line) => {
+          job.logs.push(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
+          if (job.logs.length > 200) job.logs.splice(0, job.logs.length - 200);
+        },
+      });
+      if (result.ok) { job.status = 'done'; job.videoId = result.videoId; job.url = result.url; }
+      else { job.status = 'error'; job.error = result.error; }
+    } catch (err: any) {
+      job.status = 'error';
+      job.error = err?.message ?? String(err);
+    }
+  })();
+  return id;
+}
+
+function maybeAutoPostYouTube(folder: string, pushLog: (msg: string, pct?: number) => void) {
+  const cfg = loadYtAutoPost();
+  if (!cfg.enabled) return;
+  const videoAbs = path.join(TREND_VAULT_OUT, folder, 'video.mp4');
+  if (!fs.existsSync(videoAbs)) {
+    pushLog(`⚠ YouTube auto-post skipped — ${videoAbs} not found`);
+    return;
+  }
+  const title = cfg.titleTemplate.replace(/\{folder\}/g, folder);
+  const description = cfg.descriptionTemplate.replace(/\{folder\}/g, folder);
+  const tags = cfg.tags.split(',').map(s => s.trim()).filter(Boolean);
+  const id = startYouTubeJob({ videoAbs, title, description, tags, privacy: cfg.privacy, madeForKids: cfg.madeForKids });
+  pushLog(`📺 Auto-posting to YouTube Shorts (${cfg.privacy}) — job ${id}`);
+}
+
+app.get('/youtube', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(ROOT, 'frontend', 'youtube.html'));
+});
+
+app.get('/api/youtube/videos', (_req, res) => {
+  // Reuse the same recentMp4s helper from the TikTok routes
+  res.json({ videos: recentMp4s().map(v => ({ rel: v.rel, mtime: v.mtime, size: v.size })) });
+});
+
+app.get('/api/youtube/auth-status', async (_req, res) => {
+  try {
+    const { getAuthState, getRedirectUri } = await import('./scripts/youtube-uploader');
+    const state = await getAuthState();
+    res.json({ ...state, redirectUri: getRedirectUri() });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.get('/api/youtube/auth-url', async (_req, res) => {
+  try {
+    const { getAuthUrl } = await import('./scripts/youtube-uploader');
+    res.json({ url: getAuthUrl() });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.get('/api/youtube/oauth-callback', async (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const err = typeof req.query.error === 'string' ? req.query.error : '';
+  if (err) { res.status(400).send(`<h2>OAuth error: ${err}</h2><p><a href="/youtube">Back</a></p>`); return; }
+  if (!code) { res.status(400).send('<h2>Missing code</h2>'); return; }
+  try {
+    const { exchangeCode } = await import('./scripts/youtube-uploader');
+    await exchangeCode(code);
+    res.send('<!doctype html><meta charset="utf-8"><title>YouTube signed in</title><body style="background:#020108;color:#ede8f5;font-family:system-ui;text-align:center;padding:60px"><h2>✅ YouTube signed in</h2><p>You can close this tab.</p><script>setTimeout(()=>window.close(),1500);</script><p><a style="color:#c084fc" href="/youtube">Back to Trend Vault</a></p></body>');
+  } catch (e: any) {
+    res.status(500).send(`<h2>Token exchange failed</h2><pre>${e?.message ?? e}</pre>`);
+  }
+});
+
+app.post('/api/youtube/sign-out', async (_req, res) => {
+  try {
+    const { signOut } = await import('./scripts/youtube-uploader');
+    signOut();
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/youtube/upload', express.json(), async (req, res) => {
+  const { rel, title, description, tags, privacy, madeForKids } = req.body ?? {};
+  if (typeof rel !== 'string' || !rel) { res.status(400).json({ error: 'rel required' }); return; }
+  const safeRel = path.normalize(rel).replace(/^([/\\]+)/, '');
+  const abs = path.join(ROOT, safeRel);
+  if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) { res.status(400).json({ error: 'video not found' }); return; }
+  const allowedPrivacy = new Set<YouTubeAutoPost['privacy']>(['public', 'unlisted', 'private']);
+  const p: YouTubeAutoPost['privacy'] = allowedPrivacy.has(privacy) ? privacy : 'public';
+  const t = (typeof title === 'string' ? title : 'Short').slice(0, 100);
+  const d = (typeof description === 'string' ? description : '').slice(0, 5000);
+  const tagList: string[] = Array.isArray(tags)
+    ? tags.map(String)
+    : typeof tags === 'string'
+      ? tags.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+  const id = startYouTubeJob({ videoAbs: abs, title: t, description: d, tags: tagList, privacy: p, madeForKids: !!madeForKids });
+  res.json({ jobId: id });
+});
+
+app.get('/api/youtube/status/:jobId', (req, res) => {
+  const job = youTubeJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: 'not found' }); return; }
+  res.json({ id: job.id, status: job.status, logs: job.logs, error: job.error, videoId: job.videoId, url: job.url });
+});
+
+app.get('/api/youtube/autopost', (_req, res) => {
+  res.json(loadYtAutoPost());
+});
+
+app.post('/api/youtube/autopost', express.json(), (req, res) => {
+  const incoming = req.body ?? {};
+  const cfg: YouTubeAutoPost = {
+    enabled: !!incoming.enabled,
+    titleTemplate: typeof incoming.titleTemplate === 'string' ? incoming.titleTemplate.slice(0, 100) : YT_AUTOPOST_DEFAULT.titleTemplate,
+    descriptionTemplate: typeof incoming.descriptionTemplate === 'string' ? incoming.descriptionTemplate.slice(0, 5000) : YT_AUTOPOST_DEFAULT.descriptionTemplate,
+    tags: typeof incoming.tags === 'string' ? incoming.tags.slice(0, 500) : YT_AUTOPOST_DEFAULT.tags,
+    privacy: ['public', 'unlisted', 'private'].includes(incoming.privacy) ? incoming.privacy : 'public',
+    madeForKids: !!incoming.madeForKids,
+  };
+  saveYtAutoPost(cfg);
+  res.json(cfg);
+});
+
+app.get('/api/youtube/recent-jobs', (_req, res) => {
+  const jobs = [...youTubeJobs.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 10)
+    .map(j => ({ id: j.id, status: j.status, error: j.error, startedAt: j.startedAt, videoPath: path.basename(j.videoPath), videoId: j.videoId, url: j.url }));
+  res.json({ jobs });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  INSTAGRAM REELS AUTO-UPLOAD ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+interface InstagramJob {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  logs: string[];
+  error?: string;
+  mediaId?: string;
+  url?: string;
+  startedAt: number;
+  videoPath: string;
+}
+const instagramJobs = new Map<string, InstagramJob>();
+
+interface InstagramAutoPost {
+  enabled: boolean;
+  captionTemplate: string;
+  shareToFeed: boolean;
+}
+const IG_AUTOPOST_FILE = path.join(ROOT, 'data', 'instagram-autopost.json');
+const IG_AUTOPOST_DEFAULT: InstagramAutoPost = {
+  enabled: false,
+  captionTemplate: '{folder}\n\n#reels #trendvault',
+  shareToFeed: true,
+};
+function loadIgAutoPost(): InstagramAutoPost {
+  try {
+    if (fs.existsSync(IG_AUTOPOST_FILE)) {
+      return { ...IG_AUTOPOST_DEFAULT, ...JSON.parse(fs.readFileSync(IG_AUTOPOST_FILE, 'utf8')) };
+    }
+  } catch { /* ignore */ }
+  return { ...IG_AUTOPOST_DEFAULT };
+}
+function saveIgAutoPost(cfg: InstagramAutoPost) {
+  fs.mkdirSync(path.dirname(IG_AUTOPOST_FILE), { recursive: true });
+  fs.writeFileSync(IG_AUTOPOST_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function startInstagramJob(opts: { videoAbs: string; caption: string; shareToFeed: boolean }): string {
+  const id = `ig_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const job: InstagramJob = { id, status: 'running', logs: [], startedAt: Date.now(), videoPath: opts.videoAbs };
+  instagramJobs.set(id, job);
+  (async () => {
+    try {
+      const { uploadReel } = await import('./scripts/instagram-uploader');
+      const result = await uploadReel({
+        videoPath: opts.videoAbs,
+        caption: opts.caption,
+        shareToFeed: opts.shareToFeed,
+        onLog: (line) => {
+          job.logs.push(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
+          if (job.logs.length > 200) job.logs.splice(0, job.logs.length - 200);
+        },
+      });
+      if (result.ok) { job.status = 'done'; job.mediaId = result.mediaId; job.url = result.url; }
+      else { job.status = 'error'; job.error = result.error; }
+    } catch (err: any) {
+      job.status = 'error';
+      job.error = err?.message ?? String(err);
+    }
+  })();
+  return id;
+}
+
+function maybeAutoPostInstagram(folder: string, pushLog: (msg: string, pct?: number) => void) {
+  const cfg = loadIgAutoPost();
+  if (!cfg.enabled) return;
+  const videoAbs = path.join(TREND_VAULT_OUT, folder, 'video.mp4');
+  if (!fs.existsSync(videoAbs)) {
+    pushLog(`⚠ Instagram auto-post skipped — ${videoAbs} not found`);
+    return;
+  }
+  const caption = cfg.captionTemplate.replace(/\{folder\}/g, folder);
+  const id = startInstagramJob({ videoAbs, caption, shareToFeed: cfg.shareToFeed });
+  pushLog(`📸 Auto-posting Reel to Instagram — job ${id}`);
+}
+
+app.get('/instagram', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(ROOT, 'frontend', 'instagram.html'));
+});
+
+app.get('/api/instagram/videos', (_req, res) => {
+  res.json({ videos: recentMp4s().map(v => ({ rel: v.rel, mtime: v.mtime, size: v.size })) });
+});
+
+app.get('/api/instagram/auth-status', async (_req, res) => {
+  try {
+    const { getAuthState } = await import('./scripts/instagram-uploader');
+    res.json(await getAuthState());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-in', express.json(), async (req, res) => {
+  const { username, password } = req.body ?? {};
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    res.status(400).json({ error: 'username and password required' });
+    return;
+  }
+  try {
+    const { signIn } = await import('./scripts/instagram-uploader');
+    const r = await signIn(username, password);
+    res.json(r);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-in/2fa', express.json(), async (req, res) => {
+  const { code } = req.body ?? {};
+  if (typeof code !== 'string') { res.status(400).json({ error: 'code required' }); return; }
+  try {
+    const { submitTwoFactor } = await import('./scripts/instagram-uploader');
+    const r = await submitTwoFactor(code);
+    res.json(r);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/sign-out', async (_req, res) => {
+  try {
+    const { signOut } = await import('./scripts/instagram-uploader');
+    signOut();
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/instagram/upload', express.json(), async (req, res) => {
+  const { rel, caption, shareToFeed } = req.body ?? {};
+  if (typeof rel !== 'string' || !rel) { res.status(400).json({ error: 'rel required' }); return; }
+  const safeRel = path.normalize(rel).replace(/^([/\\]+)/, '');
+  const abs = path.join(ROOT, safeRel);
+  if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) { res.status(400).json({ error: 'video not found' }); return; }
+  const cap = typeof caption === 'string' ? caption.slice(0, 2200) : '';
+  const id = startInstagramJob({ videoAbs: abs, caption: cap, shareToFeed: shareToFeed !== false });
+  res.json({ jobId: id });
+});
+
+app.get('/api/instagram/status/:jobId', (req, res) => {
+  const job = instagramJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: 'not found' }); return; }
+  res.json({ id: job.id, status: job.status, logs: job.logs, error: job.error, mediaId: job.mediaId, url: job.url });
+});
+
+app.get('/api/instagram/autopost', (_req, res) => {
+  res.json(loadIgAutoPost());
+});
+
+app.post('/api/instagram/autopost', express.json(), (req, res) => {
+  const incoming = req.body ?? {};
+  const cfg: InstagramAutoPost = {
+    enabled: !!incoming.enabled,
+    captionTemplate: typeof incoming.captionTemplate === 'string'
+      ? incoming.captionTemplate.slice(0, 2200)
+      : IG_AUTOPOST_DEFAULT.captionTemplate,
+    shareToFeed: incoming.shareToFeed !== false,
+  };
+  saveIgAutoPost(cfg);
+  res.json(cfg);
+});
+
+app.get('/api/instagram/recent-jobs', (_req, res) => {
+  const jobs = [...instagramJobs.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 10)
+    .map(j => ({ id: j.id, status: j.status, error: j.error, startedAt: j.startedAt, videoPath: path.basename(j.videoPath), mediaId: j.mediaId, url: j.url }));
+  res.json({ jobs });
+});
+
 // ── List backgrounds ──────────────────────────────────────────────────────────
 app.get('/api/backgrounds', (_req, res) => {
   const files = fs.existsSync(BACKGROUNDS)
@@ -2450,7 +2821,13 @@ app.post('/api/trend-vault/render', async (req, res) => {
       trendVaultBroadcast(jobId, { done: true, success: true, outputFile: renderState.outputFile });
 
       try { maybeAutoPostRender(folder, pushLog); }
-      catch (err) { pushLog(`⚠ Auto-post error: ${(err as Error).message}`); }
+      catch (err) { pushLog(`⚠ TikTok auto-post error: ${(err as Error).message}`); }
+
+      try { maybeAutoPostYouTube(folder, pushLog); }
+      catch (err) { pushLog(`⚠ YouTube auto-post error: ${(err as Error).message}`); }
+
+      try { maybeAutoPostInstagram(folder, pushLog); }
+      catch (err) { pushLog(`⚠ Instagram auto-post error: ${(err as Error).message}`); }
 
     } catch (err) {
       const msg = (err as Error).message || String(err);

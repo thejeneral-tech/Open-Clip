@@ -13,3 +13,11 @@ TrendVaultLauncher.exe
 
 # TikTok uploader persistent auth session — DO NOT COMMIT
 .tiktok-session/
+
+# YouTube uploader OAuth credentials and tokens — DO NOT COMMIT
+data/youtube-credentials.json
+data/youtube-token.json
+
+# Instagram uploader session — DO NOT COMMIT
+data/instagram-session.json
+data/instagram-2fa-pending.json
