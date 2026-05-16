@@ -2424,11 +2424,7 @@ async function generateSubjectsForNiche(niche){
 function buildSubjectGrid(subjects){
   const grid = document.getElementById('subjectGrid');
   if(!grid) return;
-  if(!subjects || !subjects.length){
-    // Default: show subjects for the first niche or a generic set
-    const firstNiche = Object.keys(nicheMap)[0];
-    subjects = nicheMap[firstNiche]?.subjects || [];
-  }
+  if(!subjects || !subjects.length){ grid.innerHTML = ''; return; }
   grid.innerHTML = subjects.map(s => {
     const safe = s.replace(/'/g,"\'");
     return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
