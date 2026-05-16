@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>📺 Trend Vault — YouTube Shorts Uploader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020108; --surface:#08050f; --surface2:#0f0c1c; --surface3:#161228;
+  --border:#1e1535; --border2:#2d2050;
+  --purple:#7c3aed; --purple2:#a855f7; --purple3:#c084fc;
+  --gold:#c9a227; --gold2:#f0c040;
+  --green:#22c55e; --red:#ef4444; --yellow:#eab308;
+  --yt:#ff0033; --yt2:#ff4d6d;
+  --text:#ede8f5; --text2:#b8a8d8; --muted:#9890ba;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;overflow-x:hidden}
+
+#stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
+@keyframes twinkle{from{opacity:var(--lo,.05)}to{opacity:var(--hi,.7)}}
+.nebula{position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(120px);opacity:.07}
+.nebula1{width:600px;height:600px;background:radial-gradient(circle,#7c3aed,transparent);top:-200px;left:-200px}
+.nebula2{width:500px;height:500px;background:radial-gradient(circle,#ff0033,transparent);bottom:-200px;right:-100px}
+.nebula3{width:400px;height:400px;background:radial-gradient(circle,#c9a227,transparent);top:40%;left:50%}
+
+.app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+header{display:flex;align-items:center;gap:16px;padding:18px 40px;background:rgba(2,1,8,.95);backdrop-filter:blur(24px);border-bottom:1px solid var(--border2);position:sticky;top:0;z-index:100}
+.logo-glyph{font-size:2.2rem;filter:drop-shadow(0 0 14px rgba(255,0,51,.7));animation:pulse-glow 3s ease-in-out infinite alternate}
+@keyframes pulse-glow{from{filter:drop-shadow(0 0 8px rgba(168,85,247,.6))}to{filter:drop-shadow(0 0 22px rgba(255,0,51,.9))}}
+.logo-block{display:flex;flex-direction:column;gap:1px}
+.logo-name{font-family:'Cinzel Decorative',serif;font-size:1.3rem;font-weight:900;background:linear-gradient(135deg,var(--purple3),var(--yt));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:2px}
+.logo-sub{font-size:.58rem;color:var(--muted);letter-spacing:4px;text-transform:uppercase;font-family:'Orbitron',sans-serif}
+header nav{margin-left:auto;display:flex;align-items:center;gap:10px}
+.nav-btn{padding:7px 16px;border-radius:8px;font-size:.75rem;font-weight:600;text-decoration:none;color:var(--text2);border:1px solid var(--border2);transition:all .2s;letter-spacing:.5px;cursor:pointer;background:transparent;font-family:'Space Grotesk',sans-serif}
+.nav-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.12)}
+.nav-btn.active{background:rgba(255,0,51,.16);border-color:var(--yt);color:#ff9eaf}
+
+.sysbar{display:flex;align-items:center;gap:0;padding:10px 40px;background:rgba(8,5,15,.8);border-bottom:1px solid var(--border);font-family:'Orbitron',sans-serif;font-size:.65rem;letter-spacing:1.5px;overflow-x:auto}
+.sys-item{display:flex;align-items:center;gap:8px;padding:6px 20px;border-right:1px solid var(--border);white-space:nowrap}
+.sys-item:first-child{padding-left:0}
+.sys-label{color:var(--muted);text-transform:uppercase}
+.sys-val{color:var(--text);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--yellow);box-shadow:0 0 6px var(--yellow);animation:blink 1.4s ease-in-out infinite}
+.dot.online{background:var(--green);box-shadow:0 0 8px var(--green);animation:none}
+.dot.offline{background:var(--red);box-shadow:0 0 8px var(--red);animation:none}
+@keyframes blink{from{opacity:.4}to{opacity:1}}
+
+main{flex:1;padding:30px 40px 60px;display:grid;grid-template-columns:1.4fr 1fr;gap:22px;max-width:1500px;width:100%;margin:0 auto}
+.col{display:flex;flex-direction:column;gap:22px;min-width:0}
+
+.section-label{font-family:'Orbitron',sans-serif;font-size:.68rem;letter-spacing:2.5px;color:var(--muted);text-transform:uppercase;margin:4px 2px 12px;font-weight:700}
+
+.card{background:#0b0b12;border:1px solid var(--border2);border-radius:14px;padding:22px;position:relative}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-head .ico{font-size:1.15rem}
+.card-head .ttl{font-family:'Cinzel Decorative',serif;font-size:1rem;letter-spacing:1px;color:var(--text)}
+
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label{font-size:.68rem;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:1.5px;text-transform:uppercase;font-family:'Orbitron',sans-serif;font-weight:600}
+input[type=text],textarea,select{width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:10px;color:var(--text);padding:11px 13px;font:inherit;outline:none;transition:border-color .15s}
+textarea{min-height:96px;resize:vertical;font-family:inherit}
+input[type=text]:focus,textarea:focus,select:focus{border-color:var(--purple)}
+
+button{cursor:pointer;border:1px solid var(--border2);background:var(--surface3);color:var(--text);padding:10px 16px;border-radius:10px;font:inherit;font-weight:600;letter-spacing:.4px;transition:all .15s}
+button:hover:not(:disabled){border-color:var(--purple);background:rgba(124,58,237,.12)}
+button.primary{background:linear-gradient(135deg,var(--purple),var(--yt));color:#fff;border-color:var(--purple)}
+button.primary:hover:not(:disabled){filter:brightness(1.08);box-shadow:0 0 16px rgba(255,0,51,.4)}
+button.ghost{background:transparent}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:.66rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'Orbitron',sans-serif}
+.pill.green{background:rgba(34,197,94,.16);color:var(--green);border:1px solid rgba(34,197,94,.4)}
+.pill.red{background:rgba(239,68,68,.16);color:var(--red);border:1px solid rgba(239,68,68,.4)}
+.pill.muted{background:var(--surface3);color:var(--muted);border:1px solid var(--border2)}
+
+.videos{display:flex;flex-direction:column;gap:6px;max-height:380px;overflow:auto;padding-right:4px}
+.videos::-webkit-scrollbar{width:8px}
+.videos::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+.video-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border2);border-radius:10px;cursor:pointer;background:var(--surface3);transition:all .15s}
+.video-item:hover{border-color:var(--purple);background:rgba(124,58,237,.08)}
+.video-item.selected{border-color:var(--yt);background:rgba(255,0,51,.08);box-shadow:0 0 0 1px rgba(255,0,51,.2)}
+.video-item .name{flex:1;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.video-item .meta{font-size:.66rem;color:var(--muted);font-family:'Orbitron',sans-serif;letter-spacing:.5px}
+
+.logs{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;background:#040208;border:1px solid var(--border2);border-radius:10px;padding:12px;max-height:220px;overflow:auto;white-space:pre-wrap;color:#a89dc4;line-height:1.55}
+.logs:empty::before{content:'(no activity yet)';color:var(--muted);font-style:italic}
+
+.group{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:1100px){main{grid-template-columns:1fr}.group{grid-template-columns:1fr}}
+
+.caveat{font-size:.72rem;color:var(--muted);line-height:1.6;margin-top:12px}
+.caveat b{color:var(--text2)}
+.caveat code{background:var(--surface3);padding:1px 6px;border-radius:4px;border:1px solid var(--border);color:var(--gold2);font-family:ui-monospace,monospace;font-size:.78em}
+.caveat a{color:var(--purple3)}
+
+.toggle{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border2);border-radius:10px;cursor:pointer}
+.toggle input{accent-color:var(--purple)}
+.toggle .lbl{font-size:.8rem;font-weight:600;color:var(--text)}
+
+.setup{background:rgba(255,0,51,.06);border:1px solid rgba(255,0,51,.3);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.setup ol{margin:6px 0 0 20px;font-size:.78rem;color:var(--text2);line-height:1.7}
+.setup code{background:rgba(0,0,0,.4);padding:1px 6px;border-radius:4px;color:var(--gold2);font-family:ui-monospace,monospace;font-size:.85em}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div class="nebula nebula1"></div>
+<div class="nebula nebula2"></div>
+<div class="nebula nebula3"></div>
+
+<div class="app">
+
+  <header>
+    <div class="logo-glyph">📺</div>
+    <div class="logo-block">
+      <div class="logo-name">YouTube Shorts</div>
+      <div class="logo-sub">Distribution Module</div>
+    </div>
+    <nav>
+      <a href="/trend-vault" class="nav-btn">🎬 Studio</a>
+      <a href="/voice-lab" class="nav-btn">🎙️ Voice Lab</a>
+      <a href="/" class="nav-btn">✂️ Clip Tool</a>
+      <a href="/mainframe" class="nav-btn">⚡ Mainframe</a>
+      <a href="/tiktok" class="nav-btn">📤 TikTok</a>
+      <a href="/youtube" class="nav-btn active">📺 YouTube</a>
+    </nav>
+  </header>
+
+  <div class="sysbar">
+    <div class="sys-item">
+      <div class="dot" id="ytDot"></div>
+      <span class="sys-label">YouTube</span>
+      <span class="sys-val" id="ytVal">Checking…</span>
+    </div>
+    <div class="sys-item">
+      <span class="sys-label">Channel</span>
+      <span class="sys-val" id="ytChannel">—</span>
+    </div>
+    <div class="sys-item">
+      <div class="dot" id="autoDot"></div>
+      <span class="sys-label">Auto-Post</span>
+      <span class="sys-val" id="autoVal">—</span>
+    </div>
+    <div class="sys-item">
+      <span class="sys-label">Available Renders</span>
+      <span class="sys-val" id="videoCountSys">—</span>
+    </div>
+    <div class="sys-item">
+      <span class="sys-label">Last Job</span>
+      <span class="sys-val" id="lastJob">—</span>
+    </div>
+  </div>
+
+  <main>
+
+    <div class="col">
+
+      <div class="section-label">① Google Account</div>
+      <div class="card">
+        <div class="card-head"><span class="ico">🔐</span><div class="ttl">OAuth Session</div></div>
+
+        <div id="setupBox" class="setup" style="display:none">
+          <div style="font-weight:700;color:var(--text);margin-bottom:6px">First-time setup (one-time, ~5 min)</div>
+          <ol>
+            <li>Open <a href="https://console.cloud.google.com" target="_blank">Google Cloud Console</a>, pick or create a project.</li>
+            <li>APIs &amp; Services → <b>Library</b> → enable <b>YouTube Data API v3</b>.</li>
+            <li><b>OAuth consent screen</b> → External → add your Google account as a test user.</li>
+            <li><b>Credentials</b> → Create Credentials → <b>OAuth Client ID</b> → <b>Web application</b>. Add Authorized redirect URI: <code id="redirectUri">http://localhost:3001/api/youtube/oauth-callback</code></li>
+            <li>Download the JSON → save it to <code>data/youtube-credentials.json</code> in this folder.</li>
+            <li>Click <b>↻ Re-check</b> below.</li>
+          </ol>
+        </div>
+
+        <div class="row" style="margin-bottom:10px">
+          <span id="ytStatus" class="pill muted">checking…</span>
+          <button id="signInBtn" class="primary">Sign in with Google</button>
+          <button id="signOutBtn" class="ghost" style="display:none">Sign out</button>
+          <button id="refreshStatusBtn" class="ghost">↻ Re-check</button>
+        </div>
+        <p class="caveat">Uses official YouTube Data API v3. Refresh token saved to <code>data/youtube-token.json</code>. Default quota allows ~6 uploads/day — request an increase from Google Cloud Console if you need more.</p>
+      </div>
+
+      <div class="section-label">② Pick a Render</div>
+      <div class="card">
+        <div class="card-head"><span class="ico">🎞️</span><div class="ttl">Recent MP4s</div></div>
+        <div class="row" style="margin-bottom:10px">
+          <button id="reloadVideosBtn" class="ghost">↻ Reload</button>
+          <span id="videoCount" class="pill muted">0 files</span>
+        </div>
+        <div id="videos" class="videos"></div>
+      </div>
+
+      <div class="section-label">③ Upload</div>
+      <div class="card">
+        <div class="card-head"><span class="ico">🚀</span><div class="ttl">Video Details</div></div>
+        <label>Title <span style="text-transform:none;letter-spacing:0;color:var(--muted)">— ≤ 100 chars, append #Shorts for the Shorts shelf</span></label>
+        <input type="text" id="title" maxlength="100" placeholder="My new short #Shorts"/>
+
+        <label style="margin-top:12px">Description</label>
+        <textarea id="description" placeholder="Generated with Trend Vault.&#10;&#10;#Shorts"></textarea>
+
+        <label style="margin-top:12px">Tags <span style="text-transform:none;letter-spacing:0;color:var(--muted)">— comma-separated</span></label>
+        <input type="text" id="tags" placeholder="shorts, trendvault, fyp"/>
+
+        <div class="group" style="margin-top:12px">
+          <div>
+            <label>Privacy</label>
+            <select id="privacy">
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+          <div>
+            <label>Made for kids?</label>
+            <select id="madeForKids">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:16px">
+          <button id="uploadBtn" class="primary" disabled>📺 Upload to YouTube</button>
+          <span id="uploadStatus" class="pill muted">idle</span>
+          <a id="uploadLink" href="#" target="_blank" style="display:none;color:var(--purple3);font-size:.8rem;font-weight:700">↗ open on YouTube</a>
+        </div>
+        <div id="logs" class="logs" style="margin-top:14px;display:none"></div>
+        <p class="caveat">For Shorts auto-classification, the source MP4 must be vertical (9:16) and ≤ 180 s. Title or description must contain <code>#Shorts</code>. We append it automatically if missing.</p>
+      </div>
+
+    </div>
+
+    <div class="col">
+
+      <div class="section-label">④ Auto-Post on Render</div>
+      <div class="card">
+        <div class="card-head"><span class="ico">🔁</span><div class="ttl">Continuous Distribution</div></div>
+        <label>Title template <span style="text-transform:none;letter-spacing:0;color:var(--muted)">— <code style="color:var(--gold2)">{folder}</code> = render folder name</span></label>
+        <input type="text" id="apTitle" placeholder="{folder} #Shorts" maxlength="100"/>
+
+        <label style="margin-top:12px">Description template</label>
+        <textarea id="apDescription" placeholder="Generated with Trend Vault.&#10;&#10;#Shorts #trendvault"></textarea>
+
+        <label style="margin-top:12px">Tags (comma-separated)</label>
+        <input type="text" id="apTags" placeholder="shorts,trendvault,fyp"/>
+
+        <div class="group" style="margin-top:12px">
+          <div>
+            <label>Privacy</label>
+            <select id="apPrivacy">
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+          <div>
+            <label>Made for kids?</label>
+            <select id="apKids">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:16px">
+          <label class="toggle" style="margin:0">
+            <input type="checkbox" id="apEnabled"/>
+            <span class="lbl">Enabled</span>
+          </label>
+          <button id="apSaveBtn" class="primary">💾 Save</button>
+          <span id="apStatus" class="pill muted">—</span>
+        </div>
+
+        <p class="caveat">When enabled, every successful Trend Vault Studio render auto-uploads <code>video.mp4</code> to YouTube in the background. You must be signed in (step ①). Default quota: ~6 uploads/day.</p>
+      </div>
+
+      <div class="section-label">⑤ Recent Upload Jobs</div>
+      <div class="card">
+        <div class="card-head"><span class="ico">📜</span><div class="ttl">Activity</div></div>
+        <div id="apJobs" class="logs" style="max-height:280px"></div>
+      </div>
+
+    </div>
+
+  </main>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedRel = null;
+let pollTimer = null;
+
+(function(){
+  const c=document.getElementById('stars');
+  for(let i=0;i<120;i++){
+    const s=document.createElement('div');
+    s.className='star';
+    const sz=Math.random()*1.8+.5;
+    s.style.width=sz+'px';s.style.height=sz+'px';
+    s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';
+    s.style.setProperty('--dur',(Math.random()*3+2)+'s');
+    s.style.setProperty('--lo',Math.random()*.1);
+    s.style.setProperty('--hi',Math.random()*.5+.3);
+    c.appendChild(s);
+  }
+})();
+
+async function refreshAuth(){
+  $('ytStatus').className = 'pill muted'; $('ytStatus').textContent = 'checking…';
+  $('ytDot').className = 'dot'; $('ytVal').textContent = 'Checking…';
+  try{
+    const r = await fetch('/api/youtube/auth-status').then(r=>r.json());
+    if(r.redirectUri) $('redirectUri').textContent = r.redirectUri;
+    if(!r.configured){
+      $('setupBox').style.display = 'block';
+      $('ytStatus').className = 'pill red'; $('ytStatus').textContent = 'needs setup';
+      $('ytDot').className = 'dot offline'; $('ytVal').textContent = 'Needs setup';
+      $('signInBtn').disabled = true;
+      $('signOutBtn').style.display = 'none';
+      $('ytChannel').textContent = '—';
+    } else if(r.signedIn){
+      $('setupBox').style.display = 'none';
+      $('ytStatus').className = 'pill green'; $('ytStatus').textContent = 'signed in';
+      $('ytDot').className = 'dot online'; $('ytVal').textContent = 'Signed In';
+      $('signInBtn').textContent = 'Switch account';
+      $('signInBtn').disabled = false;
+      $('signOutBtn').style.display = 'inline-block';
+      $('ytChannel').textContent = r.channel || 'unknown';
+    } else {
+      $('setupBox').style.display = 'none';
+      $('ytStatus').className = 'pill red'; $('ytStatus').textContent = 'not signed in';
+      $('ytDot').className = 'dot offline'; $('ytVal').textContent = 'Not Signed In';
+      $('signInBtn').disabled = false;
+      $('signOutBtn').style.display = 'none';
+      $('ytChannel').textContent = '—';
+    }
+  } catch(e){
+    $('ytStatus').className = 'pill red'; $('ytStatus').textContent = 'error';
+    $('ytDot').className = 'dot offline'; $('ytVal').textContent = 'Error';
+  }
+  updateUploadButton();
+}
+
+async function startSignIn(){
+  try{
+    const r = await fetch('/api/youtube/auth-url').then(r=>r.json());
+    if(r.error){ alert(r.error); return; }
+    window.open(r.url, '_blank', 'width=520,height=720');
+    const t = setInterval(async ()=>{
+      const s = await fetch('/api/youtube/auth-status').then(r=>r.json()).catch(()=>null);
+      if(s && s.signedIn){ clearInterval(t); refreshAuth(); }
+    }, 2000);
+    setTimeout(()=>clearInterval(t), 5*60*1000);
+  } catch(e){ alert(e.message); }
+}
+
+async function signOut(){
+  if(!confirm('Sign out and forget YouTube credentials?')) return;
+  await fetch('/api/youtube/sign-out',{method:'POST'});
+  refreshAuth();
+}
+
+function fmtSize(n){ if(n>1e9) return (n/1e9).toFixed(2)+' GB'; if(n>1e6) return (n/1e6).toFixed(1)+' MB'; if(n>1e3) return (n/1e3).toFixed(0)+' KB'; return n+' B'; }
+function fmtTime(ms){ return new Date(ms).toLocaleString(); }
+
+async function loadVideos(){
+  const r = await fetch('/api/youtube/videos').then(r=>r.json());
+  const list = $('videos'); list.innerHTML = '';
+  $('videoCount').textContent = `${r.videos.length} file${r.videos.length===1?'':'s'}`;
+  $('videoCountSys').textContent = r.videos.length;
+  for(const v of r.videos){
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `<div class="name" title="${v.rel}">${v.rel}</div><div class="meta">${fmtSize(v.size)} · ${fmtTime(v.mtime)}</div>`;
+    div.onclick = () => {
+      selectedRel = v.rel;
+      [...list.children].forEach(c=>c.classList.remove('selected'));
+      div.classList.add('selected');
+      // Pre-fill the title with the basename if empty
+      if(!$('title').value){
+        const stem = v.rel.split(/[\\\/]/).pop().replace(/\.mp4$/i,'');
+        $('title').value = (stem + ' #Shorts').slice(0,100);
+      }
+      updateUploadButton();
+    };
+    list.appendChild(div);
+  }
+}
+
+function updateUploadButton(){ $('uploadBtn').disabled = !selectedRel; }
+
+async function startUpload(){
+  if(!selectedRel) return;
+  $('uploadBtn').disabled = true;
+  $('uploadStatus').className = 'pill muted'; $('uploadStatus').textContent = 'starting…';
+  $('uploadLink').style.display = 'none';
+  $('logs').style.display = 'block'; $('logs').textContent = '';
+  try{
+    const tags = $('tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const r = await fetch('/api/youtube/upload',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        rel:selectedRel,
+        title:$('title').value,
+        description:$('description').value,
+        tags,
+        privacy:$('privacy').value,
+        madeForKids: $('madeForKids').value === 'true',
+      }),
+    }).then(r=>r.json());
+    if(r.error) throw new Error(r.error);
+    pollJob(r.jobId);
+  } catch(e){
+    $('uploadStatus').className = 'pill red'; $('uploadStatus').textContent = 'error: '+e.message;
+    $('uploadBtn').disabled = false;
+  }
+}
+
+function pollJob(jobId){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    try{
+      const r = await fetch(`/api/youtube/status/${jobId}`).then(r=>r.json());
+      $('logs').textContent = (r.logs||[]).join('\n');
+      $('logs').scrollTop = $('logs').scrollHeight;
+      if(r.status==='running'){ $('uploadStatus').className='pill muted'; $('uploadStatus').textContent='uploading…'; }
+      else if(r.status==='done'){
+        clearInterval(pollTimer);
+        $('uploadStatus').className='pill green'; $('uploadStatus').textContent='done';
+        $('uploadBtn').disabled=false;
+        if(r.url){ $('uploadLink').href = r.url; $('uploadLink').style.display = 'inline-block'; }
+      } else if(r.status==='error'){
+        clearInterval(pollTimer);
+        $('uploadStatus').className='pill red'; $('uploadStatus').textContent='error';
+        $('logs').textContent += '\n\nERROR: '+(r.error||'unknown');
+        $('uploadBtn').disabled=false;
+      }
+    } catch(e){}
+  }, 1500);
+}
+
+async function loadAutoPost(){
+  const r = await fetch('/api/youtube/autopost').then(r=>r.json());
+  $('apEnabled').checked = !!r.enabled;
+  $('apTitle').value = r.titleTemplate || '';
+  $('apDescription').value = r.descriptionTemplate || '';
+  $('apTags').value = r.tags || '';
+  $('apPrivacy').value = r.privacy || 'public';
+  $('apKids').value = r.madeForKids ? 'true' : 'false';
+  applyAutoPostUi(r.enabled);
+}
+
+function applyAutoPostUi(on){
+  $('apStatus').className = 'pill ' + (on ? 'green' : 'muted');
+  $('apStatus').textContent = on ? 'enabled' : 'disabled';
+  $('autoDot').className = 'dot ' + (on ? 'online' : 'offline');
+  $('autoVal').textContent = on ? 'Enabled' : 'Disabled';
+}
+
+async function saveAutoPost(){
+  $('apSaveBtn').disabled = true;
+  try{
+    const body = {
+      enabled: $('apEnabled').checked,
+      titleTemplate: $('apTitle').value,
+      descriptionTemplate: $('apDescription').value,
+      tags: $('apTags').value,
+      privacy: $('apPrivacy').value,
+      madeForKids: $('apKids').value === 'true',
+    };
+    const r = await fetch('/api/youtube/autopost',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r=>r.json());
+    applyAutoPostUi(r.enabled);
+  } catch(e){
+    $('apStatus').className='pill red'; $('apStatus').textContent='error: '+e.message;
+  }
+  $('apSaveBtn').disabled = false;
+}
+
+async function loadAutoPostJobs(){
+  try{
+    const r = await fetch('/api/youtube/recent-jobs').then(r=>r.json());
+    if(!r.jobs.length){ $('apJobs').textContent = ''; $('lastJob').textContent = '—'; return; }
+    $('apJobs').textContent = r.jobs.map(j=>{
+      const t = new Date(j.startedAt).toLocaleTimeString();
+      const tag = j.status==='done' ? '✓' : j.status==='error' ? '✗' : '…';
+      const tail = j.url ? '  → ' + j.url : (j.error ? ' — ' + j.error : '');
+      return `${tag} ${t}  ${j.videoPath}  [${j.status}]${tail}`;
+    }).join('\n');
+    const newest = r.jobs[0];
+    $('lastJob').textContent = `${newest.status} · ${new Date(newest.startedAt).toLocaleTimeString()}`;
+  } catch{}
+}
+
+$('signInBtn').onclick = startSignIn;
+$('signOutBtn').onclick = signOut;
+$('refreshStatusBtn').onclick = refreshAuth;
+$('reloadVideosBtn').onclick = loadVideos;
+$('uploadBtn').onclick = startUpload;
+$('apSaveBtn').onclick = saveAutoPost;
+
+refreshAuth();
+loadVideos();
+loadAutoPost();
+loadAutoPostJobs();
+setInterval(loadAutoPostJobs, 4000);
+</script>
+</body>
+</html>
