@@ -24,8 +24,8 @@
   --green:#22c55e;
   --red:#ef4444;
   --text:#e8e0f5;
-  --text2:#b8aad0;
-  --muted:#6b5d8a;
+  --text2:#d4cbec;
+  --muted:#9890ba;
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;overflow-x:hidden}
@@ -162,6 +162,117 @@ textarea:focus{border-color:var(--purple2)}
 .tag{display:inline-block;background:var(--surface3);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:.62rem;font-weight:600;color:var(--text2);margin-right:5px}
 
 .divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ══════════════════════════════════════════════════════════════
+   TREND VAULT — Shared dark-panel + calm RGB rim styling
+   Injected across all pages for visual consistency
+   ══════════════════════════════════════════════════════════════ */
+
+/* Calm silver-white RGB border animation */
+@keyframes calmRgbBorderMove{
+  0%  {background-position:0%   50%}
+  100%{background-position:260% 50%}
+}
+
+/* ── Card base: solid dark, no gradient bleed ── */
+.card{
+  background:#0b0b12!important;
+  background-image:none!important;
+  border:none!important;
+  border-radius:14px;
+  padding:20px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:0 0 8px rgba(167,139,250,.14);
+  transition:transform .12s ease,box-shadow .3s ease;
+}
+/* RGB rim — mask cuts out interior, only 1.5px border visible */
+.card::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  padding:1.5px;
+  border-radius:inherit;
+  background:linear-gradient(120deg,
+    rgba(255,255,255,.88),
+    rgba(167,139,250,.72),
+    rgba(96,165,250,.58),
+    rgba(255,255,255,.78),
+    rgba(244,114,182,.55),
+    rgba(255,255,255,.88)
+  );
+  background-size:260% 260%;
+  animation:calmRgbBorderMove 12s linear infinite;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  pointer-events:none;
+  z-index:2;
+}
+/* No ::after — was causing interior color bleed */
+.card::after{display:none!important}
+/* Content always above the rim layer */
+.card>*{position:relative;z-index:3}
+.card:hover{
+  transform:translateY(-1px);
+  box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.12);
+}
+
+/* ── Section/card headers ── */
+.card-title,.section-head-label,.tile-title,.conn-name,
+.panel-title,.tab-title,.section-title{
+  color:rgba(245,245,255,.95);
+  text-shadow:
+    0 0 3px rgba(255,255,255,.35),
+    0 0 7px rgba(167,139,250,.28),
+    0 0 12px rgba(96,165,250,.16);
+}
+/* Icon/emoji glow */
+.card-title .ti,.section-head-icon,.tile-icon,.section-icon{
+  filter:
+    drop-shadow(0 0 3px rgba(255,255,255,.4))
+    drop-shadow(0 0 6px rgba(167,139,250,.25));
+}
+
+/* ── Fine print / muted text — brighter, still calm ── */
+.muted,[class*="muted"],[class*="-sub"],[class*="sub-"],
+.tile-desc,.conn-subtitle,.conn-url,.stat-lbl,.job-meta,
+.ip-hint,.logo-sub,.sys-label,.small,.hint,.help-text,
+small,[style*="color:var(--muted)"]{
+  color:#a099c4!important;
+  text-shadow:0 0 4px rgba(160,153,196,.3);
+}
+/* Links / anchor fine-print */
+a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
+a[style*="font-size:.7"],a[href*="localhost"]{
+  color:#c4b8f0!important;
+  text-decoration:none;
+  text-shadow:0 0 5px rgba(167,139,250,.35);
+  transition:color .2s,text-shadow .2s;
+}
+a.small:hover,a[href*="localhost"]:hover{
+  color:#e2d9ff!important;
+  text-shadow:0 0 8px rgba(167,139,250,.55);
+}
+
+/* ── General fine print size bump ── */
+[style*="font-size:.6rem"]{font-size:.68rem!important}
+[style*="font-size:.62rem"]{font-size:.7rem!important}
+[style*="font-size:.65rem"]{font-size:.72rem!important}
+
+/* ── Inputs dark and clean ── */
+input,textarea,select{
+  background:#11111a!important;
+  color:#f0ecff!important;
+  border-color:rgba(167,139,250,.3)!important;
+  text-shadow:none!important;
+}
+input:focus,textarea:focus,select:focus{
+  border-color:rgba(167,139,250,.65)!important;
+  outline:none!important;
+  box-shadow:0 0 0 2px rgba(167,139,250,.12)!important;
+}
+
 </style>
 </head>
 <body>
