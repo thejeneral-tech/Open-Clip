@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>TrendVault — TikTok Auto-Upload</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#080810;--surface:#10101a;--surface2:#17172a;--border:#272740;
+      --accent:#FFE500;--red:#fe2c55;--green:#1db954;--blue:#4f9eff;
+      --text:#eeeef5;--muted:#60607a;--r:14px;
+    }
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;min-height:100vh}
+    header{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;background:rgba(8,8,16,.9);position:sticky;top:0;backdrop-filter:blur(12px);z-index:5}
+    header h1{font-size:1.15rem;font-weight:900;letter-spacing:-.3px}
+    header h1 span{color:var(--accent)}
+    header .nav{margin-left:auto;display:flex;gap:8px}
+    header .nav a{color:var(--muted);text-decoration:none;font-size:.82rem;padding:6px 10px;border-radius:8px}
+    header .nav a:hover{color:var(--text);background:var(--surface2)}
+    main{max-width:1080px;margin:0 auto;padding:24px 20px 80px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px}
+    .card h2{font-size:.7rem;letter-spacing:1.8px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:14px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text],textarea,select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px 12px;font:inherit;outline:none}
+    textarea{min-height:96px;resize:vertical}
+    input[type=text]:focus,textarea:focus,select:focus{border-color:var(--accent)}
+    button{cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:10px 14px;border-radius:10px;font:inherit;font-weight:600}
+    button.primary{background:var(--accent);color:#000;border-color:var(--accent)}
+    button.danger{background:var(--red);color:#fff;border-color:var(--red)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .videos{display:flex;flex-direction:column;gap:6px;max-height:380px;overflow:auto}
+    .video-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface2)}
+    .video-item.selected{border-color:var(--accent);background:rgba(255,229,0,.06)}
+    .video-item .name{flex:1;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .video-item .meta{font-size:.72rem;color:var(--muted)}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.7rem;font-weight:700;letter-spacing:.5px}
+    .pill.green{background:rgba(29,185,84,.16);color:var(--green)}
+    .pill.red{background:rgba(254,44,85,.16);color:var(--red)}
+    .pill.muted{background:var(--surface2);color:var(--muted)}
+    .logs{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;background:#05050c;border:1px solid var(--border);border-radius:10px;padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap;color:#aab}
+    .full{grid-column:1/-1}
+    .group{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .caveat{font-size:.74rem;color:var(--muted);line-height:1.5;margin-top:8px}
+    .caveat b{color:var(--text)}
+  </style>
+</head>
+<body>
+<header>
+  <div style="font-size:1.4rem">📤</div>
+  <h1>TrendVault <span>TikTok Auto-Upload</span></h1>
+  <nav class="nav">
+    <a href="/">Clip Tool</a>
+    <a href="/trend-vault">Studio</a>
+    <a href="/mainframe">Mainframe</a>
+  </nav>
+</header>
+
+<main>
+  <section class="card">
+    <h2>① TikTok Account</h2>
+    <div class="row" style="margin-bottom:10px">
+      <span id="loginStatus" class="pill muted">checking…</span>
+      <button id="loginBtn">Sign in to TikTok</button>
+      <button id="refreshStatusBtn">Refresh</button>
+    </div>
+    <p class="caveat">First time: click <b>Sign in</b>, a Chromium window opens, log in by hand, then close it. The session is saved in <code>.tiktok-session/</code> so future uploads don't need a re-login.</p>
+  </section>
+
+  <section class="card">
+    <h2>② Pick a Video</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="reloadVideosBtn">Reload</button>
+      <span id="videoCount" class="pill muted">0 files</span>
+    </div>
+    <div id="videos" class="videos"></div>
+  </section>
+
+  <section class="card full">
+    <h2>③ Post</h2>
+    <div class="group">
+      <div>
+        <label>Caption (hashtags & @mentions allowed)</label>
+        <textarea id="caption" placeholder="Your caption here #fyp #foryou"></textarea>
+      </div>
+      <div>
+        <label>Privacy</label>
+        <select id="privacy">
+          <option value="public">Public</option>
+          <option value="friends">Friends</option>
+          <option value="private">Only you</option>
+        </select>
+        <label style="margin-top:12px">Mode</label>
+        <select id="mode">
+          <option value="draft">Save as draft (recommended)</option>
+          <option value="direct">Direct post (publish immediately)</option>
+        </select>
+        <div style="margin-top:14px" class="row">
+          <button id="uploadBtn" class="primary" disabled>Upload to TikTok</button>
+          <span id="uploadStatus" class="pill muted">idle</span>
+        </div>
+      </div>
+    </div>
+    <div id="logs" class="logs" style="margin-top:14px;display:none"></div>
+    <p class="caveat" style="margin-top:14px">⚠ This uses browser automation against tiktok.com, which violates TikTok's ToS. Use a throwaway account for testing. UI changes by TikTok may break the selectors — if it fails, set <code>DEBUG_TIKTOK=1</code> when starting the server to keep the browser open and inspect.</p>
+  </section>
+
+  <section class="card full">
+    <h2>④ Auto-post on Render Complete</h2>
+    <div class="group">
+      <div>
+        <label>Caption template (use <code>{folder}</code> for the render folder name)</label>
+        <textarea id="apCaption" placeholder="{folder} #fyp #trendvault"></textarea>
+      </div>
+      <div>
+        <label>Privacy</label>
+        <select id="apPrivacy">
+          <option value="public">Public</option>
+          <option value="friends">Friends</option>
+          <option value="private">Only you</option>
+        </select>
+        <label style="margin-top:12px">Mode</label>
+        <select id="apMode">
+          <option value="draft">Save as draft (recommended)</option>
+          <option value="direct">Direct post (publish immediately)</option>
+        </select>
+        <div class="row" style="margin-top:14px">
+          <label style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="apEnabled" style="width:auto"/>
+            <span style="color:var(--text);font-size:.9rem;font-weight:600">Enabled</span>
+          </label>
+          <button id="apSaveBtn" class="primary">Save</button>
+          <span id="apStatus" class="pill muted">—</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <label>Recent auto-post jobs</label>
+      <div id="apJobs" class="logs" style="max-height:140px"></div>
+    </div>
+    <p class="caveat" style="margin-top:10px">When enabled, every successful Trend Vault Studio render fires a TikTok upload of <code>video.mp4</code> in the background. You must be signed in (step ①). Jobs run sequentially-ish; if you batch-render fast, expect a queue.</p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedRel = null;
+let pollTimer = null;
+
+async function refreshLoginStatus() {
+  $('loginStatus').className = 'pill muted';
+  $('loginStatus').textContent = 'checking…';
+  try {
+    const r = await fetch('/api/tiktok/login-status').then(r => r.json());
+    if (r.loggedIn) {
+      $('loginStatus').className = 'pill green';
+      $('loginStatus').textContent = 'signed in';
+    } else {
+      $('loginStatus').className = 'pill red';
+      $('loginStatus').textContent = 'not signed in';
+    }
+  } catch (e) {
+    $('loginStatus').className = 'pill red';
+    $('loginStatus').textContent = 'error: ' + e.message;
+  }
+  updateUploadButton();
+}
+
+async function startLogin() {
+  $('loginBtn').disabled = true;
+  $('loginBtn').textContent = 'Opening browser…';
+  try {
+    await fetch('/api/tiktok/login', { method: 'POST' });
+  } catch (e) { alert('Login failed: ' + e.message); }
+  $('loginBtn').disabled = false;
+  $('loginBtn').textContent = 'Sign in to TikTok';
+  refreshLoginStatus();
+}
+
+function fmtSize(n) {
+  if (n > 1e9) return (n / 1e9).toFixed(2) + ' GB';
+  if (n > 1e6) return (n / 1e6).toFixed(1) + ' MB';
+  if (n > 1e3) return (n / 1e3).toFixed(0) + ' KB';
+  return n + ' B';
+}
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString();
+}
+
+async function loadVideos() {
+  const r = await fetch('/api/tiktok/videos').then(r => r.json());
+  const list = $('videos');
+  list.innerHTML = '';
+  $('videoCount').textContent = `${r.videos.length} file${r.videos.length === 1 ? '' : 's'}`;
+  for (const v of r.videos) {
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `
+      <div class="name" title="${v.rel}">${v.rel}</div>
+      <div class="meta">${fmtSize(v.size)} · ${fmtTime(v.mtime)}</div>
+    `;
+    div.onclick = () => {
+      selectedRel = v.rel;
+      [...list.children].forEach(c => c.classList.remove('selected'));
+      div.classList.add('selected');
+      updateUploadButton();
+    };
+    list.appendChild(div);
+  }
+}
+
+function updateUploadButton() {
+  $('uploadBtn').disabled = !selectedRel;
+}
+
+async function startUpload() {
+  if (!selectedRel) return;
+  $('uploadBtn').disabled = true;
+  $('uploadStatus').className = 'pill muted';
+  $('uploadStatus').textContent = 'starting…';
+  $('logs').style.display = 'block';
+  $('logs').textContent = '';
+  try {
+    const r = await fetch('/api/tiktok/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rel: selectedRel,
+        caption: $('caption').value,
+        privacy: $('privacy').value,
+        mode: $('mode').value,
+      }),
+    }).then(r => r.json());
+    if (r.error) throw new Error(r.error);
+    pollJob(r.jobId);
+  } catch (e) {
+    $('uploadStatus').className = 'pill red';
+    $('uploadStatus').textContent = 'error: ' + e.message;
+    $('uploadBtn').disabled = false;
+  }
+}
+
+function pollJob(jobId) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/tiktok/status/${jobId}`).then(r => r.json());
+      $('logs').textContent = (r.logs || []).join('\n');
+      $('logs').scrollTop = $('logs').scrollHeight;
+      if (r.status === 'running') {
+        $('uploadStatus').className = 'pill muted';
+        $('uploadStatus').textContent = 'uploading…';
+      } else if (r.status === 'done') {
+        clearInterval(pollTimer);
+        $('uploadStatus').className = 'pill green';
+        $('uploadStatus').textContent = 'done';
+        $('uploadBtn').disabled = false;
+      } else if (r.status === 'error') {
+        clearInterval(pollTimer);
+        $('uploadStatus').className = 'pill red';
+        $('uploadStatus').textContent = 'error';
+        $('logs').textContent += '\n\nERROR: ' + (r.error || 'unknown');
+        $('uploadBtn').disabled = false;
+      }
+    } catch (e) {
+      // network blip — keep polling
+    }
+  }, 1500);
+}
+
+async function loadAutoPost() {
+  const r = await fetch('/api/tiktok/autopost').then(r => r.json());
+  $('apEnabled').checked = !!r.enabled;
+  $('apCaption').value = r.captionTemplate || '';
+  $('apPrivacy').value = r.privacy || 'public';
+  $('apMode').value = r.mode || 'draft';
+  $('apStatus').className = 'pill ' + (r.enabled ? 'green' : 'muted');
+  $('apStatus').textContent = r.enabled ? 'enabled' : 'disabled';
+}
+
+async function saveAutoPost() {
+  $('apSaveBtn').disabled = true;
+  try {
+    const body = {
+      enabled: $('apEnabled').checked,
+      captionTemplate: $('apCaption').value,
+      privacy: $('apPrivacy').value,
+      mode: $('apMode').value,
+    };
+    const r = await fetch('/api/tiktok/autopost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    $('apStatus').className = 'pill ' + (r.enabled ? 'green' : 'muted');
+    $('apStatus').textContent = r.enabled ? 'enabled' : 'disabled';
+  } catch (e) {
+    $('apStatus').className = 'pill red';
+    $('apStatus').textContent = 'error: ' + e.message;
+  }
+  $('apSaveBtn').disabled = false;
+}
+
+async function loadAutoPostJobs() {
+  try {
+    const r = await fetch('/api/tiktok/recent-jobs').then(r => r.json());
+    if (!r.jobs.length) { $('apJobs').textContent = '(no jobs yet)'; return; }
+    $('apJobs').textContent = r.jobs.map(j => {
+      const t = new Date(j.startedAt).toLocaleTimeString();
+      const tag = j.status === 'done' ? '✓' : j.status === 'error' ? '✗' : '…';
+      return `${tag} ${t}  ${j.videoPath}  [${j.status}]${j.error ? ' — ' + j.error : ''}`;
+    }).join('\n');
+  } catch {}
+}
+
+$('loginBtn').onclick = startLogin;
+$('refreshStatusBtn').onclick = refreshLoginStatus;
+$('reloadVideosBtn').onclick = loadVideos;
+$('uploadBtn').onclick = startUpload;
+$('apSaveBtn').onclick = saveAutoPost;
+
+refreshLoginStatus();
+loadVideos();
+loadAutoPost();
+loadAutoPostJobs();
+setInterval(loadAutoPostJobs, 4000);
+</script>
+</body>
+</html>

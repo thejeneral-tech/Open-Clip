@@ -530,6 +530,181 @@ app.get('/mainframe', (_req, res) => {
   res.sendFile(path.join(ROOT, 'frontend', 'mainframe.html'));
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+//  TIKTOK AUTO-UPLOAD ROUTES
+// ════════════════════════════════════════════════════════════════════════════
+
+interface TikTokJob {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  logs: string[];
+  error?: string;
+  startedAt: number;
+  videoPath: string;
+}
+const tikTokJobs = new Map<string, TikTokJob>();
+
+interface TikTokAutoPost {
+  enabled: boolean;
+  captionTemplate: string;
+  privacy: 'public' | 'friends' | 'private';
+  mode: 'direct' | 'draft';
+}
+const AUTOPOST_FILE = path.join(ROOT, 'data', 'tiktok-autopost.json');
+const AUTOPOST_DEFAULT: TikTokAutoPost = {
+  enabled: false,
+  captionTemplate: '{folder} #fyp #trendvault',
+  privacy: 'public',
+  mode: 'draft',
+};
+function loadAutoPost(): TikTokAutoPost {
+  try {
+    if (fs.existsSync(AUTOPOST_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(AUTOPOST_FILE, 'utf8'));
+      return { ...AUTOPOST_DEFAULT, ...parsed };
+    }
+  } catch { /* ignore */ }
+  return { ...AUTOPOST_DEFAULT };
+}
+function saveAutoPost(cfg: TikTokAutoPost) {
+  fs.mkdirSync(path.dirname(AUTOPOST_FILE), { recursive: true });
+  fs.writeFileSync(AUTOPOST_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function startTikTokJob(videoAbs: string, caption: string, privacy: TikTokAutoPost['privacy'], mode: TikTokAutoPost['mode']): string {
+  const id = `tt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const job: TikTokJob = { id, status: 'running', logs: [], startedAt: Date.now(), videoPath: videoAbs };
+  tikTokJobs.set(id, job);
+  (async () => {
+    try {
+      const { uploadVideo } = await import('./scripts/tiktok-uploader');
+      const result = await uploadVideo({
+        videoPath: videoAbs,
+        caption,
+        privacy,
+        mode,
+        onLog: (line) => {
+          job.logs.push(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
+          if (job.logs.length > 200) job.logs.splice(0, job.logs.length - 200);
+        },
+      });
+      if (result.ok) job.status = 'done';
+      else { job.status = 'error'; job.error = result.error; }
+    } catch (err: any) {
+      job.status = 'error';
+      job.error = err?.message ?? String(err);
+    }
+  })();
+  return id;
+}
+
+function maybeAutoPostRender(folder: string, pushLog: (msg: string, pct?: number) => void) {
+  const cfg = loadAutoPost();
+  if (!cfg.enabled) return;
+  const videoAbs = path.join(TREND_VAULT_OUT, folder, 'video.mp4');
+  if (!fs.existsSync(videoAbs)) {
+    pushLog(`⚠ Auto-post skipped — ${videoAbs} not found`);
+    return;
+  }
+  const caption = cfg.captionTemplate.replace(/\{folder\}/g, folder);
+  const id = startTikTokJob(videoAbs, caption, cfg.privacy, cfg.mode);
+  pushLog(`📤 Auto-posting to TikTok (${cfg.mode}) — job ${id}`);
+}
+
+function recentMp4s(): { path: string; rel: string; mtime: number; size: number }[] {
+  const roots = [TREND_VAULT_OUT, FINAL_DIR];
+  const found: { path: string; rel: string; mtime: number; size: number }[] = [];
+  const walk = (dir: string) => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fp = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(fp);
+      else if (entry.isFile() && /\.mp4$/i.test(entry.name)) {
+        const st = fs.statSync(fp);
+        found.push({ path: fp, rel: path.relative(ROOT, fp), mtime: st.mtimeMs, size: st.size });
+      }
+    }
+  };
+  for (const r of roots) walk(r);
+  return found.sort((a, b) => b.mtime - a.mtime).slice(0, 50);
+}
+
+app.get('/tiktok', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(ROOT, 'frontend', 'tiktok.html'));
+});
+
+app.get('/api/tiktok/videos', (_req, res) => {
+  res.json({ videos: recentMp4s().map(v => ({ rel: v.rel, mtime: v.mtime, size: v.size })) });
+});
+
+app.get('/api/tiktok/login-status', async (_req, res) => {
+  try {
+    const { isLoggedIn } = await import('./scripts/tiktok-uploader');
+    res.json({ loggedIn: await isLoggedIn() });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/tiktok/login', async (_req, res) => {
+  try {
+    const { loginInteractive } = await import('./scripts/tiktok-uploader');
+    await loginInteractive();
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+app.post('/api/tiktok/upload', express.json(), async (req, res) => {
+  const { rel, caption, privacy, mode } = req.body ?? {};
+  if (typeof rel !== 'string' || !rel) { res.status(400).json({ error: 'rel required' }); return; }
+  const safeRel = path.normalize(rel).replace(/^([/\\]+)/, '');
+  const abs = path.join(ROOT, safeRel);
+  if (!abs.startsWith(ROOT) || !fs.existsSync(abs)) { res.status(400).json({ error: 'video not found' }); return; }
+  const allowedPrivacy = new Set(['public', 'friends', 'private']);
+  const allowedMode = new Set(['direct', 'draft']);
+  const p: TikTokAutoPost['privacy'] = allowedPrivacy.has(privacy) ? privacy : 'public';
+  const m: TikTokAutoPost['mode'] = allowedMode.has(mode) ? mode : 'draft';
+  const cap = typeof caption === 'string' ? caption.slice(0, 2200) : '';
+
+  const id = startTikTokJob(abs, cap, p, m);
+  res.json({ jobId: id });
+});
+
+app.get('/api/tiktok/status/:jobId', (req, res) => {
+  const job = tikTokJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: 'not found' }); return; }
+  res.json({ id: job.id, status: job.status, logs: job.logs, error: job.error });
+});
+
+app.get('/api/tiktok/autopost', (_req, res) => {
+  res.json(loadAutoPost());
+});
+
+app.post('/api/tiktok/autopost', express.json(), (req, res) => {
+  const incoming = req.body ?? {};
+  const cfg: TikTokAutoPost = {
+    enabled: !!incoming.enabled,
+    captionTemplate: typeof incoming.captionTemplate === 'string'
+      ? incoming.captionTemplate.slice(0, 2200)
+      : AUTOPOST_DEFAULT.captionTemplate,
+    privacy: ['public', 'friends', 'private'].includes(incoming.privacy) ? incoming.privacy : 'public',
+    mode: ['direct', 'draft'].includes(incoming.mode) ? incoming.mode : 'draft',
+  };
+  saveAutoPost(cfg);
+  res.json(cfg);
+});
+
+app.get('/api/tiktok/recent-jobs', (_req, res) => {
+  const jobs = [...tikTokJobs.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 10)
+    .map(j => ({ id: j.id, status: j.status, error: j.error, startedAt: j.startedAt, videoPath: path.basename(j.videoPath) }));
+  res.json({ jobs });
+});
+
 // ── List backgrounds ──────────────────────────────────────────────────────────
 app.get('/api/backgrounds', (_req, res) => {
   const files = fs.existsSync(BACKGROUNDS)
@@ -2273,6 +2448,9 @@ app.post('/api/trend-vault/render', async (req, res) => {
       renderState.outputFile = `${folder}/video.mp4`;
       pushLog(`✅ Render complete! → trend-vault-output/${folder}/video.mp4`, 100);
       trendVaultBroadcast(jobId, { done: true, success: true, outputFile: renderState.outputFile });
+
+      try { maybeAutoPostRender(folder, pushLog); }
+      catch (err) { pushLog(`⚠ Auto-post error: ${(err as Error).message}`); }
 
     } catch (err) {
       const msg = (err as Error).message || String(err);

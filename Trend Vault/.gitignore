@@ -10,3 +10,6 @@ out
 build/
 *.spec
 TrendVaultLauncher.exe
+
+# TikTok uploader persistent auth session — DO NOT COMMIT
+.tiktok-session/
