@@ -135,14 +135,15 @@ function makeRng(seed?: number): () => number {
 }
 
 export async function generateTrendVaultScript(params: {
-  trendVaultSign: string;
+  niche: string;
+  subject?: string;
   category: string;
   prompt: string;
   angle: string;
   emotionalTone: string;
   targetDuration: number; // seconds, 90-120
 }): Promise<GeneratedScript> {
-  const { trendVaultSign, category, prompt, angle, emotionalTone, targetDuration } = params;
+  const { niche, subject, category, prompt, angle, emotionalTone, targetDuration } = params;
 
   const toneInstruction = TONES[emotionalTone as keyof typeof TONES] || TONES.mysterious;
 
@@ -162,17 +163,17 @@ Your videos are famous because they feel:
 - Cinematic in pacing, with tension that builds naturally
 
 You NEVER write:
-- Generic horoscope statements
-- "Hey Scorpios, this is for you" type openers
-- Spiritual platitudes or fortune-telling
-- Repetitive astrology stereotypes
+- Generic horoscope or astrology statements
+- Audience-address openers tied to zodiac signs ("Hey Scorpios...")
+- Spiritual platitudes, fortune-telling, or zodiac stereotypes
+- Hollow niche buzzwords without psychological depth behind them
 - Filler words or explanations of what you're about to say
 
 TONE: ${toneInstruction}
 
 Your scripts follow a specific emotional arc:
 1. HOOK (4-6 sec) — Opens an emotional loop. One sentence that stops the scroll. No setup, no explanation.
-2. OBSERVATION (12-18 sec) — A specific, relatable truth about this sign's behavior. Not generic.
+2. OBSERVATION (12-18 sec) — A specific, relatable truth about human behavior in this niche. Not generic.
 3. ESCALATION (18-24 sec) — Deepen the psychological tension. Layer in a second truth.
 4. DEEPER TRUTH (18-24 sec) — The real reason behind the behavior. Surprising but immediately recognized.
 5. TWIST (12-18 sec) — Emotional reframe. Changes how they see everything said before.
@@ -198,8 +199,9 @@ DIVERSITY DIALS FOR THIS GENERATION (honor these — they steer the corner of st
 - ENDING STYLE: ${endingStyle}.`;
 
   const userPrompt = `Create a trend-vault storytelling video script for:
-- Sign: ${trendVaultSign}
-- Topic Category: ${category}
+- Niche: ${niche}
+- Subject: ${subject || category}
+- Category: ${category}
 - Core Premise: ${prompt}
 - Emotional Angle: ${angle}
 
@@ -242,7 +244,7 @@ Random seed for this generation: ${rngSeed}. Use this seed mentally to ensure yo
   if (jsonMatch) jsonText = jsonMatch[1].trim();
 
   const parsed = JSON.parse(jsonText) as GeneratedScript;
-  parsed.trendVaultSign = trendVaultSign;
+  parsed.trendVaultSign = niche;
   parsed.topic = prompt;
   parsed.emotionalTone = emotionalTone;
 
@@ -285,59 +287,38 @@ export function calculateFrameTiming(
 // ─── Fallback: generate script without API ────────────────────────────────────
 
 export function generateFallbackScript(params: {
-  trendVaultSign: string;
+  niche: string;
   prompt: string;
   angle: string;
   emotionalTone?: string;
 }): GeneratedScript {
-  const { trendVaultSign, prompt, angle, emotionalTone } = params;
-
-  // If the caller asked for a motivational tone OR has no real prompt to
-  // work with, hand back the cinematic motivational script from the built-in
-  // library. This is silent — no UI surfaces it; the existing fallback path
-  // simply produces a far better script for these signs.
-  if (shouldUseMotivationalScript({ trendVaultSign, emotionalTone, prompt })) {
-    const motivational = getMotivationalScript(trendVaultSign);
-    if (motivational) {
-      return uppercaseScriptLines({
-        ...motivational,
-        title: prompt || motivational.title,
-        topic: prompt || motivational.topic,
-      });
-    }
-  }
+  const { niche, prompt, angle, emotionalTone } = params;
 
   // ── Diverse template pools ────────────────────────────────────────────────
-  // The fallback used to return the exact same 11 lines on every call — only
-  // the sign name changed, which is why the hook "SCORPIOS DON'T DO THIS BY
-  // ACCIDENT" kept reappearing. We now pick from pools per call, exclude
-  // recently-used hooks via the same recent-hooks blocklist the AI path uses,
-  // and roll a fresh seeded RNG so output rotates even on rapid repeats.
+  // Picks from pools per call, excludes recently-used hooks via the same
+  // recent-hooks blocklist the AI path uses, and rolls a fresh seeded RNG so
+  // output rotates even on rapid repeats.
   // Same 11-line / ~55s shape is preserved so captions and timing still align.
-  const signLower = trendVaultSign.toLowerCase();
-  // Smart pluralization — signs that already end in 's' must NOT get another 's'
-  // e.g. Sagittarius → sagittarius (not sagittariuss), Pisces → pisces (not piscess)
-  const signsLower = signLower.endsWith('s') ? signLower : `${signLower}s`;
 
   const HOOK_POOL: string[] = [
-    `${signsLower} don't do this by accident.`,
-    `you didn't lose a ${signLower}. you lost their patience.`,
-    `the quietest a ${signLower} ever gets is right before they're gone.`,
+    `people like this don't do it by accident.`,
+    `you didn't lose them. you lost their patience.`,
+    `the quietest they ever get is right before they're gone.`,
     `they noticed. they're just not telling you yet.`,
     `there's a version of them you only see once.`,
     `you mistook their composure for forgiveness.`,
-    `a ${signLower} doesn't warn you twice.`,
+    `they don't warn you twice.`,
     `they stayed longer than you deserved. they remember exactly when that stopped.`,
     `you keep waiting for them to react. they already did — months ago.`,
-    `the way a ${signLower} loves you is rarely the way you'll be able to describe it.`,
+    `the way they love you is rarely the way you'll be able to describe it.`,
     `everyone misreads the silence.`,
     `they don't go cold. they go quiet — and that's worse.`,
     `you weren't ignored. you were observed.`,
     `you'll know it was over the day you remember a thing you said two weeks ago.`,
-    `a ${signLower} is never confused about how they feel. you are.`,
+    `they're never confused about how they feel. you are.`,
     `the moment they decided, the room changed. you just didn't catch it.`,
     `they're not difficult. you're new to being seen this clearly.`,
-    `the most dangerous thing a ${signLower} can do is finally agree with you.`,
+    `the most dangerous thing they can do is finally agree with you.`,
   ];
 
   const OBS_POOL: string[] = [
@@ -373,11 +354,11 @@ export function generateFallbackScript(params: {
   ];
 
   const RELEASE_POOL: string[] = [
-    `when a ${signLower} finally lowers that wall — even slightly — it's not weakness.`,
-    `the day a ${signLower} stops measuring you is the day they've already chosen.`,
-    `when a ${signLower} tells you something true, they've already decided you can carry it.`,
-    `when a ${signLower} stays after seeing you at your worst, that wasn't tolerance — it was a verdict.`,
-    `when a ${signLower} softens around you, you're not winning them. you're being trusted.`,
+    `when they finally lower that wall — even slightly — it's not weakness.`,
+    `the day they stop measuring you is the day they've already chosen.`,
+    `when they tell you something true, they've already decided you can carry it.`,
+    `when they stay after seeing you at your worst, that wasn't tolerance — it was a verdict.`,
+    `when they soften around you, you're not winning them. you're being trusted.`,
   ];
 
   const ENDING_PAIR_POOL: Array<[string, string]> = [
@@ -426,8 +407,8 @@ export function generateFallbackScript(params: {
     totalDuration: lines.reduce((sum, l) => sum + l.durationSeconds, 0),
     title: prompt,
     hook: lines[0].text,
-    trendVaultSign,
+    trendVaultSign: niche,
     topic: prompt,
-    emotionalTone: 'mysterious',
+    emotionalTone: emotionalTone || 'mysterious',
   });
 }

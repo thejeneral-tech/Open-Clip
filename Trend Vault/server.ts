@@ -1217,16 +1217,17 @@ app.delete('/api/audio/:filename', (req, res) => {
 
 // ── Generate script ───────────────────────────────────────────────────────────
 app.post('/api/trend-vault/generate-script', async (req, res) => {
-  const { trendVaultSign, category, prompt, angle, emotionalTone, targetDuration } = req.body;
+  const niche: string = req.body.niche || req.body.trendVaultSign || req.body.subject || 'General';
+  const { category, prompt, angle, emotionalTone, targetDuration, subject } = req.body;
 
-  if (!trendVaultSign || !prompt) {
-    res.status(400).json({ error: 'trendVaultSign and prompt are required.' });
+  if (!prompt) {
+    res.status(400).json({ error: 'prompt is required.' });
     return;
   }
 
   const sendFallback = (notice?: string) => {
     try {
-      const script = generateFallbackScript({ trendVaultSign, prompt: prompt || '', angle: angle || '' });
+      const script = generateFallbackScript({ niche, prompt: prompt || '', angle: angle || '' });
       res.json({ ok: true, script, source: 'fallback', ...(notice ? { notice } : {}) });
     } catch (fbErr) {
       res.status(500).json({ ok: false, error: 'Script generation failed.' });
@@ -1240,7 +1241,8 @@ app.post('/api/trend-vault/generate-script', async (req, res) => {
 
   try {
     const script = await generateTrendVaultScript({
-      trendVaultSign,
+      niche,
+      subject:        subject || '',
       category:       category || 'general',
       prompt,
       angle:          angle || '',
@@ -1258,7 +1260,7 @@ app.post('/api/trend-vault/generate-script', async (req, res) => {
       try {
         const result = await aiComplete({
           maxTokens: 2048,
-          user: `Write a TikTok trend-vault storytelling script for ${trendVaultSign}.
+          user: `Write a TikTok trend-vault storytelling script for the "${niche}" niche.
 
 Topic: ${prompt}
 Angle: ${angle || ''}
@@ -1279,7 +1281,7 @@ Return ONLY valid JSON, no other text:
 Use these line types in order: hook, observation, escalation, truth, twist, ending. 12-18 lines total. Each line 1-2 sentences, 3-8 seconds.`,
         });
         const parsed = parseAIJson<{ lines: unknown[]; totalDuration: number; title: string; hook: string }>(result.text);
-        const fullScript = { ...parsed, trendVaultSign, topic: prompt, emotionalTone: emotionalTone || 'mysterious' };
+        const fullScript = { ...parsed, trendVaultSign: niche, topic: prompt, emotionalTone: emotionalTone || 'mysterious' };
         res.json({ ok: true, script: fullScript, source: 'openai', notice: result.warning || 'Using OpenAI (Anthropic credits exhausted).' });
         return;
       } catch (oaiErr) {
@@ -1288,6 +1290,34 @@ Use these line types in order: hook, observation, escalation, truth, twist, endi
     }
 
     sendFallback(isBilling ? 'Both AI providers unavailable — using built-in template.' : undefined);
+  }
+});
+
+// ── Generate subjects for a niche ────────────────────────────────────────────
+app.post('/api/trend-vault/generate-subjects', async (req, res) => {
+  const { niche } = req.body as { niche?: string };
+  if (!niche) { res.status(400).json({ error: 'niche is required.' }); return; }
+
+  const prompt = `Generate 10 specific, emotionally punchy subject ideas for the "${niche}" niche on TikTok.
+These topics are for short cinematic storytelling videos — psychological, emotional, and viral.
+Each subject should be 2-5 words, specific and compelling (no generic filler).
+Return ONLY a valid JSON array of strings, no markdown, no extra text:
+["Subject One", "Subject Two", ...]`;
+
+  try {
+    const result = await aiComplete({ user: prompt, maxTokens: 300 });
+    const raw = result.text.trim();
+    console.log('[generate-subjects] raw response:', raw.slice(0, 300));
+
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) throw new Error(`No JSON array found in response: ${raw.slice(0, 100)}`);
+    const subjects: string[] = JSON.parse(arrayMatch[0]);
+    res.json({ ok: true, subjects, source: result.provider || 'ai' });
+  } catch (err) {
+    const msg = (err as Error).message || String(err);
+    const isBilling = /credit|billing|balance|quota|429|402|insufficient/i.test(msg);
+    console.warn('[generate-subjects] error:', msg.slice(0, 200));
+    res.json({ ok: true, subjects: [], source: isBilling ? 'billing' : 'error', error: msg.slice(0, 200) });
   }
 });
 
@@ -3033,13 +3063,14 @@ app.get('/api/prompts', (_req, res) => {
 
 // ── Extend existing script with AI ────────────────────────────────────────────
 app.post('/api/trend-vault/extend-script', async (req, res) => {
-  const { trendVaultSign, prompt, emotionalTone, existingLines, addCount } = req.body as {
-    trendVaultSign: string; category?: string; prompt: string; angle?: string;
+  const { prompt, emotionalTone, existingLines, addCount } = req.body as {
+    category?: string; prompt: string; angle?: string;
     emotionalTone: string; existingLines: { text: string; type: string; durationSeconds: number }[];
     addCount: number;
   };
-  if (!trendVaultSign || !prompt || !existingLines?.length) {
-    res.status(400).json({ error: 'trendVaultSign, prompt, existingLines required.' }); return;
+  const niche: string = req.body.niche || req.body.trendVaultSign || req.body.subject || 'General';
+  if (!prompt || !existingLines?.length) {
+    res.status(400).json({ error: 'prompt and existingLines are required.' }); return;
   }
   const count = Math.min(Math.max(addCount || 4, 1), 12);
 
@@ -3047,7 +3078,7 @@ app.post('/api/trend-vault/extend-script', async (req, res) => {
   if (!hasAnyKey) {
     const types = ['observation','escalation','truth','twist'] as const;
     const newLines = Array.from({ length: count }, (_, i) => ({
-      text: `${trendVaultSign}s carry something most people never see.`,
+      text: `people in this space carry something most people never see.`,
       type: types[i % types.length],
       durationSeconds: 5,
     }));
@@ -3068,7 +3099,7 @@ app.post('/api/trend-vault/extend-script', async (req, res) => {
       maxTokens: 1024,
       user: `You write TikTok trend-vault storytelling scripts. Tone: ${tone}.
 
-Existing script for ${trendVaultSign} about "${prompt}":
+Existing script in the "${niche}" niche about "${prompt}":
 ${existingText}
 
 Add ${count} NEW continuation lines. Keep the same emotional arc and tone.
@@ -3086,7 +3117,7 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
     console.warn('[extend-script] error:', msg);
     const types = ['observation','escalation','truth','twist'] as const;
     const newLines = Array.from({ length: count }, (_, i) => ({
-      text: `And yet — ${trendVaultSign}s always find their way back to themselves.`,
+      text: `And yet — they always find their way back to themselves.`,
       type: types[i % types.length], durationSeconds: 5,
     }));
     res.json({ ok: true, lines: newLines, source: 'fallback', error: msg });

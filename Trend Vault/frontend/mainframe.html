@@ -644,16 +644,9 @@ input:focus,textarea:focus,select:focus{
       <div class="logo-name">Trend Vault Mainframe</div>
       <div class="logo-sub">Command &amp; Control</div>
     </div>
-    <nav>
-      <a href="/trend-vault" class="nav-btn">🎬 Studio</a>
-      <a href="/voice-lab" class="nav-btn">🎙️ Voice Lab</a>
-      <a href="/" class="nav-btn">✂️ Clip Tool</a>
-      <a href="/tiktok" class="nav-btn">📤 TikTok</a>
-      <a href="/youtube" class="nav-btn">📺 YouTube</a>
-      <a href="/instagram" class="nav-btn">📸 Instagram</a>
-      <a href="/mainframe" class="nav-btn active">⚡ Mainframe</a>
-    </nav>
+    <nav id="tv-nav"></nav>
   </header>
+  <script src="/nav.js" defer></script>
 
   <!-- ── System bar ── -->
   <div class="sysbar">
@@ -868,29 +861,8 @@ input:focus,textarea:focus,select:focus{
 
         <!-- Niche picker row -->
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <select class="niche-select" id="nicheSelect">
-            <option value="">— Pick Niche —</option>
-            <option>Human Psychology</option><option>Dark Psychology</option>
-            <option>Emotional Intelligence</option><option>Mindset</option>
-            <option>Overthinking</option><option>Hidden Truths</option>
-            <option>Mystery &amp; Curiosity</option><option>Relationships</option>
-            <option>Dating &amp; Attraction</option><option>Breakups &amp; Healing</option>
-            <option>No Contact</option><option>Red Flags</option>
-            <option>Loyalty &amp; Trust</option><option>Communication</option>
-            <option>Friendship</option><option>Family Dynamics</option>
-            <option>Self Improvement</option><option>Personal Growth</option>
-            <option>Confidence</option><option>Glow-Up</option>
-            <option>Villain Arc</option><option>Revenge</option>
-            <option>Success</option><option>Inner Peace</option>
-            <option>Life Lessons</option><option>Money &amp; Success</option>
-            <option>Career &amp; Ambition</option><option>Discipline &amp; Focus</option>
-            <option>Motivation</option><option>Productivity</option>
-            <option>Habits</option><option>Masculine Energy</option>
-            <option>Feminine Energy</option><option>Spirituality</option>
-            <option>Health &amp; Wellness</option><option>Fitness Mindset</option>
-            <option>Social Skills</option>
-          </select>
-          <button class="nb-btn sm" onclick="nbRandomNiche()">🎲 Random</button>
+          <input id="nicheSelect" placeholder="Type a niche or subject…"
+            style="flex:1;background:var(--surface2,#1e1e2e);border:1px solid rgba(167,139,250,.25);border-radius:8px;color:#e2d9f3;font-size:.75rem;padding:7px 10px;font-family:inherit;outline:none"/>
         </div>
 
         <button class="nb-btn gold" style="width:100%;margin-bottom:14px;padding:10px 0" onclick="nbGenerate()">
@@ -1370,12 +1342,12 @@ function nbShuffle(a){ const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Mat
 function nbPool(niche){ return NB_POOL[niche] || NB_POOL[NB_ALIAS[niche]] || NB_POOL['Human Psychology']; }
 
 function nbRandomNiche(){
-  const sel = document.getElementById('nicheSelect');
-  sel.value = NB_NICHES[Math.floor(Math.random() * NB_NICHES.length)];
+  const inp = document.getElementById('nicheSelect');
+  inp.value = NB_NICHES[Math.floor(Math.random() * NB_NICHES.length)];
 }
 
 function nbGenerate(){
-  let niche = document.getElementById('nicheSelect').value;
+  let niche = document.getElementById('nicheSelect').value.trim();
   if(!niche){ nbRandomNiche(); niche = document.getElementById('nicheSelect').value; }
 
   const pool = nbPool(niche);
