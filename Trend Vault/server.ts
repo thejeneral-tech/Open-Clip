@@ -1221,38 +1221,31 @@ Use these line types in order: hook, observation, escalation, truth, twist, endi
   }
 });
 
-// ── Generate subjects for a niche (Haiku) ────────────────────────────────────
+// ── Generate subjects for a niche ────────────────────────────────────────────
 app.post('/api/trend-vault/generate-subjects', async (req, res) => {
   const { niche } = req.body as { niche?: string };
   if (!niche) { res.status(400).json({ error: 'niche is required.' }); return; }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    res.json({ ok: true, subjects: [], source: 'none' }); return;
-  }
-
-  try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: `Generate 10 specific, emotionally punchy subject ideas for the "${niche}" niche on TikTok.
+  const prompt = `Generate 10 specific, emotionally punchy subject ideas for the "${niche}" niche on TikTok.
 These topics are for short cinematic storytelling videos — psychological, emotional, and viral.
 Each subject should be 2-5 words, specific and compelling (no generic filler).
 Return ONLY a valid JSON array of strings, no markdown, no extra text:
-["Subject One", "Subject Two", ...]`,
-      }],
-    });
+["Subject One", "Subject Two", ...]`;
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]';
-    const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/,'').trim();
-    const subjects: string[] = JSON.parse(clean);
-    res.json({ ok: true, subjects, source: 'claude' });
+  try {
+    const result = await aiComplete({ user: prompt, maxTokens: 300 });
+    const raw = result.text.trim();
+    console.log('[generate-subjects] raw response:', raw.slice(0, 300));
+
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (!arrayMatch) throw new Error(`No JSON array found in response: ${raw.slice(0, 100)}`);
+    const subjects: string[] = JSON.parse(arrayMatch[0]);
+    res.json({ ok: true, subjects, source: result.provider || 'ai' });
   } catch (err) {
-    console.warn('[generate-subjects] error:', (err as Error).message?.slice(0, 120));
-    res.json({ ok: true, subjects: [], source: 'error' });
+    const msg = (err as Error).message || String(err);
+    const isBilling = /credit|billing|balance|quota|429|402|insufficient/i.test(msg);
+    console.warn('[generate-subjects] error:', msg.slice(0, 200));
+    res.json({ ok: true, subjects: [], source: isBilling ? 'billing' : 'error', error: msg.slice(0, 200) });
   }
 });
 

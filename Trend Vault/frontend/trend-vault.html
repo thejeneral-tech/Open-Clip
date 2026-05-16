@@ -805,12 +805,20 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">🧠 Niche Trend Builder</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <input id="nicheCustom" placeholder="Type a niche or subject…"
-          oninput="if(this.value.trim()){nicheState.selectedNiche=this.value.trim()}"
+          oninput="if(this.value.trim()){nicheState.selectedNiche=this.value.trim();resetNicheConfirm()}"
+          onkeydown="if(event.key==='Enter')confirmNiche()"
           style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:5px 8px;font-family:inherit;outline:none"/>
+        <button id="nicheConfirmBtn" onclick="confirmNiche()"
+          style="padding:5px 12px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);border-radius:7px;color:#86efac;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
+          ✓ Confirm
+        </button>
         <button onclick="nicheTrendGenerate()"
           style="padding:5px 12px;background:linear-gradient(135deg,rgba(124,58,237,.35),rgba(168,85,247,.25));border:1px solid rgba(124,58,237,.55);border-radius:7px;color:#d8b4fe;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap">
           ⚡ Generate
         </button>
+      </div>
+      <div id="nicheConfirmedBadge" style="display:none;margin-top:6px;font-size:.62rem;color:#86efac;font-weight:600;letter-spacing:.5px">
+        ✓ Niche confirmed: <span id="nicheConfirmedLabel"></span>
       </div>
     </div>
 
@@ -2348,19 +2356,33 @@ async function generateSubjectsForNiche(niche){
     const data = await r.json();
     if(loading) loading.style.display = 'none';
 
-    if(!data.ok || !data.subjects?.length){
-      grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">No subjects returned — pick a niche and try again.</span>';
+    // Use AI subjects if available, otherwise fall back to static nicheMap
+    const subjects = (data.ok && data.subjects?.length)
+      ? data.subjects
+      : (nicheMap[niche]?.subjects || []);
+
+    if(!subjects.length){
+      grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">No subjects found for this niche.</span>';
       return;
     }
 
-    grid.innerHTML = data.subjects.map(s => {
-      const safe = s.replace(/'/g, "\\'");
-      return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
-    }).join('');
+    renderSubjectChips(subjects);
   } catch(e) {
     if(loading) loading.style.display = 'none';
-    grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">Could not reach server.</span>';
+    // Server unreachable — fall back to static subjects silently
+    const fallback = nicheMap[niche]?.subjects || [];
+    if(fallback.length) renderSubjectChips(fallback);
+    else grid.innerHTML = '<span style="font-size:.65rem;color:var(--muted)">Could not load subjects.</span>';
   }
+}
+
+function renderSubjectChips(subjects){
+  const grid = document.getElementById('subjectGrid');
+  if(!grid) return;
+  grid.innerHTML = subjects.map(s => {
+    const safe = s.replace(/'/g, "\\'");
+    return `<button class="subject-chip" data-subject="${s}" onclick="selectSubject('${safe}')">${s}</button>`;
+  }).join('');
 }
 
 function buildSubjectGrid(subjects){
@@ -8511,6 +8533,32 @@ function selectNicheCategory(btn, label){
   }
 }
 
+function confirmNiche(){
+  const inp = document.getElementById('nicheCustom');
+  const niche = inp?.value?.trim() || nicheState.selectedNiche;
+  if(!niche){ showToast('Type a niche first', 'error'); return; }
+  nicheState.selectedNiche = niche;
+
+  const btn = document.getElementById('nicheConfirmBtn');
+  const badge = document.getElementById('nicheConfirmedBadge');
+  const label = document.getElementById('nicheConfirmedLabel');
+
+  if(btn){ btn.style.background='rgba(34,197,94,.28)'; btn.style.borderColor='rgba(34,197,94,.7)'; btn.textContent='✓ Confirmed'; }
+  if(badge){ badge.style.display='block'; }
+  if(label){ label.textContent=niche; }
+
+  nichePillUpdate();
+  generateSubjectsForNiche(niche);
+  showToast('Niche set: ' + niche, 'info');
+}
+
+function resetNicheConfirm(){
+  const btn = document.getElementById('nicheConfirmBtn');
+  const badge = document.getElementById('nicheConfirmedBadge');
+  if(btn){ btn.style.background='rgba(34,197,94,.12)'; btn.style.borderColor='rgba(34,197,94,.4)'; btn.textContent='✓ Confirm'; }
+  if(badge){ badge.style.display='none'; }
+}
+
 function nicheTrendGenerate(){
   try {
     const niche = nicheState.selectedNiche
@@ -8519,6 +8567,9 @@ function nicheTrendGenerate(){
     if(!niche){ showToast('Pick or type a niche first', 'error'); return; }
     nicheState.selectedNiche = niche;
     console.log('[Action] nicheTrendGenerate — niche:', niche);
+
+    // Generate AI subjects for the selected niche
+    generateSubjectsForNiche(niche);
 
     // 1. Resolve niche to REAL category objects (id + label + emoji)
     const realCats = (typeof _nicheRealCats === 'function')
