@@ -53,11 +53,5 @@
     "dev:worker": "tsx render-worker.ts",
     "start:worker": "tsx render-worker.ts",
     "tiktok:install": "playwright install chromium"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "sideEffects": [
-    "*.css"
-  ]
+  }
 }

@@ -24,9 +24,9 @@
   --gold2:#f0c040;
   --red:#e53e3e;
   --green:#2ecc71;
-  --text:#f0eaff;
-  --text2:#cfc4e8;
-  --muted:#a090c4;
+  --text:#f8f4ff;
+  --text2:#ddd4f5;
+  --muted:#b8a8d8;
   --r:14px;
   --r2:10px;
 }
@@ -37,9 +37,11 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 #stars{position:fixed;inset:0;pointer-events:none;z-index:0}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
 @keyframes twinkle{from{opacity:var(--lo,.1)}to{opacity:var(--hi,.9)}}
-@property --rgb-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
-@keyframes rgb-rotate{to{--rgb-angle:360deg}}
-@keyframes rgb-glow{0%,100%{opacity:.55}50%{opacity:.9}}
+/* RGB border — calm silver-white flow */
+@keyframes calmRgbBorderMove{
+  0%   { background-position: 0%   50%; }
+  100% { background-position: 260% 50%; }
+}
 
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -76,7 +78,9 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 
 /* Export / Render side panel */
 .export-panel{width:280px;min-width:280px;padding:28px 24px 28px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto}
-.export-section{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+.export-section{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:14px;padding:16px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(167,139,250,.15)}
+.export-section::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.export-section::after{display:none}
 .export-label{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin-bottom:12px;font-weight:700}
 .btn-render-big{
   width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
@@ -100,18 +104,48 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 @media(max-width:1400px){.export-panel{width:240px;min-width:240px}}
 @media(max-width:1100px){.export-panel{display:none}}
 
-/* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;transition:border-color .15s ease,box-shadow .15s ease,transform .12s ease;position:relative;isolation:isolate}
-.card::before{content:'';position:absolute;inset:-2px;border-radius:calc(var(--r) + 2px);background:conic-gradient(from var(--rgb-angle),#ff0054,#ff6a00,#ffee00,#00ff99,#00ccff,#cc00ff,#ff0054);z-index:-1;animation:rgb-rotate 5s linear infinite,rgb-glow 3s ease-in-out infinite;opacity:.5;transition:opacity .35s}
-.card:hover{border-color:rgba(168,85,247,.5);box-shadow:0 6px 28px rgba(0,0,0,.3)}
-.card:hover::before{opacity:.95}
+/* ── Cards: solid dark panel + thin animated RGB rim ──────────────────────
+   mask-composite technique: ::before gradient fills the whole element but
+   the mask cuts out the content-box, leaving ONLY the 2px border visible.
+   The inside stays fully dark. ::after is a blurred glow behind the card.
+   ──────────────────────────────────────────────────────────────────────── */
+.card{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:var(--r);padding:20px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(167,139,250,.15);transition:transform .12s ease,box-shadow .3s ease}
+.card::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.card::after{display:none}
+.card:hover{transform:translateY(-1px);box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.14)}
+.card>*{position:relative;z-index:3}
 /* Snappier slider feedback: thumb scales when grabbed for tactile feel */
 input[type=range]::-webkit-slider-thumb{transition:transform .12s ease, box-shadow .15s ease}
 input[type=range]:active::-webkit-slider-thumb{transform:scale(1.18)}
 input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,237,.22)}
 /* Subtle pulse on the keyboard-shortcut hint */
 @keyframes kbdPulse{ 0%,100%{opacity:.5} 50%{opacity:.85} }
-.card:hover{border-color:var(--border2)}
+/* ── Text glow — soft, readable, not blinding ── */
+/* Headings, labels, section titles, buttons: moderate glow */
+/* Section title icons + labels — premium soft glow */
+.card-title,.export-label{
+  color:rgba(245,245,255,.95);
+  text-shadow:0 0 3px rgba(255,255,255,.35),0 0 7px rgba(167,139,250,.28),0 0 12px rgba(96,165,250,.16);
+}
+/* Icon/emoji next to title */
+.card-title .ti{
+  filter:drop-shadow(0 0 3px rgba(255,255,255,.4)) drop-shadow(0 0 6px rgba(167,139,250,.25));
+}
+/* Headings */
+h1,h2,h3{
+  text-shadow:0 0 3px rgba(255,255,255,.25),0 0 8px rgba(167,139,250,.18);
+}
+/* Buttons — very subtle, don't overpower */
+.btn-primary,.btn-gold,.btn-render-big,.btn-render-local,.btn-random{
+  text-shadow:0 0 4px rgba(255,255,255,.15);
+}
+/* Body/prompt text — barely-there lift */
+.prompt-main,.prompt-angle,.preset-name,.preset-desc,.export-meta-row,
+.save-path-text,.line-type-badge,p,span{
+  text-shadow:0 0 2px rgba(255,255,255,.08);
+}
+/* Inputs and textareas — completely clean for readability */
+textarea,input,select{ text-shadow:none!important; }
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-title{font-size:.74rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:8px}
 .card-title .ti{font-size:.9rem;filter:drop-shadow(0 0 6px currentColor)}
@@ -222,57 +256,32 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
 .fmt-btn:hover{border-color:var(--purple);color:var(--purple2)}
 .fmt-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.3)}
 
-<<<<<<< Updated upstream
-/* Voice preset grid – compact list */
-.preset-grid{display:flex;flex-direction:column;gap:3px;margin-bottom:16px}
-.preset-card{
-  display:grid;grid-template-columns:28px 1fr auto;grid-template-rows:auto auto;
-  column-gap:8px;row-gap:0;align-items:center;
-  padding:6px 8px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);
-  cursor:pointer;transition:all .18s;text-align:left;position:relative;min-height:36px;
-=======
 /* Voice preset grid */
 .preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin-bottom:16px}
 @media(max-width:600px){.preset-grid{grid-template-columns:repeat(2,1fr)}}
 .preset-card{
-  padding:8px 7px 9px;border-radius:9px;background:var(--surface2);border:1px solid var(--border);
-  cursor:pointer;transition:all .18s;text-align:center;position:relative;
+  padding:8px 7px 9px;border-radius:9px;background:#0b0b12!important;border:none;
+  cursor:pointer;transition:all .18s;text-align:center;position:relative;isolation:isolate;
   display:flex;flex-direction:column;align-items:center;
->>>>>>> Stashed changes
-}
+overflow:hidden;}
 /* SAVED badge sits above content on custom presets */
 .preset-card:has(.preset-del-btn){padding-top:20px}
-/* RGB glow on preset cards */
-.preset-card::before{content:'';position:absolute;inset:-2px;border-radius:9px;background:conic-gradient(from var(--rgb-angle),#ff0054,#ff6a00,#ffee00,#00ff99,#00ccff,#cc00ff,#ff0054);z-index:-1;animation:rgb-rotate 5s linear infinite;opacity:.35;transition:opacity .3s}
-.preset-card:hover::before{opacity:.85}
-.preset-card.active::before{opacity:1}
-.preset-card:hover{border-color:var(--purple);background:rgba(124,58,237,.06);transform:translateY(-1px)}
-.preset-card.active{border-color:var(--purple2);background:rgba(124,58,237,.15);box-shadow:0 0 0 1px rgba(168,85,247,.3)}
+/* Preset cards — same mask technique, thinner 1.5px rim */
+.preset-card::before{content:'';position:absolute;inset:0;padding:1px;border-radius:9px;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.preset-card::after{display:none}
+.preset-card:hover{transform:translateY(-1px)}
+.preset-card:hover::after{opacity:.3;filter:blur(12px)}
+.preset-card.active{background:rgba(124,58,237,.12)}
+.preset-card.active::after{opacity:.35;filter:blur(12px)}
 .preset-del-btn{
-<<<<<<< Updated upstream
-  position:absolute;top:3px;right:4px;width:15px;height:15px;border-radius:50%;
-  background:rgba(220,38,38,.18);border:1px solid rgba(220,38,38,.4);color:#fca5a5;
-  font-size:.65rem;font-weight:700;line-height:1;cursor:pointer;
-=======
   position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;
   background:rgba(220,38,38,.18);border:1px solid rgba(220,38,38,.4);color:#fca5a5;
   font-size:.75rem;font-weight:700;line-height:1;cursor:pointer;
->>>>>>> Stashed changes
   display:flex;align-items:center;justify-content:center;padding:0;
   opacity:.35;transition:all .15s;font-family:inherit;
 }
 .preset-card:hover .preset-del-btn{opacity:1}
 .preset-del-btn:hover{background:rgba(220,38,38,.55);color:#fff;transform:scale(1.1)}
-<<<<<<< Updated upstream
-.preset-icon{grid-column:1;grid-row:1/3;font-size:1.1rem;line-height:1;display:flex;align-items:center;justify-content:center;margin-bottom:0}
-.preset-name{grid-column:2;grid-row:1;font-size:.75rem;font-weight:700;color:var(--text);line-height:1.25;word-break:break-word;overflow-wrap:anywhere;margin-bottom:0;min-width:0}
-.preset-desc{grid-column:2;grid-row:2;font-size:.62rem;color:var(--text2);letter-spacing:.2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere;min-width:0}
-.preset-test-btn{
-  grid-column:3;grid-row:1/3;width:auto;margin-top:0;white-space:nowrap;
-  padding:4px 7px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
-  border-radius:5px;color:var(--purple2);font-size:.56rem;font-weight:700;cursor:pointer;
-  transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;
-=======
 .preset-icon{font-size:1.25rem;margin-bottom:3px;display:block;line-height:1}
 .preset-name{font-size:.68rem;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.25;word-break:break-word;overflow-wrap:anywhere;width:100%}
 .preset-desc{font-size:.54rem;color:var(--muted);letter-spacing:.2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere;width:100%}
@@ -280,7 +289,6 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
   margin-top:6px;padding:3px 6px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
   border-radius:5px;color:var(--purple2);font-size:.56rem;font-weight:700;cursor:pointer;
   transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;width:100%;
->>>>>>> Stashed changes
 }
 .preset-test-btn:hover{background:rgba(124,58,237,.4)}
 /* Voice sliders section */
@@ -692,6 +700,16 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
   .preview-wrap{display:none}
   .controls{max-width:100%;padding:24px 20px 100px}
 }
+
+/* Dark text inputs — no gradient bleed */
+textarea,input[type=text],input[type=number],input[type=email],input[type=password],
+.script-area,.line-text-input,.line-dur{
+  background:#11111a!important;background-image:none!important;
+  color:#f4f4ff!important;border:1px solid rgba(168,85,247,.3)!important;
+}
+textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
+  border-color:rgba(168,85,247,.7)!important;outline:none;
+}
 </style>
 </head>
 <body>
@@ -1081,28 +1099,15 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
     <div class="preset-grid" id="presetGrid"></div>
     <!-- Voice sliders -->
     <div class="voice-sliders" id="voiceSliders">
-<<<<<<< Updated upstream
-      <!-- ── Fine-tune toolbar ──────────────────────────────────────── -->
-=======
       <!-- Fine-tune toolbar: current voice + undo / redo / save -->
->>>>>>> Stashed changes
       <div style="display:flex;align-items:center;gap:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
         <div style="flex:1;min-width:0">
           <div style="font-size:.55rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px">Fine-tune this preset</div>
           <div id="voiceFineTuneLabel" style="font-size:.8rem;font-weight:700;color:var(--purple2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
         </div>
-<<<<<<< Updated upstream
-        <button id="voiceUndoBtn" onclick="undoVoiceSliders()" title="Undo" disabled
-          style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4;transition:opacity .15s">↩ Undo</button>
-        <button id="voiceRedoBtn" onclick="redoVoiceSliders()" title="Redo" disabled
-          style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4;transition:opacity .15s">↪ Redo</button>
-        <button onclick="saveCurrentVoiceAsPreset()" title="Save current slider values as a new preset"
-          style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">💾 Save</button>
-=======
         <button onclick="undoVoiceSliders()" id="voiceUndoBtn" title="Undo last slider change" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4" disabled>↩ Undo</button>
         <button onclick="redoVoiceSliders()" id="voiceRedoBtn" title="Redo last slider change" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 9px;font-size:.68rem;cursor:pointer;font-family:inherit;flex-shrink:0;opacity:.4" disabled>↪ Redo</button>
         <button onclick="saveCurrentVoiceAsPreset()" title="Save current settings as a new preset" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:7px;padding:5px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">💾 Save</button>
->>>>>>> Stashed changes
       </div>
       <div class="voice-slider-row">
         <span class="voice-slider-label">Pitch</span>
@@ -2714,17 +2719,11 @@ function selectPreset(id){
   setSlider('vChamber', ps.chamberSpace ?? 0, 'vChamberVal', v=>v+'%');
   ['vPitch','vRate','vSpeed','vVolume','vIntensity','vThroat','vRasp','vPace','vChamber']
     .forEach(updateSliderTrack);
-<<<<<<< Updated upstream
-  // Refresh toolbar label; new preset = fresh history
-  _vsUpdateLabel();
-  voiceUndoStack.length = 0; voiceRedoStack.length = 0; _vsUpdateBtns();
-=======
   // Update the fine-tune toolbar label & clear undo/redo history on preset switch
   updateVoiceFineTuneLabel();
   if(typeof voiceUndoStack !== 'undefined'){
     voiceUndoStack.length = 0; voiceRedoStack.length = 0; _updateVoiceHistoryBtns();
   }
->>>>>>> Stashed changes
 }
 
 function setSlider(sliderId, value, valId, fmt){
@@ -2806,68 +2805,6 @@ function resetCinematicSliders(){
   showToast('↺ Cinematic sliders reset','info');
 }
 
-<<<<<<< Updated upstream
-// ── Voice slider undo / redo engine ──────────────────────────────────────────
-
-// Maps each slider id → its display label id, format fn, and voiceSliders key
-const _VS_META = {
-  vPitch:    { lbl:'vPitchVal',     fmt:v=>(v>0?'+':'')+v+'st',                      key:'pitch'       },
-  vRate:     { lbl:'vRateVal',      fmt:v=>(v>0?'+':'')+v+'%',                       key:'rate'        },
-  vSpeed:    { lbl:'vSpeedVal',     fmt:v=>(v/100).toFixed(2)+'x',                   key:'speed'       },
-  vVolume:   { lbl:'vVolumeVal',    fmt:v=>(v>0?'+':'')+parseFloat(v).toFixed(1)+'dB', key:'volume'    },
-  vIntensity:{ lbl:'vIntensityVal', fmt:v=>v+'%',                                    key:'intensity'   },
-  vThroat:   { lbl:'vThroatVal',    fmt:v=>v+'%',                                    key:'throatDepth' },
-  vRasp:     { lbl:'vRaspVal',      fmt:v=>v+'%',                                    key:'ancientRasp' },
-  vPace:     { lbl:'vPaceVal',      fmt:v=>v+'%',                                    key:'royalPace'   },
-  vChamber:  { lbl:'vChamberVal',   fmt:v=>v+'%',                                    key:'chamberSpace'},
-};
-
-/** Read all 9 sliders into a plain object {sliderId: numericValue} */
-function _vsCapture(){
-  const snap = {};
-  for(const id of Object.keys(_VS_META)){
-    const el = document.getElementById(id);
-    snap[id] = el ? parseFloat(el.value) : 0;
-  }
-  return snap;
-}
-
-/** Write a snapshot back to all 9 sliders + their labels + voiceSliders state */
-function _vsApply(snap){
-  for(const [id, val] of Object.entries(snap)){
-    const m = _VS_META[id]; if(!m) continue;
-    const el  = document.getElementById(id);
-    const lbl = document.getElementById(m.lbl);
-    if(el){ el.value = val; updateSliderTrack(id); }
-    if(lbl) lbl.textContent = m.fmt(val);
-    voiceSliders[m.key] = val;          // keep voiceSliders in sync
-  }
-  try{ markDirty?.('voice'); }         catch{}
-  try{ refreshTimingBadge?.(); }       catch{}
-}
-
-/** Push current state onto the undo stack (clears redo) */
-function _vsPushUndo(){
-  voiceUndoStack.push(_vsCapture());
-  voiceRedoStack.length = 0;
-  _vsUpdateBtns();
-}
-
-/** Enable / disable the undo & redo buttons based on stack depth */
-function _vsUpdateBtns(){
-  const u = document.getElementById('voiceUndoBtn');
-  const r = document.getElementById('voiceRedoBtn');
-  if(u){ u.disabled = !voiceUndoStack.length; u.style.opacity = voiceUndoStack.length ? '1' : '.4'; }
-  if(r){ r.disabled = !voiceRedoStack.length;  r.style.opacity = voiceRedoStack.length ? '1' : '.4'; }
-}
-
-/** Update the voice-name label in the toolbar */
-function _vsUpdateLabel(){
-  const lbl = document.getElementById('voiceFineTuneLabel');
-  if(!lbl) return;
-  const p = VOICE_PRESETS.find(x => x.id === state.voice);
-  lbl.textContent = p ? (p.icon ? p.icon + ' ' + p.name : p.name) : (state.voice || '—');
-=======
 // ── Voice Slider Undo / Redo ──────────────────────────────────────────────────
 let voiceUndoStack = [];
 let voiceRedoStack = [];
@@ -2912,59 +2849,18 @@ function _updateVoiceHistoryBtns(){
   const r = document.getElementById('voiceRedoBtn');
   if(u){ u.disabled = !voiceUndoStack.length; u.style.opacity = voiceUndoStack.length ? '1' : '0.4'; }
   if(r){ r.disabled = !voiceRedoStack.length;  r.style.opacity = voiceRedoStack.length ? '1' : '0.4'; }
->>>>>>> Stashed changes
 }
 
 function undoVoiceSliders(){
   if(!voiceUndoStack.length) return;
-<<<<<<< Updated upstream
-  voiceRedoStack.push(_vsCapture());
-  _vsApply(voiceUndoStack.pop());
-  _vsUpdateBtns();
-=======
   voiceRedoStack.push(captureVoiceSnapshot());
   applyVoiceSnapshot(voiceUndoStack.pop());
   _updateVoiceHistoryBtns();
->>>>>>> Stashed changes
   showToast('↩ Undo','info');
 }
 
 function redoVoiceSliders(){
   if(!voiceRedoStack.length) return;
-<<<<<<< Updated upstream
-  voiceUndoStack.push(_vsCapture());
-  _vsApply(voiceRedoStack.pop());
-  _vsUpdateBtns();
-  showToast('↪ Redo','info');
-}
-
-// Wire up drag-capture: pointerdown saves pre-drag state; change commits it to undo stack
-document.addEventListener('DOMContentLoaded', function(){
-  const container = document.getElementById('voiceSliders');
-  if(!container) return;
-
-  // Before drag: snapshot current state
-  container.addEventListener('pointerdown', function(e){
-    if(e.target.tagName === 'INPUT' && e.target.type === 'range'){
-      _vsPreDragSnap = _vsCapture();
-    }
-  });
-
-  // After release: push pre-drag snapshot if the value actually changed
-  container.addEventListener('change', function(e){
-    if(e.target.tagName === 'INPUT' && e.target.type === 'range' && _vsPreDragSnap){
-      const after = _vsCapture();
-      const changed = Object.keys(_vsPreDragSnap).some(k => _vsPreDragSnap[k] !== after[k]);
-      if(changed){
-        voiceUndoStack.push(_vsPreDragSnap);
-        voiceRedoStack.length = 0;
-        _vsUpdateBtns();
-      }
-      _vsPreDragSnap = null;
-    }
-  });
-});
-=======
   voiceUndoStack.push(captureVoiceSnapshot());
   applyVoiceSnapshot(voiceRedoStack.pop());
   _updateVoiceHistoryBtns();
@@ -3002,7 +2898,6 @@ function updateVoiceFineTuneLabel(){
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 })();
->>>>>>> Stashed changes
 
 // Save the currently-selected voice + slider tweaks as a new custom preset.
 async function saveCurrentVoiceAsPreset(){
@@ -7997,315 +7892,4 @@ filterPromptsBySign = function(){
     return signMatch && catMatch;
   }) ?? [];
   list.innerHTML = prompts.slice(0,30).map(p=>`
-    <li class="prompt-item${p.id===state.promptId?' active':''}" data-pid="${p.id}" style="list-style:none;display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface2);border:1px solid ${p.id===state.promptId?'var(--purple)':'var(--border)'};border-radius:9px;cursor:pointer;margin-bottom:5px">
-      <div style="flex:1" onclick="selectPrompt(${p.id})">
-        <div class="pi-text" style="font-size:.78rem;color:var(--text2)">${p.prompt}</div>
-        <div class="pi-cat" style="font-size:.65rem;color:var(--muted);margin-top:2px">${p.category.replace(/_/g,' ')} ${p.sign!=='All'?'• '+p.sign:''}</div>
-      </div>
-      <button onclick="toggleFavoritePrompt(${p.id},${JSON.stringify(p.prompt).replace(/'/g,'&apos;')},event)" style="background:none;border:none;cursor:pointer;font-size:.85rem;flex-shrink:0;opacity:.7" title="${savedFavPrompts.find(x=>x.id===p.id)?'Remove from saved':'Save'}">${savedFavPrompts.find(x=>x.id===p.id)?'❤️':'🤍'}</button>
-    </li>`).join('');
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// DRAFT SAVE / LOAD
-// ═══════════════════════════════════════════════════════════════════
-
-async function saveDraft(){
-  const name = prompt('Name this draft:', state.sign ? `${state.sign} — ${(state.promptText||'Draft').slice(0,30)}` : 'My Draft');
-  if(!name) return;
-  try{
-    const draftState = {
-      sign: state.sign, category: state.category, promptId: state.promptId,
-      promptText: state.promptText, promptAngle: state.promptAngle,
-      tone: state.tone, voice: state.voice, script: state.script,
-      targetDurationSec: 90,
-      background: state.background, music: state.music,
-      colorGrade: state.colorGrade, grainType: state.grainType,
-      grainIntensity: state.grainIntensity, fontFamily: state.fontFamily,
-      fontSize: state.fontSize, textColor: state.textColor,
-    };
-    const r = await fetch(`${API_BASE}/api/trend-vault/drafts`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, state: draftState })
-    });
-    const data = await r.json();
-    if(!data.ok) throw new Error('Save failed');
-    showToast('💾 Draft saved: '+name,'success');
-    loadDrafts();
-  }catch(e){ showToast('Save failed: '+e.message,'error'); }
-}
-
-async function loadDrafts(){
-  try{
-    const r = await fetch(`${API_BASE}/api/trend-vault/drafts`);
-    const {drafts} = await r.json();
-    const el = document.getElementById('draftsList');
-    if(!drafts.length){
-      el.innerHTML='<div style="font-size:.75rem;color:var(--muted)">No saved drafts yet — save your current project to resume later.</div>';
-      return;
-    }
-    el.innerHTML = drafts.map(d=>`
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
-        <div style="flex:1">
-          <div style="font-size:.78rem;font-weight:600;color:var(--text)">${d.name}</div>
-          <div style="font-size:.65rem;color:var(--muted)">${new Date(d.savedAt).toLocaleDateString()} · ${d.state?.script?.length||0} lines</div>
-        </div>
-        <button onclick="loadDraft(${JSON.stringify(d).replace(/"/g,'&quot;')})" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Load</button>
-        <button onclick="deleteDraft('${d.id}')" style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#f87171;border-radius:7px;padding:5px 7px;font-size:.7rem;cursor:pointer">✕</button>
-      </div>`).join('');
-  }catch(e){ console.warn('loadDrafts error',e); }
-}
-
-function loadDraft(d){
-  if(!confirm(`Load draft "${d.name}"? Current work will be replaced.`)) return;
-  const s = d.state;
-  if(s.sign) selectSign(s.sign);
-  if(s.category) selectCategory(s.category);
-  state.promptText = s.promptText || '';
-  state.promptAngle = s.promptAngle || '';
-  state.promptId = s.promptId || null;
-  if(state.promptText){
-    document.getElementById('promptDisplay').style.display='flex';
-    document.getElementById('promptMain').textContent = state.promptText;
-    document.getElementById('promptAngle').textContent = state.promptAngle;
-    document.getElementById('selectedPromptBadge').textContent = ' — '+state.promptText.slice(0,50);
-  }
-  if(s.targetDurationSec){ setTargetDuration?.(s.targetDurationSec); state.targetDurationSec = s.targetDurationSec; const el=document.getElementById('targetDurationInput'); if(el) el.value=s.targetDurationSec; }
-  if(s.tone) selectTone(s.tone);
-  if(s.voice) selectPreset(s.voice);
-  if(s.script?.length){ state.script = s.script; buildScriptLines(); updatePreview(); }
-  if(s.background) selectBackground(s.background);
-  if(s.music) selectMusic(s.music);
-  if(s.colorGrade) setColorGrade(s.colorGrade, null);
-  if(s.grainType) setGrainType(s.grainType, null);
-  if(s.grainIntensity !== undefined){
-    state.grainIntensity = s.grainIntensity;
-    const gs = document.getElementById('grainSlider'); if(gs) gs.value = s.grainIntensity;
-  }
-  if(s.fontFamily){ state.fontFamily = s.fontFamily; }
-  if(s.fontSize){ state.fontSize = s.fontSize; }
-  if(s.textColor){ state.textColor = s.textColor; }
-  updatePreview();
-  showToast('Draft loaded: '+d.name,'success');
-}
-
-async function deleteDraft(id){
-  if(!confirm('Delete this draft?')) return;
-  await fetch(`${API_BASE}/api/trend-vault/drafts/${id}`,{method:'DELETE'});
-  loadDrafts();
-  showToast('Draft deleted','info');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// URL IMPORTER (YouTube / TikTok via yt-dlp)
-// ═══════════════════════════════════════════════════════════════════
-
-async function importUrl(type){
-  const inputId = type==='video' ? 'bgUrlInput' : 'musicUrlInput';
-  const statusId = type==='video' ? 'bgImportStatus' : 'musicImportStatus';
-  const url = document.getElementById(inputId)?.value?.trim();
-  const status = document.getElementById(statusId);
-  if(!url){ showToast('Paste a URL first','error'); return; }
-  if(status) status.textContent = `⬇ Queued — downloading in background…`;
-  try{
-    const r = await fetch(`${API_BASE}/api/trend-vault/import-url`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({url, type})
-    });
-    const data = await r.json();
-    if(!data.ok) throw new Error(data.error||'Import failed');
-    if(status) status.textContent = '✅ Queued! Watch progress in the right panel.';
-    document.getElementById(inputId).value = '';
-    showToast(`⬇ Download queued — keep working!`,'success');
-    startDownloadQueuePolling();
-    setTimeout(()=>{ if(status) status.textContent=''; }, 5000);
-  }catch(e){
-    const msg = e.message||'Import failed';
-    if(status) status.textContent = '❌ '+msg;
-    if(msg.includes('yt-dlp not installed')){
-      showToast('Install yt-dlp first: pip install yt-dlp','error');
-    } else {
-      showToast('Import failed: '+msg.slice(0,60),'error');
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// TOAST
-// ═══════════════════════════════════════════════════════════════════
-
-function showToast(msg,type='info'){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = `toast ${type}`;
-  setTimeout(()=>t.classList.add('show'),10);
-  setTimeout(()=>t.classList.remove('show'),3000);
-}
-
-function showHelp(){
-  showToast('Set sign → pick prompt → generate script → choose voice + BG → render 🔮','info');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════════════════
-
-document.addEventListener('DOMContentLoaded', init);
-
-// Animate grain on preview loop
-// Also guard grainType !== 'none': when type is 'none' drawPhoneGrain() only
-// runs ctx.clearRect and returns — wasted work every 120ms.
-setInterval(()=>{ if(state.grainIntensity>0 && state.grainType!=='none') drawPhoneGrain(); }, 120);
-
-// Load browser voices once available
-if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged = ()=>{};
-</script>
-
-<!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- STOCK MEDIA BROWSER MODAL                                                 -->
-<!-- ══════════════════════════════════════════════════════════════════════════ -->
-<div id="stockModal">
-  <div class="stock-backdrop" onclick="closeStockModal()"></div>
-  <div class="stock-panel">
-
-    <!-- Header -->
-    <div class="stock-header">
-      <span class="stock-title">🌐 Stock Media Browser</span>
-      <div class="stock-tabs-row">
-        <button class="stock-tab active" data-tab="videos" onclick="switchStockTab('videos')">🎬 Videos</button>
-        <button class="stock-tab"        data-tab="audio"  onclick="switchStockTab('audio')">🎵 Music</button>
-      </div>
-      <button class="stock-close-btn" onclick="closeStockModal()" title="Close">✕</button>
-    </div>
-
-    <!-- Body -->
-    <div class="stock-body">
-      <div class="stock-search-row">
-        <input id="stockSearchInp" class="stock-search-inp" type="text"
-          placeholder="Search videos…"
-          onkeydown="if(event.key==='Enter')searchStock()"/>
-        <button class="stock-search-btn" onclick="searchStock()">Search</button>
-      </div>
-      <div class="stock-chips-row" id="stockChips"></div>
-      <div id="stockResults"><div class="stock-loading">Choose a category or search above ✨</div></div>
-      <div id="stockPagination"></div>
-    </div>
-
-  </div>
-</div>
-
-<script>
-// ═══════════════════════════════════════════════════════════════════
-// STOCK MEDIA BROWSER
-// ═══════════════════════════════════════════════════════════════════
-
-const VIDEO_CHIPS = ['cosmos','space','mystical','ocean','fire','forest','rain','city night','abstract','fog','northern lights','smoke'];
-const AUDIO_CHIPS = ['ambient','meditation','cinematic','dark','mystical','epic','lofi','calm','spiritual','dramatic','fantasy','orchestral'];
-
-let _stockTab  = 'videos';
-let _stockPage = 1;
-let _stockQ    = 'cosmos';
-let _stockAudio = null; // current preview HTMLAudioElement
-
-function openStockBrowser(tab){
-  _stockTab  = tab || 'videos';
-  _stockPage = 1;
-  _stockQ    = _stockTab === 'videos' ? 'cosmos' : 'ambient';
-  document.getElementById('stockModal').style.display = 'block';
-  document.body.style.overflow = 'hidden';
-  _initStockTab(false);
-  searchStock();
-}
-
-function closeStockModal(){
-  document.getElementById('stockModal').style.display = 'none';
-  document.body.style.overflow = '';
-  stopStockAudio();
-}
-
-function stopStockAudio(){
-  if(_stockAudio){ _stockAudio.pause(); _stockAudio = null; }
-  document.querySelectorAll('.stock-prev-btn').forEach(b=>{ b.textContent='▶'; b.classList.remove('playing'); });
-}
-
-function _initStockTab(doSearch){
-  const tab = _stockTab;
-  document.querySelectorAll('.stock-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  const chips = tab === 'videos' ? VIDEO_CHIPS : AUDIO_CHIPS;
-  document.getElementById('stockChips').innerHTML = chips.map(c =>
-    `<button class="stock-chip${_stockQ===c?' active':''}" onclick="stockChipClick('${c}')">${c}</button>`
-  ).join('');
-  document.getElementById('stockSearchInp').placeholder = tab === 'videos' ? 'Search videos…' : 'Search music…';
-  if(doSearch) searchStock();
-}
-
-function switchStockTab(tab){
-  stopStockAudio();
-  _stockTab  = tab;
-  _stockPage = 1;
-  _stockQ    = tab === 'videos' ? 'cosmos' : 'ambient';
-  document.getElementById('stockSearchInp').value = '';
-  _initStockTab(true);
-}
-
-function stockChipClick(chip){
-  _stockQ = chip;
-  _stockPage = 1;
-  document.getElementById('stockSearchInp').value = chip;
-  document.querySelectorAll('.stock-chip').forEach(c => c.classList.toggle('active', c.textContent === chip));
-  searchStock();
-}
-
-async function searchStock(){
-  const inp = document.getElementById('stockSearchInp').value.trim();
-  if(inp) _stockQ = inp;
-  _stockPage = 1;
-  stopStockAudio();
-  await _doStockFetch();
-}
-
-async function stockGoPage(p){
-  _stockPage = p;
-  stopStockAudio();
-  await _doStockFetch();
-  document.querySelector('.stock-body').scrollTop = 0;
-}
-
-async function _doStockFetch(){
-  const res = document.getElementById('stockResults');
-  res.innerHTML = '<div class="stock-loading">✨ Searching…</div>';
-  document.getElementById('stockPagination').innerHTML = '';
-  try {
-    if(_stockTab === 'videos'){
-      const r = await fetch(`${API_BASE}/api/stock/videos?q=${encodeURIComponent(_stockQ)}&page=${_stockPage}`);
-      const d = await r.json();
-      if(d.error === 'no_key'){ _showStockNoKey('pexels'); return; }
-      _renderStockVideos(d.videos||[], d.total||0);
-    } else {
-      const r = await fetch(`${API_BASE}/api/stock/audio?q=${encodeURIComponent(_stockQ)}&page=${_stockPage}`);
-      const d = await r.json();
-      if(d.error === 'no_key'){ _showStockNoKey('jamendo'); return; }
-      _renderStockAudio(d.tracks||[], d.total||0);
-    }
-  } catch(e){
-    res.innerHTML = `<div class="stock-empty">⚠ ${e.message}</div>`;
-  }
-}
-
-function _showStockNoKey(provider){
-  const isPexels = provider === 'pexels';
-  document.getElementById('stockResults').innerHTML = `
-    <div class="stock-no-key">
-      <h3>${isPexels ? '🎬' : '🎵'} Free API Key Needed</h3>
-      <p>${isPexels
-        ? 'Stock videos are powered by <strong>Pexels</strong> — a free, professional video library.'
-        : 'Background music is powered by <strong>Jamendo</strong> — a free Creative Commons music platform.'
-      }</p>
-      <p>
-        <strong>Step 1.</strong> Get your free key at
-        <a href="${isPexels ? 'https://www.pexels.com/api/' : 'https://devportal.jamendo.com/'}" target="_blank">
-          ${isPexels ? 'pexels.com/api' : 'devportal.jamendo.com'}
-        </a> — takes about 1 minute<br/>
-        <strong>Step 2.</strong> Open <code>.env</code> in your Trend Vault Program folder<br/>
-        <strong>Step 3.</strong> Add the line:<br/>
-        <code style="
+    <li class="prompt-item${p.id===state.promptId?' active':''}" data-p

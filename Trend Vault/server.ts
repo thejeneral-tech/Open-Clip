@@ -2644,27 +2644,17 @@ Rules: 1-2 sentences per line, 3-8 seconds each, psychologically vivid, no astro
   }
 });
 
-<<<<<<< Updated upstream
-// ── Local (no-API) script reframe engine — full rewrite, no filler ───────────
-// Completely rewrites the script from scratch using source lines as thematic
-// seeds. Targets ~90 seconds / 190-230 words with 16-20 unique lines.
-=======
 // ── Local (no-API) script reframe engine ─────────────────────────────────────
 // Fully rewrites the script from scratch using the source lines as thematic
 // seeds. Targets ~90 seconds / 190-230 words. Does NOT apply word-swaps that
 // produce filler text. Each output line is unique.
->>>>>>> Stashed changes
 function localReframe(
   lines: { text: string; type: string; durationSeconds: number }[],
   trendVaultSign: string,
   _emotionalTone: string
 ): { text: string; type: string; durationSeconds: number }[] {
 
-<<<<<<< Updated upstream
-  // ── 1. Canonical zodiac name (guards against double-s and other mangling) ─
-=======
   // ── 1. Fix zodiac sign name (guard against double-s mangling) ────────────
->>>>>>> Stashed changes
   const CORRECT_SIGN: Record<string, string> = {
     aries: 'Aries', ariess: 'Aries',
     taurus: 'Taurus', tauruss: 'Taurus',
@@ -2681,35 +2671,6 @@ function localReframe(
   };
   const sign = CORRECT_SIGN[trendVaultSign.toLowerCase().trim()] ?? trendVaultSign.trim();
 
-<<<<<<< Updated upstream
-  // ── 2. Strip filler injected by the OLD engine; collect clean user text ───
-  const FILLER_RE = [
-    /something deeper/gi, /most souls never once see/gi, /never once\b/gi,
-    /can actually\b/gi, /will inevitably\b/gi, /absolutely everything/gi,
-    /without exception,?\s*always/gi, /desperately need/gi,
-    /understand on a level words can'?t reach/gi,
-    /feels deep in their bones/gi, /entire existence/gi,
-    /specific about the way/gi,
-  ];
-  const cleanLine = (t: string): string => {
-    // normalise UPPERCASE lines from the caption engine
-    let s = t.trim().toUpperCase() === t.trim() ? t.trim().toLowerCase() : t.trim();
-    for (const re of FILLER_RE) s = s.replace(re, '');
-    return s.replace(/\s{2,}/g, ' ').replace(/[.!?]+$/, '').trim();
-  };
-
-  // Lines that are actual user text (not placeholder or blank)
-  const userThemes = lines
-    .map(l => cleanLine(l.text))
-    .filter(t => t.length > 10);
-
-  // ── 3. Seeded RNG so each call is deterministic-ish but varied ───────────
-  const seed = userThemes.join('').length ^ (trendVaultSign.length * 31);
-  const rng = (() => {
-    let s = (seed ^ 0xdeadbeef) >>> 0;
-    return () => {
-      s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0;
-=======
   // ── 2. Extract clean source themes from existing lines ───────────────────
   const FILLER_PHRASES = [
     /something deeper/gi, /most souls never once see/gi, /never once see/gi,
@@ -2735,29 +2696,18 @@ function localReframe(
     let s = (seed ^ 0xdeadbeef) >>> 0;
     return () => {
       s = (Math.imul(s ^ (s >>> 15), s | 1) ^ (s + Math.imul(s ^ (s >>> 7), s | 61))) >>> 0;
->>>>>>> Stashed changes
       return s / 4294967296;
     };
   })();
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
-<<<<<<< Updated upstream
-  const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => rng() - 0.5);
-
-  // ── 4. Template pools — clean, emotional, no filler ──────────────────────
-=======
 
   // ── 3. Template pools — clean, human, emotional, no filler ───────────────
->>>>>>> Stashed changes
   const HOOKS = [
     `Most people think ${sign} moves on fast. They don't.`,
     `There's a version of ${sign} you only get to see once.`,
     `${sign} doesn't go cold. They go quiet — and that's worse.`,
     `You didn't lose a ${sign}. You lost their patience.`,
-<<<<<<< Updated upstream
-    `The quietest ${sign} ever gets is right before they're gone.`,
-=======
     `The quietest a ${sign} ever gets is right before they're gone.`,
->>>>>>> Stashed changes
     `${sign} noticed. They're just not telling you yet.`,
     `You mistook ${sign}'s composure for forgiveness. Those aren't the same thing.`,
     `${sign} never warns you twice. The first time is the only time.`,
@@ -2819,21 +2769,6 @@ function localReframe(
     `When ${sign} tells you something true, they've already decided you can carry it.`,
   ];
 
-<<<<<<< Updated upstream
-  // ── 5. Build arc — shuffle each pool for variety ─────────────────────────
-  const sHooks   = shuffle(HOOKS);
-  const sObs     = shuffle(OBSERVATIONS);
-  const sEsc     = shuffle(ESCALATIONS);
-  const sTruths  = shuffle(TRUTHS);
-  const sTwists  = shuffle(TWISTS);
-  const sEndings = shuffle(ENDINGS);
-
-  // Prepare any user-supplied themes as extra lines to blend in
-  const extras = userThemes
-    .filter(t => t.length > 20)
-    .slice(0, 4)
-    .map(t => {
-=======
   // ── 4. Build the full arc (16-20 lines, ~90 seconds) ────────────────────
   // Shuffle each pool so lines come out in different order each call
   const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => rng() - 0.5);
@@ -2851,42 +2786,10 @@ function localReframe(
     .slice(0, 4)
     .map(t => {
       // Capitalise cleanly and ensure proper punctuation
->>>>>>> Stashed changes
       const s = t.charAt(0).toUpperCase() + t.slice(1);
       return s.endsWith('.') || s.endsWith('!') || s.endsWith('?') ? s : s + '.';
     });
 
-<<<<<<< Updated upstream
-  const arcLines: { text: string; type: string; durationSeconds: number }[] = [];
-  const addLine = (text: string, type: string) => {
-    const words = text.trim().split(/\s+/).length;
-    arcLines.push({ text, type, durationSeconds: Math.max(3, Math.min(9, Math.round(words / 2.4))) });
-  };
-
-  // Arc: hook × 1, obs × 3, esc × 2, truth × 3, twist × 2, ending × 2
-  // Extras blended into escalation, truth, twist, and ending slots
-  addLine(sHooks[0],  'hook');
-  addLine(sObs[0],    'observation');
-  addLine(sObs[1],    'observation');
-  addLine(sObs[2] ?? sObs[0], 'observation');
-  addLine(sEsc[0],    'escalation');
-  if (extras[0]) addLine(extras[0], 'escalation');
-  addLine(sEsc[1],    'escalation');
-  addLine(sTruths[0], 'truth');
-  if (extras[1]) addLine(extras[1], 'truth');
-  addLine(sTruths[1], 'truth');
-  addLine(sTruths[2] ?? sTruths[0], 'truth');
-  addLine(sTwists[0], 'twist');
-  if (extras[2]) addLine(extras[2], 'twist');
-  addLine(sTwists[1], 'twist');
-  addLine(sEndings[0],'ending');
-  if (extras[3]) addLine(extras[3], 'ending');
-  addLine(sEndings[1],'ending');
-
-  // ── 6. Deduplicate ────────────────────────────────────────────────────────
-  const seen = new Set<string>();
-  return arcLines.filter(l => {
-=======
   // Arc plan: hook × 1, obs × 3, esc × 2, truth × 3, twist × 2, ending × 2
   // Inject up to 2 user ideas into the truth/escalation zone
   const arcLines: { text: string; type: string; durationSeconds: number }[] = [];
@@ -2929,7 +2832,6 @@ function localReframe(
   // ── 5. Deduplicate — remove any lines with identical text ────────────────
   const seen = new Set<string>();
   const deduped = arcLines.filter(l => {
->>>>>>> Stashed changes
     const key = l.text.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
     if (seen.has(key)) return false;
     seen.add(key);
@@ -3539,189 +3441,7 @@ app.get('/api/stock/audio', async (req, res) => {
   }
 });
 
-// GET /api/stock/audio-proxy?url=...
-// Proxies a Jamendo audio stream through the server to avoid CORS issues in the browser
-app.get('/api/stock/audio-proxy', async (req, res) => {
-  const url = String(req.query.url ?? '');
-  if (!url) { res.status(400).end(); return; }
-  try {
-    const upstream = await fetch(url, {
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    if (!upstream.ok) { res.status(upstream.status).end(); return; }
-    res.setHeader('Content-Type',  upstream.headers.get('content-type')  ?? 'audio/mpeg');
-    res.setHeader('Content-Length', upstream.headers.get('content-length') ?? '');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    // Stream body - works in Node 18+ where Response.body is a ReadableStream
-    const { Readable } = await import('stream');
-    Readable.fromWeb(upstream.body as any).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// POST /api/stock/download  { type:'video'|'audio', downloadUrl, filename }
-app.post('/api/stock/download', async (req, res) => {
-  const { type, downloadUrl, filename } = req.body as {
-    type: 'video' | 'audio';
-    downloadUrl: string;
-    filename: string;
-  };
-  if (!type || !downloadUrl || !filename) {
-    res.status(400).json({ error: 'type, downloadUrl and filename are required' });
-    return;
-  }
-  const ext     = type === 'video' ? '.mp4' : '.mp3';
-  const safe    = filename.replace(/[^a-z0-9_\-]/gi, '_').replace(/__+/g, '_').slice(0, 72);
-  const base    = safe.endsWith(ext) ? safe : safe + ext;
-  const destDir = type === 'video' ? BACKGROUNDS : MUSIC_DIR;
-  const dest    = path.join(destDir, base);
-  // Return cached file if already downloaded
-  if (fs.existsSync(dest)) {
-    res.json({ ok: true, filename: base, cached: true });
-    return;
-  }
-  try {
-    const response = await fetch(downloadUrl, {
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    if (!response.ok) throw new Error(`Remote returned HTTP ${response.status}`);
-    // Stream to disk - avoids loading the whole file into memory
-    const { Readable } = await import('stream');
-    const { pipeline } = await import('stream/promises');
-    const fileStream = fs.createWriteStream(dest);
-    await pipeline(Readable.fromWeb(response.body as any), fileStream);
-    res.json({ ok: true, filename: base });
-  } catch (e) {
-    try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch { /* ignore */ }
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// ─── Health Check ───────────────────────────────────────────────────────────
-// GET /api/health
-// Returns a structured JSON report of every critical subsystem.
-// status: 'ok' | 'warning' | 'failed'
-
-app.get('/api/health', async (_req, res) => {
-  type ComponentStatus = { status: 'ok' | 'warning' | 'failed'; message: string };
-  const components: Record<string, ComponentStatus> = {};
-  function check(name: string, status: 'ok' | 'warning' | 'failed', message: string) {
-    components[name] = { status, message };
-  }
-
-  // 1. Required storage folders
-  const requiredDirs: [string, string][] = [
-    [TREND_VAULT_OUT,                  'trend-vault-output'],
-    [FINAL_DIR,                   'output/final'],
-    [UPLOADS,                     'uploads'],
-    [AUDIO_DIR,                   'custom-audio'],
-    [BACKGROUNDS,                 'backgrounds'],
-    [DRAFTS_DIR,                  'data/drafts'],
-    [path.join(ROOT, 'output', 'tts'), 'output/tts'],
-  ];
-  const missingDirs: string[] = [];
-  for (const [dir, label] of requiredDirs) {
-    if (!fs.existsSync(dir)) {
-      try { fs.mkdirSync(dir, { recursive: true }); }
-      catch { missingDirs.push(label); }
-    }
-  }
-  if (missingDirs.length === 0) {
-    check('storage_folders', 'ok', 'All required folders exist');
-  } else {
-    check('storage_folders', 'warning', `Missing (could not create): ${missingDirs.join(', ')}`);
-  }
-
-  // 2. FFmpeg
-  try {
-    const ffmpegInstaller = await import('@ffmpeg-installer/ffmpeg');
-    const ffmpegPath = ffmpegInstaller.path;
-    if (fs.existsSync(ffmpegPath)) {
-      check('ffmpeg', 'ok', `Bundled FFmpeg found: ${ffmpegPath}`);
-    } else {
-      check('ffmpeg', 'failed', `FFmpeg binary not found at: ${ffmpegPath}`);
-    }
-  } catch {
-    check('ffmpeg', 'failed', 'Could not load @ffmpeg-installer/ffmpeg');
-  }
-
-  // 3. Piper TTS
-  if (fs.existsSync(PIPER_EXE)) {
-    const voices = getPiperVoices();
-    check('piper_tts', 'ok', `Piper found with ${voices.length} voice(s): ${voices.slice(0, 3).join(', ') || 'none'}`);
-  } else {
-    check('piper_tts', 'warning', `Piper not installed at ${PIPER_EXE} — Edge TTS fallback will be used`);
-  }
-
-  // 4. ElevenLabs API key
-  if (!process.env.ELEVENLABS_API_KEY) {
-    check('elevenlabs', 'warning', 'ELEVENLABS_API_KEY not set in .env — premium voice path disabled');
-  } else {
-    try {
-      const r = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (r.ok) {
-        const data = await r.json() as { tier?: string; character_count?: number; character_limit?: number };
-        const used = data.character_count ?? 0;
-        const cap  = data.character_limit ?? 0;
-        check('elevenlabs', 'ok', `ElevenLabs connected (tier=${data.tier ?? '?'}, ${used}/${cap || '?'} chars used)`);
-      } else {
-        check('elevenlabs', 'warning', `ElevenLabs returned HTTP ${r.status} — verify the API key`);
-      }
-    } catch {
-      check('elevenlabs', 'warning', 'ElevenLabs unreachable (network) — voice routes will surface the error');
-    }
-  }
-
-  // 5. Edge TTS module
-  try {
-    await import('node-edge-tts');
-    check('edge_tts', 'ok', 'node-edge-tts module available');
-  } catch {
-    check('edge_tts', 'failed', 'node-edge-tts module missing — run npm install');
-  }
-
-  // 6. Remotion renderer module
-  try {
-    await import('@remotion/renderer');
-    check('remotion', 'ok', '@remotion/renderer module loaded');
-  } catch {
-    check('remotion', 'warning', '@remotion/renderer not installed — video render disabled');
-  }
-
-  // 7. Anthropic / OpenAI keys
-  const hasAnthropic = !!(process.env.ANTHROPIC_API_KEY);
-  const hasOpenAI    = !!(process.env.OPENAI_API_KEY);
-  if (hasAnthropic || hasOpenAI) {
-    check('ai_keys', 'ok', `Keys present: ${[hasAnthropic && 'Anthropic', hasOpenAI && 'OpenAI'].filter(Boolean).join(', ')}`);
-  } else {
-    check('ai_keys', 'warning', 'No AI API keys — local reframe fallback active');
-  }
-
-  // 8. Jamendo
-  const hasJamendo = !!(process.env.JAMENDO_CLIENT_ID);
-  check('jamendo', hasJamendo ? 'ok' : 'warning', hasJamendo ? 'Client ID present' : 'No client ID — music search disabled');
-
-  // Overall rollup
-  const statuses = Object.values(components).map(c => c.status);
-  const overall  = statuses.includes('failed') ? 'failed' : statuses.includes('warning') ? 'warning' : 'ok';
-
-  res.json({ overall, components });
-});
-
-// ─── SPA Catch-All ───────────────────────────────────────────────────────────
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(ROOT, 'frontend', 'trend-vault.html'));
-});
-
-// ─── Start Server ─────────────────────────────────────────────────────────────
-const PORT_NUM = typeof PORT === 'string' ? parseInt(PORT, 10) : (PORT as number);
-app.listen(PORT_NUM, () => {
-  console.log(`\n  🔐 Trend Vault Studio running at http://localhost:${PORT_NUM}/trend-vault\n`);
+// ── Start server ──────────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`\n  Trend Vault Studio  —  http://localhost:${PORT}/trend-vault\n`);
 });
