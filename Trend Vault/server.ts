@@ -544,6 +544,11 @@ interface TikTokJob {
 }
 const tikTokJobs = new Map<string, TikTokJob>();
 
+// ── TikTok login state tracker (in-memory, resets on server restart) ──────
+type TikTokLoginState = 'idle' | 'browser_open' | 'done' | 'failed';
+let tikTokLoginState: TikTokLoginState = 'idle';
+let tikTokLoginError = '';
+
 interface TikTokAutoPost {
   enabled: boolean;
   captionTemplate: string;
@@ -638,23 +643,90 @@ app.get('/api/tiktok/videos', (_req, res) => {
   res.json({ videos: recentMp4s().map(v => ({ rel: v.rel, mtime: v.mtime, size: v.size })) });
 });
 
+// ── Fast status check (no browser launch) ────────────────────────────────
+app.get('/api/tiktok/session/status', async (_req, res) => {
+  try {
+    const { readSessionStatus, sessionExists } = await import('./scripts/tiktok-uploader');
+    const cached = readSessionStatus();
+    const exists = sessionExists();
+    res.json({
+      signedIn: cached?.signedIn ?? false,
+      sessionExists: exists,
+      loginState: tikTokLoginState,
+      loginError: tikTokLoginError || undefined,
+      savedAt: cached?.savedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
+});
+
+// ── Non-blocking login — opens browser, returns immediately ───────────────
+app.post('/api/tiktok/session/login', async (_req, res) => {
+  if (tikTokLoginState === 'browser_open') {
+    res.json({ started: false, reason: 'Browser already open — log in and close it.' });
+    return;
+  }
+  tikTokLoginState = 'browser_open';
+  tikTokLoginError = '';
+  res.json({ started: true }); // Return to frontend immediately
+
+  // Run in background — do NOT await in the request handler
+  (async () => {
+    try {
+      const { loginInteractive } = await import('./scripts/tiktok-uploader');
+      const result = await loginInteractive();
+      tikTokLoginState = result.ok ? 'done' : 'failed';
+      tikTokLoginError = result.ok ? '' : (result.reason ?? 'Unknown error');
+    } catch (err: any) {
+      tikTokLoginState = 'failed';
+      tikTokLoginError = err?.message ?? String(err);
+      console.error('[TikTok Session] Login failed:', tikTokLoginError);
+    }
+  })();
+});
+
+// ── Logout — delete session directory ────────────────────────────────────
+app.post('/api/tiktok/session/logout', (_req, res) => {
+  const sessionDir = path.join(ROOT, '.tiktok-session');
+  try {
+    if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
+    tikTokLoginState = 'idle';
+    tikTokLoginError = '';
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Could not save TikTok session. Check folder permissions. ' + (err?.message ?? '') });
+  }
+});
+
+// ── Legacy compat aliases ─────────────────────────────────────────────────
 app.get('/api/tiktok/login-status', async (_req, res) => {
   try {
-    const { isLoggedIn } = await import('./scripts/tiktok-uploader');
-    res.json({ loggedIn: await isLoggedIn() });
+    const { readSessionStatus, sessionExists } = await import('./scripts/tiktok-uploader');
+    const cached = readSessionStatus();
+    res.json({ loggedIn: cached?.signedIn ?? false, sessionExists: sessionExists() });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? String(err) });
   }
 });
 
 app.post('/api/tiktok/login', async (_req, res) => {
-  try {
-    const { loginInteractive } = await import('./scripts/tiktok-uploader');
-    await loginInteractive();
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? String(err) });
-  }
+  // Legacy — redirect to non-blocking version
+  if (tikTokLoginState === 'browser_open') { res.json({ ok: true, reason: 'already_open' }); return; }
+  tikTokLoginState = 'browser_open';
+  tikTokLoginError = '';
+  res.json({ ok: true, started: true });
+  (async () => {
+    try {
+      const { loginInteractive } = await import('./scripts/tiktok-uploader');
+      const result = await loginInteractive();
+      tikTokLoginState = result.ok ? 'done' : 'failed';
+      tikTokLoginError = result.ok ? '' : (result.reason ?? '');
+    } catch (err: any) {
+      tikTokLoginState = 'failed';
+      tikTokLoginError = err?.message ?? String(err);
+    }
+  })();
 });
 
 app.post('/api/tiktok/upload', express.json(), async (req, res) => {

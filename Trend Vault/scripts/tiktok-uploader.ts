@@ -28,8 +28,36 @@ export interface UploadOptions {
   onLog?: (line: string) => void;
 }
 
+const STATUS_FILE = path.join(SESSION_DIR, '.session-status.json');
+
 function ensureSessionDir() {
   if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+}
+
+/** Write session status to disk — no browser needed. */
+export function saveSessionStatus(signedIn: boolean): void {
+  ensureSessionDir();
+  fs.writeFileSync(STATUS_FILE, JSON.stringify({ signedIn, savedAt: Date.now() }), 'utf-8');
+  console.log('[TikTok Session] Session status saved:', signedIn);
+}
+
+/** Read cached session status — instant, no browser. */
+export function readSessionStatus(): { signedIn: boolean; savedAt: number } | null {
+  try {
+    if (!fs.existsSync(STATUS_FILE)) return null;
+    return JSON.parse(fs.readFileSync(STATUS_FILE, 'utf-8'));
+  } catch { return null; }
+}
+
+/**
+ * Fast check — no browser launch.
+ * Returns true if a Chromium session directory exists with cookies.
+ */
+export function sessionExists(): boolean {
+  if (!fs.existsSync(SESSION_DIR)) return false;
+  // Chromium writes Default/Cookies after first persistent context is used
+  const cookiesDb = path.join(SESSION_DIR, 'Default', 'Cookies');
+  return fs.existsSync(cookiesDb) || fs.existsSync(STATUS_FILE);
 }
 
 async function openContext(headless: boolean): Promise<BrowserContext> {
@@ -37,31 +65,111 @@ async function openContext(headless: boolean): Promise<BrowserContext> {
   return chromium.launchPersistentContext(SESSION_DIR, {
     headless,
     viewport: { width: 1280, height: 900 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     args: ['--disable-blink-features=AutomationControlled'],
   });
 }
 
-export async function loginInteractive(timeoutMs = 5 * 60 * 1000): Promise<void> {
-  const ctx = await openContext(false);
-  const page = await ctx.newPage();
-  await page.goto('https://www.tiktok.com/login');
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const cookies = await ctx.cookies('https://www.tiktok.com');
-    if (cookies.some((c) => c.name === 'sessionid' || c.name === 'sid_tt')) break;
-    await page.waitForTimeout(2000);
+/**
+ * Opens a headed Chromium window, lets the user log in manually,
+ * then waits for them to close the window.
+ * Session is persisted automatically by the persistent context.
+ */
+export async function loginInteractive(timeoutMs = 10 * 60 * 1000): Promise<{ ok: boolean; reason?: string }> {
+  console.log('[TikTok Session] Launching login browser...');
+  console.log('[TikTok Session] Session directory:', SESSION_DIR);
+
+  let ctx: BrowserContext;
+  try {
+    ctx = await openContext(false);
+  } catch (err: any) {
+    const msg = 'Could not open TikTok login browser. Check Playwright/Puppeteer installation. ' + (err?.message ?? err);
+    console.error('[TikTok Session]', msg);
+    return { ok: false, reason: msg };
   }
-  await ctx.close();
+
+  const page = await ctx.newPage();
+  await page.goto('https://www.tiktok.com/login', { waitUntil: 'domcontentloaded' }).catch(() => {});
+
+  let sessionDetected = false;
+  let closed = false;
+
+  // Poll for session cookie every 2 seconds
+  const poll = setInterval(async () => {
+    if (closed) { clearInterval(poll); return; }
+    try {
+      const cookies = await ctx.cookies('https://www.tiktok.com');
+      if (cookies.some((c) => c.name === 'sessionid' || c.name === 'sid_tt')) {
+        if (!sessionDetected) {
+          sessionDetected = true;
+          console.log('[TikTok Session] Signed in:', true);
+          saveSessionStatus(true);
+          // Show a green banner in the browser so the user knows to close it
+          await page.evaluate(() => {
+            const b = document.createElement('div');
+            b.id = '__tv_login_banner';
+            b.style.cssText = [
+              'position:fixed;top:0;left:0;right:0;z-index:2147483647',
+              'background:#16a34a;color:#fff;text-align:center',
+              'padding:14px 20px;font-size:16px;font-weight:700',
+              'font-family:system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4)',
+            ].join(';');
+            b.textContent = '✓ Logged in! Session saved to Trend Vault. You can close this window.';
+            document.body.prepend(b);
+          }).catch(() => {});
+        }
+      }
+    } catch { /* context may already be closing */ }
+  }, 2000);
+
+  // Wait for the user to close the browser or timeout
+  await Promise.race([
+    new Promise<void>((resolve) => ctx.once('close', resolve)),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+
+  closed = true;
+  clearInterval(poll);
+
+  try { await ctx.close(); } catch { /* already closed */ }
+
+  if (sessionDetected) return { ok: true };
+
+  // One last cookie check after close in case timing was tight
+  try {
+    const ctx2 = await openContext(true);
+    const cookies = await ctx2.cookies('https://www.tiktok.com');
+    await ctx2.close();
+    if (cookies.some((c) => c.name === 'sessionid' || c.name === 'sid_tt')) {
+      saveSessionStatus(true);
+      return { ok: true };
+    }
+  } catch { /* ignore */ }
+
+  return { ok: false, reason: 'Browser closed without detecting a TikTok session.' };
 }
 
+/**
+ * Full session check — launches headless browser to verify cookie validity.
+ * Slower (~3-5s). Updates STATUS_FILE with result.
+ */
 export async function isLoggedIn(): Promise<boolean> {
-  if (!fs.existsSync(SESSION_DIR)) return false;
-  const ctx = await openContext(true);
+  console.log('[TikTok Session] Checking status...');
+  if (!sessionExists()) {
+    console.log('[TikTok Session] Signed in:', false, '(no session directory)');
+    return false;
+  }
   try {
+    const ctx = await openContext(true);
     const cookies = await ctx.cookies('https://www.tiktok.com');
-    return cookies.some((c) => c.name === 'sessionid' || c.name === 'sid_tt');
-  } finally {
     await ctx.close();
+    const ok = cookies.some((c) => c.name === 'sessionid' || c.name === 'sid_tt');
+    saveSessionStatus(ok);
+    console.log('[TikTok Session] Signed in:', ok);
+    return ok;
+  } catch (err: any) {
+    console.error('[TikTok Session] isLoggedIn error:', err?.message);
+    return false;
   }
 }
 

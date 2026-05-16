@@ -276,7 +276,7 @@ input:focus,textarea:focus,select:focus{
           <button id="loginBtn" class="primary">Sign in to TikTok</button>
           <button id="refreshStatusBtn" class="ghost">↻ Refresh</button>
         </div>
-        <p class="caveat">First time: click <b>Sign in</b>, a Chromium window opens, log in by hand, then close it. The session lives in <code>.tiktok-session/</code> so future uploads don't need a re-login.</p>
+        <p class="caveat" id="caveatText">First time: click <b>Sign in</b>, a Chromium window opens, log in by hand, then close it. Session saved in .tiktok-session/ — no re-login needed.</p>
       </div>
 
       <div class="section-label">② Pick a Render</div>
@@ -391,33 +391,101 @@ let pollTimer = null;
   }
 })();
 
-async function refreshLoginStatus(){
-  $('loginStatus').className = 'pill muted';
-  $('loginStatus').textContent = 'checking…';
-  $('loginDot').className = 'dot';
-  $('loginVal').textContent = 'Checking…';
-  try{
-    const r = await fetch('/api/tiktok/login-status').then(r=>r.json());
-    if(r.loggedIn){
-      $('loginStatus').className = 'pill green'; $('loginStatus').textContent = 'signed in';
-      $('loginDot').className = 'dot online'; $('loginVal').textContent = 'Signed In';
-    } else {
-      $('loginStatus').className = 'pill red'; $('loginStatus').textContent = 'not signed in';
-      $('loginDot').className = 'dot offline'; $('loginVal').textContent = 'Not Signed In';
-    }
-  } catch(e){
-    $('loginStatus').className = 'pill red'; $('loginStatus').textContent = 'error';
-    $('loginDot').className = 'dot offline'; $('loginVal').textContent = 'Error';
-  }
+// ── Session UI states ──────────────────────────────────────────────────────
+function setSessionUI(state){
+  const states = {
+    checking:      { pill:'muted',  dot:'',        val:'Checking…',        btn:true,  btnTxt:'Sign in to TikTok' },
+    signed_in:     { pill:'green',  dot:'online',   val:'Signed In',        btn:false, btnTxt:'Sign in to TikTok' },
+    not_signed_in: { pill:'red',    dot:'offline',  val:'NOT SIGNED IN',    btn:false, btnTxt:'Sign in to TikTok' },
+    browser_open:  { pill:'yellow', dot:'checking', val:'Browser Open…',    btn:true,  btnTxt:'Waiting for login…' },
+    session_expired:{ pill:'red',   dot:'offline',  val:'Session Expired',  btn:false, btnTxt:'Sign in again' },
+    error:         { pill:'red',    dot:'offline',  val:'Error',            btn:false, btnTxt:'Sign in to TikTok' },
+  };
+  const s = states[state] || states.error;
+  $('loginStatus').className = 'pill ' + s.pill;
+  $('loginStatus').textContent = s.val.toLowerCase().replace('not signed in','not signed in');
+  $('loginDot').className = 'dot ' + s.dot;
+  $('loginVal').textContent = s.val;
+  $('loginBtn').disabled = s.btn;
+  $('loginBtn').textContent = s.btnTxt;
   updateUploadButton();
 }
 
+let _loginPollTimer = null;
+
+async function refreshLoginStatus(){
+  setSessionUI('checking');
+  try {
+    const r = await fetch('/api/tiktok/session/status').then(r => r.json());
+    console.log('[TikTok Session] Status response:', r);
+    if(r.loginState === 'browser_open'){
+      setSessionUI('browser_open');
+      startLoginPoll(); // keep polling until browser closes
+      return;
+    }
+    if(r.signedIn){
+      setSessionUI('signed_in');
+      stopLoginPoll();
+    } else if(r.sessionExists && !r.signedIn){
+      setSessionUI('session_expired');
+      stopLoginPoll();
+    } else {
+      setSessionUI('not_signed_in');
+      stopLoginPoll();
+    }
+  } catch(e){
+    console.error('[TikTok Session] Status check failed:', e);
+    setSessionUI('error');
+    stopLoginPoll();
+  }
+}
+
+function startLoginPoll(){
+  if(_loginPollTimer) return; // already polling
+  _loginPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/tiktok/session/status').then(r => r.json());
+      if(r.loginState === 'done' && r.signedIn){
+        setSessionUI('signed_in');
+        stopLoginPoll();
+        return;
+      }
+      if(r.loginState === 'failed'){
+        const msg = r.loginError || 'Login failed — check that Playwright/Chromium is installed.';
+        setSessionUI('not_signed_in');
+        $('loginVal').textContent = 'Login Failed';
+        console.error('[TikTok Session]', msg);
+        stopLoginPoll();
+        return;
+      }
+      // Still browser_open — keep polling, update caveat text
+      $('caveatText').textContent = 'Log in inside the Chromium window, then close it when finished. Checking every 3 seconds…';
+    } catch {}
+  }, 3000);
+}
+
+function stopLoginPoll(){
+  if(_loginPollTimer){ clearInterval(_loginPollTimer); _loginPollTimer = null; }
+  $('caveatText').textContent = 'First time: click Sign in, a Chromium window opens, log in by hand, then close it. Session saved in .tiktok-session/ — no re-login needed.';
+}
+
 async function startLogin(){
-  $('loginBtn').disabled = true; $('loginBtn').textContent = 'Opening browser…';
-  try{ await fetch('/api/tiktok/login',{method:'POST'}); }
-  catch(e){ alert('Login failed: '+e.message); }
-  $('loginBtn').disabled = false; $('loginBtn').textContent = 'Sign in to TikTok';
-  refreshLoginStatus();
+  setSessionUI('checking');
+  $('loginBtn').textContent = 'Opening browser…';
+  try {
+    const r = await fetch('/api/tiktok/session/login', { method:'POST' }).then(r => r.json());
+    if(r.started || r.ok){
+      setSessionUI('browser_open');
+      $('caveatText').textContent = 'Log in inside the Chromium window, then close it when finished. A green banner will appear when your session is saved.';
+      startLoginPoll();
+    } else {
+      alert(r.reason || 'Could not open TikTok login browser. Check Playwright/Puppeteer installation.');
+      setSessionUI('not_signed_in');
+    }
+  } catch(e){
+    alert('Could not open TikTok login browser. Check Playwright/Puppeteer installation.\n\n' + e.message);
+    setSessionUI('not_signed_in');
+  }
 }
 
 function fmtSize(n){ if(n>1e9) return (n/1e9).toFixed(2)+' GB'; if(n>1e6) return (n/1e6).toFixed(1)+' MB'; if(n>1e3) return (n/1e3).toFixed(0)+' KB'; return n+' B'; }
@@ -446,34 +514,43 @@ function updateUploadButton(){ $('uploadBtn').disabled = !selectedRel; }
 
 async function startUpload(){
   if(!selectedRel) return;
+  // Check session before uploading
+  try {
+    const s = await fetch('/api/tiktok/session/status').then(r => r.json());
+    if(!s.signedIn){
+      alert('Not signed in to TikTok. Click "Sign in to TikTok" first.');
+      setSessionUI('not_signed_in');
+      return;
+    }
+  } catch(e) {
+    if(!confirm('Could not verify TikTok session. Try uploading anyway?')) return;
+  }
   $('uploadBtn').disabled = true;
   $('uploadStatus').className = 'pill muted'; $('uploadStatus').textContent = 'starting…';
   $('logs').style.display = 'block'; $('logs').textContent = '';
-  try{
-    const r = await fetch('/api/tiktok/upload',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ rel:selectedRel, caption:$('caption').value, privacy:$('privacy').value, mode:$('mode').value }),
-    }).then(r=>r.json());
-    if(r.error) throw new Error(r.error);
-    pollJob(r.jobId);
+  const body = {
+    rel: selectedRel,
+    caption: $('caption').value,
+    privacy: $('privacy').value,
+    mode: $('mode').value,
+  };
+  try {
+    const r = await fetch('/api/tiktok/upload',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r=>r.json());
+    if(r.error){ $('uploadStatus').className='pill red'; $('uploadStatus').textContent='error'; $('uploadBtn').disabled=false; return; }
+    const jobId = r.jobId;
+    $('uploadStatus').className='pill yellow'; $('uploadStatus').textContent='uploading…';
+    const pollTimer = setInterval(async ()=>{
+      try{
+        const r2 = await fetch('/api/tiktok/status/'+jobId).then(r=>r.json());
+        if(r2.logs) $('logs').textContent = r2.logs.join('\n');
+        if(r2.status==='done'){ clearInterval(pollTimer); $('uploadStatus').className='pill green'; $('uploadStatus').textContent='done ✓'; $('uploadBtn').disabled=false; loadAutoPostJobs(); }
+        else if(r2.status==='error'){ clearInterval(pollTimer); $('uploadStatus').className='pill red'; $('uploadStatus').textContent='error'; $('logs').textContent += '\n\nERROR: '+(r2.error||'unknown'); $('uploadBtn').disabled=false; }
+      } catch(e){}
+    }, 1500);
   } catch(e){
-    $('uploadStatus').className = 'pill red'; $('uploadStatus').textContent = 'error: '+e.message;
-    $('uploadBtn').disabled = false;
+    $('uploadStatus').className='pill red'; $('uploadStatus').textContent='error';
+    $('uploadBtn').disabled=false;
   }
-}
-
-function pollJob(jobId){
-  if(pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async ()=>{
-    try{
-      const r = await fetch(`/api/tiktok/status/${jobId}`).then(r=>r.json());
-      $('logs').textContent = (r.logs||[]).join('\n');
-      $('logs').scrollTop = $('logs').scrollHeight;
-      if(r.status==='running'){ $('uploadStatus').className='pill muted'; $('uploadStatus').textContent='uploading…'; }
-      else if(r.status==='done'){ clearInterval(pollTimer); $('uploadStatus').className='pill green'; $('uploadStatus').textContent='done'; $('uploadBtn').disabled=false; }
-      else if(r.status==='error'){ clearInterval(pollTimer); $('uploadStatus').className='pill red'; $('uploadStatus').textContent='error'; $('logs').textContent += '\n\nERROR: '+(r.error||'unknown'); $('uploadBtn').disabled=false; }
-    } catch(e){}
-  }, 1500);
 }
 
 async function loadAutoPost(){
@@ -515,15 +592,17 @@ async function loadAutoPostJobs(){
     }).join('\n');
     const newest = r.jobs[0];
     $('lastJob').textContent = `${newest.status} · ${new Date(newest.startedAt).toLocaleTimeString()}`;
-  } catch{}
+  } catch {}
 }
 
-$('loginBtn').onclick = startLogin;
+// ── Button wiring ─────────────────────────────────────────────────────────
+$('loginBtn').onclick         = startLogin;
 $('refreshStatusBtn').onclick = refreshLoginStatus;
-$('reloadVideosBtn').onclick = loadVideos;
-$('uploadBtn').onclick = startUpload;
-$('apSaveBtn').onclick = saveAutoPost;
+$('reloadVideosBtn').onclick  = loadVideos;
+$('uploadBtn').onclick        = startUpload;
+$('apSaveBtn').onclick        = saveAutoPost;
 
+// ── Init ──────────────────────────────────────────────────────────────────
 refreshLoginStatus();
 loadVideos();
 loadAutoPost();
