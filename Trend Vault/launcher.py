@@ -83,7 +83,7 @@ def ts() -> str:
 class TrendVaultLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Trend Vault Launcher')
+        self.title('🏦 Trend Vault Launcher')
         self.configure(bg=BG)
         self.resizable(False, False)
         self.geometry('520x620')
@@ -102,7 +102,7 @@ class TrendVaultLauncher(tk.Tk):
         # Header
         hdr = tk.Frame(self, bg=BG, pady=16)
         hdr.pack(fill='x', padx=24)
-        tk.Label(hdr, text='\U0001f3ac  TREND VAULT', bg=BG, fg=TEXT,
+        tk.Label(hdr, text='🏦  TREND VAULT', bg=BG, fg=TEXT,
                  font=('Segoe UI', 17, 'bold')).pack(side='left')
         tk.Label(hdr, text='LAUNCHER', bg=BG, fg=ACCENT,
                  font=('Segoe UI', 17, 'bold')).pack(side='left', padx=(6,0))
