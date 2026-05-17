@@ -1692,10 +1692,19 @@ Rules:
 
 // ── TTS: Piper (offline) + Edge TTS (online fallback) ────────────────────────
 
-app.get('/api/trend-vault/tts-status', (_req, res) => {
+app.get('/api/trend-vault/tts-status', async (_req, res) => {
   const piperReady  = fs.existsSync(PIPER_EXE);
   const piperVoices = getPiperVoices();
-  res.json({ piperReady, piperVoices });
+  const localTts    = await probeLocalTts();
+  res.json({
+    piperReady,
+    piperVoices,
+    // Flat fields the mainframe dashboard reads
+    local:  localTts.ok,
+    engine: localTts.engine,
+    url:    localTts.url,
+    kokoro: localTts.engine === 'kokoro' && localTts.ok,
+  });
 });
 
 app.post('/api/trend-vault/tts', async (req, res) => {
@@ -2032,6 +2041,18 @@ app.get('/api/trend-vault/engine-status', async (_req, res) => {
     capcutOk = r.ok || r.status === 404 || r.status === 405;
   } catch { /* not running */ }
 
+  // Render worker — read URL from env directly, not gated on USE_RENDER_WORKER
+  // (that flag only controls *delegation*; we still want the dashboard to
+  // reflect the worker's real state).
+  const workerUrl = (process.env.RENDER_WORKER_URL ?? '').trim();
+  let workerOnline = false;
+  if (workerUrl) {
+    try {
+      const r = await fetch(`${workerUrl}/api/render/health`, { signal: AbortSignal.timeout(1500) });
+      workerOnline = r.ok || r.status === 404 || r.status === 405;
+    } catch { /* not reachable */ }
+  }
+
   // ElevenLabs — only check is whether the API key is present. The full
   // ElevenLabs status (account / quota) lives at /api/elevenlabs/status.
   const elConfigured = !!(process.env.ELEVENLABS_API_KEY);
@@ -2041,6 +2062,16 @@ app.get('/api/trend-vault/engine-status', async (_req, res) => {
     capcut:      { ok: capcutOk,     url: capcutUrl },
     edge:        { ok: true,         name: 'Microsoft Edge TTS (always available)' },
     elevenlabs:  { configured: elConfigured },
+    // Flat fields the mainframe dashboard reads
+    workerOnline,
+    workerUrl,
+    // API-key presence flags (mainframe Env panel)
+    hasAnthropic:   !!process.env.ANTHROPIC_API_KEY,
+    hasOpenai:      !!process.env.OPENAI_API_KEY,
+    hasElevenLabs:  elConfigured,
+    hasAssemblyai:  !!process.env.ASSEMBLYAI_API_KEY,
+    hasPexels:      !!process.env.PEXELS_API_KEY,
+    aiProvider:     process.env.AI_PROVIDER || 'auto',
   });
 });
 
