@@ -292,7 +292,7 @@ input:focus,textarea:focus,select:focus{
     <!-- LEFT: Editor pane -->
     <div>
       <div class="help-bubble">
-        <strong>How it works:</strong> Drop an MP3 or WAV → click Analyze → the system runs autocorrelation pitch detection, RMS loudness, spectral centroid, and dynamic range analysis on your audio. The sliders below get auto-tuned to match the source. Hit <code>Generate Replica</code> to hear how Edge TTS sounds with those settings. Tweak anything you want, then save the preset with a name — it'll show up everywhere in the app.
+        <strong>How it works:</strong> Drop an MP3 or WAV → click Analyze → the system runs autocorrelation pitch detection, RMS loudness, spectral centroid, and dynamic range analysis on your audio. The sliders below get auto-tuned to match the source. Hit <code>Generate Replica</code> to hear how the Kokoro voice sounds with those settings. Tweak anything you want, then save the preset with a name — it'll show up everywhere in the app.
       </div>
 
       <div class="card">
@@ -352,7 +352,7 @@ input:focus,textarea:focus,select:focus{
           <div class="detected-voice">
             <span style="font-size:1.6rem">🎯</span>
             <div>
-              <div class="detected-voice-label">Recommended Edge TTS Base</div>
+              <div class="detected-voice-label">Recommended Voice Base</div>
               <div class="detected-voice-value" id="aEdgeId">—</div>
             </div>
           </div>
@@ -812,11 +812,11 @@ function autoTuneSliders(a){
   const semitones = 12 * Math.log2(Math.max(60, targetHz) / refCenter);
   const pitch = Math.round(Math.max(-12, Math.min(12, semitones)));
 
-  // Speed from syllable rate (Edge baseline ~3.5 syl/s)
+  // Speed from syllable rate (baseline ~3.5 syl/s)
   const rate = a.sylPerSec ? Math.round(Math.max(-15, Math.min(15, (a.sylPerSec - 3.5) * 6))) : 0;
   const speed = Math.round(Math.max(85, Math.min(115, 100 + (a.sylPerSec - 3.5) * 6)));
 
-  // Volume from RMS dB (Edge baseline -18 dB)
+  // Volume from RMS dB (baseline -18 dB)
   const volume = Math.round(Math.max(-6, Math.min(6, (a.rmsDb + 18) * 0.5)) * 2) / 2;
 
   // Intensity from dynamic range (more dynamic → more cinematic / reverb wetness)
@@ -860,7 +860,7 @@ async function generateReplica(){
   const status = document.getElementById('genStatus');
   btn.innerHTML = '<span class="spinner"></span>Generating...';
   btn.disabled = true;
-  status.textContent = 'Building filter chain & calling Edge TTS...';
+  status.textContent = 'Building filter chain & calling Kokoro...';
 
   try{
     // Build a one-shot ad-hoc preset on the fly:

@@ -349,7 +349,6 @@ input:focus,textarea:focus,select:focus{
     </div>
   </div>
   <nav id="tv-nav"></nav>
-  <span id="edgeTtsStatus" class="openai-badge offline" style="margin-left:8px">⚡ openai-edge-tts: checking...</span>
 </header>
 <script src="/nav.js" defer></script>
 
@@ -508,7 +507,7 @@ input:focus,textarea:focus,select:focus{
   <div class="tab-content" id="tab-clone">
     <div class="section-head"><span class="section-head-icon">🧬</span><span class="section-head-label">Voice Cloning Lab</span></div>
     <div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:16px;margin-bottom:24px;font-size:.78rem;line-height:1.7;color:var(--text2)">
-      <strong style="color:var(--purple2)">How it works:</strong> Upload reference audio samples (MP3/WAV). The system builds a voice database. When you generate, it uses <strong>openai-edge-tts</strong> (if running on port 5050) to match the voice style. For deep cloning, install <strong>tortoise-tts</strong> locally.<br/>
+      <strong style="color:var(--purple2)">How it works:</strong> Upload reference audio samples (MP3/WAV). The system builds a voice database. Generation runs through the local <strong>Kokoro</strong> TTS engine to match the voice style. For deep cloning, install <strong>tortoise-tts</strong> locally.<br/>
       <strong style="color:var(--gold2)">Auto-save:</strong> Your voice database auto-saves every 30 minutes. Last save: <span id="lastSaveTime">Never</span>
     </div>
     <div class="clone-layout">
@@ -662,7 +661,6 @@ let compareSet  = new Set(); // max 2
 let currentTab  = 'browse';
 let activeCat   = 'all';
 let ppController = null;
-let edgeTtsAvailable = false;
 let voiceDatabase = [];
 
 // ═══════════════════════════════════════════════════════
@@ -672,11 +670,19 @@ async function init(){
   buildStars();
   buildCatList();
   await loadPresets();
-  await checkEdgeTts();
+  updateFavCount();
   await loadVoiceDb();
   setupAutoSave();
   initSliderTracks();
   buildCloneSliders();
+}
+
+function updateFavCount(){
+  const favCountEl = document.getElementById('favCount');
+  if(favCountEl){
+    const count = allPresets.filter(p => favorites.has(p.id) || p.favorite).length;
+    favCountEl.textContent = count;
+  }
 }
 
 async function loadPresets(){
@@ -694,28 +700,6 @@ async function loadPresets(){
   // Apply saved favorites
   allPresets.forEach(p => { if(favorites.has(p.id)) p.favorite = true; });
   renderVoiceGrid();
-}
-
-async function checkEdgeTts(){
-  try{
-    const r = await fetch(`${API_BASE}/api/trend-vault/edge-tts-status`);
-    const d = await r.json();
-    edgeTtsAvailable = d.available;
-    const badge = document.getElementById('edgeTtsStatus');
-    if(badge){
-      badge.className = d.available ? 'openai-badge' : 'openai-badge offline';
-      badge.textContent = d.available
-        ? `⚡ openai-edge-tts: LIVE (${d.voices||0} voices)`
-        : '⚡ openai-edge-tts: offline';
-    }
-  }catch{}
-
-  // Initial favorites count
-  const favCountEl = document.getElementById('favCount');
-  if(favCountEl){
-    const count = allPresets.filter(p => favorites.has(p.id) || p.favorite).length;
-    favCountEl.textContent = count;
-  }
 }
 
 function buildStars(){
@@ -1622,27 +1606,30 @@ async function generateCloned(){
   status.style.display='block'; status.className='status-box';
   status.textContent = '⏳ Generating audio...';
   try{
-    // Try openai-edge-tts first for voice matching
     const v = voiceDatabase.find(x=>x.id===profileId);
     const prompt = document.getElementById('voicePrompt')?.value||'';
-    let url;
-    if(edgeTtsAvailable){
-      // Pick an appropriate voice for the description
-      const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice-openai`,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({text, voice:'en-US-GuyNeural', speed:0.88})
-      });
-      if(!r.ok) throw new Error('openai-edge-tts failed: '+r.status);
-      const blob = await r.blob();
-      url = URL.createObjectURL(blob);
-      status.className='status-box ok'; status.textContent='✅ Generated via openai-edge-tts'+(prompt?'\nPrompt: '+prompt:'');
-    } else {
-      // Fall back to regular preset generation
-      const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({text,presetId:'velvet_static',preview:false})
-      });
-      if(!r.ok) throw new Error('Generation failed');
-      const blob = await r.blob();
-      url = URL.createObjectURL(blob);
-      status.className='status-box ok'; status.textContent='✅ Generated (install openai-edge-tts f
+    // Generate via the standard Kokoro pipeline
+    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text,presetId:'velvet_static',preview:false})
+    });
+    if(!r.ok) throw new Error('Generation failed');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    status.className='status-box ok';
+    status.textContent='✅ Generated via Kokoro'+(prompt?'\nPrompt: '+prompt:'');
+    if(wrap){
+      wrap.style.display='block';
+      const audio = wrap.querySelector('audio') || wrap;
+      if(audio.tagName === 'AUDIO'){ audio.src = url; audio.play().catch(()=>{}); }
+    }
+  }catch(e){
+    status.className='status-box err';
+    status.textContent='❌ '+(e.message||e);
+  }finally{
+    btn.innerHTML='🎤 Generate'; btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>

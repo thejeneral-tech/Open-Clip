@@ -13,7 +13,6 @@ import express from 'express';
 import multer from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
 import { spawn } from 'child_process';
 import { generateTrendVaultScript, generateFallbackScript } from './scripts/trend-vault-generate';
 import { generateVoice, VOICE_PRESETS } from './scripts/tts/ttsService';
@@ -40,9 +39,6 @@ const MUSIC_DIR     = path.join(ROOT, 'music');
 const AUDIO_DIR     = path.join(ROOT, 'custom-audio');
 const TREND_VAULT_OUT    = path.join(ROOT, 'trend-vault-output');
 const DRAFTS_DIR    = path.join(ROOT, 'data', 'drafts');
-const PIPER_DIR     = path.join(ROOT, 'piper');
-const PIPER_EXE     = path.join(PIPER_DIR, 'piper.exe');
-const PIPER_VOICES  = path.join(PIPER_DIR, 'voices');
 // Remote worker render path — disabled for now, always use local in-process render.
 // To re-enable: set USE_RENDER_WORKER=true in .env alongside RENDER_WORKER_URL.
 // Local test: RENDER_WORKER_URL=http://localhost:4000
@@ -69,40 +65,6 @@ try {
     } catch { /* ignore individual failures */ }
   }
 } catch { /* ignore if trend-vault-output doesn't exist yet */ }
-
-// ── Piper TTS helpers ─────────────────────────────────────────────────────────
-
-function getPiperVoices(): string[] {
-  if (!fs.existsSync(PIPER_VOICES)) return [];
-  return fs.readdirSync(PIPER_VOICES)
-    .filter(f => f.endsWith('.onnx'))
-    .map(f => f.replace('.onnx', ''));
-}
-
-async function runPiper(text: string, modelName: string): Promise<Buffer> {
-  const modelPath = path.join(PIPER_VOICES, `${modelName}.onnx`);
-  if (!fs.existsSync(modelPath)) throw new Error(`Voice not installed: ${modelName}`);
-  const tmpFile = path.join(os.tmpdir(), `trend-vault-${Date.now()}.wav`);
-  return new Promise((resolve, reject) => {
-    const proc = spawn(PIPER_EXE, [
-      '--model', modelPath,
-      '--output-file', tmpFile,
-      '--sentence-silence', '0.25',
-    ]);
-    proc.stdin.write(text, 'utf8');
-    proc.stdin.end();
-    proc.stderr.on('data', () => {});
-    proc.on('close', (code) => {
-      if (code !== 0) { reject(new Error(`Piper exited ${code}`)); return; }
-      try {
-        const buf = fs.readFileSync(tmpFile);
-        try { fs.unlinkSync(tmpFile); } catch {}
-        resolve(buf);
-      } catch (e) { reject(e); }
-    });
-    proc.on('error', reject);
-  });
-}
 
 // ─── Express ───────────────────────────────────────────────────────────────
 
@@ -1677,61 +1639,17 @@ Rules:
   }
 });
 
-// ── TTS: Piper (offline) + Edge TTS (online fallback) ────────────────────────
+// ── TTS: Kokoro local server ─────────────────────────────────────────────────
 
 app.get('/api/trend-vault/tts-status', async (_req, res) => {
-  const piperReady  = fs.existsSync(PIPER_EXE);
-  const piperVoices = getPiperVoices();
-  const localTts    = await probeLocalTts();
+  const localTts = await probeLocalTts();
   res.json({
-    piperReady,
-    piperVoices,
     // Flat fields the mainframe dashboard reads
     local:  localTts.ok,
     engine: localTts.engine,
     url:    localTts.url,
     kokoro: localTts.engine === 'kokoro' && localTts.ok,
   });
-});
-
-app.post('/api/trend-vault/tts', async (req, res) => {
-  const { text, piperId, edgeId } = req.body as { text: string; piperId?: string; edgeId?: string };
-  if (!text) { res.status(400).json({ error: 'text required' }); return; }
-
-  // 1. Try Piper (offline) first
-  if (piperId && fs.existsSync(PIPER_EXE)) {
-    const modelPath = path.join(PIPER_VOICES, `${piperId}.onnx`);
-    if (fs.existsSync(modelPath)) {
-      try {
-        const audio = await runPiper(text, piperId);
-        res.setHeader('Content-Type', 'audio/wav');
-        res.send(audio);
-        return;
-      } catch (e) {
-        console.warn('[TTS] Piper failed, trying Edge TTS:', (e as Error).message);
-      }
-    }
-  }
-
-  // 2. Try Edge TTS (online, free, no key needed)
-  if (edgeId) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { EdgeTTS } = require('node-edge-tts');
-      const tts = new EdgeTTS({ voice: edgeId, outputFormat: 'audio-24khz-96kbitrate-mono-mp3' });
-      const tmpFile = path.join(os.tmpdir(), `trend-vault-edge-${Date.now()}.mp3`);
-      await tts.ttsPromise(text, tmpFile);
-      const buf = fs.readFileSync(tmpFile);
-      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.send(buf);
-      return;
-    } catch (e) {
-      console.warn('[TTS] Edge TTS failed:', (e as Error).message);
-    }
-  }
-
-  res.status(503).json({ error: 'No TTS engine ready. Run setup-voices.bat for offline voices.' });
 });
 
 // ── Serve Voice Lab page ──────────────────────────────────────────────────────
@@ -1803,41 +1721,6 @@ app.delete('/api/custom-presets/:id', (req, res) => {
 app.get('/api/trend-vault/voice-presets', (_req, res) => {
   const custom = readCustomPresets();
   res.json({ presets: [...custom, ...VOICE_PRESETS] });
-});
-
-// ── Check openai-edge-tts server (localhost:5050) ─────────────────────────────
-app.get('/api/trend-vault/edge-tts-status', async (_req, res) => {
-  try {
-    const r = await fetch('http://localhost:5050/v1/voices', { signal: AbortSignal.timeout(1500) });
-    if (r.ok) {
-      const data = await r.json() as { voices?: unknown[] };
-      res.json({ available: true, voices: Array.isArray(data.voices) ? data.voices.length : 0 });
-    } else {
-      res.json({ available: false });
-    }
-  } catch {
-    res.json({ available: false });
-  }
-});
-
-// ── Generate voice via openai-edge-tts (high quality, localhost:5050) ─────────
-app.post('/api/trend-vault/generate-voice-openai', async (req, res) => {
-  const { text, voice, speed } = req.body as { text: string; voice: string; speed?: number };
-  if (!text || !voice) { res.status(400).json({ error: 'text and voice required' }); return; }
-  try {
-    const r = await fetch('http://localhost:5050/v1/audio/speech', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'tts-1', voice, input: text, response_format: 'mp3', speed: speed ?? 1.0 }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!r.ok) throw new Error(`openai-edge-tts error: ${r.status}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.send(buf);
-  } catch (e) {
-    res.status(503).json({ error: (e as Error).message });
-  }
 });
 
 // ── Voice cloning: sample upload + storage ────────────────────────────────────
@@ -2075,7 +1958,6 @@ app.post('/api/trend-vault/generate-voice', async (req, res) => {
     res.setHeader('Content-Type', mimeType);
     res.send(buffer);
   } catch (e) {
-    // node-edge-tts throws plain strings ("Timed out") so coerce safely
     const msg = e instanceof Error ? e.message
       : typeof e === 'string' ? e
       : JSON.stringify(e) || 'Unknown voice generation error';
@@ -2335,12 +2217,11 @@ app.post('/api/trend-vault/render', async (req, res) => {
       if (t.audioPath && !fs.existsSync(t.audioPath)) {
         preflightErrors.push(`preview audio file missing on disk: ${t.audioPath}`);
       }
-      // Phase 8: provider mismatch — if timing was built by one engine but the
-      // render submits a different engine, the audio file won't match. Block it.
+      // Phase 8: provider mismatch — Kokoro is the only engine now, so this
+      // only triggers if a stale pre-cleanup preview is around.
       const tProv = (settings.previewTiming as { provider?: string }).provider;
-      const submittedEngine = settings.voiceEngine || 'auto';
-      if (tProv && submittedEngine !== 'auto' && tProv.indexOf(submittedEngine) === -1 && submittedEngine.indexOf(tProv) === -1) {
-        preflightErrors.push(`timeline audio was generated by ${tProv} but render requested ${submittedEngine} — regenerate the voice preview after switching providers`);
+      if (tProv && tProv !== 'kokoro' && tProv.indexOf('kokoro') === -1) {
+        preflightErrors.push(`timeline audio was generated by ${tProv} but only kokoro is supported now — regenerate the voice preview`);
       }
     }
   }

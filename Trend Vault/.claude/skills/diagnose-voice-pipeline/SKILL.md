@@ -1,65 +1,58 @@
 ---
 name: diagnose-voice-pipeline
-description: Use this skill whenever the user reports voice problems in the Trend Vault studio — the voice sounds robotic, kokoro isn't connecting, edge TTS keeps timing out, the preview doesn't match the rendered audio, the wrong engine is being used, the voice slider has no audible effect, or any other audio-pipeline weirdness. Trigger on phrases like "voice not working", "still hearing edge tts", "kokoro broken", "voice timed out", "preview doesn't match render", "audio pipeline issue", "the new sliders don't change anything", or anyone asking "why is my voice X". Use proactively the moment a voice issue is mentioned, before guessing.
+description: Use this skill whenever the user reports voice problems in the Trend Vault studio — Kokoro isn't connecting, the voice sounds wrong, the preview doesn't match the rendered audio, a slider has no audible effect, or any other audio-pipeline weirdness. The studio is Kokoro-only; there is no Edge/ElevenLabs/Piper fallback. Trigger on phrases like "voice not working", "kokoro broken", "no audio", "voice timed out", "preview doesn't match render", "audio pipeline issue", "sliders don't change anything".
 ---
 
 # Diagnose the voice pipeline
 
-The pipeline has six stages. Walk them in order — the first stage that fails is the bug.
+The pipeline has four stages. Walk them in order — the first stage that fails is the bug.
 
-## Stage 1: Engine selection in the UI
-
-Where: `state.voiceEngine` in `frontend/trend-vault.html` (default `'auto'`).
-
-- `'auto'` → try local first, fall back to Edge TTS
-- `'local'` → local only, throws a clear error if Kokoro is down
-- `'edge'` → always Edge TTS, skips local entirely
-
-If user said "I clicked Local Only and got a clear error", they're correctly diagnosing — go to stage 3. If user is in `auto` and "still hearing Edge", it means stage 3 is silently falling back. Check stage 2 first.
-
-## Stage 2: Node server `.env` loading
-
-The Node process reads `.env` **once at startup**.
-
-```
-http://localhost:3001/api/trend-vault/engine-status
-```
-
-Should return `localTts.ok: true, engine: "kokoro", url: "http://localhost:5070"`.
-
-If `localTts: { ok: false }` here, `LOCAL_TTS_URL` is not in the Node process's environment. Either:
-- It's missing from `.env` → add `LOCAL_TTS_URL=http://localhost:5070` and `LOCAL_TTS_ENGINE=kokoro`
-- Node was started before `.env` was edited → restart Node
-
-## Stage 3: Kokoro server reachability
+## Stage 1: Kokoro server reachable?
 
 ```
 http://localhost:5070/
 ```
 
-Should return `{"ok": true, "engine": "kokoro"}`. If not, Kokoro isn't running. Run `start-kokoro.bat` and wait for `Running on http://127.0.0.1:5070`.
+Should return `{"ok": true, "engine": "kokoro", "model": "kokoro-v0_19.onnx", ...}`. If not:
+- Server isn't running → click **Start Kokoro TTS** in the launcher, or run `start-kokoro.bat`. Wait for `Running on http://127.0.0.1:5070`.
+- Server crashed → look in its console window for a Python traceback.
+- Model missing → `setup-kokoro.bat` (idempotent; re-downloads only what's missing).
 
-## Stage 4: Preset → engine voice mapping
+## Stage 2: Node server can reach Kokoro?
 
-`scripts/tts/voicePresets.json` voices use Edge IDs like `en-US-DavisNeural`. The Kokoro server (`kokoro-tts/kokoro_server.py`) maps these to Kokoro voice ids in its `VOICE_MAP`. If a preset was added with a new Edge ID that isn't in the map, the server falls back to `af_bella`. To add new mappings, edit the dict in `kokoro_server.py` and restart Kokoro.
+```
+http://localhost:3001/api/trend-vault/engine-status
+```
 
-## Stage 5: Cinematic slider effect
+Should return `localTts: { ok: true, engine: "kokoro", url: "http://localhost:5070" }`.
+
+If `localTts.ok: false` here even though Stage 1 passed:
+- Node started before Kokoro → restart the Node server (close the cmd window + Start Web App in the launcher).
+- `LOCAL_TTS_URL` mis-set in `.env` → confirm it's `http://localhost:5070`. Default is the same, so removing it works too.
+
+## Stage 3: Preset → Kokoro voice mapping
+
+`scripts/tts/voicePresets.json` presets carry an `edgeId` (legacy field, e.g. `en-US-DavisNeural`). The Kokoro server (`kokoro-tts/kokoro_server.py`) maps these via `VOICE_MAP` to Kokoro voice ids (`am_adam`, `af_bella`, etc.). If a preset has a brand-new `edgeId` that isn't in the map, the server falls back to `af_bella`.
+
+Fix: add the mapping in `VOICE_MAP` and restart Kokoro.
+
+## Stage 4: Cinematic slider effect
 
 Where: `scripts/tts/audioPostProcess.ts` `buildFilterChain()`.
 
-The 4 sliders (`throatDepth`, `ancientRasp`, `royalPace`, `chamberSpace`) are folded into the FFmpeg chain. If a slider has no audible effect:
+The 4 sliders (`throatDepth`, `ancientRasp`, `royalPace`, `chamberSpace`) fold into the FFmpeg chain. If a slider has no audible effect:
 - Check `getVoiceParams()` in `trend-vault.html` — does it include the slider?
-- Check the server preview endpoint — does it forward the slider to `generateVoice`?
+- Check the server preview endpoint (`/api/trend-vault/voice-preview`) — does it forward the slider to `generateVoice`?
 - Check `ttsService.generateVoice` — does it pass it to `applyAudioFX`?
-- All three points were wired in the cinematic-narrator overhaul. If any link is broken, the change recently regressed.
+- All three points were wired in the cinematic-narrator overhaul. If a link is broken, something regressed recently.
 
-## Stage 6: Preview vs render mismatch
+## Preview vs render mismatch
 
-The preview and render call the SAME `generateVoice()` with the SAME params. If they differ:
-- Browser cached an old preview → cache-buster `?_=Date.now()` is already on the URL; force-refresh anyway.
-- The audio element didn't reload → `audioEl.load()` is called explicitly after setting `src`.
-- The render uses different params → check `getVoiceParams()` is included in render settings (`state.voice` is sent in render request).
+Preview and render both call `generateVoice()` with the same params. If they differ:
+- Browser cached an old preview → the URL has `?_=Date.now()`; force-refresh anyway.
+- `audioEl.load()` is called explicitly after setting `src` — verify.
+- Different params on render → check `state.voice` (the preset+sliders bundle) is in the render request body.
 
 ## How to report findings
 
-After running the diagnosis, tell the user the **exact failed stage**, what's broken, and the one-line fix. Don't dump every check — surface the actual cause.
+Surface the **failed stage** and the one-line fix. Don't dump every check — just the cause.

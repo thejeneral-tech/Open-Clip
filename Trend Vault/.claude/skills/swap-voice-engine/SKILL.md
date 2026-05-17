@@ -1,84 +1,40 @@
 ---
 name: swap-voice-engine
-description: Use this skill when the user wants to switch the voice engine — between local Kokoro and Microsoft Edge TTS, force Kokoro only, get rid of Edge, set up a new local TTS server like Coqui or Piper, or change which engine handles a specific render. Trigger on phrases like "switch to kokoro", "stop using edge tts", "force local voices", "use coqui instead", "swap to piper", "rip out microsoft voices for real this time".
+description: Use this skill when the user wants to change how voices are produced — adjust the Kokoro server, swap voice presets, or troubleshoot the local TTS pipeline. The studio is Kokoro-only; there is no Edge / ElevenLabs / Piper fallback. Trigger on "switch voice", "voice engine broken", "use a different voice", "kokoro mapping", "voice not playing".
 ---
 
-# Swap the voice engine
+# Voice engine — Kokoro only
 
-The Trend Vault project supports three voice engine modes selected via UI chip in the Voice Preset card:
+The Trend Vault studio uses one TTS engine: the local **Kokoro** Python server in `kokoro-tts/`.
+ElevenLabs, Microsoft Edge TTS, and Piper have all been removed. There is **no fallback** — if Kokoro isn't running, voice generation fails with a clear error pointing at `start-kokoro.bat`.
 
-| Mode | Behavior |
-|---|---|
-| `auto` (default) | Try the local TTS server first; if it fails, fall back to Edge TTS |
-| `local` | Local TTS only; if no local server is reachable, surface a clear error |
-| `edge` | Always use Microsoft Edge TTS (cloud); skip the local server |
+## Where the wiring lives
 
-The wiring lives in:
-- `frontend/trend-vault.html` — `state.voiceEngine` chip handlers
-- `server.ts` — engine forwarded into `generateVoice`
-- `scripts/tts/ttsService.ts` — engine selection logic
-- `scripts/tts/localTtsAdapter.ts` — HTTP adapter for local engines
+- `kokoro-tts/kokoro_server.py` — Flask server on `:5070`. The `VOICE_MAP` dict at the top translates the legacy Edge Neural ids stored in `voicePresets.json` (`en-US-DavisNeural`, etc.) to Kokoro voices (`am_adam`, `af_bella`, …). Add a new mapping there if you wire up a preset with a `edgeId` not already covered.
+- `scripts/tts/localTtsAdapter.ts` — thin HTTP client that posts `{ text, voice, speed }` to `/tts`. If the server is unreachable it returns null.
+- `scripts/tts/ttsService.ts` — the only TTS entry point. Calls Kokoro and throws a "start the Kokoro server" error on failure.
+- `server.ts` — `/api/trend-vault/generate-voice`, `/api/trend-vault/voice-preview`, and the render path all flow through `ttsService.generateVoice()`. No engine selection logic exists.
+- `frontend/trend-vault.html` — no engine chips, no per-engine UI. Voice preset grid + sliders only.
 
-## To make a clean switch FROM Edge TO Kokoro
+## Common tasks
 
-1. Run `setup-kokoro.bat` once (creates a Python venv + installs Kokoro + downloads model).
-2. Run `start-kokoro.bat` to launch the Kokoro server on port 5070.
-3. Edit `.env` to include:
-   ```
-   LOCAL_TTS_URL=http://localhost:5070
-   LOCAL_TTS_ENGINE=kokoro
-   ```
-4. Restart the Node server (must read updated `.env`).
-5. In the studio, click the **🏠 Local Only** chip. Voice card's status line should turn green with `Local TTS: kokoro @ http://localhost:5070`.
-6. Click ▶ PREVIEW. The MP3 played is now coming from Kokoro, fully bypassing Microsoft.
+**The voice doesn't play / preview fails.**
+1. Check the launcher's Kokoro card — green dot means port 5070 is bound.
+2. Hit `http://127.0.0.1:5070/` directly; should return `{"ok":true,"engine":"kokoro",…}`.
+3. Look in the Kokoro console window for Python tracebacks.
+4. If the model file is missing the server logs it on boot — run `setup-kokoro.bat`.
 
-## To swap Kokoro for Coqui XTTS or Piper
+**A preset sounds wrong / the wrong Kokoro voice plays.**
+The preset's `edgeId` in `scripts/tts/voicePresets.json` is the lookup key. Open `kokoro-tts/kokoro_server.py` and update `VOICE_MAP[<edgeId>]` to a different Kokoro voice. The valid Kokoro voices for v0.19 are: `af_bella`, `af_sarah`, `af_nicole`, `af_sky`, `am_adam`, `am_michael`, `bf_emma`, `bf_isabella`, `bm_george`, `bm_lewis`. Restart Kokoro after editing.
 
-The adapter speaks two protocols — Kokoro-style (`POST /tts` JSON) and Coqui XTTS-style (`GET /api/tts?text=...`).
+**Adding a brand-new preset.**
+Append to `voicePresets.json` with a `edgeId` that's already in `VOICE_MAP`. Easiest: pick an existing preset whose voice you want to clone, copy its `edgeId`.
 
-For **Coqui XTTS**:
-1. `pip install TTS`
-2. Run their built-in server: `tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2` (port 5002 by default)
-3. `.env`:
-   ```
-   LOCAL_TTS_URL=http://localhost:5002
-   LOCAL_TTS_ENGINE=coqui
-   ```
-4. Restart Node, hard-refresh studio, pick Local Only.
+**A preset with a brand-new `edgeId` was added (e.g. from MP3 Voice Editor).**
+Add an entry to `VOICE_MAP`; otherwise the preset falls back to `af_bella`.
 
-For **Piper**:
-1. Download `piper.exe` + a voice `.onnx` from https://github.com/rhasspy/piper/releases.
-2. Wrap in a small HTTP server that exposes `POST /tts` (the adapter expects the Kokoro protocol — easiest path is a 30-line Flask wrapper).
-3. Point `LOCAL_TTS_URL` at it, set `LOCAL_TTS_ENGINE=piper`.
+## What NOT to do
 
-## Voice mapping
-
-Each preset's `edgeId` (like `en-US-DavisNeural`) is what the studio sends in the local request body. The local server is responsible for mapping that to its own voice id.
-
-For Kokoro: `kokoro-tts/kokoro_server.py` has `VOICE_MAP`. To add new mappings:
-```python
-VOICE_MAP = {
-    "en-US-AriaNeural":    "af_bella",
-    "en-US-DavisNeural":   "am_michael",
-    # add new mappings here
-}
-```
-
-Restart Kokoro after editing.
-
-## To rip Edge TTS out for real
-
-Edge TTS is still in the codebase as a defensive fallback. To FORCE all renders through local:
-
-1. Set the studio's engine chip to `🏠 Local Only`. This is per-session.
-2. To persist it across sessions, edit `state.voiceEngine` default in `frontend/trend-vault.html` from `'auto'` to `'local'`. The autosave layer respects this.
-3. To remove Edge TTS code entirely, delete `import { edgeTtsToFile } from './edgeTtsAdapter'` from `ttsService.ts` and remove the `await edgeTtsToFile(...)` call. The `if (engine === 'local')` path already throws a clear error if local fails — so removing Edge breaks `auto` mode. Don't do this unless local is rock-solid.
-
-## After swapping
-
-Verify via:
-```
-http://localhost:3001/api/trend-vault/engine-status
-```
-
-`localTts.ok: true` confirms the Node server can reach the new local engine. Any voice preview from this point uses it.
+- Don't reintroduce `node-edge-tts`, ElevenLabs, or Piper "as a fallback." The user explicitly removed them. Voice failures should surface a clear "start Kokoro" error, not silently degrade.
+- Don't add `voiceEngine` back to API request bodies or `state` — every consumer was simplified to assume Kokoro.
+- Don't add a `LOCAL_TTS_ENGINE` env var; the adapter is hard-coded to speak the Kokoro `POST /tts` protocol.

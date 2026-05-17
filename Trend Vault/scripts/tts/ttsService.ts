@@ -23,6 +23,9 @@ export interface VoicePreset {
   name: string;
   icon: string;
   description: string;
+  // Legacy Edge Neural voice id (e.g. "en-US-DavisNeural") — still carried in
+  // voicePresets.json because the Kokoro server uses it as the lookup key in
+  // its VOICE_MAP. Don't rename or drop it.
   edgeId: string;
   defaults: {
     pitch: number;
@@ -47,10 +50,6 @@ export interface GenerateVoiceOptions {
   volume?: number;
   intensity?: number;
   preview?: boolean; // truncate to ~12s
-  // Engine policy (UI-driven). 'auto' = local first, fall back to Edge TTS.
-  // 'local' = local only, raise an error if no local server is running.
-  // 'edge'  = always Microsoft Edge TTS.
-  engine?: 'auto' | 'local' | 'edge';
   // ── Cinematic narrator sliders (0-100) ────────────────────────────────────
   throatDepth?:  number;
   ancientRasp?:  number;
@@ -62,37 +61,6 @@ function tmpFile(ext: string): string {
   return path.join(os.tmpdir(), `trend-vault-tts-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
 }
 
-async function edgeTtsToFile(text: string, voiceId: string, outputPath: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { EdgeTTS } = require('node-edge-tts');
-
-  // node-edge-tts throws plain strings ("Timed out") on network errors instead
-  // of Error objects — that's why server.ts logs showed
-  // `(e as Error).message === undefined`. Wrap with retry + proper coercion.
-  const attempt = async (): Promise<void> => {
-    const tts = new EdgeTTS({
-      voice: voiceId,
-      outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
-    });
-    await tts.ttsPromise(text, outputPath);
-  };
-
-  let lastErr: unknown;
-  for (let i = 0; i < 2; i++) {
-    try {
-      await attempt();
-      return;
-    } catch (e) {
-      lastErr = e;
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
-  const msg = lastErr instanceof Error ? lastErr.message
-    : typeof lastErr === 'string' ? lastErr
-    : JSON.stringify(lastErr);
-  throw new Error(`Edge TTS failed for "${voiceId}": ${msg}. Check internet connection or try another preset.`);
-}
-
 export async function generateVoice(opts: GenerateVoiceOptions): Promise<{ buffer: Buffer; mimeType: string }> {
   // Look up in built-in presets first, then in user-saved custom presets on disk
   const preset =
@@ -101,11 +69,10 @@ export async function generateVoice(opts: GenerateVoiceOptions): Promise<{ buffe
   if (!preset) throw new Error(`Unknown preset: ${opts.presetId}`);
 
   // Punctuation- + cadence-aware preprocessing — produces TTS-ready text with
-  // intentional ellipsis pauses, cleaned em-dashes, and prosody cues. This is
-  // the single biggest "less robotic" upgrade short of swapping engines.
+  // intentional ellipsis pauses, cleaned em-dashes, and prosody cues.
   // The Royal Pace slider takes priority — when it's > 0 the dramatic-dwell
   // formula drives pause durations directly. Otherwise we use the per-preset
-  // cinematic/default config (existing behavior).
+  // cinematic/default config.
   const isCinematic = /cave_oracle|dungeon_wizard|cosmic_monk|dark_story|forbidden|shadow_prophet|gravel_king|ancient_librarian|ethereal|mythic|raspy|ancient_king|medieval_oracle|cave_prophet|dungeon_storyteller|old_warlock|cathedral_monk|gravel_knight|shadow_bard|elder_dragon|royal_seer|night_watchman|stone_temple|wandering_sage|dark_cosmos|flamekeeper|quiet_giant|old_kingdom/i.test(preset.id);
   const pauseCfg = (opts.royalPace && opts.royalPace > 0)
     ? pauseConfigFromRoyalPace(opts.royalPace)
@@ -124,30 +91,18 @@ export async function generateVoice(opts: GenerateVoiceOptions): Promise<{ buffe
   const outPath = tmpFile('.mp3');
 
   try {
-    // Step 1: Engine selection driven by UI toggle.
-    //   auto  → try local first, fall back to Edge TTS
-    //   local → local only; throw a clear error if no local server is up
-    //   edge  → skip local, use Edge TTS (current default)
-    const engine = opts.engine ?? 'auto';
-    let usedLocal = false;
-    if (engine !== 'edge') {
-      const local = await generateVoiceLocal({
-        text,
-        voice:   preset.edgeId,
-        speed:   opts.speed ?? preset.defaults.speed,
-        outPath: rawPath,
-      });
-      usedLocal = !!local;
-      if (!usedLocal && engine === 'local') {
-        throw new Error(
-          'Voice engine set to LOCAL ONLY but no local TTS server reachable. ' +
-          'Set LOCAL_TTS_URL in .env (e.g. http://localhost:5070 for Kokoro) and start the server. ' +
-          'See scripts/tts/localTtsAdapter.ts for setup steps.'
-        );
-      }
-    }
-    if (!usedLocal) {
-      await edgeTtsToFile(text, preset.edgeId, rawPath);
+    // Step 1: Synthesize via the local Kokoro server (only supported engine).
+    const local = await generateVoiceLocal({
+      text,
+      voice:   preset.edgeId,
+      speed:   opts.speed ?? preset.defaults.speed,
+      outPath: rawPath,
+    });
+    if (!local) {
+      throw new Error(
+        'Kokoro TTS server is not reachable. Start it with start-kokoro.bat ' +
+        '(the launcher\'s Kokoro card does the same thing) and try again.'
+      );
     }
 
     // Step 2: Apply FFmpeg post-processing (pitch, speed, EQ, reverb, etc.)
