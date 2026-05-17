@@ -112,16 +112,6 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .btn-render-local:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 22px rgba(13,148,136,.42)}
 .btn-render-local:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 8px rgba(13,148,136,.3)}
 
-/* ElevenLabs — API/voice action (muted purple-indigo) */
-.btn-render-el{
-  background:linear-gradient(135deg,rgba(124,58,237,.75) 0%,rgba(99,43,200,.85) 100%);
-  color:#e9d5ff;
-  box-shadow:0 4px 16px rgba(124,58,237,.22),inset 0 1px 0 rgba(255,255,255,.08);
-  border:1px solid rgba(167,139,250,.25);
-}
-.btn-render-el:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 7px 22px rgba(124,58,237,.38)}
-.btn-render-el:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 8px rgba(124,58,237,.2)}
-
 /* ── Resolution / Format / Output info box ── */
 .export-meta{display:flex;flex-direction:column;gap:9px;padding:13px 14px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:10px;font-size:.76rem}
 .export-meta-row{display:flex;justify-content:space-between;align-items:center;color:var(--text2);gap:8px}
@@ -1105,7 +1095,6 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <button class="effect-chip"        data-engine="local"       onclick="setVoiceEngine('local',this)"       title="Local TTS only (Kokoro/Coqui/Piper). Requires LOCAL_TTS_URL in .env">🏠 Local Only</button>
       <button class="effect-chip"        data-engine="edge"        onclick="setVoiceEngine('edge',this)"        title="Microsoft Edge TTS (cloud, always available)">☁ Edge TTS</button>
       <!-- Fish Speech removed — bridge no longer active -->
-      <button class="effect-chip"        data-engine="elevenlabs"  onclick="setVoiceEngine('elevenlabs',this)"  title="ElevenLabs — top-tier AI voice with REAL per-word timestamps">✨ ElevenLabs</button>
     </div>
     <div id="engineStatusLine" style="font-size:.6rem;color:var(--muted);margin-bottom:6px;letter-spacing:.3px"></div>
     <!-- Dirty-state badges: script / voice / timing / preview / render -->
@@ -1139,41 +1128,6 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         </button>
       </div>
       <div id="voiceSampleStatus" style="font-size:.6rem;color:var(--muted);margin-top:4px;min-height:14px">click 🔊 Preview Voice Only to hear the selected voice</div>
-    </div>
-
-    <!-- ── ElevenLabs Panel (shown only when engine = elevenlabs) ─────────── -->
-    <div id="elevenLabsPanel" style="display:none;flex-direction:column;gap:10px;background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.25);border-radius:12px;padding:14px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:8px;font-size:.7rem">
-        <strong style="color:var(--gold2)">✨ ElevenLabs</strong>
-        <span id="elStatusDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#94a3b8"></span>
-        <span id="elStatusText" style="color:var(--muted);font-size:.65rem">checking…</span>
-        <span style="margin-left:auto;color:var(--muted);font-size:.6rem" id="elUsageText"></span>
-        <button onclick="refreshElevenLabsUsageOnly()" title="Refresh ElevenLabs usage"
-                style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:1px 6px;font-size:.6rem;cursor:pointer">↻</button>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <select id="elVoiceSelect" onchange="state.elVoice.voiceId=this.value; markDirty('voice')"
-                style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.7rem;padding:6px 8px;font-family:inherit">
-          <option value="">(loading voices…)</option>
-        </select>
-        <button onclick="elPreviewVoice()" class="preview-nav-btn" style="padding:6px 10px;font-size:.66rem" title="Hear this voice on the current script">🔊 Preview</button>
-        <button onclick="elSaveAsPreset()" class="preview-nav-btn" style="padding:6px 10px;font-size:.66rem" title="Save current voice + tuning as a reusable preset">💾 Save Preset</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-        <label style="font-size:.6rem;color:var(--muted)">Stability
-          <input type="range" min="0" max="100" value="50" oninput="state.elVoice.stability=this.value/100"
-                 style="width:100%;margin-top:2px"/>
-        </label>
-        <label style="font-size:.6rem;color:var(--muted)">Similarity
-          <input type="range" min="0" max="100" value="75" oninput="state.elVoice.similarity=this.value/100"
-                 style="width:100%;margin-top:2px"/>
-        </label>
-        <label style="font-size:.6rem;color:var(--muted)">Style
-          <input type="range" min="0" max="100" value="0" oninput="state.elVoice.style=this.value/100"
-                 style="width:100%;margin-top:2px"/>
-        </label>
-      </div>
-      <div id="elPresetList" style="display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto;font-size:.62rem"></div>
     </div>
 
     <!-- ── Fish Speech Panel (shown only when engine = fish-speech) ───────── -->
@@ -2042,13 +1996,10 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       </div>
     </div>
 
-    <!-- Render buttons: LOCAL left (primary), ELEVENLABS right (API) -->
+    <!-- Render button: LOCAL (Kokoro) -->
     <div class="render-btn-row" style="margin-bottom:18px">
       <button class="btn-render-big btn-render-local" onclick="renderVideo('local')" id="renderBtnLocal">
         <span style="font-size:.95rem;line-height:1">🎙</span> Local Render
-      </button>
-      <button class="btn-render-big btn-render-el" onclick="renderVideo('elevenlabs')" id="renderBtnEl">
-        <span style="font-size:.95rem;line-height:1">⚡</span> ElevenLabs
       </button>
     </div>
 
@@ -2105,7 +2056,6 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   </div>
   <button class="btn-primary" onclick="generateScript()" id="genBtnBar">✨ Generate Script</button>
   <button onclick="exportToCapCut()" id="capcutExportBtn" title="Export this project as a CapCut draft for manual finishing in CapCut" style="padding:10px 16px;background:rgba(0,217,232,.15);border:1px solid rgba(0,217,232,.45);border-radius:9px;color:#67e8f9;font-size:.74rem;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.5px;display:flex;align-items:center;gap:6px">📤 CapCut</button>
-  <button onclick="renderVideo('elevenlabs')" id="renderBtnBarEl" style="padding:10px 16px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:9px;color:#0a0614;font-size:.78rem;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.5px;display:flex;align-items:center;gap:5px">⚡ EL Render</button>
   <button onclick="renderVideo('local')" id="renderBtnBarLocal" style="padding:10px 16px;background:linear-gradient(135deg,#059669,#047857);border:none;border-radius:9px;color:#fff;font-size:.78rem;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.5px;display:flex;align-items:center;gap:5px">🎙 Local Render</button>
 </div>
 
@@ -2190,7 +2140,7 @@ const state = {
   textSyncOffsetMs:    0,      // -300 to +300; shifts caption display relative to audio
   // ── Voice Sample (voice-only preview, kept SEPARATE from timeline audio) ──
   voiceSample: null,           // {provider, voiceId, voiceName, audioUrl, durationSeconds, isPlayable, error, generatedAt}
-  activeTimelineProvider: null,// 'auto'|'edge'|'fish-speech'|'elevenlabs' — set by Use In Timeline
+  activeTimelineProvider: null,// 'auto'|'edge'|'fish-speech' — set by Use In Timeline
   // ── Dirty-state machine (Phase 3) ───────────────────────────────────────
   // Each becomes true when its inputs change; cleared when the corresponding
   // pipeline completes. UI badges read these flags via refreshDirtyBadges().
@@ -3581,7 +3531,6 @@ function onVoiceSlider(sliderId, valId, fmt){
 function getVoiceParams(){
   const p = VOICE_PRESETS.find(x=>x.id===state.voice) || VOICE_PRESETS[0];
   const ps = (p && p.sliders) || {}; // cinematic-slider defaults from preset
-  const el = state.elVoice || {};
   return {
     presetId:  p.id,
     pitch:     voiceSliders.pitch     ?? p.defaults.pitch,
@@ -3593,14 +3542,6 @@ function getVoiceParams(){
     ancientRasp:  voiceSliders.ancientRasp  ?? ps.ancientRasp  ?? 0,
     royalPace:    voiceSliders.royalPace    ?? ps.royalPace    ?? 0,
     chamberSpace: voiceSliders.chamberSpace ?? ps.chamberSpace ?? 0,
-    // ElevenLabs — only consumed by server when voiceEngine='elevenlabs'.
-    // Always sent so the user can A/B test by just toggling the engine chip.
-    elevenLabsVoiceId: el.voiceId,
-    elevenLabsModel:   el.modelId,
-    stability:    el.stability,
-    similarity:   el.similarity,
-    style:        el.style,
-    speakerBoost: el.speakerBoost,
   };
 }
 
@@ -3837,7 +3778,7 @@ function testPreset(id){
 }
 
 function previewVoice(){
-  // Fish & ElevenLabs go through the FULL voice-preview pipeline so that
+  // Fish goes through the FULL voice-preview pipeline so that
   // captions/timeline are also generated. The old code routed Fish Speech to
   // the raw bridge endpoint which returned binary audio without captions,
   // leaving the preview timeline stuck on the previous voice/script.
@@ -3847,7 +3788,6 @@ function previewVoice(){
     generateVoicePreview();
     return;
   }
-  if(state.voiceEngine === 'elevenlabs'){  elPreviewVoice(); return; }
   if(!state.voice){ showToast('Select a voice preset first','error'); return; }
   const line = state.script[state.voicePreviewLine%Math.max(1,state.script.length)]?.text
     || "The truth they never say out loud.";
@@ -4516,21 +4456,17 @@ function setVoiceEngine(engine, btn){
     local:        'Local Only — needs Kokoro/Coqui running',
     edge:         'Microsoft Edge TTS (cloud)',
     'fish-speech':'Fish Speech — local AI voice',
-    elevenlabs:   'ElevenLabs — premium AI voice with word-level timestamps',
   };
   showToast(`🎙 Voice engine: ${labels[engine] || engine}`, 'info');
 
-  // Show Fish Speech panel / ElevenLabs panel; hide standard preset grid as needed
+  // Show Fish Speech panel; hide standard preset grid as needed
   const fishPanel  = document.getElementById('fishSpeechPanel');
-  const elPanel    = document.getElementById('elevenLabsPanel');
   const presetGrid = document.getElementById('presetGrid');
   const voiceSliders = document.getElementById('voiceSliders');
   const isFish = engine === 'fish-speech';
-  const isEL   = engine === 'elevenlabs';
   if(fishPanel)    fishPanel.style.display    = isFish ? 'flex' : 'none';
-  if(elPanel)      elPanel.style.display      = isEL   ? 'flex' : 'none';
-  if(presetGrid)   presetGrid.style.display   = (isFish || isEL) ? 'none' : '';
-  if(voiceSliders) voiceSliders.style.display = (isFish || isEL) ? 'none' : '';
+  if(presetGrid)   presetGrid.style.display   = isFish ? 'none' : '';
+  if(voiceSliders) voiceSliders.style.display = isFish ? 'none' : '';
 
   if(isFish){
     checkFishSpeechStatus();
@@ -4540,164 +4476,7 @@ function setVoiceEngine(engine, btn){
       if(histPanel && (d.history||[]).length > 0) histPanel.style.display = 'flex';
     }).catch(()=>{});
   }
-  else if(isEL) refreshElevenLabs();
   else refreshEngineStatus();
-}
-
-// ── ElevenLabs panel handlers ───────────────────────────────────────────────
-async function refreshElevenLabs(){
-  const dot = document.getElementById('elStatusDot');
-  const txt = document.getElementById('elStatusText');
-  const sel = document.getElementById('elVoiceSelect');
-  const use = document.getElementById('elUsageText');
-  if(!sel) return;
-  try{
-    const [vR, pR] = await Promise.all([
-      fetch(`${API_BASE}/api/elevenlabs/voices`),
-      fetch(`${API_BASE}/api/elevenlabs/presets`),
-    ]);
-    const v = await vR.json();
-    const p = await pR.json();
-    if(!v.ok){
-      if(dot) dot.style.background = '#f87171';
-      if(txt) txt.textContent = v.error || 'unavailable';
-      sel.innerHTML = '<option value="">(unavailable)</option>';
-      return;
-    }
-    if(dot) dot.style.background = '#34d399';
-    if(txt) txt.textContent = `${v.voices.length} voices · ready`;
-
-    // ── Phase 5: TikTok Voices group ───────────────────────────────────────
-    // ElevenLabs ships five well-known pre-made voices that work perfectly
-    // for TikTok-style narration. We pin them at the top in their own
-    // optgroup so users can pick them with one click. Voice IDs are the
-    // public, stable, pre-made IDs from ElevenLabs (same for every account).
-    const TIKTOK_VOICES = [
-      { name: 'Adam',    voiceId: 'pNInz6obpgDQGcFmaJgB' },
-      { name: 'Antoni',  voiceId: 'ErXwobaYiN019PkySvjV' },
-      { name: 'Josh',    voiceId: 'TxGEqnHWrfWFTfGW9XjX' },
-      { name: 'Arnold',  voiceId: 'VR6AewLTigWG4xSOukaG' },
-      { name: 'Rachel',  voiceId: '21m00Tcm4TlvDq8ikWAM' },
-    ];
-    // If the user's account exposes one of these by a different ID, prefer
-    // the account's live ID (so the voice always works). Match by name.
-    const liveByName = new Map(v.voices.map(o => [String(o.name).toLowerCase(), o]));
-    const tiktokOptions = TIKTOK_VOICES.map(t => {
-      const live = liveByName.get(t.name.toLowerCase());
-      const id   = live?.voice_id || t.voiceId;
-      const tag  = live ? '' : ' · pre-made';
-      return `<option value="${id}" data-tiktok="1">${t.name}${tag}</option>`;
-    }).join('');
-
-    // Remove TikTok voices from the "all" group so they don't appear twice
-    const tiktokIds = new Set(TIKTOK_VOICES.map(t =>
-      liveByName.get(t.name.toLowerCase())?.voice_id || t.voiceId
-    ));
-    const otherOptions = v.voices.filter(o => !tiktokIds.has(o.voice_id)).map(o =>
-      `<option value="${o.voice_id}">${o.name}${o.category ? ' · ' + o.category : ''}</option>`
-    ).join('');
-
-    sel.innerHTML =
-      '<optgroup label="🎵 TikTok Voices">'  + tiktokOptions + '</optgroup>' +
-      '<optgroup label="All ElevenLabs Voices">' + otherOptions + '</optgroup>';
-
-    if(!state.elVoice) state.elVoice = {};
-    if(!state.elVoice.voiceId){
-      // Default to Adam if the user hasn't chosen anything yet
-      const adamId = liveByName.get('adam')?.voice_id || 'pNInz6obpgDQGcFmaJgB';
-      state.elVoice.voiceId = adamId;
-      sel.value = adamId;
-    } else {
-      sel.value = state.elVoice.voiceId;
-    }
-    if(use) use.textContent = `${p.usage?.count || 0} / ${p.usage?.budget || 0} renders used`;
-    // Render saved presets
-    const list = document.getElementById('elPresetList');
-    if(list){
-      list.innerHTML = (p.presets || []).map(ps =>
-        `<div style="display:flex;gap:6px;align-items:center;padding:4px 6px;background:var(--surface2);border-radius:6px">
-           <button onclick="elApplyPreset('${ps.id}')" class="preview-nav-btn" style="padding:3px 8px;font-size:.6rem">${ps.name}</button>
-           <span style="flex:1;color:var(--muted)">voice:${ps.voiceId.slice(0,8)}…  stab:${(ps.stability??0.5).toFixed(2)}  sim:${(ps.similarity??0.75).toFixed(2)}</span>
-           <button onclick="elDeletePreset('${ps.id}')" class="preview-nav-btn" style="padding:3px 6px;font-size:.6rem;color:#f87171">✕</button>
-         </div>`
-      ).join('') || '<span style="color:var(--muted);font-size:.6rem">no saved presets yet</span>';
-    }
-  }catch(e){
-    if(dot) dot.style.background = '#f87171';
-    if(txt) txt.textContent = e.message;
-  }
-}
-
-// Lightweight usage-only refresh — does NOT re-fetch the voice list. Called
-// after every render or preview that actually used ElevenLabs so the budget
-// number updates without a full page refresh.
-async function refreshElevenLabsUsageOnly(){
-  const use = document.getElementById('elUsageText');
-  if(!use) return;
-  const previous = use.textContent;
-  use.textContent = '⏳ updating usage…';
-  try{
-    const r = await fetch(`${API_BASE}/api/elevenlabs/presets`, { cache: 'no-store' });
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const p = await r.json();
-    use.textContent = `${p.usage?.count || 0} / ${p.usage?.budget || 0} renders used`;
-    use.style.color = '';
-  }catch(e){
-    use.textContent = previous || '(usage unavailable)';
-    use.style.color = '#f87171';
-    use.title = 'Usage refresh failed: ' + (e?.message || e);
-  }
-}
-
-window.refreshElevenLabsUsageOnly = refreshElevenLabsUsageOnly;
-
-async function elPreviewVoice(){
-  if(!state.elVoice?.voiceId){ showToast('Pick an ElevenLabs voice first','error'); return; }
-  if(!state.script?.length){ showToast('Generate a script first','info'); return; }
-  await generateVoicePreview();
-}
-
-async function elSaveAsPreset(){
-  if(!state.elVoice?.voiceId){ showToast('Pick an ElevenLabs voice first','error'); return; }
-  const sel = document.getElementById('elVoiceSelect');
-  const voiceName = sel?.options[sel.selectedIndex]?.text || 'Voice';
-  const name = prompt('Preset name:', voiceName.split(' · ')[0]);
-  if(!name) return;
-  const r = await fetch(`${API_BASE}/api/elevenlabs/presets`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      name, voiceId: state.elVoice.voiceId,
-      stability:  state.elVoice.stability  ?? 0.5,
-      similarity: state.elVoice.similarity ?? 0.75,
-      style:      state.elVoice.style      ?? 0.0,
-      speakerBoost: state.elVoice.speakerBoost ?? true,
-    }),
-  });
-  const d = await r.json();
-  if(d.ok){ showToast('Preset saved: ' + name, 'success'); refreshElevenLabs(); }
-  else    { showToast('Save failed: ' + d.error, 'error'); }
-}
-
-async function elApplyPreset(id){
-  const r = await fetch(`${API_BASE}/api/elevenlabs/presets`);
-  const d = await r.json();
-  const ps = (d.presets || []).find(x => x.id === id);
-  if(!ps) return;
-  if(!state.elVoice) state.elVoice = {};
-  state.elVoice.voiceId = ps.voiceId;
-  state.elVoice.stability  = ps.stability;
-  state.elVoice.similarity = ps.similarity;
-  state.elVoice.style      = ps.style;
-  state.elVoice.speakerBoost = ps.speakerBoost;
-  const sel = document.getElementById('elVoiceSelect');
-  if(sel) sel.value = ps.voiceId;
-  showToast('Applied: ' + ps.name, 'info');
-}
-
-async function elDeletePreset(id){
-  if(!confirm('Delete this preset?')) return;
-  await fetch(`${API_BASE}/api/elevenlabs/presets/${id}`, { method:'DELETE' });
-  refreshElevenLabs();
 }
 
 async function refreshEngineStatus(){
@@ -4709,7 +4488,6 @@ async function refreshEngineStatus(){
     const d = await r.json();
     const localOk     = d.localTts?.ok;
     const localEngine = d.localTts?.engine || 'kokoro';
-    const elOk        = d.elevenlabs?.configured;
     const fishOk      = d.fishSpeech?.bridgeOk;
     const fishApiOk   = d.fishSpeech?.apiOk;
     const dot = (ok) => ok ? '<span style="color:#86efac">●</span>' : '<span style="color:#fca5a5">●</span>';
@@ -4719,8 +4497,7 @@ async function refreshEngineStatus(){
     line.innerHTML =
       `${dot(true)} Edge: ready &nbsp;|&nbsp; ` +
       `${dot(localOk)} Local: ${localOk ? localEngine : 'off'} &nbsp;|&nbsp; ` +
-      `${dot(fishOk)} Fish Speech: ${fishLabel} &nbsp;|&nbsp; ` +
-      `${dot(elOk)} ElevenLabs: ${elOk ? 'key set' : 'no key'}`;
+      `${dot(fishOk)} Fish Speech: ${fishLabel}`;
   } catch { /* server might be starting */ }
 }
 
@@ -5017,8 +4794,7 @@ async function fishSpeechGenerate(customText){
         state.lastFishRating    = null;
         state.lastFishAudioUrl  = audioUrl;
         // ── Build Fish-specific previewTiming from actual audio duration ──
-        // This is critical: render and preview must use Fish audio duration,
-        // NOT leftover ElevenLabs timing from a prior generation.
+        // This is critical: render and preview must use Fish audio duration.
         const fishDurSec = j.duration_sec || null;
         if(fishDurSec && fishDurSec > 0){
           const wordCount = (text||'').split(/\S+/).length - 1;
@@ -6242,9 +6018,9 @@ function getTimingHash(){
   // Cinematic-slider overrides live in the module-level `voiceSliders` const,
   // NOT on `state` — the previous reference to `state.voiceSliders` was always
   // undefined, so slider tweaks were silently invisible to the staleness check.
-  // Stringify the actual map so any change flips the hash. We also include the
-  // ElevenLabs model id and Fish pitch/normalize so changing those mid-session
-  // invalidates the preview properly (matches the server-side voiceKey).
+  // Stringify the actual map so any change flips the hash. We also include
+  // Fish pitch/normalize so changing those mid-session invalidates the
+  // preview properly (matches the server-side voiceKey).
   let sliderBlob = '';
   try { sliderBlob = (typeof voiceSliders === 'object' && voiceSliders) ? JSON.stringify(voiceSliders) : ''; }
   catch { sliderBlob = ''; }
@@ -6256,12 +6032,6 @@ function getTimingHash(){
     state.fishTemp ?? 0,
     state.fishPitch ?? 0,
     state.fishNormalize ?? '',
-    state.elVoice?.voiceId || '',
-    state.elVoice?.modelId || '',
-    state.elVoice?.stability ?? '',
-    state.elVoice?.similarity ?? '',
-    state.elVoice?.style ?? '',
-    state.elVoice?.speakerBoost ?? '',
     sliderBlob,
   ].join('|');
   let h = 0;
@@ -6391,10 +6161,6 @@ function _resolveVoiceName(){
     const sel = document.getElementById('fishVoiceSelect');
     return sel?.options?.[sel.selectedIndex]?.text || state.fishVoice || 'Fish Voice';
   }
-  if(state.voiceEngine === 'elevenlabs'){
-    const sel = document.getElementById('elVoiceSelect');
-    return sel?.options?.[sel.selectedIndex]?.text || 'ElevenLabs Voice';
-  }
   return state.voice || state.voiceEngine || 'Voice';
 }
 
@@ -6407,10 +6173,6 @@ async function previewVoiceOnlySample(){
     return;
   }
   if(_voiceSampleInFlight){ showToast('Already generating a sample — wait for it to finish','info'); return; }
-  if(state.voiceEngine === 'elevenlabs' && !state.elVoice?.voiceId){
-    _setSampleStatus('✗ Voice ID missing. Pick an ElevenLabs voice first.', '#f87171');
-    return;
-  }
 
   const btn = document.getElementById('voiceSamplePreviewBtn');
   const audioEl = document.getElementById('voiceSampleAudio');
@@ -6465,7 +6227,7 @@ async function previewVoiceOnlySample(){
     const voiceName = _resolveVoiceName();
     state.voiceSample = {
       provider:        data.resolvedEngine || state.voiceEngine || 'auto',
-      voiceId:         state.elVoice?.voiceId || state.fishVoice || state.voice || null,
+      voiceId:         state.fishVoice || state.voice || null,
       voiceName,
       audioUrl:        data.audioUrl,
       durationSeconds: audioEl.duration || data.audioDurationSec || 0,
@@ -6752,8 +6514,8 @@ let _previewAudioRAF = null;
 // ── Phase 1/3: generation race protection ───────────────────────────────────
 // Each Generate Voice click increments _previewGenerationSeq. Only the response
 // from the LATEST generation is allowed to write to state. Older responses
-// (e.g. a slow ElevenLabs call that finishes after the user already started a
-// faster Edge generation) are dropped without touching state.previewAudioUrl.
+// (e.g. a slow call that finishes after the user already started a
+// faster generation) are dropped without touching state.previewAudioUrl.
 let _previewGenerationSeq = 0;
 let _previewGenerationInFlight = false;
 
@@ -6769,7 +6531,7 @@ async function generateVoicePreview(){
   if(state.voiceEngine === 'fish-speech' && state.fishHealth){
     const fs = state.fishState;
     if(fs === 'gpu_oom_restart_required' || fs === 'cuda_crashed' || fs === 'test_generation_timeout'){
-      showToast('Fish Speech is GPU-broken — restart the Fish Speech API window then press ⟲ MARK RESTARTED. Or switch to ✨ ElevenLabs / ☁ Edge TTS.', 'error');
+      showToast('Fish Speech is GPU-broken — restart the Fish Speech API window then press ⟲ MARK RESTARTED.', 'error');
       return;
     }
   }
@@ -6878,12 +6640,6 @@ async function generateVoicePreview(){
       status.textContent =
         `✓ ${data.audioDurationSec.toFixed(2)}s · ${data.captions.length} captions · ${data.source}${engLabel}`;
       status.style.color = 'var(--gold2)';
-    }
-
-    // Auto-refresh ElevenLabs usage display whenever EL actually produced this
-    // preview (either explicit elevenlabs engine or auto cascade resolved to it)
-    if(/elevenlabs/i.test(data.resolvedEngine || '')){
-      try { refreshElevenLabsUsageOnly(); } catch {}
     }
 
     // Client-side debug log — mirrors the server-side [VOICE-PREVIEW] block
@@ -7443,9 +7199,7 @@ function selectRenderPreset(id){
 // pass busy=true to lock them, busy=false to restore labels.
 function _setRenderBtns(busy){
   const cfgs = [
-    {id:'renderBtnEl',      label:'<span style="font-size:1rem">⚡</span> ElevenLabs'},
     {id:'renderBtnLocal',   label:'<span style="font-size:1rem">🎙</span> Local'},
-    {id:'renderBtnBarEl',   label:'⚡ EL Render'},
     {id:'renderBtnBarLocal',label:'🎙 Local Render'},
   ];
   cfgs.forEach(({id,label})=>{
@@ -7478,7 +7232,7 @@ function buildRenderPayload(engineOverride) {
   // ── Voice engine ─────────────────────────────────────────────────────────
   let effectiveEngine = engineOverride || state.voiceEngine || 'auto';
   if (engineOverride === 'local') {
-    effectiveEngine = (state.voiceEngine && state.voiceEngine !== 'elevenlabs') ? state.voiceEngine : 'auto';
+    effectiveEngine = state.voiceEngine || 'auto';
   }
 
   // ── Voice params (full) ──────────────────────────────────────────────────
@@ -7597,12 +7351,11 @@ async function renderVideo(engineOverride){
   console.log('[Render] voice/render status: starting', { voice: state.voice, voiceEngine: state.voiceEngine });
 
   // Resolve which voice engine this render will actually use.
-  // 'local' means: use whatever non-ElevenLabs engine is currently selected
-  // (fish-speech, local, edge, auto). Falls back to 'fish-speech' if nothing set.
+  // 'local' means: use whatever engine is currently selected
+  // (fish-speech, local, edge, auto). Falls back to 'auto' if nothing set.
   let effectiveEngine = engineOverride || state.voiceEngine || 'auto';
   if(engineOverride === 'local'){
-    effectiveEngine = (state.voiceEngine && state.voiceEngine !== 'elevenlabs')
-      ? state.voiceEngine : 'auto';
+    effectiveEngine = state.voiceEngine || 'auto';
   }
 
   // ── Fish Speech pre-render guard ─────────────────────────────────────────
@@ -7739,10 +7492,6 @@ function pollRenderStatus(jobId, folder){
         showToast('🎬 Video rendered! Check Past Renders below','success');
         _setRenderBtns(false);
         loadOutputs();
-        // Auto-refresh ElevenLabs usage if this render used it
-        if(/elevenlabs/i.test(msg.resolvedEngine || '') || /elevenlabs/i.test(settings?.voiceEngine || '')){
-          try { refreshElevenLabsUsageOnly(); } catch {}
-        }
         // Show save path
         if(folder){
           const sp = document.getElementById('savePathText');

@@ -26,13 +26,6 @@ import {
   bundleToRenderLines,
   type TimedCaptionsBundle,
 } from './scripts/timing';
-import {
-  listElevenLabsVoices,
-  generateElevenLabsVoiceWithTimestamps,
-  alignWordsToLines,
-  readElevenLabsUsage,
-  incrementElevenLabsUsage,
-} from './scripts/tts/elevenLabsAdapter';
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
@@ -50,10 +43,6 @@ const DRAFTS_DIR    = path.join(ROOT, 'data', 'drafts');
 const PIPER_DIR     = path.join(ROOT, 'piper');
 const PIPER_EXE     = path.join(PIPER_DIR, 'piper.exe');
 const PIPER_VOICES  = path.join(PIPER_DIR, 'voices');
-// Local cache of generated ElevenLabs audio (and any other voice output).
-// Older preview payloads referenced this directory under the same name, so
-// existing /outputs-voices URLs continue to resolve after the cleanup.
-const ELEVENLABS_OUT_DIR = path.join(ROOT, 'outputs', 'voices');
 // Remote worker render path — disabled for now, always use local in-process render.
 // To re-enable: set USE_RENDER_WORKER=true in .env alongside RENDER_WORKER_URL.
 // Local test: RENDER_WORKER_URL=http://localhost:4000
@@ -124,8 +113,6 @@ app.use('/clips',       express.static(FINAL_DIR));
 app.use('/backgrounds', express.static(BACKGROUNDS));
 app.use('/music',       express.static(MUSIC_DIR));
 app.use('/trend-vault-clips',   express.static(TREND_VAULT_OUT));
-if (!fs.existsSync(ELEVENLABS_OUT_DIR)) fs.mkdirSync(ELEVENLABS_OUT_DIR, { recursive: true });
-app.use('/outputs-voices', express.static(ELEVENLABS_OUT_DIR));
 // Serve generated voice MP3 and timed-caption JSON files for the frontend
 // preview (and for any other consumer that needs the canonical timing).
 app.use('/custom-audio', express.static(path.join(ROOT, 'public', 'custom-audio')));
@@ -2053,22 +2040,15 @@ app.get('/api/trend-vault/engine-status', async (_req, res) => {
     } catch { /* not reachable */ }
   }
 
-  // ElevenLabs — only check is whether the API key is present. The full
-  // ElevenLabs status (account / quota) lives at /api/elevenlabs/status.
-  const elConfigured = !!(process.env.ELEVENLABS_API_KEY);
-
   res.json({
     localTts,
     capcut:      { ok: capcutOk,     url: capcutUrl },
-    edge:        { ok: true,         name: 'Microsoft Edge TTS (always available)' },
-    elevenlabs:  { configured: elConfigured },
     // Flat fields the mainframe dashboard reads
     workerOnline,
     workerUrl,
     // API-key presence flags (mainframe Env panel)
     hasAnthropic:   !!process.env.ANTHROPIC_API_KEY,
     hasOpenai:      !!process.env.OPENAI_API_KEY,
-    hasElevenLabs:  elConfigured,
     hasAssemblyai:  !!process.env.ASSEMBLYAI_API_KEY,
     hasPexels:      !!process.env.PEXELS_API_KEY,
     aiProvider:     process.env.AI_PROVIDER || 'auto',
@@ -2111,21 +2091,13 @@ app.post('/api/trend-vault/generate-voice', async (req, res) => {
 // caches both and plays them together — preview audio + captions are now
 // driven by the SAME timeline the final render will use.
 app.post('/api/trend-vault/voice-preview', async (req, res) => {
-  const { scriptLines, voice = {}, voiceEngine = 'auto' } = req.body as {
+  const { scriptLines, voice = {} } = req.body as {
     scriptLines: Array<{ text: string; type?: string; durationSeconds?: number }>;
     voice: {
       presetId?: string; pitch?: number; rate?: number; speed?: number;
       volume?: number; intensity?: number;
       throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
-      // ElevenLabs-specific
-      elevenLabsVoiceId?: string;
-      elevenLabsModel?:   string;
-      stability?:    number;
-      similarity?:   number;
-      style?:        number;
-      speakerBoost?: boolean;
     };
-    voiceEngine: 'auto' | 'local' | 'edge' | 'elevenlabs';
   };
   if (!Array.isArray(scriptLines) || scriptLines.length === 0) {
     res.status(400).json({ error: 'scriptLines[] required' }); return;
@@ -2142,84 +2114,19 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
   const publicAudioPath = path.join(publicAudioDir, audioFile);
 
   try {
-    // ── 1. Generate the voice ──────────────────────────────────────────────
-    // Branch by engine. ElevenLabs is the high-quality path that ALSO returns
-    // per-word timestamps — when used, downstream sync is exact, not
-    // approximate. All other engines fall through to the existing
-    // generateVoice() pipeline (Edge / Kokoro / Piper).
-    let buffer: Buffer | undefined;
-    let resolvedEngine: string = voiceEngine;
-    let perLineWords: Array<Array<{ word: string; startMs: number; endMs: number }>> | undefined;
-    let timingSource: TimedCaptionsBundle['source'] = 'word-proportional';
+    // ── 1. Generate the voice (Kokoro only) ────────────────────────────────
+    const resolvedEngine = 'kokoro';
+    const timingSource: TimedCaptionsBundle['source'] = 'word-proportional';
+    const perLineWords: Array<Array<{ word: string; startMs: number; endMs: number }>> | undefined = undefined;
 
-    if (voiceEngine === 'elevenlabs') {
-      if (!voice.elevenLabsVoiceId) {
-        throw new Error('voiceEngine=elevenlabs requires voice.elevenLabsVoiceId');
-      }
-      const r = await generateElevenLabsVoiceWithTimestamps({
-        text:     fullText,
-        voiceId:  voice.elevenLabsVoiceId,
-        modelId:  voice.elevenLabsModel,
-        stability:    voice.stability,
-        similarity:   voice.similarity,
-        style:        voice.style,
-        speakerBoost: voice.speakerBoost,
-      });
-      buffer = r.buffer;
-      resolvedEngine = 'elevenlabs';
-      if (r.words.length > 0) {
-        perLineWords = alignWordsToLines(scriptLines, r.words);
-        timingSource = 'assemblyai-forced-alignment'; // reuse the "word-level" label
-      }
-    } else {
-      // ── Auto / Local / Edge path ─────────────────────────────────────────
-      // Auto cascade: ElevenLabs (if key + selected voice) → Local/Edge
-      let autoEngine: 'auto' | 'local' | 'edge' = voiceEngine as 'auto' | 'local' | 'edge';
-      if (voiceEngine === 'auto') {
-        const hasEL = !!(process.env.ELEVENLABS_API_KEY && voice.elevenLabsVoiceId);
-        if (hasEL) {
-          const r = await generateElevenLabsVoiceWithTimestamps({
-            text:        fullText,
-            voiceId:     voice.elevenLabsVoiceId!,
-            modelId:     voice.elevenLabsModel,
-            stability:   voice.stability,
-            similarity:  voice.similarity,
-            style:       voice.style,
-            speakerBoost: voice.speakerBoost,
-          });
-          buffer = r.buffer;
-          if (r.words.length > 0) {
-            perLineWords  = alignWordsToLines(scriptLines, r.words);
-            timingSource  = 'assemblyai-forced-alignment';
-          }
-          resolvedEngine = 'auto→elevenlabs';
-        } else {
-          const result = await generateVoice({
-            text: fullText, presetId,
-            pitch: voice.pitch, rate: voice.rate, speed: voice.speed,
-            volume: voice.volume, intensity: voice.intensity,
-            engine: 'auto',
-            throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
-            royalPace: voice.royalPace, chamberSpace: voice.chamberSpace,
-          });
-          buffer = result.buffer;
-          resolvedEngine = 'auto→local';
-          autoEngine = 'auto';
-        }
-      } else {
-        const result = await generateVoice({
-          text: fullText,
-          presetId,
-          pitch: voice.pitch, rate: voice.rate, speed: voice.speed,
-          volume: voice.volume, intensity: voice.intensity,
-          engine: autoEngine,
-          throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
-          royalPace:   voice.royalPace,   chamberSpace: voice.chamberSpace,
-        });
-        buffer = result.buffer;
-        resolvedEngine = autoEngine;
-      }
-    }
+    const result = await generateVoice({
+      text: fullText, presetId,
+      pitch: voice.pitch, rate: voice.rate, speed: voice.speed,
+      volume: voice.volume, intensity: voice.intensity,
+      throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
+      royalPace:   voice.royalPace,   chamberSpace: voice.chamberSpace,
+    });
+    const buffer = result.buffer;
 
     if (!buffer || buffer.length < 1024) {
       throw new Error(`TTS returned suspiciously small audio (${buffer?.length || 0} bytes).`);
@@ -2234,9 +2141,6 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
     }
 
     // ── 3. Build canonical caption bundle ──────────────────────────────────
-    // When ElevenLabs gave us per-word timings we pass them in — the engine
-    // uses them for word-level reveal AND still normalizes the last caption
-    // end to exactly audioDurationSec.
     const bundle = buildTimedCaptions(
       scriptLines.map(l => ({ text: l.text, type: l.type as 'observation' | undefined })),
       audioDurationSec,
@@ -2273,12 +2177,10 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
     // Any voice-affecting field that changes the generated audio must appear here,
     // otherwise the render-time hash check will let a stale preview through.
     const voiceKey   = [
-      voiceEngine, voice.elevenLabsVoiceId || '', voice.elevenLabsModel || '',
+      'kokoro',
       voice.presetId || '',
       voice.speed ?? '', voice.pitch ?? '', voice.rate ?? '',
       voice.volume ?? '', voice.intensity ?? '',
-      voice.stability ?? '', voice.similarity ?? '',
-      voice.style ?? '', voice.speakerBoost ?? '',
       voice.throatDepth ?? '', voice.ancientRasp ?? '',
       voice.royalPace ?? '', voice.chamberSpace ?? '',
     ].join('|');
@@ -2291,7 +2193,7 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
       scriptHash:                stableHash(scriptText),
       voiceHash:                 stableHash(voiceKey),
       provider:                  resolvedEngine,
-      voiceId:                   voice.elevenLabsVoiceId || voice.presetId || null,
+      voiceId:                   voice.presetId || null,
       audioUrl:                  `/custom-audio/${audioFile}`,
       audioFile,
       audioPath:                 publicAudioPath,
@@ -2327,343 +2229,6 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
   }
 });
 
-// ── ElevenLabs — list voices, save preset, read usage ────────────────────────
-// Three small routes the studio uses to surface ElevenLabs as a first-class
-// voice provider with a clean preset workflow.
-
-const EL_PRESETS_PATH = path.resolve('data', 'elevenlabs-presets.json');
-
-function readElevenLabsPresets(): Array<{
-  id: string; name: string; voiceId: string; modelId?: string;
-  stability?: number; similarity?: number; style?: number; speakerBoost?: boolean;
-  createdAt: string;
-}> {
-  try { return JSON.parse(fs.readFileSync(EL_PRESETS_PATH, 'utf8')); } catch { return []; }
-}
-function writeElevenLabsPresets(list: ReturnType<typeof readElevenLabsPresets>): void {
-  fs.mkdirSync(path.dirname(EL_PRESETS_PATH), { recursive: true });
-  fs.writeFileSync(EL_PRESETS_PATH, JSON.stringify(list, null, 2));
-}
-
-app.get('/api/elevenlabs/voices', async (_req, res) => {
-  try {
-    if (!process.env.ELEVENLABS_API_KEY) {
-      res.json({ ok: false, configured: false, voices: [], error: 'ELEVENLABS_API_KEY not set in .env' });
-      return;
-    }
-    const voices = await listElevenLabsVoices();
-    res.json({ ok: true, configured: true, voices });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ ok: false, configured: true, error: msg });
-  }
-});
-
-app.get('/api/elevenlabs/presets', (_req, res) => {
-  const presets = readElevenLabsPresets();
-  const usage = readElevenLabsUsage();
-  res.json({ ok: true, presets, usage });
-});
-
-app.post('/api/elevenlabs/presets', (req, res) => {
-  const body = req.body as {
-    name: string; voiceId: string; modelId?: string;
-    stability?: number; similarity?: number; style?: number; speakerBoost?: boolean;
-  };
-  if (!body?.name || !body?.voiceId) {
-    res.status(400).json({ ok: false, error: 'name and voiceId required' }); return;
-  }
-  const presets = readElevenLabsPresets();
-  const id = 'el_' + body.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now().toString(36);
-  const entry = {
-    id, name: body.name, voiceId: body.voiceId,
-    modelId: body.modelId, stability: body.stability,
-    similarity: body.similarity, style: body.style,
-    speakerBoost: body.speakerBoost,
-    createdAt: new Date().toISOString(),
-  };
-  presets.unshift(entry);
-  writeElevenLabsPresets(presets);
-  res.json({ ok: true, preset: entry });
-});
-
-app.delete('/api/elevenlabs/presets/:id', (req, res) => {
-  const presets = readElevenLabsPresets().filter(p => p.id !== req.params.id);
-  writeElevenLabsPresets(presets);
-  res.json({ ok: true });
-});
-
-app.post('/api/elevenlabs/usage/increment', (_req, res) => {
-  res.json({ ok: true, usage: incrementElevenLabsUsage() });
-});
-
-// ── ElevenLabs — full voice studio API surface ───────────────────────────────
-// These routes back the in-app ElevenLabs panel. They all rely on the server-
-// side ELEVENLABS_API_KEY from .env — the API key is never exposed to the
-// browser. Endpoints:
-//   GET  /api/elevenlabs/status         — key present + account info
-//   GET  /api/elevenlabs/voices         — list every voice on the account
-//   POST /api/elevenlabs/preview        — short preview clip from a voice_id
-//   POST /api/elevenlabs/generate       — full script → mp3 saved on disk
-//   GET  /api/elevenlabs/default-voice  — read the saved default voice/settings
-//   POST /api/elevenlabs/default-voice  — write the saved default voice/settings
-// (Preset list / save / delete and usage increment routes are defined above.)
-
-const ELEVENLABS_DEFAULT_FILE = path.join(ROOT, 'data', 'elevenlabs-default-voice.json');
-
-interface ElevenLabsDefaultVoice {
-  voiceId: string;
-  name: string;
-  modelId: string;
-  stability: number;
-  similarity: number;
-  style: number;
-  speakerBoost: boolean;
-  updatedAt: string;
-}
-
-function readElevenLabsDefault(): ElevenLabsDefaultVoice | null {
-  try {
-    if (!fs.existsSync(ELEVENLABS_DEFAULT_FILE)) return null;
-    return JSON.parse(fs.readFileSync(ELEVENLABS_DEFAULT_FILE, 'utf8'));
-  } catch { return null; }
-}
-
-function writeElevenLabsDefault(d: ElevenLabsDefaultVoice): void {
-  fs.mkdirSync(path.dirname(ELEVENLABS_DEFAULT_FILE), { recursive: true });
-  fs.writeFileSync(ELEVENLABS_DEFAULT_FILE, JSON.stringify(d, null, 2));
-}
-
-// GET /api/elevenlabs/status — connectivity + (best-effort) subscription quota
-app.get('/api/elevenlabs/status', async (_req, res) => {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) {
-    res.json({
-      ok:        false,
-      connected: false,
-      reason:    'ELEVENLABS_API_KEY is not set. Add it to .env as ELEVENLABS_API_KEY=your_key_here, then restart the server.',
-    });
-    return;
-  }
-  try {
-    // /v1/user/subscription returns character_count, character_limit, tier
-    const r = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-      headers: { 'xi-api-key': key },
-      signal:  AbortSignal.timeout(8000),
-    });
-    if (!r.ok) {
-      const body = await r.text().catch(() => '');
-      res.json({
-        ok:        false,
-        connected: false,
-        reason:    `ElevenLabs rejected the API key (HTTP ${r.status}). ${body.slice(0, 200)}`,
-      });
-      return;
-    }
-    const data = await r.json() as {
-      tier?: string;
-      character_count?: number;
-      character_limit?: number;
-      next_character_count_reset_unix?: number;
-      voice_limit?: number;
-    };
-    const usage = readElevenLabsUsage();
-    const defaultVoice = readElevenLabsDefault();
-    res.json({
-      ok:        true,
-      connected: true,
-      account: {
-        tier:                data.tier               ?? null,
-        charactersUsed:      data.character_count    ?? null,
-        charactersAllowed:   data.character_limit    ?? null,
-        nextResetUnix:       data.next_character_count_reset_unix ?? null,
-        voiceLimit:          data.voice_limit        ?? null,
-      },
-      localUsage:    usage,
-      defaultVoice,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.json({
-      ok:        false,
-      connected: false,
-      reason:    /abort|timeout/i.test(msg)
-        ? 'ElevenLabs API did not respond within 8s. Check your internet connection.'
-        : `ElevenLabs API error: ${msg}`,
-    });
-  }
-});
-
-// POST /api/elevenlabs/preview — generate a short sample clip for a voice_id.
-//   Body: { voiceId, text? (default sample), modelId?, stability?, similarity?, style?, speakerBoost? }
-//   Returns: { ok, audioUrl, audioPath, durationSec }
-//   The audio is written into outputs/voices/ so it is served by /outputs-voices.
-app.post('/api/elevenlabs/preview', async (req, res) => {
-  const body = req.body as {
-    voiceId?: string; text?: string; modelId?: string;
-    stability?: number; similarity?: number; style?: number; speakerBoost?: boolean;
-  };
-  if (!process.env.ELEVENLABS_API_KEY) {
-    res.status(400).json({ ok: false, error: 'ELEVENLABS_API_KEY is not set in .env' });
-    return;
-  }
-  if (!body?.voiceId) {
-    res.status(400).json({ ok: false, error: 'voiceId is required' });
-    return;
-  }
-  const previewText = (body.text && body.text.trim().length > 0)
-    ? body.text.trim().slice(0, 280)
-    : 'This is your selected ElevenLabs voice preview.';
-
-  try {
-    const r = await generateElevenLabsVoiceWithTimestamps({
-      text:         previewText,
-      voiceId:      body.voiceId,
-      modelId:      body.modelId ?? 'eleven_flash_v2_5',
-      stability:    body.stability,
-      similarity:   body.similarity,
-      style:        body.style,
-      speakerBoost: body.speakerBoost,
-    });
-    const fileName = `el_preview_${Date.now()}.mp3`;
-    const outPath  = path.join(ELEVENLABS_OUT_DIR, fileName);
-    fs.writeFileSync(outPath, r.buffer);
-    // Also copy into public/custom-audio so the studio can play it as part of
-    // the preview pipeline if it wants to.
-    const publicAudioDir = path.join(ROOT, 'public', 'custom-audio');
-    fs.mkdirSync(publicAudioDir, { recursive: true });
-    fs.copyFileSync(outPath, path.join(publicAudioDir, fileName));
-
-    let durationSec: number | null = null;
-    try { durationSec = await getVideoDuration(outPath); } catch { /* non-fatal */ }
-
-    res.json({
-      ok:           true,
-      audioUrl:     `/outputs-voices/${fileName}`,
-      audioPath:    outPath,
-      durationSec,
-      bytes:        r.buffer.length,
-      voiceId:      body.voiceId,
-      modelId:      body.modelId ?? 'eleven_flash_v2_5',
-      previewText,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ ok: false, error: msg });
-  }
-});
-
-// POST /api/elevenlabs/generate — full script → audio file used by the render.
-//   Body: { text, voiceId, modelId?, stability?, similarity?, style?, speakerBoost?, outputName? }
-//   Returns: { ok, audioUrl, audioPath, durationSec, words[] }
-//   words[] is the per-word timing if ElevenLabs returned alignment data.
-app.post('/api/elevenlabs/generate', async (req, res) => {
-  const body = req.body as {
-    text?: string; voiceId?: string; modelId?: string;
-    stability?: number; similarity?: number; style?: number;
-    speakerBoost?: boolean; outputName?: string;
-  };
-  if (!process.env.ELEVENLABS_API_KEY) {
-    res.status(400).json({ ok: false, error: 'ELEVENLABS_API_KEY is not set in .env' });
-    return;
-  }
-  if (!body?.text?.trim()) {
-    res.status(400).json({ ok: false, error: 'text is required' });
-    return;
-  }
-  if (!body?.voiceId) {
-    res.status(400).json({ ok: false, error: 'voiceId is required' });
-    return;
-  }
-  try {
-    const r = await generateElevenLabsVoiceWithTimestamps({
-      text:         body.text,
-      voiceId:      body.voiceId,
-      modelId:      body.modelId,
-      stability:    body.stability,
-      similarity:   body.similarity,
-      style:        body.style,
-      speakerBoost: body.speakerBoost,
-    });
-    const cleanName = (body.outputName || `el_${Date.now()}`).replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 60);
-    const fileName  = `${cleanName}.mp3`;
-    const outPath   = path.join(ELEVENLABS_OUT_DIR, fileName);
-    fs.writeFileSync(outPath, r.buffer);
-
-    // Copy to public/custom-audio so the render pipeline can find it.
-    const publicAudioDir = path.join(ROOT, 'public', 'custom-audio');
-    fs.mkdirSync(publicAudioDir, { recursive: true });
-    fs.copyFileSync(outPath, path.join(publicAudioDir, fileName));
-
-    let durationSec: number | null = null;
-    try { durationSec = await getVideoDuration(outPath); } catch { /* non-fatal */ }
-
-    // Count this against the soft usage budget.
-    try { incrementElevenLabsUsage(); } catch { /* non-fatal */ }
-
-    res.json({
-      ok:           true,
-      audioUrl:     `/outputs-voices/${fileName}`,
-      audioPath:    outPath,
-      durationSec,
-      bytes:        r.buffer.length,
-      words:        r.words,
-      voiceId:      body.voiceId,
-      modelId:      body.modelId ?? 'eleven_multilingual_v2',
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ ok: false, error: msg });
-  }
-});
-
-// GET /api/elevenlabs/default-voice — return the persisted default voice
-app.get('/api/elevenlabs/default-voice', (_req, res) => {
-  res.json({ ok: true, defaultVoice: readElevenLabsDefault() });
-});
-
-// POST /api/elevenlabs/default-voice — save the picked default voice
-app.post('/api/elevenlabs/default-voice', (req, res) => {
-  const b = req.body as Partial<ElevenLabsDefaultVoice> & { voiceId: string; name?: string };
-  if (!b?.voiceId) { res.status(400).json({ ok: false, error: 'voiceId required' }); return; }
-  const next: ElevenLabsDefaultVoice = {
-    voiceId:      b.voiceId,
-    name:         b.name         ?? '',
-    modelId:      b.modelId      ?? 'eleven_multilingual_v2',
-    stability:    typeof b.stability    === 'number' ? b.stability    : 0.5,
-    similarity:   typeof b.similarity   === 'number' ? b.similarity   : 0.75,
-    style:        typeof b.style        === 'number' ? b.style        : 0.0,
-    speakerBoost: b.speakerBoost  !== false,
-    updatedAt:    new Date().toISOString(),
-  };
-  writeElevenLabsDefault(next);
-  res.json({ ok: true, defaultVoice: next });
-});
-
-// POST /api/elevenlabs/save-preset — accepted as an alias for POST /presets
-// so the new ElevenLabs panel can use the more descriptive URL.
-app.post('/api/elevenlabs/save-preset', (req, res) => {
-  const body = req.body as {
-    name: string; voiceId: string; modelId?: string;
-    stability?: number; similarity?: number; style?: number; speakerBoost?: boolean;
-  };
-  if (!body?.name || !body?.voiceId) {
-    res.status(400).json({ ok: false, error: 'name and voiceId required' });
-    return;
-  }
-  const presets = readElevenLabsPresets();
-  const id = 'el_' + body.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now().toString(36);
-  const entry = {
-    id, name: body.name, voiceId: body.voiceId,
-    modelId: body.modelId, stability: body.stability,
-    similarity: body.similarity, style: body.style,
-    speakerBoost: body.speakerBoost,
-    createdAt: new Date().toISOString(),
-  };
-  presets.unshift(entry);
-  writeElevenLabsPresets(presets);
-  res.json({ ok: true, preset: entry });
-});
 
 // ── Active trend-vault renders ─────────────────────────────────────────────────────
 interface TrendVaultRenderState {
@@ -2735,10 +2300,6 @@ app.post('/api/trend-vault/render', async (req, res) => {
   }
   if (settings) {
     if (!settings.trendVaultSign) preflightErrors.push('trendVaultSign missing');
-    const engine = settings.voiceEngine || 'auto';
-    if (engine === 'elevenlabs' && !settings.voice?.elevenLabsVoiceId) {
-      preflightErrors.push('voiceEngine=elevenlabs but no elevenLabsVoiceId selected');
-    }
     if (settings.durationMode === 'fixed' && !(settings.durationSeconds > 0)) {
       preflightErrors.push('durationMode=fixed but durationSeconds invalid');
     }
@@ -2757,13 +2318,10 @@ app.post('/api/trend-vault/render', async (req, res) => {
       // Adding any new voice-affecting param requires updating both sites.
       const v = (settings.voice || {}) as Record<string, unknown>;
       const submittedVoiceKey   = [
-        settings.voiceEngine || 'auto',
-        v.elevenLabsVoiceId || '', v.elevenLabsModel || '',
+        'kokoro',
         v.presetId || '',
         v.speed ?? '', v.pitch ?? '', v.rate ?? '',
         v.volume ?? '', v.intensity ?? '',
-        v.stability ?? '', v.similarity ?? '',
-        v.style ?? '', v.speakerBoost ?? '',
         v.throatDepth ?? '', v.ancientRasp ?? '',
         v.royalPace ?? '', v.chamberSpace ?? '',
       ].join('|');
@@ -2847,55 +2405,30 @@ app.post('/api/trend-vault/render', async (req, res) => {
       const voiceFile      = `trend_vault_voice_${jobId}.mp3`;
       const voicePath      = path.join(AUDIO_DIR, voiceFile);
       const selectedPreset = voiceParams.presetId || 'tiktok_female';
-      const selectedEngine = settings.voiceEngine || 'auto';
 
-      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=${selectedEngine}`);
+      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=kokoro`);
       pushLog(`[TTS] text length: ${fullText.length} chars across ${scriptLines.length} lines`);
 
       let voiceBuffer: Buffer;
-      // ElevenLabs gives us per-word timestamps as part of TTS — capture them
-      // so the timing engine downstream can use real word boundaries instead
-      // of word-proportional approximation. Same path as voice-preview.
-      let elevenLabsWords: Array<{ word: string; startMs: number; endMs: number }> | undefined;
       try {
-        if (selectedEngine === 'elevenlabs') {
-          if (!voiceParams.elevenLabsVoiceId) {
-            throw new Error('voiceEngine=elevenlabs requires voice.elevenLabsVoiceId');
-          }
-          const r = await generateElevenLabsVoiceWithTimestamps({
-            text:     fullText,
-            voiceId:  voiceParams.elevenLabsVoiceId,
-            modelId:  voiceParams.elevenLabsModel,
-            stability:    voiceParams.stability,
-            similarity:   voiceParams.similarity,
-            style:        voiceParams.style,
-            speakerBoost: voiceParams.speakerBoost,
-          });
-          voiceBuffer = r.buffer;
-          elevenLabsWords = r.words;
-          // Bump usage so the studio can warn when budget is nearly reached.
-          try { incrementElevenLabsUsage(); } catch { /* non-fatal */ }
-        } else {
-          const result = await generateVoice({
-            text:      fullText,
-            presetId:  selectedPreset,
-            pitch:     voiceParams.pitch,
-            rate:      voiceParams.rate,
-            speed:     voiceParams.speed,
-            volume:    voiceParams.volume,
-            intensity: voiceParams.intensity,
-            engine:    settings.voiceEngine as 'auto' | 'local' | 'edge',
-            // Cinematic narrator sliders — preview & render use the SAME values
-            throatDepth:  voiceParams.throatDepth,
-            ancientRasp:  voiceParams.ancientRasp,
-            royalPace:    voiceParams.royalPace,
-            chamberSpace: voiceParams.chamberSpace,
-          });
-          voiceBuffer = result.buffer;
-        }
+        const result = await generateVoice({
+          text:      fullText,
+          presetId:  selectedPreset,
+          pitch:     voiceParams.pitch,
+          rate:      voiceParams.rate,
+          speed:     voiceParams.speed,
+          volume:    voiceParams.volume,
+          intensity: voiceParams.intensity,
+          // Cinematic narrator sliders — preview & render use the SAME values
+          throatDepth:  voiceParams.throatDepth,
+          ancientRasp:  voiceParams.ancientRasp,
+          royalPace:    voiceParams.royalPace,
+          chamberSpace: voiceParams.chamberSpace,
+        });
+        voiceBuffer = result.buffer;
       } catch (ttsErr) {
         const msg = (ttsErr as Error).message || String(ttsErr);
-        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Check internet connection (for Edge TTS) or local TTS server.`);
+        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Make sure the Kokoro server is running (start-kokoro.bat).`);
       }
 
       // Hard guard: TTS must produce a non-trivial audio file
@@ -2942,23 +2475,14 @@ app.post('/api/trend-vault/render', async (req, res) => {
       const inputLines: ScriptLineWithWords[] =
         (scriptLines as ScriptLineWithWords[]).map(l => ({ ...l }));
 
-      // Per-word alignment for the timing engine. Three possible sources, in
+      // Per-word alignment for the timing engine. Two possible sources, in
       // order of preference:
-      //   1. ElevenLabs returned timestamps with its TTS (no extra API call)
-      //   2. AssemblyAI transcription of the generated voice file
-      //   3. Fallback to pure word-proportional inside buildTimedCaptions()
+      //   1. AssemblyAI transcription of the generated voice file
+      //   2. Fallback to pure word-proportional inside buildTimedCaptions()
       let perLineWords: Array<Array<{ word: string; startMs: number; endMs: number }>> | undefined;
       let timingSource: TimedCaptionsBundle['source'] = 'word-proportional';
 
-      // Path 1: ElevenLabs already gave us word timestamps
-      if (elevenLabsWords && elevenLabsWords.length > 0) {
-        perLineWords = alignWordsToLines(scriptLines, elevenLabsWords);
-        timingSource = 'assemblyai-forced-alignment';
-        pushLog(`✓ ElevenLabs word timestamps: ${elevenLabsWords.length} words across ${inputLines.length} lines`);
-      }
-
       const aaiKey = process.env.ASSEMBLYAI_API_KEY;
-      // Path 2: AssemblyAI — skip if ElevenLabs already provided word timings
       if (!perLineWords && aaiKey && fs.existsSync(voicePath)) {
         try {
           pushLog('🔤 Aligning captions to voice (AssemblyAI)...', 16);

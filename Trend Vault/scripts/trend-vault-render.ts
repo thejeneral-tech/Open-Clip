@@ -431,9 +431,8 @@ async function main() {
   const sVoice = (settings as { voice?: {
     presetId?: string; name?: string;
     throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
-    elevenLabsVoiceId?: string;
   } }).voice || {};
-  const sEngine = (settings as { voiceEngine?: string }).voiceEngine ?? 'auto';
+  const sEngine = 'kokoro';
 
 
   // Resolve audio file paths for raw vs processed
@@ -454,7 +453,6 @@ async function main() {
   // Voice identity string: most specific identifier available
   const selectedVoice: string =
     (sVoice as { name?: string }).name ??
-    (sVoice as { elevenLabsVoiceId?: string }).elevenLabsVoiceId ??
     sVoice.presetId ??
     sEngine;
 

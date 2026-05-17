@@ -14,19 +14,12 @@ pushd "%~dp0.."
 set "TREND_VAULT_DIR=%CD%"
 popd
 
-:: ── ElevenLabs key check (optional but recommended) ──────────
-set ELEVENLABS_PRESENT=false
-findstr /i /r "^ELEVENLABS_API_KEY=." "%TREND_VAULT_DIR%\.env" >nul 2>&1
-if not errorlevel 1 set ELEVENLABS_PRESENT=true
-:: ─────────────────────────────────────────────────────────────
-
 echo.
 echo ============================================================
 echo   Trend Vault System Launcher
 echo ============================================================
 echo.
 echo   Trend Vault        : %TREND_VAULT_DIR%
-echo   ElevenLabs    : %ELEVENLABS_PRESENT%
 echo.
 
 :: ── STEP 1: Python check ─────────────────────────────────────
