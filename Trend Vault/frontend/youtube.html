@@ -220,7 +220,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
         <div class="row" style="margin-bottom:10px">
           <span id="ytStatus" class="pill muted">checking…</span>
-          <button id="signInBtn" class="primary">Sign in with Google</button>
+          <button id="signInBtn" class="primary" disabled>Sign in with Google</button>
           <button id="signOutBtn" class="ghost" style="display:none">Sign out</button>
           <button id="refreshStatusBtn" class="ghost">↻ Re-check</button>
         </div>
@@ -393,7 +393,20 @@ async function refreshAuth(){
 async function startSignIn(){
   try{
     const r = await fetch('/api/youtube/auth-url').then(r=>r.json());
-    if(r.error){ alert(r.error); return; }
+    if(r.error){
+      const box = $('setupBox');
+      box.style.display = 'block';
+      box.scrollIntoView({behavior:'smooth', block:'start'});
+      let banner = $('setupError');
+      if(!banner){
+        banner = document.createElement('div');
+        banner.id = 'setupError';
+        banner.style.cssText = 'margin-bottom:10px;padding:8px 12px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);border-radius:8px;color:#fca5a5;font-size:.78rem';
+        box.prepend(banner);
+      }
+      banner.textContent = '⚠ ' + r.error;
+      return;
+    }
     window.open(r.url, '_blank', 'width=520,height=720');
     const t = setInterval(async ()=>{
       const s = await fetch('/api/youtube/auth-status').then(r=>r.json()).catch(()=>null);
