@@ -6,10 +6,10 @@ dist
 # Ignore the output video from Git but not videos you import into src/.
 out
 
-# PyInstaller build artifacts
+# PyInstaller build artifacts (the final .exe IS committed, only the staging junk is ignored)
 build/
+dist/
 *.spec
-TrendVaultLauncher.exe
 
 # TikTok uploader persistent auth session — DO NOT COMMIT
 .tiktok-session/
