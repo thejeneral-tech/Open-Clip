@@ -161,6 +161,7 @@ export async function uploadShort(opts: YouTubeUploadOptions): Promise<{ ok: tru
 
     log(`uploading ${path.basename(opts.videoPath)} (${(stats.size / 1e6).toFixed(1)} MB) — privacy=${opts.privacy}`);
 
+    let lastPct = -1;
     const r = await yt.videos.insert(
       {
         part: ['snippet', 'status'],
@@ -182,7 +183,11 @@ export async function uploadShort(opts: YouTubeUploadOptions): Promise<{ ok: tru
       {
         onUploadProgress: (e: { bytesRead: number }) => {
           const pct = stats.size ? Math.round((e.bytesRead / stats.size) * 100) : 0;
-          if (pct % 10 === 0 || pct >= 100) log(`upload progress: ${pct}%`);
+          const bucket = Math.floor(pct / 10) * 10;
+          if (bucket !== lastPct && (bucket % 10 === 0 || pct >= 100)) {
+            lastPct = bucket;
+            log(`upload progress: ${pct}%`);
+          }
         },
       },
     );
@@ -192,7 +197,13 @@ export async function uploadShort(opts: YouTubeUploadOptions): Promise<{ ok: tru
     log(`done — id=${id}`);
     return { ok: true, videoId: id, url: `https://youtube.com/shorts/${id}` };
   } catch (e: any) {
+    const status = e?.code ?? e?.response?.status ?? e?.status;
     const msg = e?.errors?.[0]?.message ?? e?.message ?? String(e);
+    if (status === 401 || /unauthorized|invalid_grant|token.*expir/i.test(msg)) {
+      // Token revoked or expired — delete it so the UI shows "not signed in"
+      if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+      return { ok: false, error: 'YouTube session expired — please sign in again on the /youtube page.' };
+    }
     return { ok: false, error: msg };
   }
 }
