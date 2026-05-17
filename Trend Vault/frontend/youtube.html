@@ -434,16 +434,26 @@ async function loadVideos(){
     const div = document.createElement('div');
     div.className = 'video-item';
     div.innerHTML = `<div class="name" title="${v.rel}">${v.rel}</div><div class="meta">${fmtSize(v.size)} · ${fmtTime(v.mtime)}</div>`;
-    div.onclick = () => {
+    div.onclick = async () => {
       selectedRel = v.rel;
       [...list.children].forEach(c=>c.classList.remove('selected'));
       div.classList.add('selected');
-      // Pre-fill the title with the basename if empty
-      if(!$('title').value){
-        const stem = v.rel.split(/[\\\/]/).pop().replace(/\.mp4$/i,'');
-        $('title').value = (stem + ' #Shorts').slice(0,100);
-      }
       updateUploadButton();
+      try{
+        const m = await fetch('/api/render-meta?rel=' + encodeURIComponent(v.rel)).then(r=>r.json());
+        if(m && m.suggestions){
+          const s = m.suggestions;
+          if(s.youtubeTitle)       $('title').value       = s.youtubeTitle;
+          if(s.youtubeDescription) $('description').value = s.youtubeDescription;
+          if(Array.isArray(s.youtubeTags)) $('tags').value = s.youtubeTags.join(', ');
+        } else {
+          const stem = v.rel.split(/[\\\/]/).pop().replace(/\.mp4$/i,'');
+          $('title').value = (stem + ' #Shorts').slice(0,100);
+        }
+      } catch(e){
+        const stem = v.rel.split(/[\\\/]/).pop().replace(/\.mp4$/i,'');
+        if(!$('title').value) $('title').value = (stem + ' #Shorts').slice(0,100);
+      }
     };
     list.appendChild(div);
   }

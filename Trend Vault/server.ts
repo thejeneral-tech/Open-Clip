@@ -636,6 +636,85 @@ function recentMp4s(): { path: string; rel: string; mtime: number; size: number 
   return found.sort((a, b) => b.mtime - a.mtime).slice(0, 50);
 }
 
+// ── Auto-generate captions/descriptions/tags from a render's meta.json ─────
+const ZODIAC_SIGNS = [
+  'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
+  'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces',
+];
+
+function slugTag(s: string): string {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 30);
+}
+
+function deriveUploadSuggestions(meta: Record<string, any>, folder: string) {
+  const sign     = String(meta.trendVaultSign || meta.niche || '').trim();
+  const topic    = String(meta.topic || meta.niche || '').trim();
+  const category = String(meta.category || '').trim();
+  const tone     = String(meta.emotionalTone || '').trim();
+  const story    = String(meta.storyPrompt || '').trim();
+  const lines    = Array.isArray(meta.scriptLines) ? meta.scriptLines : [];
+  const hookLine = String(lines[0]?.text || '').trim();
+  const blob     = `${story} ${topic} ${sign} ${meta.script || ''}`;
+  const zodiacMatch = blob.match(new RegExp(`\\b(${ZODIAC_SIGNS.join('|')})\\b`, 'i'));
+  const zodiac   = zodiacMatch ? zodiacMatch[1].charAt(0).toUpperCase() + zodiacMatch[1].slice(1).toLowerCase() : '';
+
+  const titleSubject = zodiac && topic
+    ? `${zodiac}: ${topic}`
+    : (zodiac || topic || sign || folder.replace(/_/g, ' '));
+
+  const tagPool: string[] = [];
+  if (zodiac)   tagPool.push(slugTag(zodiac), slugTag(zodiac + 'season'), slugTag(zodiac + 'energy'), 'zodiac', 'astrology');
+  if (topic)    tagPool.push(slugTag(topic));
+  if (sign && sign.toLowerCase() !== topic.toLowerCase()) tagPool.push(slugTag(sign));
+  if (category) tagPool.push(slugTag(category));
+  if (tone)     tagPool.push(slugTag(tone));
+  tagPool.push('psychology', 'mindset', 'spiritual', 'deep', 'storytime', 'fyp', 'foryou', 'shorts');
+  const tags = [...new Set(tagPool.filter(Boolean))].slice(0, 15);
+
+  const hashtags = tags.slice(0, 8).map(t => '#' + t).join(' ');
+
+  const ytTitleRaw  = `${titleSubject} #Shorts`;
+  const ytTitle     = ytTitleRaw.length > 100 ? ytTitleRaw.slice(0, 100) : ytTitleRaw;
+  const ytDescription = [
+    hookLine,
+    '',
+    story ? `🎭 ${story}` : '',
+    '',
+    hashtags,
+    '',
+    '#Shorts',
+  ].filter(Boolean).join('\n');
+
+  const tiktokCaption = [hookLine, '', hashtags].filter(Boolean).join('\n').slice(0, 2200);
+  const instagramCaption = [hookLine, '', hashtags, '#reels'].filter(Boolean).join('\n').slice(0, 2200);
+
+  return {
+    youtubeTitle: ytTitle,
+    youtubeDescription: ytDescription,
+    youtubeTags: tags,
+    tiktokCaption,
+    instagramCaption,
+  };
+}
+
+app.get('/api/render-meta', (req, res) => {
+  const rel = String((req.query as { rel?: string }).rel || '').trim();
+  if (!rel) { res.status(400).json({ error: 'missing rel' }); return; }
+  const abs = path.resolve(ROOT, rel);
+  if (!abs.startsWith(ROOT)) { res.status(400).json({ error: 'invalid path' }); return; }
+  const metaPath = path.join(path.dirname(abs), 'meta.json');
+  let meta: Record<string, any> = {};
+  try {
+    if (fs.existsSync(metaPath)) meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  } catch { /* ignore parse errors */ }
+  const folder = path.basename(path.dirname(abs));
+  res.json({ ok: true, hasMeta: Object.keys(meta).length > 0, folder, meta, suggestions: deriveUploadSuggestions(meta, folder) });
+});
+
 app.get('/tiktok', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(ROOT, 'frontend', 'tiktok.html'));
