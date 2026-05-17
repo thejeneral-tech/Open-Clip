@@ -62,11 +62,22 @@ export function sessionExists(): boolean {
 
 async function openContext(headless: boolean): Promise<BrowserContext> {
   ensureSessionDir();
-  return chromium.launchPersistentContext(SESSION_DIR, {
+  const base = {
     headless,
     viewport: { width: 1280, height: 900 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     args: ['--disable-blink-features=AutomationControlled'],
+  };
+  // Try real installed browsers first so no separate Playwright install is required.
+  // msedge is always present on Windows 11; chrome is common on all platforms.
+  for (const channel of ['msedge', 'chrome'] as const) {
+    try {
+      return await chromium.launchPersistentContext(SESSION_DIR, { ...base, channel });
+    } catch { /* browser not installed, try next */ }
+  }
+  // Fall back to Playwright's own bundled Chromium (needs: npx playwright install chromium)
+  return chromium.launchPersistentContext(SESSION_DIR, {
+    ...base,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   });
 }
 

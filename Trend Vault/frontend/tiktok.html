@@ -465,18 +465,20 @@ function stopLoginPoll(){
 async function startLogin(){
   setSessionUI('checking');
   $('loginBtn').textContent = 'Opening browser…';
+  // Open TikTok login in the current browser as a new window for reference
+  window.open('https://www.tiktok.com/login', '_blank', 'width=1200,height=800,noopener');
   try {
     const r = await fetch('/api/tiktok/session/login', { method:'POST' }).then(r => r.json());
     if(r.started || r.ok){
       setSessionUI('browser_open');
-      $('caveatText').textContent = 'Log in inside the Chromium window, then close it when finished. A green banner will appear when your session is saved.';
+      $('caveatText').textContent = 'A browser window has opened — log in there, then close it when finished. A green banner will appear when your session is saved.';
       startLoginPoll();
     } else {
-      alert(r.reason || 'Could not open TikTok login browser. Check Playwright/Puppeteer installation.');
+      alert(r.reason || 'Could not open TikTok login browser. Is Edge or Chrome installed?');
       setSessionUI('not_signed_in');
     }
   } catch(e){
-    alert('Could not open TikTok login browser. Check Playwright/Puppeteer installation.\n\n' + e.message);
+    alert('Could not open TikTok login browser. Is Edge or Chrome installed?\n\n' + e.message);
     setSessionUI('not_signed_in');
   }
 }
