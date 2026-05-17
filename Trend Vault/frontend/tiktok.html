@@ -495,11 +495,17 @@ async function loadVideos(){
     const div = document.createElement('div');
     div.className = 'video-item';
     div.innerHTML = `<div class="name" title="${v.rel}">${v.rel}</div><div class="meta">${fmtSize(v.size)} · ${fmtTime(v.mtime)}</div>`;
-    div.onclick = () => {
+    div.onclick = async () => {
       selectedRel = v.rel;
       [...list.children].forEach(c=>c.classList.remove('selected'));
       div.classList.add('selected');
       updateUploadButton();
+      try{
+        const m = await fetch('/api/render-meta?rel=' + encodeURIComponent(v.rel)).then(r=>r.json());
+        if(m && m.suggestions && m.suggestions.tiktokCaption){
+          $('caption').value = m.suggestions.tiktokCaption;
+        }
+      } catch(e){ /* leave caption alone */ }
     };
     list.appendChild(div);
   }
