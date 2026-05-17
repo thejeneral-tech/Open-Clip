@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+Trend[[:space:]]Vault/kokoro-tts/kokoro-v0_19.onnx filter=lfs diff=lfs merge=lfs -text
+Trend[[:space:]]Vault/kokoro-tts/voices.bin filter=lfs diff=lfs merge=lfs -text
