@@ -738,6 +738,12 @@ input:focus,textarea:focus,select:focus{
           <div class="tile-name">Accounts</div>
           <div class="tile-desc">Manage connected social accounts</div>
         </a>
+        <a href="http://localhost:3002" target="_blank" rel="noopener" class="tool-tile">
+          <div class="tile-badge" style="background:rgba(168,85,247,.25);border-color:var(--purple2);color:var(--purple3)">New</div>
+          <div class="tile-icon">🤖</div>
+          <div class="tile-name">Ollama Chat</div>
+          <div class="tile-desc">Local LLM web UI (port 3002)</div>
+        </a>
         <div class="tool-tile" onclick="refreshAll()" style="cursor:pointer">
           <div class="tile-icon">🔄</div>
           <div class="tile-name">Refresh Status</div>
@@ -783,6 +789,14 @@ input:focus,textarea:focus,select:focus{
             <div class="conn-url">localhost:5070</div>
           </div>
           <div class="conn-status checking" id="ttsConnStatus">CHECKING</div>
+        </div>
+        <div class="conn-row">
+          <div class="dot checking" id="ollamaConnDot" style="margin:0;flex-shrink:0"></div>
+          <div class="conn-name">
+            Ollama Chat UI
+            <div class="conn-url">localhost:3002 → ollama:11434</div>
+          </div>
+          <div class="conn-status checking" id="ollamaConnStatus">CHECKING</div>
         </div>
       </div>
 
@@ -848,6 +862,11 @@ input:focus,textarea:focus,select:focus{
         <a href="/accounts" class="action-btn">
           <span class="action-icon">👥</span>
           <span class="action-text">Manage Accounts</span>
+          <span class="action-arrow">→</span>
+        </a>
+        <a href="http://localhost:3002" target="_blank" rel="noopener" class="action-btn">
+          <span class="action-icon">🤖</span>
+          <span class="action-text">Open Ollama Chat</span>
           <span class="action-arrow">→</span>
         </a>
         <button class="action-btn" onclick="refreshAll()">
@@ -1025,6 +1044,29 @@ async function checkTts(){
   }
 }
 
+async function checkOllama(){
+  const cDot=document.getElementById('ollamaConnDot');
+  const cSt=document.getElementById('ollamaConnStatus');
+  try{
+    // The UI on :3002 proxies /api/* to ollama on :11434, so /api/tags
+    // succeeds only if both the UI server and ollama itself are up.
+    const r=await fetch('http://localhost:3002/api/tags',{signal:AbortSignal.timeout(3000)});
+    if(r.ok){
+      setDot(cDot,'online');
+      cSt.className='conn-status online'; cSt.textContent='ONLINE';
+      addLog('ok','Ollama UI online');
+    } else {
+      setDot(cDot,'offline');
+      cSt.className='conn-status offline'; cSt.textContent='OFFLINE';
+      addLog('warn','Ollama UI reachable but ollama backend not responding');
+    }
+  }catch(e){
+    setDot(cDot,'offline');
+    cSt.className='conn-status offline'; cSt.textContent='OFFLINE';
+    addLog('warn','Ollama UI offline — start it from the launcher');
+  }
+}
+
 function setDot(el,state){
   el.className='dot '+state;
 }
@@ -1124,7 +1166,7 @@ async function loadEnvStatus(){
 async function refreshAll(){
   addLog('info','Refreshing all system checks…');
   renderLog();
-  await Promise.allSettled([checkWorker(), checkTts(), loadJobs(), loadStats(), loadEnvStatus()]);
+  await Promise.allSettled([checkWorker(), checkTts(), checkOllama(), loadJobs(), loadStats(), loadEnvStatus()]);
   renderLog();
   addLog('ok','Status refresh complete');
 }
