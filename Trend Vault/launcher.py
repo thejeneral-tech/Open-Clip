@@ -27,6 +27,8 @@ if os.path.isfile(_KOKORO_VENV_PY):
 else:
     _KOKORO_CMD = ['start-kokoro.bat']
 
+_OLLAMA_UI_SERVER = os.path.join(ROOT, 'Ollama web ui', 'server.js')
+
 SERVICES = [
     {
         'key':  'webapp',
@@ -35,6 +37,7 @@ SERVICES = [
         'port': 3001,
         'cmd':  ['npm', 'start'],
         'url':  'http://localhost:3001/trend-vault',
+        'needs_npm': True,
     },
     {
         'key':  'worker',
@@ -43,6 +46,7 @@ SERVICES = [
         'port': 4000,
         'cmd':  ['npx', 'tsx', 'render-worker.ts'],
         'url':  None,
+        'needs_npm': True,
     },
     {
         'key':  'kokoro',
@@ -51,6 +55,26 @@ SERVICES = [
         'port': 5070,
         'cmd':  _KOKORO_CMD,
         'url':  None,
+        'needs_npm': False,
+    },
+    {
+        'key':  'ollama',
+        'name': 'Ollama',
+        'desc': 'Local LLM server  •  port 11434',
+        'port': 11434,
+        'cmd':  ['ollama', 'serve'],
+        'url':  None,
+        'needs_npm': False,
+    },
+    {
+        'key':  'ollama_ui',
+        'name': 'Ollama Chat UI',
+        'desc': 'Web chat for Ollama  •  port 3002',
+        'port': 3002,
+        'cmd':  ['node', _OLLAMA_UI_SERVER],
+        'url':  'http://localhost:3002',
+        'env':  {'PORT': '3002', 'OLLAMA_HOST': 'http://127.0.0.1:11434'},
+        'needs_npm': False,
     },
 ]
 
@@ -104,7 +128,7 @@ class TrendVaultLauncher(tk.Tk):
         self.title('🏦 Trend Vault Launcher')
         self.configure(bg=BG)
         self.resizable(False, False)
-        self.geometry('520x720')
+        self.geometry('540x860')
 
         # Process handles  { key: subprocess.Popen }
         self._procs: dict[str, subprocess.Popen] = {}
@@ -145,11 +169,12 @@ class TrendVaultLauncher(tk.Tk):
         inner = tk.Frame(bar, bg=BG2)
         inner.pack()
 
-        self._btn(inner, '▶  START ALL',  self._start_all,   BTN_GO,  GREEN ).pack(side='left', padx=6)
-        self._btn(inner, '■  STOP ALL',   self._stop_all,    BTN_STP, RED   ).pack(side='left', padx=6)
-        self._btn(inner, '\U0001f4e6  INSTALL', self._run_install, BTN,    AMBER ).pack(side='left', padx=6)
-        self._btn(inner, '⬡  HEALTH',     self._health,      BTN,     AMBER ).pack(side='left', padx=6)
-        self._btn(inner, '\U0001f310  OPEN',   self._open_browser, BTN,    ACCENT).pack(side='left', padx=6)
+        self._btn(inner, '▶  START ALL',  self._start_all,   BTN_GO,  GREEN ).pack(side='left', padx=4)
+        self._btn(inner, '■  STOP ALL',   self._stop_all,    BTN_STP, RED   ).pack(side='left', padx=4)
+        self._btn(inner, '\U0001f4e6  INSTALL', self._run_install, BTN,    AMBER ).pack(side='left', padx=4)
+        self._btn(inner, '⬡  HEALTH',     self._health,      BTN,     AMBER ).pack(side='left', padx=4)
+        self._btn(inner, '\U0001f310  OPEN',   self._open_browser, BTN,    ACCENT).pack(side='left', padx=4)
+        self._btn(inner, '\U0001f916  CHAT',   self._open_chat,    BTN,    ACCENT).pack(side='left', padx=4)
 
         # Divider
         tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
@@ -336,8 +361,7 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line(svc['name'] + ' already running on :' + str(svc['port']), AMBER)
             return
         def _do():
-            # Kokoro doesn't need npm deps; everything else does
-            if svc['key'] != 'kokoro' and not self._ensure_deps():
+            if svc.get('needs_npm', True) and not self._ensure_deps():
                 return
             self._launch(svc)
         threading.Thread(target=_do, daemon=True).start()
@@ -350,8 +374,10 @@ class TrendVaultLauncher(tk.Tk):
         def _do():
             if not self._ensure_deps():
                 return
-            # Boot Kokoro first so the Node server's TTS probe succeeds at startup
-            ordered = sorted(SERVICES, key=lambda s: 0 if s['key'] == 'kokoro' else 1)
+            # Boot order: Ollama and Kokoro first (so dependents' probes succeed),
+            # then the Ollama UI (which proxies to :11434), then the rest.
+            order = {'ollama': 0, 'kokoro': 0, 'ollama_ui': 1}
+            ordered = sorted(SERVICES, key=lambda s: order.get(s['key'], 2))
             for svc in ordered:
                 threading.Thread(target=self._launch, args=(svc,), daemon=True).start()
                 time.sleep(0.3)
@@ -370,6 +396,7 @@ class TrendVaultLauncher(tk.Tk):
         self._set_status('Starting ' + svc['name'] + '...')
         try:
             env = {**os.environ, 'NODE_OPTIONS': '--max-old-space-size=8192'}
+            env.update(svc.get('env', {}))
             proc = subprocess.Popen(
                 svc['cmd'], cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -429,7 +456,7 @@ class TrendVaultLauncher(tk.Tk):
             folders = [
                 'trend-vault-output', 'public/custom-audio',
                 'backgrounds', 'music', 'custom-audio',
-                'kokoro-tts',
+                'kokoro-tts', 'Ollama web ui',
             ]
             for folder in folders:
                 exists = os.path.isdir(os.path.join(ROOT, folder))
@@ -453,6 +480,14 @@ class TrendVaultLauncher(tk.Tk):
     # ── Browser ───────────────────────────────────────────────────────────────
     def _open_browser(self):
         url = 'http://localhost:3001/trend-vault'
+        webbrowser.open(url)
+        self._log_line('Opening ' + url, ACCENT)
+
+    def _open_chat(self):
+        url = 'http://localhost:3002'
+        if not port_in_use(3002):
+            self._log_line('Ollama Chat UI not running on :3002 -- start it first', AMBER)
+            return
         webbrowser.open(url)
         self._log_line('Opening ' + url, ACCENT)
 

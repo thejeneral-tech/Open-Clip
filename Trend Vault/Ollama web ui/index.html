@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ollama Chat</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar: conversation history -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="new-chat-btn" id="newChatBtn" title="New chat">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New chat</span>
+        </button>
+      </div>
+      <nav class="conversations" id="conversations"></nav>
+      <div class="sidebar-footer">
+        <button class="icon-btn" id="settingsBtn" title="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main chat panel -->
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-only" id="toggleSidebar" title="Toggle sidebar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="model-picker">
+          <select id="modelSelect" aria-label="Choose model">
+            <option value="">Loading models…</option>
+          </select>
+          <span class="status-dot" id="statusDot" title="Connection status"></span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <button class="icon-only" id="clearChatBtn" title="Clear current chat">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6"></path>
+            <path d="M14 11v6"></path>
+          </svg>
+        </button>
+      </header>
+
+      <section class="chat" id="chat">
+        <div class="welcome" id="welcome">
+          <h1>Ollama Chat</h1>
+          <p>Chat with your local Ollama models. Pick a model above and send a message to begin.</p>
+        </div>
+        <div class="messages" id="messages"></div>
+      </section>
+
+      <footer class="composer">
+        <form id="composerForm" class="composer-form" autocomplete="off">
+          <textarea
+            id="input"
+            class="composer-input"
+            placeholder="Message Ollama…"
+            rows="1"
+          ></textarea>
+          <button type="submit" id="sendBtn" class="send-btn" title="Send">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+          <button type="button" id="stopBtn" class="stop-btn hidden" title="Stop generating">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+          </button>
+        </form>
+        <p class="hint">Press Enter to send · Shift+Enter for newline</p>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal-backdrop hidden" id="settingsModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-labelledby="settingsTitle">
+      <div class="modal-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button class="icon-only" id="closeSettings" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span class="field-label">Ollama host</span>
+          <input type="text" id="hostInput" placeholder="(empty = use server proxy)" />
+          <span class="field-hint">Leave empty to use the bundled <code>server.js</code> proxy. Set to e.g. <code>http://localhost:11434</code> to talk to Ollama directly (requires <code>OLLAMA_ORIGINS</code>).</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">System prompt</span>
+          <textarea id="systemPrompt" rows="4" placeholder="You are a helpful assistant."></textarea>
+          <span class="field-hint">Sent as the first message of every conversation.</span>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Temperature <span class="value" id="tempValue">0.7</span></span>
+            <input type="range" id="temperature" min="0" max="2" step="0.05" value="0.7" />
+          </label>
+          <label class="field">
+            <span class="field-label">Top P <span class="value" id="topPValue">0.9</span></span>
+            <input type="range" id="topP" min="0" max="1" step="0.01" value="0.9" />
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Top K <span class="value" id="topKValue">40</span></span>
+            <input type="range" id="topK" min="0" max="100" step="1" value="40" />
+          </label>
+          <label class="field">
+            <span class="field-label">Max tokens <span class="value" id="numPredictValue">-1</span></span>
+            <input type="range" id="numPredict" min="-1" max="4096" step="1" value="-1" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Repeat penalty <span class="value" id="repeatPenaltyValue">1.1</span></span>
+          <input type="range" id="repeatPenalty" min="0.5" max="2" step="0.05" value="1.1" />
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="resetSettings">Reset to defaults</button>
+        <button class="btn-primary" id="saveSettings">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
