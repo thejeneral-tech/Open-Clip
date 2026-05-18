@@ -9,8 +9,8 @@ Build to .exe (run build-launcher.bat):
     pyinstaller --onefile --windowed --name TrendVaultLauncher launcher.py
 """
 
-import os, sys, time, socket, subprocess, threading, webbrowser, tkinter as tk
-from tkinter import font as tkfont
+import os, sys, time, socket, subprocess, threading, webbrowser, shutil, tkinter as tk
+from tkinter import font as tkfont, messagebox
 from datetime import datetime
 
 # ── Project root (works as .py or frozen .exe) ───────────────────────────────
@@ -28,6 +28,20 @@ else:
     _KOKORO_CMD = ['start-kokoro.bat']
 
 _OLLAMA_UI_SERVER = os.path.join(ROOT, 'Ollama web ui', 'server.js')
+
+# Ollama: required dependency for the Chat UI. Resolved at launch time so a
+# fresh install (which extends PATH after we started) is still picked up.
+_OLLAMA_INSTALLER_URL = 'https://ollama.com/download/OllamaSetup.exe'
+_OLLAMA_DEFAULT_EXE = os.path.expandvars(r'%LOCALAPPDATA%\Programs\Ollama\ollama.exe')
+
+def resolve_ollama() -> str | None:
+    """Return the path to ollama.exe, or None if it isn't installed."""
+    p = shutil.which('ollama')
+    if p:
+        return p
+    if os.path.isfile(_OLLAMA_DEFAULT_EXE):
+        return _OLLAMA_DEFAULT_EXE
+    return None
 
 SERVICES = [
     {
@@ -133,9 +147,11 @@ class TrendVaultLauncher(tk.Tk):
         # Process handles  { key: subprocess.Popen }
         self._procs: dict[str, subprocess.Popen] = {}
         self._lock  = threading.Lock()
+        self._installing_ollama = False
 
         self._build_ui()
-        self._poll()   # start status polling loop
+        self._poll()                                 # start status polling loop
+        self.after(800, self._check_ollama_on_start) # prompt to install if missing
 
     # ── UI construction ───────────────────────────────────────────────────────
     def _build_ui(self):
@@ -354,9 +370,80 @@ class TrendVaultLauncher(tk.Tk):
                 self._log_line('--- End ---', ACCENT)
         threading.Thread(target=_do, daemon=True).start()
 
+    # ── Ollama dependency ─────────────────────────────────────────────────────
+    def _check_ollama_on_start(self):
+        """Runs ~1s after the UI is built. Logs status, prompts to install."""
+        path = resolve_ollama()
+        if path:
+            self._log_line('Ollama detected: ' + path, GREEN)
+            return
+        self._log_line('Ollama is not installed -- the Chat UI needs it to work', AMBER)
+        self._prompt_install_ollama()
+
+    def _prompt_install_ollama(self):
+        if self._installing_ollama:
+            self._log_line('Ollama install already in progress...', AMBER)
+            return
+        answer = messagebox.askyesno(
+            'Install Ollama?',
+            'Ollama is required for the Chat UI but was not found on this PC.\n\n'
+            'Download the official installer (~700 MB) from ollama.com and run it now?\n\n'
+            'You will need to click through the Ollama setup window when it appears.',
+        )
+        if not answer:
+            self._log_line('Ollama install skipped by user', MUTED)
+            return
+        threading.Thread(target=self._install_ollama, daemon=True).start()
+
+    def _install_ollama(self):
+        """Download OllamaSetup.exe and launch it. Installer is interactive."""
+        import urllib.request, tempfile
+        self._installing_ollama = True
+        try:
+            self._log_line('Downloading Ollama installer...', AMBER)
+            self._set_status('Downloading Ollama...')
+            installer_path = os.path.join(tempfile.gettempdir(), 'OllamaSetup.exe')
+            req = urllib.request.Request(
+                _OLLAMA_INSTALLER_URL,
+                headers={'User-Agent': 'TrendVaultLauncher/1.0'},
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                total = int(resp.headers.get('Content-Length', 0) or 0)
+                downloaded = 0
+                last_pct = -1
+                with open(installer_path, 'wb') as f:
+                    while True:
+                        chunk = resp.read(64 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = int(downloaded * 100 / total)
+                            if pct != last_pct and pct % 5 == 0:
+                                self._set_status('Downloading Ollama... ' + str(pct) + '%')
+                                last_pct = pct
+            self._log_line('Download complete (' + str(downloaded // (1024 * 1024)) + ' MB)', GREEN)
+            self._log_line('Launching installer -- complete the setup window to finish', TEXT)
+            self._set_status('Running Ollama installer...')
+            # Run installer; UAC prompt handled by Windows. Don't block.
+            subprocess.Popen([installer_path], shell=False)
+            self._log_line(
+                'When the installer finishes, click START on the Ollama card to launch it.',
+                ACCENT,
+            )
+        except Exception as e:
+            self._log_line('Ollama install failed: ' + str(e), RED)
+        finally:
+            self._installing_ollama = False
+            self._set_status('Ready')
+
     # ── Service control ───────────────────────────────────────────────────────
     def _start_one(self, key: str):
         svc = next(s for s in SERVICES if s['key'] == key)
+        if key == 'ollama' and not resolve_ollama():
+            self._prompt_install_ollama()
+            return
         if port_in_use(svc['port']):
             self._log_line(svc['name'] + ' already running on :' + str(svc['port']), AMBER)
             return
@@ -371,6 +458,11 @@ class TrendVaultLauncher(tk.Tk):
         threading.Thread(target=self._kill, args=(svc,), daemon=True).start()
 
     def _start_all(self):
+        # If Ollama is missing, ask the user once before kicking off the batch.
+        if not resolve_ollama():
+            self._prompt_install_ollama()
+            # Continue starting everything else regardless — the user can hit
+            # START ALL again after the installer finishes.
         def _do():
             if not self._ensure_deps():
                 return
@@ -379,6 +471,10 @@ class TrendVaultLauncher(tk.Tk):
             order = {'ollama': 0, 'kokoro': 0, 'ollama_ui': 1}
             ordered = sorted(SERVICES, key=lambda s: order.get(s['key'], 2))
             for svc in ordered:
+                # Skip ollama silently if it's still missing — _launch would
+                # log a redundant error otherwise.
+                if svc['key'] == 'ollama' and not resolve_ollama():
+                    continue
                 threading.Thread(target=self._launch, args=(svc,), daemon=True).start()
                 time.sleep(0.3)
         threading.Thread(target=_do, daemon=True).start()
@@ -392,13 +488,20 @@ class TrendVaultLauncher(tk.Tk):
         if port_in_use(svc['port']):
             self._log_line(svc['name'] + ' already on :' + str(svc['port']), AMBER)
             return
+        cmd = svc['cmd']
+        if key == 'ollama':
+            ollama_bin = resolve_ollama()
+            if not ollama_bin:
+                self._log_line('Ollama is not installed -- skipping', RED)
+                return
+            cmd = [ollama_bin, 'serve']
         self._log_line('Starting ' + svc['name'] + '...', TEXT)
         self._set_status('Starting ' + svc['name'] + '...')
         try:
             env = {**os.environ, 'NODE_OPTIONS': '--max-old-space-size=8192'}
             env.update(svc.get('env', {}))
             proc = subprocess.Popen(
-                svc['cmd'], cwd=ROOT, env=env,
+                cmd, cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 encoding='utf-8', errors='replace', bufsize=1,
                 shell=(sys.platform == 'win32'),
@@ -473,6 +576,11 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line(
                 'Kokoro model'.ljust(15) + '  ' + ('OK' if kokoro_ready else 'MISSING -- run setup-kokoro.bat'),
                 TEXT if kokoro_ready else AMBER
+            )
+            ollama_path = resolve_ollama()
+            self._log_line(
+                'Ollama'.ljust(15) + '  ' + (ollama_path if ollama_path else 'MISSING -- click START on the Ollama card to install'),
+                TEXT if ollama_path else AMBER
             )
             self._log_line('--- End ---', ACCENT)
         threading.Thread(target=_check, daemon=True).start()
