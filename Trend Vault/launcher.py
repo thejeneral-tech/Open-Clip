@@ -141,13 +141,15 @@ class TrendVaultLauncher(tk.Tk):
         super().__init__()
         self.title('🏦 Trend Vault Launcher')
         self.configure(bg=BG)
-        self.resizable(False, False)
-        self.geometry('540x860')
+        self.minsize(1080, 720)
+        self.geometry('1180x780')
 
         # Process handles  { key: subprocess.Popen }
         self._procs: dict[str, subprocess.Popen] = {}
         self._lock  = threading.Lock()
         self._installing_ollama = False
+        self._cached_model: str | None = None
+        self._busy_prompt = False
 
         self._build_ui()
         self._poll()                                 # start status polling loop
@@ -157,64 +159,106 @@ class TrendVaultLauncher(tk.Tk):
     def _build_ui(self):
         mono = tkfont.Font(family='Consolas', size=9)
 
-        # Header
-        hdr = tk.Frame(self, bg=BG, pady=16)
-        hdr.pack(fill='x', padx=24)
+        # ── Top header (spans both columns) ──
+        hdr = tk.Frame(self, bg=BG, pady=14)
+        hdr.pack(fill='x', padx=28)
         tk.Label(hdr, text='🏦  TREND VAULT', bg=BG, fg=TEXT,
-                 font=('Segoe UI', 17, 'bold')).pack(side='left')
-        tk.Label(hdr, text='LAUNCHER', bg=BG, fg=ACCENT,
-                 font=('Segoe UI', 17, 'bold')).pack(side='left', padx=(6,0))
+                 font=('Segoe UI', 18, 'bold')).pack(side='left')
+        tk.Label(hdr, text='CONTROL', bg=BG, fg=ACCENT,
+                 font=('Segoe UI', 18, 'bold')).pack(side='left', padx=(8, 0))
+        self._status_var = tk.StringVar(value='Ready')
+        tk.Label(hdr, textvariable=self._status_var, bg=BG, fg=MUTED,
+                 font=('Segoe UI', 9)).pack(side='right')
 
-        # Divider
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=0)
+        tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
 
-        # Service cards
-        cards_frame = tk.Frame(self, bg=BG, pady=16)
-        cards_frame.pack(fill='x', padx=24)
+        # ── Two-column body ──
+        body = tk.Frame(self, bg=BG)
+        body.pack(fill='both', expand=True)
+
+        # LEFT column: services + actions (fixed width)
+        left = tk.Frame(body, bg=BG, width=560)
+        left.pack(side='left', fill='y')
+        left.pack_propagate(False)
+
+        tk.Frame(body, bg=BORDER, width=1).pack(side='left', fill='y')
+
+        # RIGHT column: console + prompt (flex)
+        right = tk.Frame(body, bg=BG2)
+        right.pack(side='left', fill='both', expand=True)
+
+        # ── LEFT: section label + service cards ──
+        tk.Label(left, text='SERVICES', bg=BG, fg=MUTED,
+                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=28, pady=(18, 6))
+        cards_frame = tk.Frame(left, bg=BG)
+        cards_frame.pack(fill='x', padx=28)
 
         self._cards: dict[str, dict] = {}
         for svc in SERVICES:
             self._cards[svc['key']] = self._make_card(cards_frame, svc)
 
-        # Divider
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=0)
+        # Action bar inside left column
+        tk.Frame(left, bg=BORDER, height=1).pack(fill='x', pady=(14, 0))
+        tk.Label(left, text='ACTIONS', bg=BG, fg=MUTED,
+                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=28, pady=(12, 6))
+        bar = tk.Frame(left, bg=BG)
+        bar.pack(fill='x', padx=24, pady=(0, 16))
+        # Two rows of action buttons so they fit cleanly in 560px
+        row1 = tk.Frame(bar, bg=BG); row1.pack(fill='x', pady=(0, 6))
+        row2 = tk.Frame(bar, bg=BG); row2.pack(fill='x')
+        self._btn(row1, '▶  START ALL',       self._start_all,    BTN_GO,  GREEN ).pack(side='left', padx=3)
+        self._btn(row1, '■  STOP ALL',        self._stop_all,     BTN_STP, RED   ).pack(side='left', padx=3)
+        self._btn(row1, '\U0001f4e6 INSTALL', self._run_install,  BTN,     AMBER ).pack(side='left', padx=3)
+        self._btn(row1, '⬡  HEALTH',          self._health,       BTN,     AMBER ).pack(side='left', padx=3)
+        self._btn(row2, '\U0001f310 OPEN STUDIO', self._open_browser, BTN, ACCENT).pack(side='left', padx=3)
+        self._btn(row2, '\U0001f916 OPEN CHAT UI', self._open_chat,   BTN, ACCENT).pack(side='left', padx=3)
 
-        # Global action bar
-        bar = tk.Frame(self, bg=BG2, pady=14)
-        bar.pack(fill='x', padx=0)
-        inner = tk.Frame(bar, bg=BG2)
-        inner.pack()
-
-        self._btn(inner, '▶  START ALL',  self._start_all,   BTN_GO,  GREEN ).pack(side='left', padx=4)
-        self._btn(inner, '■  STOP ALL',   self._stop_all,    BTN_STP, RED   ).pack(side='left', padx=4)
-        self._btn(inner, '\U0001f4e6  INSTALL', self._run_install, BTN,    AMBER ).pack(side='left', padx=4)
-        self._btn(inner, '⬡  HEALTH',     self._health,      BTN,     AMBER ).pack(side='left', padx=4)
-        self._btn(inner, '\U0001f310  OPEN',   self._open_browser, BTN,    ACCENT).pack(side='left', padx=4)
-        self._btn(inner, '\U0001f916  CHAT',   self._open_chat,    BTN,    ACCENT).pack(side='left', padx=4)
-
-        # Divider
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
-
-        # Log pane
-        log_hdr = tk.Frame(self, bg=BG, pady=8)
-        log_hdr.pack(fill='x', padx=24)
-        tk.Label(log_hdr, text='LOGS', bg=BG, fg=MUTED,
-                 font=('Segoe UI', 8, 'bold')).pack(side='left')
-        self._btn(log_hdr, 'clear', self._clear_log, BG, MUTED,
+        # ── RIGHT: console header ──
+        rhdr = tk.Frame(right, bg=BG2)
+        rhdr.pack(fill='x', padx=20, pady=(18, 6))
+        tk.Label(rhdr, text='CONSOLE', bg=BG2, fg=ACCENT,
+                 font=('Segoe UI', 9, 'bold')).pack(side='left')
+        self._model_var = tk.StringVar(value='ollama: not connected')
+        tk.Label(rhdr, textvariable=self._model_var, bg=BG2, fg=MUTED,
+                 font=('Segoe UI', 8)).pack(side='left', padx=(12, 0))
+        self._btn(rhdr, 'clear', self._clear_log, BG2, MUTED,
                   font=('Segoe UI', 8)).pack(side='right')
 
+        # Log pane (fills the right column)
+        log_wrap = tk.Frame(right, bg=BORDER)
+        log_wrap.pack(fill='both', expand=True, padx=20, pady=(0, 8))
         self._log = tk.Text(
-            self, bg=BG2, fg='#a0a0c0', font=mono,
+            log_wrap, bg=BG, fg='#c0c0d8', font=mono,
             bd=0, relief='flat', wrap='word',
-            state='disabled', height=12,
+            state='disabled', padx=12, pady=10,
             insertbackground=TEXT, selectbackground=ACCENT,
         )
-        self._log.pack(fill='both', expand=True, padx=24, pady=(0, 16))
+        self._log.pack(fill='both', expand=True, padx=1, pady=1)
+        self._log.tag_configure('inline', foreground=TEXT)
 
-        # Status bar
-        self._status_var = tk.StringVar(value='Ready')
-        tk.Label(self, textvariable=self._status_var, bg=BG, fg=MUTED,
-                 font=('Segoe UI', 8), anchor='w', pady=4).pack(fill='x', padx=24)
+        # ── Prompt input row ──
+        tk.Label(right, text='PROMPT  (Enter to send to Ollama)', bg=BG2, fg=MUTED,
+                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=20, pady=(2, 4))
+        prompt_wrap = tk.Frame(right, bg=BORDER)
+        prompt_wrap.pack(fill='x', padx=20, pady=(0, 18))
+        prompt_row = tk.Frame(prompt_wrap, bg=BG)
+        prompt_row.pack(fill='x', padx=1, pady=1)
+        tk.Label(prompt_row, text='>', bg=BG, fg=ACCENT,
+                 font=('Consolas', 13, 'bold')).pack(side='left', padx=(10, 6), pady=4)
+        self._prompt_var = tk.StringVar()
+        self._prompt_entry = tk.Entry(
+            prompt_row, textvariable=self._prompt_var,
+            bg=BG, fg=TEXT, insertbackground=TEXT,
+            relief='flat', bd=0, highlightthickness=0,
+            font=('Consolas', 10),
+        )
+        self._prompt_entry.pack(side='left', fill='x', expand=True, ipady=8)
+        self._prompt_entry.bind('<Return>', lambda e: self._send_prompt())
+        self._btn(prompt_row, 'SEND', self._send_prompt, BTN_GO, GREEN,
+                  font=('Segoe UI', 9, 'bold')).pack(side='left', padx=(6, 6), pady=4)
+
+        # Fetch the active ollama model in the background to populate the chip
+        self.after(1500, lambda: threading.Thread(target=self._refresh_model, daemon=True).start())
 
     def _make_card(self, parent: tk.Frame, svc: dict) -> dict:
         card = tk.Frame(parent, bg=CARD, bd=0, padx=16, pady=12,
@@ -598,6 +642,96 @@ class TrendVaultLauncher(tk.Tk):
             return
         webbrowser.open(url)
         self._log_line('Opening ' + url, ACCENT)
+
+    # ── Ollama prompt sender ─────────────────────────────────────────────────
+    def _refresh_model(self):
+        """Fetch the first available ollama model and cache it for prompts."""
+        import urllib.request, json
+        try:
+            with urllib.request.urlopen('http://127.0.0.1:11434/api/tags', timeout=3) as resp:
+                data = json.load(resp)
+            models = data.get('models') or []
+            if not models:
+                self.after(0, lambda: self._model_var.set('ollama: no models -- run `ollama pull llama3.2`'))
+                self._cached_model = None
+                return
+            name = models[0].get('name') or models[0].get('model')
+            self._cached_model = name
+            self.after(0, lambda: self._model_var.set('ollama: ' + str(name)))
+        except Exception:
+            self.after(0, lambda: self._model_var.set('ollama: not connected'))
+            self._cached_model = None
+
+    def _send_prompt(self):
+        text = self._prompt_var.get().strip()
+        if not text:
+            return
+        if self._busy_prompt:
+            self._log_line('Still streaming previous response, please wait...', AMBER)
+            return
+        self._prompt_var.set('')
+        if not resolve_ollama():
+            self._log_line('Ollama not installed -- click START on the Ollama card to install', AMBER)
+            return
+        if not port_in_use(11434):
+            self._log_line('Ollama not running -- click START on the Ollama card', AMBER)
+            return
+        self._log_line('> ' + text, ACCENT)
+        threading.Thread(target=self._stream_ollama, args=(text,), daemon=True).start()
+
+    def _stream_ollama(self, prompt: str):
+        import urllib.request, json
+        self._busy_prompt = True
+        try:
+            model = self._cached_model
+            if not model:
+                self._refresh_model()
+                model = self._cached_model
+            if not model:
+                self._log_line('No ollama models installed. Run: ollama pull llama3.2', RED)
+                return
+            payload = json.dumps({
+                'model': model,
+                'prompt': prompt,
+                'stream': True,
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'http://127.0.0.1:11434/api/generate',
+                data=payload,
+                headers={'Content-Type': 'application/json'},
+            )
+            self._append_inline('  ', leading_ts=True)
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                for raw in resp:
+                    raw = raw.strip()
+                    if not raw:
+                        continue
+                    try:
+                        obj = json.loads(raw)
+                    except Exception:
+                        continue
+                    chunk = obj.get('response') or ''
+                    if chunk:
+                        self._append_inline(chunk)
+                    if obj.get('done'):
+                        self._append_inline('\n')
+                        break
+        except Exception as e:
+            self._log_line('Ollama error: ' + str(e), RED)
+        finally:
+            self._busy_prompt = False
+
+    def _append_inline(self, text: str, leading_ts: bool = False):
+        """Stream raw text into the log without per-token timestamps."""
+        def _do():
+            self._log.configure(state='normal')
+            if leading_ts:
+                self._log.insert('end', '[' + ts() + ']  ', 'cinline')
+                self._log.tag_configure('cinline', foreground=MUTED)
+            self._log.insert('end', text, 'inline')
+            self._log.see('end')
+            self._log.configure(state='disabled')
+        self.after(0, _do)
 
     # ── Window close ─────────────────────────────────────────────────────────
     def destroy(self):
