@@ -702,6 +702,70 @@ async function handleLocalCodeCheck(req, res) {
   }
 }
 
+// Small / quantised llama-family models often "describe" a tool call in plain
+// text (e.g. `{"name": "list_dir", "parameters": {"path": "."}}`) instead of
+// emitting it in the `tool_calls` field that Ollama exposes. Scan the assistant
+// text for such embedded JSON-shaped calls and lift them out so the agent loop
+// can still execute them.
+const KNOWN_TOOL_NAMES = new Set([
+  "read_file", "write_file", "edit_file", "list_dir", "glob", "grep", "bash",
+]);
+
+function extractEmbeddedToolCalls(text) {
+  if (!text || typeof text !== "string") return { calls: [], cleanedText: text || "" };
+  const out = [];
+  const ranges = [];
+
+  // Find candidate starts: any `"name"` key whose value is a known tool name.
+  const startRe = /\{\s*"name"\s*:\s*"([a-z_]+)"/g;
+  let m;
+  while ((m = startRe.exec(text)) !== null) {
+    if (!KNOWN_TOOL_NAMES.has(m[1])) continue;
+    // Brace-match forward from this `{` until depth hits zero, respecting
+    // strings + escapes so internal `}` inside string values don't fool us.
+    let depth = 0, i = m.index, inStr = false, esc = false, end = -1;
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) { end = i + 1; break; }
+      }
+    }
+    if (end === -1) continue;
+    const blob = text.slice(m.index, end);
+    let parsed;
+    try { parsed = JSON.parse(blob); } catch { continue; }
+    if (!parsed || typeof parsed.name !== "string") continue;
+    const args = parsed.parameters || parsed.arguments || parsed.input || {};
+    out.push({ function: { name: parsed.name, arguments: args } });
+    ranges.push([m.index, end]);
+    startRe.lastIndex = end;
+  }
+
+  if (ranges.length === 0) return { calls: out, cleanedText: text };
+
+  // Strip the extracted blobs to produce a cleaner narrative for the UI.
+  ranges.sort((a, b) => a[0] - b[0]);
+  let cleaned = "";
+  let pos = 0;
+  for (const [s, e] of ranges) {
+    cleaned += text.slice(pos, s);
+    pos = e;
+  }
+  cleaned += text.slice(pos);
+  cleaned = cleaned
+    .replace(/```(?:json)?\s*```/g, "")         // empty fences left behind
+    .replace(/^[ \t]+|[ \t]+$/gm, "")           // trim trailing/leading spaces per line
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { calls: out, cleanedText: cleaned };
+}
+
 function defaultCodeSystemPrompt(cwd, allowedDirs) {
   const lines = [
     "You are a coding agent operating across one or more local directories the user has authorised.",
@@ -826,19 +890,38 @@ async function handleLocalCodeChat(req, res) {
       }
 
       const msg = resp.message || {};
-      // Push the assistant message into history before we even render it,
-      // so tool replies have the right shape on the next turn.
-      messages.push({
-        role: "assistant",
-        content: msg.content || "",
-        tool_calls: msg.tool_calls,
-      });
 
-      if (msg.content) {
-        emit({ kind: "assistant_text", text: msg.content });
+      // Real Ollama tool_calls field if the model used it natively.
+      let calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+      let displayText = msg.content || "";
+
+      // Fallback: small llamas often emit JSON-shaped tool calls in plain text.
+      // Lift those out and execute them as if they were native tool_calls.
+      if (calls.length === 0 && displayText) {
+        const ex = extractEmbeddedToolCalls(displayText);
+        if (ex.calls.length > 0) {
+          calls = ex.calls;
+          displayText = ex.cleanedText;
+          emit({
+            kind: "warning",
+            message:
+              `Model emitted ${ex.calls.length} tool call${ex.calls.length === 1 ? "" : "s"} ` +
+              `as text — running them anyway. (For better behaviour, try a larger model: ` +
+              `qwen2.5-coder, llama3.1, mistral-nemo.)`,
+          });
+        }
       }
 
-      const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+      // Record the (possibly-rewritten) assistant turn in history so the next
+      // round-trip sees the correct shape.
+      messages.push({
+        role: "assistant",
+        content: displayText,
+        tool_calls: calls.length ? calls : undefined,
+      });
+
+      if (displayText) emit({ kind: "assistant_text", text: displayText });
+
       if (calls.length === 0) {
         emit({ kind: "done", iters });
         break;

@@ -782,34 +782,40 @@
   }
 
   function buildToolUseBlock(toolName, input) {
+    // Claude Code TUI style: one bullet-prefixed call line, one indented
+    // result line, and a click-to-expand block for full I/O.
     const block = document.createElement("div");
-    block.className = "tool-use";
+    block.className = "tool-use status-running";
     block.dataset.tool = toolName || "tool";
 
-    const header = document.createElement("div");
-    header.className = "tool-use-header";
-    const icon = document.createElement("span");
-    icon.className = "tool-use-icon";
-    icon.textContent = toolIcon(toolName);
-    const name = document.createElement("span");
-    name.className = "tool-use-name";
-    name.textContent = toolName || "Tool";
-    const summary = document.createElement("span");
-    summary.className = "tool-use-summary";
-    summary.textContent = summarizeToolInput(toolName, input);
-    const status = document.createElement("span");
-    status.className = "tool-use-status running";
-    status.textContent = "running…";
-    header.appendChild(icon);
-    header.appendChild(name);
-    header.appendChild(summary);
-    header.appendChild(status);
-    block.appendChild(header);
+    const call = document.createElement("div");
+    call.className = "tool-call-line";
+    const bullet = document.createElement("span");
+    bullet.className = "tool-bullet";
+    bullet.textContent = "●";
+    const callText = document.createElement("span");
+    callText.className = "tool-call-text";
+    callText.textContent = formatToolCall(toolName, input);
+    call.appendChild(bullet);
+    call.appendChild(callText);
+    block.appendChild(call);
+
+    const resultLine = document.createElement("div");
+    resultLine.className = "tool-result-line";
+    const arrow = document.createElement("span");
+    arrow.className = "tool-result-arrow";
+    arrow.textContent = "⎿";
+    const snippet = document.createElement("span");
+    snippet.className = "tool-result-snippet";
+    snippet.textContent = "running…";
+    resultLine.appendChild(arrow);
+    resultLine.appendChild(snippet);
+    block.appendChild(resultLine);
 
     const detail = document.createElement("details");
     detail.className = "tool-use-detail";
     const sum = document.createElement("summary");
-    sum.textContent = "Show details";
+    sum.textContent = "expand";
     detail.appendChild(sum);
 
     const inputPre = document.createElement("pre");
@@ -822,9 +828,29 @@
     detail.appendChild(resultPre);
 
     block.appendChild(detail);
-    block._status = status;
+    block._snippet = snippet;
     block._resultPre = resultPre;
     return block;
+  }
+
+  // Render a tool call as `tool_name(key-arg)` for the one-line headline.
+  function formatToolCall(name, input) {
+    const n = (name || "").toLowerCase();
+    const arg = (s) => {
+      if (typeof s !== "string") return "";
+      return s.length > 70 ? s.slice(0, 70) + "…" : s;
+    };
+    if (n === "read_file" || n === "write_file" || n === "edit_file" || n === "list_dir") {
+      return `${name}(${arg(input?.path || "")})`;
+    }
+    if (n === "bash") return `${name}(${arg(input?.command || "")})`;
+    if (n === "grep") {
+      const p = input?.pattern || "";
+      const where = input?.path ? `, ${arg(input.path)}` : "";
+      return `${name}(${arg(p)}${where})`;
+    }
+    if (n === "glob") return `${name}(${arg(input?.pattern || "")})`;
+    return `${name}(${arg(safeJsonStringify(input || {}))})`;
   }
 
   function toolIcon(name) {
@@ -863,28 +889,63 @@
 
   function attachToolResult(block, content, isError) {
     if (!block) return;
-    const status = block._status;
-    if (status) {
-      status.classList.remove("running");
-      status.classList.toggle("error", !!isError);
-      status.classList.toggle("ok", !isError);
-      status.textContent = isError ? "error" : "done";
+    block.classList.remove("status-running");
+    block.classList.add(isError ? "status-error" : "status-ok");
+
+    // One-line snippet under the call line — the part you can read at a glance.
+    if (block._snippet) {
+      block._snippet.textContent = summarizeToolResult(block.dataset.tool, content, isError);
     }
+
+    // Full I/O, hidden behind the "expand" disclosure.
     const pre = block._resultPre;
     if (pre) {
       pre.classList.remove("hidden");
       let text;
-      if (typeof content === "string") {
-        text = content;
-      } else if (Array.isArray(content)) {
+      if (typeof content === "string") text = content;
+      else if (Array.isArray(content)) {
         text = content.map((c) => (typeof c === "string" ? c : c.text || safeJsonStringify(c))).join("\n");
-      } else {
-        text = safeJsonStringify(content);
-      }
-      // Trim huge outputs for display; full output is still in the underlying message store if needed.
+      } else text = safeJsonStringify(content);
       if (text.length > 8000) text = text.slice(0, 8000) + `\n…\n[truncated, ${text.length} chars total]`;
       pre.textContent = text;
     }
+  }
+
+  // Produce the dim one-liner that goes under the call (e.g. "Read 245 lines, 8 KB").
+  function summarizeToolResult(toolName, content, isError) {
+    if (isError) {
+      const msg = content && content.error ? content.error : (typeof content === "string" ? content : safeJsonStringify(content));
+      return `Error: ${msg.length > 200 ? msg.slice(0, 200) + "…" : msg}`;
+    }
+    const n = (toolName || "").toLowerCase();
+    const obj = content || {};
+    const fmtBytes = (b) => {
+      if (!Number.isFinite(b)) return "";
+      if (b < 1024) return `${b}B`;
+      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+      return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+    };
+
+    if (n === "read_file") {
+      const lines = (obj.content || "").split(/\r?\n/).length;
+      const size = fmtBytes(obj.bytes);
+      return `Read ${lines} line${lines === 1 ? "" : "s"}${size ? `, ${size}` : ""}`;
+    }
+    if (n === "write_file") return `Wrote ${fmtBytes(obj.bytes) || "OK"}`;
+    if (n === "edit_file") return `Replaced 1 occurrence at offset ${obj.replacedAt ?? "?"}`;
+    if (n === "list_dir") return `${(obj.entries || []).length} entries`;
+    if (n === "glob") return `${obj.count ?? (obj.paths || []).length} matches`;
+    if (n === "grep") return `${obj.count ?? (obj.hits || []).length} hits`;
+    if (n === "bash") {
+      const ec = obj.exitCode;
+      const out = (obj.stdout || "").length;
+      const err = (obj.stderr || "").length;
+      const head = (obj.stdout || obj.stderr || "").split(/\r?\n/, 1)[0].slice(0, 80);
+      return `exit ${ec ?? "?"}, ${out}B out / ${err}B err${head ? ` · ${head}` : ""}`;
+    }
+    // Generic fallback.
+    if (typeof content === "string") return content.split(/\r?\n/, 1)[0].slice(0, 120);
+    return "done";
   }
 
   function buildCodeMessageEl(msg) {

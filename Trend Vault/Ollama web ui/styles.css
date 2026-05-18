@@ -1187,76 +1187,83 @@ input, textarea, select {
   font-size: 12px;
 }
 
-/* Tool-use card */
+/* ─── Tool-use blocks: Claude-Code style compact TUI lines ─────────────────
+   Each tool call renders as two lines:
+     ● tool_name(args)
+       ⎿  result snippet
+   plus a `<details>` "expand" for the full input/output JSON.
+*/
 .tool-use {
-  margin: 8px 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elevated);
-  overflow: hidden;
-}
-.tool-use-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  margin: 4px 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid var(--border-subtle);
-}
-.tool-use-icon { font-size: 14px; }
-.tool-use-name {
-  font-weight: 600;
+  line-height: 1.5;
   color: var(--text);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
-.tool-use-summary {
-  color: var(--text-muted);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
+.tool-call-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  word-break: break-word;
 }
-.tool-use-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 500;
+.tool-bullet {
   flex-shrink: 0;
-}
-.tool-use-status.running {
-  background: rgba(217, 119, 6, 0.15);
+  width: 12px;
+  text-align: center;
+  font-size: 12px;
+  /* default = running */
   color: #f59e0b;
 }
-.tool-use-status.ok {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+.tool-use.status-ok .tool-bullet { color: #22c55e; }
+.tool-use.status-error .tool-bullet { color: #ef4444; }
+.tool-call-text {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
-.tool-use-status.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+.tool-result-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-left: 4px;
+  color: var(--text-dim);
 }
+.tool-result-arrow {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.tool-result-snippet {
+  word-break: break-word;
+}
+.tool-use.status-error .tool-result-snippet { color: #ef4444; }
 .tool-use-detail {
-  padding: 0 12px;
+  margin: 2px 0 6px 24px;
 }
 .tool-use-detail > summary {
   cursor: pointer;
-  padding: 8px 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   user-select: none;
+  padding: 1px 0;
+  display: inline-block;
+}
+.tool-use-detail > summary::-webkit-details-marker { display: none; }
+.tool-use-detail > summary::before {
+  content: "▸ ";
+}
+.tool-use-detail[open] > summary::before {
+  content: "▾ ";
 }
 .tool-use-detail > summary:hover { color: var(--text-muted); }
 .tool-use-input,
 .tool-use-result {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  background: var(--bg);
-  border-radius: 6px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  font-family: inherit;
   font-size: 12px;
   color: var(--text);
   white-space: pre-wrap;
@@ -1268,11 +1275,31 @@ input, textarea, select {
 .tool-use-result { border-left: 2px solid var(--text-dim); }
 .tool-use-result.hidden { display: none; }
 
+/* ─── Code-mode message (whole conversation goes monospace) ──────────────── */
+.message.code-msg {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
 .message.code-msg .avatar {
   background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
+}
+.message.code-msg .message-content {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.message.code-msg .message-content p { margin: 4px 0; }
+.message.code-msg .message-content code {
+  background: var(--bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.message.code-msg .message-blocks > * + * {
+  margin-top: 4px;
 }
 
 /* Settings: small "applies to ollama only" tag */
