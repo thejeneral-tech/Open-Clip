@@ -1,33 +1,25 @@
 /**
  * Kokoro TTS Adapter
- * ─────────────────────────────────────────────────────────────────────────────
- * Talks to the local Kokoro HTTP server.
- *
- * Return contract for generateVoiceLocal:
- *   - returns LocalTtsResult on success.
- *   - returns null ONLY when Kokoro is genuinely unreachable.
- *   - throws KokoroTimeoutError on timeout.
- *   - throws Error on every other failure.
  */
 
 import * as fs from 'fs';
 
 export interface LocalTtsRequest {
-  text:    string;
-  voice?:  string;
-  speed?:  number;
+  text: string;
+  voice?: string;
+  speed?: number;
   outPath: string;
   timeoutMs?: number;
 }
 
 export interface LocalTtsResult {
-  outPath:  string;
+  outPath: string;
   mimeType: string;
-  bytes:    number;
+  bytes: number;
 }
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5070';
-const DEFAULT_TIMEOUT_MS = 600_000;
+const DEFAULT_TIMEOUT_MS = 600000;
 
 function baseUrl(): string {
   return (process.env.LOCAL_TTS_URL || DEFAULT_BASE_URL).trim();
@@ -67,8 +59,7 @@ export async function generateVoiceLocal(req: LocalTtsRequest): Promise<LocalTts
     if (isConnectionRefused(err)) return null;
     if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
       throw new KokoroTimeoutError(
-        'Kokoro TTS request timed out after ' + Math.round(timeoutMs / 1000) + 's for ' +
-        req.text.length + ' chars - try a shorter script or restart Kokoro.'
+        'Kokoro TTS request timed out after ' + Math.round(timeoutMs / 1000) + 's for ' + req.text.length + ' chars'
       );
     }
     const msg = (err instanceof Error ? err.message : String(err)) || 'unknown';
@@ -79,20 +70,15 @@ export async function generateVoiceLocal(req: LocalTtsRequest): Promise<LocalTts
     try { body = (await res.text()).slice(0, 200); } catch { /* ignore */ }
     throw new Error('Kokoro TTS returned HTTP ' + res.status + (body ? ': ' + body : ''));
   }
-
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(req.outPath, buf);
-  return {
-    outPath: req.outPath,
-    mimeType: res.headers.get('content-type') || 'audio/wav',
-    bytes: buf.length,
-  };
+  return { outPath: req.outPath, mimeType: res.headers.get('content-type') || 'audio/wav', bytes: buf.length };
 }
 
 export async function probeLocalTts(): Promise<{ ok: boolean; engine?: 'kokoro'; url?: string }> {
   const url = baseUrl();
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(2_000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
     return { ok: res.ok || res.status === 404, engine: 'kokoro', url };
   } catch {
     return { ok: false };
@@ -106,7 +92,7 @@ export async function probeKokoroAlive(): Promise<{ ok: boolean; reason?: string
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'test.', voice: 'en-US-JennyNeural', speed: 1.0 }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) return { ok: false, reason: 'HTTP ' + res.status };
     const buf = Buffer.from(await res.arrayBuffer());
@@ -122,8 +108,8 @@ export async function probeKokoroAlive(): Promise<{ ok: boolean; reason?: string
 export async function waitForKokoroReady(
   options: { maxMs?: number; intervalMs?: number; logger?: (line: string) => void } = {},
 ): Promise<{ ready: boolean; elapsedMs: number; lastReason?: string }> {
-  const maxMs = options.maxMs ?? 60_000;
-  const intervalMs = options.intervalMs ?? 2_000;
+  const maxMs = options.maxMs !== undefined ? options.maxMs : 60000;
+  const intervalMs = options.intervalMs !== undefined ? options.intervalMs : 2000;
   const log = options.logger || (() => {});
   const start = Date.now();
   let attempt = 0;

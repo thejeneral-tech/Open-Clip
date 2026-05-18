@@ -2375,6 +2375,7 @@ app.post('/api/trend-vault/render', async (req, res) => {
       }
 
       let voiceBuffer: Buffer;
+      let ttsEngineUsed = 'unknown';
       try {
         const result = await generateVoice({
           text:      fullText,
@@ -2391,10 +2392,14 @@ app.post('/api/trend-vault/render', async (req, res) => {
           chamberSpace: voiceParams.chamberSpace,
           // Per-chunk progress goes straight to the render SSE log
           logger:    pushLog,
-          // "Force Working Render" — skip the FX chain, just loudnorm
+          // "Force Working Voice Render" — skip the FX chain, just loudnorm
           safeMode,
         });
         voiceBuffer = result.buffer;
+        ttsEngineUsed = result.engineUsed || 'unknown';
+        if (result.finalDurationSec !== undefined) {
+          pushLog(`[TTS] engine used: ${ttsEngineUsed} | final voice: ${result.finalDurationSec.toFixed(2)}s`);
+        }
       } catch (ttsErr) {
         const msg = (ttsErr as Error).message || String(ttsErr);
         throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Make sure the Kokoro server is running (start-kokoro.bat).`);
@@ -2424,11 +2429,19 @@ app.post('/api/trend-vault/render', async (req, res) => {
       fs.mkdirSync(publicAudioDir, { recursive: true });
       const publicAudioPath = path.join(publicAudioDir, voiceFile);
       fs.copyFileSync(voicePath, publicAudioPath);
-      pushLog(`[AUDIO] voice path used: ${publicAudioPath}`);
-      pushLog(`[AUDIO] voice volume: ${settings.voiceVolume ?? 1}`);
-      pushLog(`[AUDIO] music file: ${settings.musicFile || '(none)'}`);
-      pushLog(`[AUDIO] music volume: ${settings.musicVolume ?? 0.25}`);
-      pushLog(`[DURATION] mode=${settings.durationMode || 'autoVoice'} target=${settings.durationSeconds ?? 'n/a'}s ttsDur=${ttsDurationSec.toFixed(2)}s`);
+      // ── Render handoff verification — the user wants to know EXACTLY what
+      //    audio file is being used, what engine produced it, and how long it
+      //    is, before the (possibly multi-minute) Remotion render kicks off.
+      pushLog('───────── RENDER HANDOFF ─────────');
+      pushLog(`[HANDOFF] tts engine used : ${ttsEngineUsed}`);
+      pushLog(`[HANDOFF] final audio path: ${publicAudioPath}`);
+      pushLog(`[HANDOFF] final audio dur : ${ttsDurationSec.toFixed(2)}s`);
+      pushLog(`[HANDOFF] voice volume    : ${settings.voiceVolume ?? 1}`);
+      pushLog(`[HANDOFF] music file      : ${settings.musicFile || '(none)'}`);
+      pushLog(`[HANDOFF] music volume    : ${settings.musicVolume ?? 0.25}`);
+      pushLog(`[HANDOFF] duration mode   : ${settings.durationMode || 'autoVoice'} (target=${settings.durationSeconds ?? 'n/a'}s)`);
+      pushLog(`[HANDOFF] output folder   : ${folder}`);
+      pushLog('──────────────────────────────────');
 
       // ── Canonical timing build — voice duration is the master clock ─────
       // ONE pipeline produces the timeline used by preview AND render:
@@ -4201,18 +4214,45 @@ app.get('/api/clip/download-direct', async (req, res) => {
 
   console.log('[download-direct] URL submitted:', url, '| via:', ytd.source);
 
-  // Stream the best pre-muxed format directly to stdout (-o -)
+  const fmt = 'best[ext=mp4]/best[ext=webm]/best';
+  const prefixArgs: string[] = (ytd as any).prefixArgs ?? [];
+
+  // ── Quick pre-flight: ask yt-dlp for the file size so the browser gets a
+  //    real Content-Length and can show a percentage progress bar.
+  //    Timeout after 10 s so we never stall the download on a slow lookup.
+  let filesize = 0;
+  try {
+    const sizeStr = await new Promise<string>((resolve) => {
+      const timer = setTimeout(() => { try { p.kill(); } catch {} resolve(''); }, 10_000);
+      const p = spawn(ytd.cmd, [
+        ...prefixArgs,
+        '--no-playlist', '--no-warnings',
+        '-f', fmt,
+        '--print', '%(filesize,filesize_approx)s',
+        url,
+      ], { shell: false, windowsHide: true });
+      let out = '';
+      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      p.on('close', () => { clearTimeout(timer); resolve(out.trim()); });
+      p.on('error', () => { clearTimeout(timer); resolve(''); });
+    });
+    const n = parseInt(sizeStr);
+    if (!isNaN(n) && n > 0) filesize = n;
+  } catch { /* proceed without size — progress bar will show MB received */ }
+
+  // ── Stream yt-dlp stdout straight to the browser — nothing saved on server
   const args = [
-    ...ytd.prefixArgs,
+    ...prefixArgs,
     '--no-playlist',
     '--retries', '3',
-    '-f', 'best[ext=mp4]/best[ext=webm]/best',
+    '-f', fmt,
     '-o', '-',
     url,
   ];
 
   res.setHeader('Content-Type', 'video/mp4');
   res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
+  if (filesize > 0) res.setHeader('Content-Length', String(filesize));
 
   const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
 
@@ -4233,185 +4273,16 @@ app.get('/api/clip/download-direct', async (req, res) => {
   req.on('close', () => { try { proc.kill(); } catch { /* ignore */ } });
 });
 
-// ─── Stock Media Browser ────────────────────────────────────────────────────
+// ─── Start server
 
-// GET /api/stock/videos?q=cosmos&page=1
-app.get('/api/stock/videos', async (req, res) => {
-  const key = (process.env.PEXELS_API_KEY ?? '').trim();
-  if (!key) {
-    res.json({ error: 'no_key', provider: 'pexels' });
-    return;
-  }
-  const q    = String(req.query.q   || 'cosmos mystical stars');
-  const page = String(req.query.page || '1');
-  try {
-    const resp = await fetch(
-      `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=15&page=${page}&orientation=portrait`,
-      { headers: { Authorization: key } }
-    );
-    const data = await resp.json() as any;
-    const videos = ((data.videos ?? []) as any[]).map(v => {
-      const files: any[] = v.video_files ?? [];
-      // prefer portrait HD <= 1080 wide, else first file
-      const pick = files.find(f => f.height > f.width && f.width <= 1080 && f.quality === 'hd')
-                ?? files.find(f => f.height > f.width)
-                ?? files.find(f => f.quality === 'hd')
-                ?? files[0];
-      return {
-        id:          String(v.id),
-        thumb:       v.image ?? '',
-        duration:    v.duration ?? 0,
-        author:      v.user?.name ?? 'Pexels',
-        downloadUrl: pick?.link ?? '',
-        width:       pick?.width  ?? 0,
-        height:      pick?.height ?? 0,
-        source:      'pexels',
-      };
-    }).filter(v => v.downloadUrl);
-    res.json({ videos, page: data.page ?? page, total: data.total_results ?? 0 });
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// GET /api/stock/audio?q=ambient&page=1
-app.get('/api/stock/audio', async (req, res) => {
-  const clientId = (process.env.JAMENDO_CLIENT_ID ?? '').trim();
-  if (!clientId) {
-    res.json({ error: 'no_key', provider: 'jamendo' });
-    return;
-  }
-  const q      = String(req.query.q || 'ambient').trim();
-  const page   = Number(req.query.page || 1);
-  const offset = (page - 1) * 20;
-
-  // Map common mood words to Jamendo tag vocabulary
-  const MOOD_MAP: Record<string, string> = {
-    calm: 'ambient', chill: 'chillout', mystical: 'new+age',
-    spiritual: 'new+age', meditation: 'new+age',
-    cinematic: 'soundtrack', dramatic: 'soundtrack',
-    fantasy: 'soundtrack', epic: 'orchestral',
-    lofi: 'downtempo', dark: 'ambient',
-    orchestral: 'orchestral', ambient: 'ambient',
-    atmospheric: 'ambient', peaceful: 'new+age',
-  };
-  const mappedTag = MOOD_MAP[q.toLowerCase()] ?? null;
-
-  const baseParams: Record<string, string> = {
-    client_id:   clientId,
-    format:      'json',
-    limit:       '20',
-    offset:      String(offset),
-    audioformat: 'mp31',
-    imagesize:   '100',
-    include:     'musicinfo',
-    order:       'popularity_month',
-  };
-
-  async function jamendoFetch(extra: Record<string, string>) {
-    const p = new URLSearchParams({ ...baseParams, ...extra });
-    const r = await fetch(`https://api.jamendo.com/v3.0/tracks/?${p}`);
-    return r.json() as any;
-  }
-
-  try {
-    // Stage 1 - exact/mapped tag search (best for mood chips)
-    let data = mappedTag ? await jamendoFetch({ tags: mappedTag }) : null;
-
-    // Detect auth/credential errors early
-    if (data?.headers?.status === 'failed') {
-      const code = data?.headers?.code;
-      if (code === 5 || code === 2 || String(data?.headers?.error_message ?? '').toLowerCase().includes('credential')) {
-        res.json({ error: 'no_key', provider: 'jamendo' });
-        return;
-      }
-    }
-
-    // Stage 2 - fuzzy tag search
-    if (!data?.results?.length) {
-      data = await jamendoFetch({ fuzzytags: q });
-    }
-
-    // Stage 3 - full-text name search
-    if (!data?.results?.length) {
-      data = await jamendoFetch({ namesearch: q });
-    }
-
-    // Stage 4 - last resort: popular ambient tracks
-    if (!data?.results?.length) {
-      data = await jamendoFetch({ tags: 'ambient' });
-    }
-
-    const tracks = ((data?.results ?? []) as any[]).map(t => {
-      const rawDownload: string = t.audiodownload ?? t.audio ?? '';
-      const downloadUrl = rawDownload
-        ? (rawDownload.includes('?')
-            ? `${rawDownload}&client_id=${clientId}`
-            : `${rawDownload}?client_id=${clientId}`)
-        : '';
-      return {
-        id:          String(t.id),
-        title:       t.name ?? 'Track',
-        author:      t.artist_name ?? '',
-        duration:    t.duration ?? 0,
-        thumb:       t.image ?? '',
-        previewUrl:  t.audio ?? '',
-        downloadUrl,
-        tags:        (t.musicinfo?.tags?.genres ?? []).slice(0, 3).join(', '),
-        source:      'jamendo',
-      };
-    });
-    res.json({ tracks, page, total: data?.headers?.results_count ?? tracks.length });
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// GET /api/stock/audio-proxy?url=...
-// Proxies a Jamendo audio stream through the server to avoid CORS issues in the browser
-app.get('/api/stock/audio-proxy', async (req, res) => {
-  const url = String(req.query.url ?? '');
-  if (!url) { res.status(400).end(); return; }
-  try {
-    const upstream = await fetch(url, {
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    if (!upstream.ok) { res.status(upstream.status).end(); return; }
-    res.setHeader('Content-Type',  upstream.headers.get('content-type')  ?? 'audio/mpeg');
-    res.setHeader('Content-Length', upstream.headers.get('content-length') ?? '');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    // Stream body - works in Node 18+ where Response.body is a ReadableStream
-    const { Readable } = await import('stream');
-    Readable.fromWeb(upstream.body as any).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-});
-
-// POST /api/stock/download  { type:'video'|'audio', downloadUrl, filename }
-// Note: this is a NO-OP placeholder — the real /api/stock/download route
-// is registered earlier in this file (Express uses the first registration).
-// Kept here only so the surgical tail-rewrite has a deterministic insertion
-// point if it needs to run again.
-
-// ─── Start server ───────────────────────────────────────────────────────────
+// Start server
 const server = app.listen(PORT, () => {
-  console.log('');
-  console.log('  Trend Vault Studio  —  http://localhost:' + PORT + '/trend-vault');
-  console.log('');
+  console.log('  Trend Vault Studio  -  http://localhost:' + PORT + '/trend-vault');
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
-    console.error('');
-    console.error('  ====================================================');
-    console.error('  ERROR: Port ' + PORT + ' is already in use.');
-    console.error('  An old Trend Vault window is still running in the background.');
-    console.error('  Fix: run  stop_trend_vault_system.bat  then try again.');
-    console.error('  Or close all Trend Vault windows in the taskbar first.');
-    console.error('  ====================================================');
+    console.error('ERROR: Port ' + PORT + ' is already in use.');
     process.exit(1);
   } else {
     throw err;

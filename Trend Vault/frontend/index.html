@@ -999,6 +999,9 @@ newVideoBtn.addEventListener('click', () => {
   const ytProgress = E('ytProgress');
   const ytStatus   = E('ytStatus');
   const ytAvail    = E('ytAvail');
+  const ytProgFill = E('ytProgFill');
+  const ytPct      = E('ytPct');
+  const ytSpeedEta = E('ytSpeedEta');
 
   // ---- shared helpers --------------------------------------------------
   function setStatus(state, msg){
@@ -1106,15 +1109,60 @@ newVideoBtn.addEventListener('click', () => {
         return;
       }
 
-      setStatus('processing', '⚙ Processing stream…');
-      const blob = await r.blob();
-      if (!blob || blob.size === 0) {
+      // 3. Stream the response in chunks so we can update the progress bar live.
+      const contentLength = parseInt(r.headers.get('Content-Length') || '0', 10);
+      const reader = r.body.getReader();
+      const chunks = [];
+      let received = 0;
+      const t0 = Date.now();
+
+      const fmtSpeed = b => b > 1048576 ? (b/1048576).toFixed(1)+' MB/s' : (b/1024).toFixed(0)+' KB/s';
+      const fmtEta   = s => s > 60 ? Math.floor(s/60)+'m '+String(Math.round(s%60)).padStart(2,'0')+'s' : Math.round(s)+'s';
+
+      setStatus('downloading', '⬇ Downloading…');
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+
+        // Progress percentage (or raw MB if no Content-Length)
+        if (contentLength > 0) {
+          const pct = Math.min(99, received / contentLength * 100);
+          if (ytProgFill) ytProgFill.style.width = pct.toFixed(1) + '%';
+          if (ytPct)      ytPct.textContent       = pct.toFixed(1) + '%';
+        } else {
+          const mb = (received / 1048576).toFixed(1);
+          if (ytPct)      ytPct.textContent       = mb + ' MB';
+          if (ytProgFill) ytProgFill.style.width  = '99%'; // indeterminate
+        }
+
+        // Speed + ETA
+        const elapsed = (Date.now() - t0) / 1000;
+        if (elapsed > 0.5 && ytSpeedEta) {
+          const speed = received / elapsed;
+          const speedStr = fmtSpeed(speed);
+          if (contentLength > 0) {
+            const eta = (contentLength - received) / speed;
+            ytSpeedEta.textContent = speedStr + ' · ETA ' + fmtEta(eta);
+          } else {
+            ytSpeedEta.textContent = speedStr;
+          }
+        }
+      }
+
+      if (received === 0) {
         setStatus('failed', '❌ Download returned empty file');
         return;
       }
 
-      // 3. Trigger the browser save dialog from a real Blob — never a
-      //    navigation, never a white page.
+      // 4. Assemble blob and trigger browser Save dialog
+      setStatus('processing', '⚙ Saving…');
+      const blob = new Blob(chunks, { type: 'video/mp4' });
+      if (ytProgFill) ytProgFill.style.width = '100%';
+      if (ytPct)      ytPct.textContent      = '100%';
+      if (ytSpeedEta) ytSpeedEta.textContent = '';
+
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
