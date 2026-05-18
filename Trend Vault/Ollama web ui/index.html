@@ -3,23 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ollama Chat</title>
+  <title>Ollama Studio</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app">
-    <!-- Sidebar: conversation history -->
+
+    <!-- ===== Sidebar ===== -->
     <aside class="sidebar" id="sidebar">
+
+      <!-- View tabs -->
+      <div class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-view="chat" role="tab" aria-selected="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Chat</span>
+        </button>
+        <button class="nav-tab" data-view="code" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span>Code</span>
+        </button>
+        <button class="nav-tab" data-view="models" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+            <path d="M3 5v14a9 3 0 0 0 18 0V5"></path>
+            <path d="M3 12a9 3 0 0 0 18 0"></path>
+          </svg>
+          <span>Models</span>
+        </button>
+      </div>
+
       <div class="sidebar-header">
         <button class="new-chat-btn" id="newChatBtn" title="New chat">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>New chat</span>
+          <span id="newChatLabel">New chat</span>
         </button>
       </div>
+
       <nav class="conversations" id="conversations"></nav>
+
       <div class="sidebar-footer">
         <button class="icon-btn" id="settingsBtn" title="Settings">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -31,8 +60,10 @@
       </div>
     </aside>
 
-    <!-- Main chat panel -->
+    <!-- ===== Main ===== -->
     <main class="main">
+
+      <!-- Top bar (shared) -->
       <header class="topbar">
         <button class="icon-only" id="toggleSidebar" title="Toggle sidebar">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -41,13 +72,18 @@
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <div class="model-picker">
+
+        <div class="view-title" id="viewTitle">Chat</div>
+
+        <div class="model-picker" id="modelPickerWrap">
           <select id="modelSelect" aria-label="Choose model">
             <option value="">Loading models…</option>
           </select>
           <span class="status-dot" id="statusDot" title="Connection status"></span>
         </div>
+
         <div class="topbar-spacer"></div>
+
         <button class="icon-only" id="clearChatBtn" title="Clear current chat">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -58,36 +94,91 @@
         </button>
       </header>
 
-      <section class="chat" id="chat">
-        <div class="welcome" id="welcome">
-          <h1>Ollama Chat</h1>
-          <p>Chat with your local Ollama models. Pick a model above and send a message to begin.</p>
-        </div>
-        <div class="messages" id="messages"></div>
-      </section>
+      <!-- Chat view (also used by Code view, with different state) -->
+      <div class="view view-chat" id="chatView">
+        <section class="chat" id="chat">
+          <div class="welcome" id="welcome">
+            <h1 id="welcomeTitle">Ollama Chat</h1>
+            <p id="welcomeSubtitle">Chat with your local Ollama models. Pick a model above and send a message to begin.</p>
+            <div class="welcome-tips" id="welcomeTips" hidden>
+              <div class="tip-card">📝 Explain this code</div>
+              <div class="tip-card">🐛 Find the bug in...</div>
+              <div class="tip-card">⚡ Refactor for performance</div>
+              <div class="tip-card">🧪 Write tests for...</div>
+            </div>
+          </div>
+          <div class="messages" id="messages"></div>
+        </section>
 
-      <footer class="composer">
-        <form id="composerForm" class="composer-form" autocomplete="off">
-          <textarea
-            id="input"
-            class="composer-input"
-            placeholder="Message Ollama…"
-            rows="1"
-          ></textarea>
-          <button type="submit" id="sendBtn" class="send-btn" title="Send">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
-          <button type="button" id="stopBtn" class="stop-btn hidden" title="Stop generating">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-            </svg>
-          </button>
-        </form>
-        <p class="hint">Press Enter to send · Shift+Enter for newline</p>
-      </footer>
+        <footer class="composer">
+          <form id="composerForm" class="composer-form" autocomplete="off">
+            <textarea
+              id="input"
+              class="composer-input"
+              placeholder="Message Ollama…"
+              rows="1"
+            ></textarea>
+            <button type="submit" id="sendBtn" class="send-btn" title="Send">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+            <button type="button" id="stopBtn" class="stop-btn hidden" title="Stop generating">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+              </svg>
+            </button>
+          </form>
+          <p class="hint">Press Enter to send · Shift+Enter for newline</p>
+        </footer>
+      </div>
+
+      <!-- Models view -->
+      <div class="view view-models" id="modelsView" hidden>
+        <div class="models-wrap">
+          <section class="models-section">
+            <h2>Pull a model</h2>
+            <p class="section-hint">Download from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a>. Pull progress streams below.</p>
+            <form id="pullForm" class="pull-form" autocomplete="off">
+              <input type="text" id="pullInput" placeholder="e.g. llama3.2  or  qwen2.5-coder:7b" />
+              <button type="submit" id="pullBtn" class="btn-primary">Pull</button>
+            </form>
+            <div class="suggested">
+              <div class="suggested-label">Suggested:</div>
+              <button class="suggest-chip" data-name="llama3.2">llama3.2</button>
+              <button class="suggest-chip" data-name="llama3.2:1b">llama3.2:1b <span class="chip-size">~1.3 GB</span></button>
+              <button class="suggest-chip" data-name="qwen2.5-coder:7b">qwen2.5-coder:7b <span class="chip-size">~4.7 GB</span></button>
+              <button class="suggest-chip" data-name="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b <span class="chip-size">~1 GB</span></button>
+              <button class="suggest-chip" data-name="deepseek-coder-v2">deepseek-coder-v2</button>
+              <button class="suggest-chip" data-name="phi3.5">phi3.5</button>
+              <button class="suggest-chip" data-name="mistral">mistral</button>
+              <button class="suggest-chip" data-name="gemma2:9b">gemma2:9b</button>
+            </div>
+            <div class="pull-progress hidden" id="pullProgress">
+              <div class="pull-progress-header">
+                <span class="pull-progress-name" id="pullProgressName">—</span>
+                <button type="button" class="btn-link" id="pullCancel">Cancel</button>
+              </div>
+              <div class="pull-progress-status" id="pullProgressStatus">Preparing…</div>
+              <div class="pull-progress-bar">
+                <div class="pull-progress-fill" id="pullProgressFill"></div>
+              </div>
+              <div class="pull-progress-detail" id="pullProgressDetail"></div>
+            </div>
+          </section>
+
+          <section class="models-section">
+            <div class="models-list-header">
+              <h2>Installed models</h2>
+              <button type="button" class="btn-secondary" id="refreshModelsBtn">Refresh</button>
+            </div>
+            <div class="models-list" id="modelsList">
+              <div class="models-empty">Loading…</div>
+            </div>
+          </section>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -111,9 +202,15 @@
         </label>
 
         <label class="field">
-          <span class="field-label">System prompt</span>
-          <textarea id="systemPrompt" rows="4" placeholder="You are a helpful assistant."></textarea>
-          <span class="field-hint">Sent as the first message of every conversation.</span>
+          <span class="field-label">Chat system prompt</span>
+          <textarea id="systemPrompt" rows="3" placeholder="You are a helpful assistant."></textarea>
+          <span class="field-hint">Prepended to chat conversations.</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Code system prompt</span>
+          <textarea id="codeSystemPrompt" rows="4" placeholder="You are an expert pair programmer..."></textarea>
+          <span class="field-hint">Prepended to coding conversations.</span>
         </label>
 
         <div class="field-row">
