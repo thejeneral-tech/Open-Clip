@@ -372,6 +372,12 @@ tbody td:last-child{text-align:center}
 .modal-plat-btn.instagram{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.25)}
 .modal-plat-btn.instagram.on{background:rgba(214,41,118,.15);border-color:rgba(214,41,118,.5);color:#f472b6;box-shadow:0 0 8px rgba(214,41,118,.2)}
 
+/* Platform button layout — with status label */
+.modal-plat-row .modal-plat-btn{flex-direction:column;gap:2px;padding:9px 14px;min-width:118px;justify-content:center;line-height:1}
+.plat-stat-lbl{display:block;font-size:.55rem;font-weight:700;letter-spacing:.9px;text-transform:uppercase;font-family:'Orbitron',sans-serif;opacity:.55;margin-top:3px}
+.modal-plat-btn.on .plat-stat-lbl{opacity:.9;color:inherit}
+.modal-plat-btn.off .plat-stat-lbl{color:rgba(255,255,255,.28)}
+
 .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
 .btn-primary{
   background:linear-gradient(135deg,rgba(124,58,237,.7),rgba(168,85,247,.5));
@@ -532,9 +538,15 @@ tbody td:last-child{text-align:center}
     <div class="modal-field">
       <div class="modal-label">Platforms Connected</div>
       <div class="modal-plat-row">
-        <button class="modal-plat-btn tiktok off" id="mTikTok" onclick="toggleModalPlat('tiktok')">📤 TikTok</button>
-        <button class="modal-plat-btn youtube off" id="mYouTube" onclick="toggleModalPlat('youtube')">📺 YouTube</button>
-        <button class="modal-plat-btn instagram off" id="mInstagram" onclick="toggleModalPlat('instagram')">📸 Instagram</button>
+        <button class="modal-plat-btn tiktok off" id="mTikTok" onclick="navigateToPlatform('tiktok')">
+          📤 TikTok<span class="plat-stat-lbl" id="mTikTokStat">Not Connected</span>
+        </button>
+        <button class="modal-plat-btn youtube off" id="mYouTube" onclick="navigateToPlatform('youtube')">
+          📺 YouTube<span class="plat-stat-lbl" id="mYouTubeStat">Not Connected</span>
+        </button>
+        <button class="modal-plat-btn instagram off" id="mInstagram" onclick="navigateToPlatform('instagram')">
+          📸 Instagram<span class="plat-stat-lbl" id="mInstagramStat">Not Connected</span>
+        </button>
       </div>
     </div>
 
@@ -786,6 +798,64 @@ function saveNoteInline(id) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// MODAL DRAFT — save / restore state across platform-page navigation
+// ════════════════════════════════════════════════════════════════════════════
+const DRAFT_KEY = 'tv_modal_draft_v1';
+
+function _saveModalDraft(navigatingTo) {
+  const draft = {
+    name:        (document.getElementById('modalName').value  || '').trim(),
+    notes:       (document.getElementById('modalNotes').value || '').trim(),
+    mPlatState:  { tiktok: mPlat.tiktok, youtube: mPlat.youtube, instagram: mPlat.instagram },
+    modalMode,
+    editingId,
+    navigatingTo,
+    ts: Date.now(),
+  };
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+function _checkReturnFromPlatform() {
+  const p = new URLSearchParams(window.location.search);
+  const returnPlat = p.get('returnFromPlatform');
+  if (!returnPlat) return;
+
+  // Clean the URL so a refresh doesn't re-trigger this flow
+  history.replaceState({}, '', window.location.pathname);
+
+  // Try to retrieve the saved draft
+  let draft = null;
+  try { draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null'); } catch {}
+  sessionStorage.removeItem(DRAFT_KEY);
+
+  if (!draft || (Date.now() - (draft.ts || 0)) > 3_600_000) {
+    // Draft missing or too old — just show a toast, don't reopen modal
+    showToast(platLabel(returnPlat) + ' connection complete ✓', 'success');
+    return;
+  }
+
+  // Restore modal fields
+  modalMode = draft.modalMode || 'add';
+  editingId = draft.editingId || null;
+  document.getElementById('modalTitle').textContent = modalMode === 'edit' ? 'Edit Account' : 'Add Account';
+  document.getElementById('modalIcon').textContent  = modalMode === 'edit' ? '✏️' : '＋';
+  document.getElementById('modalName').value  = draft.name  || '';
+  document.getElementById('modalNotes').value = draft.notes || '';
+
+  // Restore platform state + mark the returning platform as connected
+  const mps = draft.mPlatState || {};
+  mPlat.tiktok    = !!mps.tiktok;
+  mPlat.youtube   = !!mps.youtube;
+  mPlat.instagram = !!mps.instagram;
+  mPlat[returnPlat] = true; // the platform we just visited = connected
+
+  syncModalPlatBtns();
+  showModal();
+  showToast(platLabel(returnPlat) + ' marked as connected ✓', 'success');
+  setTimeout(() => document.getElementById('modalName').focus(), 80);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MODAL — ADD / EDIT
 // ════════════════════════════════════════════════════════════════════════════
 let modalMode = 'add'; // 'add' | 'edit'
@@ -822,17 +892,28 @@ function openEditModal(id) {
   setTimeout(() => document.getElementById('modalName').focus(), 80);
 }
 
+function navigateToPlatform(plat) {
+  // Save current modal draft to sessionStorage before navigating away
+  _saveModalDraft(plat);
+  const routes = { tiktok: '/tiktok', youtube: '/youtube', instagram: '/instagram' };
+  window.location.href = (routes[plat] || '/' + plat) + '?returnTo=accounts&platform=' + plat;
+}
+
 function toggleModalPlat(plat) {
+  // Direct programmatic toggle (used internally)
   mPlat[plat] = !mPlat[plat];
   syncModalPlatBtns();
 }
 
 function syncModalPlatBtns() {
   ['tiktok','youtube','instagram'].forEach(p => {
-    const btn = document.getElementById('m' + p.charAt(0).toUpperCase() + p.slice(1));
+    const capP = p.charAt(0).toUpperCase() + p.slice(1);
+    const btn = document.getElementById('m' + capP);
     if (!btn) return;
-    btn.classList.toggle('on', mPlat[p]);
+    btn.classList.toggle('on',  mPlat[p]);
     btn.classList.toggle('off', !mPlat[p]);
+    const statEl = document.getElementById('m' + capP + 'Stat');
+    if (statEl) statEl.textContent = mPlat[p] ? '✓ Connected' : 'Not Connected';
   });
 }
 
@@ -863,7 +944,6 @@ function saveModal() {
       acct.name = name;
       acct.tiktok = mPlat.tiktok;
       acct.youtube = mPlat.youtube;
-      acct.instagram = mPlat.instagram;
       acct.notes = notes;
       acct.updatedAt = new Date().toISOString();
     }
@@ -952,6 +1032,7 @@ document.addEventListener('keydown', e => {
 // BOOT
 // ════════════════════════════════════════════════════════════════════════════
 renderTable();
+_checkReturnFromPlatform(); // restore modal if returning from a platform page
 </script>
 </body>
 </html>
