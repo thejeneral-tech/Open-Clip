@@ -1,6 +1,6 @@
 /**
  * Trend Vault Program — Local Web Server
- * Run: npm start  (or double-click start.bat)
+ * Run: npm start  (or double-click bats/START.bat)
  *
  * Trend Vault Studio: /trend-vault   → trend-vault-output/<folder>/
  * Clip Tool:     /          → output/final/<VideoName>/
@@ -14,23 +14,23 @@ import multer from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
-import { generateTrendVaultScript, generateFallbackScript } from './scripts/trend-vault-generate';
+import { generateTrendVaultScript, generateFallbackScript } from '../scripts/trend-vault-generate';
 import {
   generateVoice,
   VOICE_PRESETS,
   runKokoroRenderPreflight,
   debugChunkSynthesis,
   forceWorkingVoiceRender,
-} from './scripts/tts/ttsService';
-import { probeLocalTts, probeKokoroAlive, waitForKokoroReady } from './scripts/tts/localTtsAdapter';
-import { aiComplete, parseAIJson } from './scripts/ai-completion';
+} from '../scripts/tts/ttsService';
+import { probeLocalTts, probeKokoroAlive, waitForKokoroReady } from '../scripts/tts/localTtsAdapter';
+import { aiComplete, parseAIJson } from '../scripts/ai-completion';
 import { AssemblyAI } from 'assemblyai';
 import {
   buildTimedCaptions,
   logTimingDebug,
   bundleToRenderLines,
   type TimedCaptionsBundle,
-} from './scripts/timing';
+} from '../scripts/timing';
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
@@ -546,7 +546,7 @@ function startTikTokJob(videoAbs: string, caption: string, privacy: TikTokAutoPo
   tikTokJobs.set(id, job);
   (async () => {
     try {
-      const { uploadVideo } = await import('./scripts/tiktok-uploader');
+      const { uploadVideo } = await import('../scripts/tiktok-uploader');
       const result = await uploadVideo({
         videoPath: videoAbs,
         caption,
@@ -689,7 +689,7 @@ app.get('/api/tiktok/videos', (_req, res) => {
 // ── Fast status check (no browser launch) ────────────────────────────────
 app.get('/api/tiktok/session/status', async (_req, res) => {
   try {
-    const { readSessionStatus, sessionExists } = await import('./scripts/tiktok-uploader');
+    const { readSessionStatus, sessionExists } = await import('../scripts/tiktok-uploader');
     const cached = readSessionStatus();
     const exists = sessionExists();
     res.json({
@@ -717,7 +717,7 @@ app.post('/api/tiktok/session/login', async (_req, res) => {
   // Run in background — do NOT await in the request handler
   (async () => {
     try {
-      const { loginInteractive } = await import('./scripts/tiktok-uploader');
+      const { loginInteractive } = await import('../scripts/tiktok-uploader');
       const result = await loginInteractive();
       tikTokLoginState = result.ok ? 'done' : 'failed';
       tikTokLoginError = result.ok ? '' : (result.reason ?? 'Unknown error');
@@ -745,7 +745,7 @@ app.post('/api/tiktok/session/logout', (_req, res) => {
 // ── Legacy compat aliases ─────────────────────────────────────────────────
 app.get('/api/tiktok/login-status', async (_req, res) => {
   try {
-    const { readSessionStatus, sessionExists } = await import('./scripts/tiktok-uploader');
+    const { readSessionStatus, sessionExists } = await import('../scripts/tiktok-uploader');
     const cached = readSessionStatus();
     res.json({ loggedIn: cached?.signedIn ?? false, sessionExists: sessionExists() });
   } catch (err: any) {
@@ -761,7 +761,7 @@ app.post('/api/tiktok/login', async (_req, res) => {
   res.json({ ok: true, started: true });
   (async () => {
     try {
-      const { loginInteractive } = await import('./scripts/tiktok-uploader');
+      const { loginInteractive } = await import('../scripts/tiktok-uploader');
       const result = await loginInteractive();
       tikTokLoginState = result.ok ? 'done' : 'failed';
       tikTokLoginError = result.ok ? '' : (result.reason ?? '');
@@ -872,7 +872,7 @@ function startYouTubeJob(opts: { videoAbs: string; title: string; description: s
   youTubeJobs.set(id, job);
   (async () => {
     try {
-      const { uploadShort } = await import('./scripts/youtube-uploader');
+      const { uploadShort } = await import('../scripts/youtube-uploader');
       const result = await uploadShort({
         videoPath: opts.videoAbs,
         title: opts.title,
@@ -922,7 +922,7 @@ app.get('/api/youtube/videos', (_req, res) => {
 
 app.get('/api/youtube/auth-status', async (_req, res) => {
   try {
-    const { getAuthState, getRedirectUri } = await import('./scripts/youtube-uploader');
+    const { getAuthState, getRedirectUri } = await import('../scripts/youtube-uploader');
     const state = await getAuthState();
     res.json({ ...state, redirectUri: getRedirectUri() });
   } catch (err: any) {
@@ -932,7 +932,7 @@ app.get('/api/youtube/auth-status', async (_req, res) => {
 
 app.get('/api/youtube/auth-url', async (_req, res) => {
   try {
-    const { getAuthUrl } = await import('./scripts/youtube-uploader');
+    const { getAuthUrl } = await import('../scripts/youtube-uploader');
     res.json({ url: getAuthUrl() });
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? String(err) });
@@ -945,7 +945,7 @@ app.get('/api/youtube/oauth-callback', async (req, res) => {
   if (err) { res.status(400).send(`<h2>OAuth error: ${err}</h2><p><a href="/youtube">Back</a></p>`); return; }
   if (!code) { res.status(400).send('<h2>Missing code</h2>'); return; }
   try {
-    const { exchangeCode } = await import('./scripts/youtube-uploader');
+    const { exchangeCode } = await import('../scripts/youtube-uploader');
     await exchangeCode(code);
     res.send('<!doctype html><meta charset="utf-8"><title>YouTube signed in</title><body style="background:#020108;color:#ede8f5;font-family:system-ui;text-align:center;padding:60px"><h2>✅ YouTube signed in</h2><p>You can close this tab.</p><script>setTimeout(()=>window.close(),1500);</script><p><a style="color:#c084fc" href="/youtube">Back to Trend Vault</a></p></body>');
   } catch (e: any) {
@@ -955,7 +955,7 @@ app.get('/api/youtube/oauth-callback', async (req, res) => {
 
 app.post('/api/youtube/sign-out', async (_req, res) => {
   try {
-    const { signOut } = await import('./scripts/youtube-uploader');
+    const { signOut } = await import('../scripts/youtube-uploader');
     signOut();
     res.json({ ok: true });
   } catch (err: any) {
@@ -1061,7 +1061,7 @@ function startInstagramJob(opts: { videoAbs: string; caption: string; shareToFee
   instagramJobs.set(id, job);
   (async () => {
     try {
-      const { uploadReel } = await import('./scripts/instagram-uploader');
+      const { uploadReel } = await import('../scripts/instagram-uploader');
       const result = await uploadReel({
         videoPath: opts.videoAbs,
         caption: opts.caption,
@@ -1105,7 +1105,7 @@ app.get('/api/instagram/videos', (_req, res) => {
 
 app.get('/api/instagram/auth-status', async (_req, res) => {
   try {
-    const { getAuthState } = await import('./scripts/instagram-uploader');
+    const { getAuthState } = await import('../scripts/instagram-uploader');
     res.json(await getAuthState());
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? String(err) });
@@ -1119,7 +1119,7 @@ app.post('/api/instagram/sign-in', express.json(), async (req, res) => {
     return;
   }
   try {
-    const { signIn } = await import('./scripts/instagram-uploader');
+    const { signIn } = await import('../scripts/instagram-uploader');
     const r = await signIn(username, password);
     res.json(r);
   } catch (err: any) {
@@ -1131,7 +1131,7 @@ app.post('/api/instagram/sign-in/2fa', express.json(), async (req, res) => {
   const { code } = req.body ?? {};
   if (typeof code !== 'string') { res.status(400).json({ error: 'code required' }); return; }
   try {
-    const { submitTwoFactor } = await import('./scripts/instagram-uploader');
+    const { submitTwoFactor } = await import('../scripts/instagram-uploader');
     const r = await submitTwoFactor(code);
     res.json(r);
   } catch (err: any) {
@@ -1141,7 +1141,7 @@ app.post('/api/instagram/sign-in/2fa', express.json(), async (req, res) => {
 
 app.post('/api/instagram/sign-out', async (_req, res) => {
   try {
-    const { signOut } = await import('./scripts/instagram-uploader');
+    const { signOut } = await import('../scripts/instagram-uploader');
     signOut();
     res.json({ ok: true });
   } catch (err: any) {
@@ -1672,7 +1672,7 @@ app.get('/voice-lab', (_req, res) => {
 
 
 // ── Custom presets storage ────────────────────────────────────────────────────
-const CUSTOM_PRESETS_FILE = path.join(ROOT, 'custom-presets.json');
+const CUSTOM_PRESETS_FILE = path.join(ROOT, 'data', 'custom-presets.json');
 function readCustomPresets(): unknown[] {
   if (!fs.existsSync(CUSTOM_PRESETS_FILE)) return [];
   try { return JSON.parse(fs.readFileSync(CUSTOM_PRESETS_FILE, 'utf8')); }
@@ -2366,7 +2366,7 @@ app.post('/api/trend-vault/render', async (req, res) => {
           throw new Error(
             'Kokoro TTS server is not responding after 60s of retries. ' +
             'Last reason: ' + (waited.lastReason || 'unknown') + '. ' +
-            'Make sure Kokoro is running (start-kokoro.bat or the launcher card), ' +
+            'Make sure Kokoro is running (bats/start-kokoro.bat or the launcher card), ' +
             'and that nothing else is bound to port 5070.'
           );
         }
@@ -2402,7 +2402,7 @@ app.post('/api/trend-vault/render', async (req, res) => {
         }
       } catch (ttsErr) {
         const msg = (ttsErr as Error).message || String(ttsErr);
-        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Make sure the Kokoro server is running (start-kokoro.bat).`);
+        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Make sure the Kokoro server is running (bats/start-kokoro.bat).`);
       }
 
       // Hard guard: TTS must produce a non-trivial audio file

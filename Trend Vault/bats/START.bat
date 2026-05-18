@@ -1,6 +1,6 @@
 @echo off
 title Trend Vault Studio
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo.
 echo  ============================================
@@ -22,6 +22,6 @@ echo.
 echo  Press Ctrl+C to stop.
 echo.
 
-npx tsx server.ts
+npx tsx server\server.ts
 
 pause

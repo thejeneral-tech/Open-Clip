@@ -2,7 +2,7 @@
 # Clip Factory — Mac / Linux launcher
 # Usage: bash start.sh   (or: chmod +x start.sh && ./start.sh)
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 echo ""
 echo "  ============================================="
@@ -58,4 +58,4 @@ echo "  Server starting at http://localhost:3001"
 echo "  Leave this window open while processing."
 echo "  Press Ctrl+C to stop Clip Factory."
 echo ""
-npx tsx server.ts
+npx tsx server/server.ts

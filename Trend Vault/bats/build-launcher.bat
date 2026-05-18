@@ -7,8 +7,8 @@ if /i not "%~1"=="--keepopen" (
 
 title Build Trend Vault Launcher
 
-:: Project root is the same folder as this bat file
-for %%I in ("%~dp0.") do set "ROOT=%%~fI"
+:: Project root is one level up from this bat file (bats/)
+for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
 
 echo.

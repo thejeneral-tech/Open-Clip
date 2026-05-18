@@ -7,9 +7,9 @@
 $ErrorActionPreference = "Stop"
 
 # ── Load config ──────────────────────────────────────────────
-$configPath = Join-Path $PSScriptRoot "..\sync.config.json"
+$configPath = Join-Path $PSScriptRoot "..\data\sync.config.json"
 if (-not (Test-Path $configPath)) {
-    Write-Error "sync.config.json not found at: $configPath"
+    Write-Error "data/sync.config.json not found at: $configPath"
     exit 1
 }
 $config = Get-Content $configPath | ConvertFrom-Json
@@ -58,14 +58,14 @@ if (-not (Test-Path $driveRoot)) {
     Write-Host "  WARNING: Google Drive root does not exist:" -ForegroundColor Yellow
     Write-Host "  $driveRoot" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Please check your Google Drive path in sync.config.json" -ForegroundColor Yellow
+    Write-Host "  Please check your Google Drive path in data/sync.config.json" -ForegroundColor Yellow
     Write-Host "  Common paths:" -ForegroundColor White
     Write-Host "    C:\Users\$env:USERNAME\Google Drive\My Drive\Trend Vault Program Sync" -ForegroundColor White
     Write-Host "    G:\My Drive\Trend Vault Program Sync" -ForegroundColor White
     Write-Host ""
     $proceed = Read-Host "Create the folder anyway? (y/n)"
     if ($proceed -ne "y") {
-        Write-Host "Skipped Google Drive folder creation. Edit sync.config.json and re-run." -ForegroundColor Red
+        Write-Host "Skipped Google Drive folder creation. Edit data/sync.config.json and re-run." -ForegroundColor Red
         exit 0
     }
 }

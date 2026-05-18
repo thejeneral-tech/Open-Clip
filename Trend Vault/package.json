@@ -44,15 +44,15 @@
     "lint": "eslint src && tsc",
     "typecheck": "tsc --noEmit",
     "clip": "tsx scripts/clip.ts",
-    "start": "tsx server.ts",
-    "studio": "start start.bat",
+    "start": "tsx server/server.ts",
+    "studio": "start bats\\START.bat",
     "setup:sync": "powershell -ExecutionPolicy Bypass -File scripts/setup-sync.ps1",
     "setup:storage": "node scripts/setup-storage.js",
     "healthcheck": "node scripts/healthcheck.js",
     "sync:worker": "node scripts/sync-worker.js",
     "sync:test": "node scripts/sync-worker.js --test",
-    "dev:worker": "tsx render-worker.ts",
-    "start:worker": "tsx render-worker.ts",
+    "dev:worker": "tsx server/render-worker.ts",
+    "start:worker": "tsx server/render-worker.ts",
     "tiktok:install": "playwright install chromium"
   }
 }

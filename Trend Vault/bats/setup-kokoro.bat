@@ -5,14 +5,14 @@
 ::  Kokoro v0.19 ONNX model + voices. Safe to re-run; reuses anything already
 ::  in place.
 ::
-::  After this finishes once, just use start-kokoro.bat to boot the server.
+::  After this finishes once, just use bats\start-kokoro.bat to boot the server.
 :: ============================================================================
 
 setlocal EnableDelayedExpansion
 title Trend Vault — Kokoro Setup
 color 0B
 
-pushd "%~dp0"
+pushd "%~dp0.."
 set "TV_DIR=%CD%"
 set "KOKORO_DIR=%TV_DIR%\kokoro-tts"
 set "VENV_DIR=%KOKORO_DIR%\.venv"
@@ -92,7 +92,7 @@ if not exist "%VOICES%" (
 echo.
 echo ============================================================
 echo   Kokoro setup complete.
-echo   Start the server with: start-kokoro.bat
+echo   Start the server with: bats\start-kokoro.bat
 echo ============================================================
 echo.
 popd

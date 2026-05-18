@@ -59,10 +59,10 @@ echo.
 :: ── 4. .env + Drive sync config ───────────────────────────────────────────
 echo [4/4] Config files
 if exist "%TREND_VAULT_DIR%\.env" ( echo     [OK]   .env exists ) else echo     [MISSING] .env -- API keys will be unavailable
-if exist "%TREND_VAULT_DIR%\sync.config.json" (
-    echo     [OK]   sync.config.json exists
+if exist "%TREND_VAULT_DIR%\data\sync.config.json" (
+    echo     [OK]   data\sync.config.json exists
 ) else (
-    echo     [INFO] sync.config.json missing -- Drive sync not configured (laptop normal)
+    echo     [INFO] data\sync.config.json missing -- Drive sync not configured (laptop normal)
 )
 echo.
 

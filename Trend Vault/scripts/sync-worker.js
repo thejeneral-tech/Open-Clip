@@ -18,9 +18,9 @@ const path  = require('path');
 const { execSync, spawn } = require('child_process');
 
 // ── Load config ───────────────────────────────────────────────────────────────
-const CONFIG_PATH = path.join(__dirname, '..', 'sync.config.json');
+const CONFIG_PATH = path.join(__dirname, '..', 'data', 'sync.config.json');
 if (!fs.existsSync(CONFIG_PATH)) {
-  console.error('[FATAL] sync.config.json not found at:', CONFIG_PATH);
+  console.error('[FATAL] data/sync.config.json not found at:', CONFIG_PATH);
   process.exit(1);
 }
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));

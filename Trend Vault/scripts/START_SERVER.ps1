@@ -1,10 +1,11 @@
 # ─────────────────────────────────────────────────────────────
 #  Trend Vault — Start Server
 #  Run from anywhere:
-#    powershell -ExecutionPolicy Bypass -File "C:\Users\Anton\OneDrive\Documents\GitHub\TrendVault-Program\Trend Vault\START_SERVER.ps1"
+#    powershell -ExecutionPolicy Bypass -File "C:\path\to\Trend Vault\scripts\START_SERVER.ps1"
 # ─────────────────────────────────────────────────────────────
 
-$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectDir = Split-Path -Parent $ScriptDir
 Set-Location $ProjectDir
 
 Write-Host ""
@@ -47,4 +48,4 @@ Write-Host ""
 Write-Host "  Press Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""
 
-npx tsx server.ts
+npx tsx server\server.ts

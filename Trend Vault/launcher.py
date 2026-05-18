@@ -4,7 +4,7 @@ Trend Vault Launcher
 Single-file GUI launcher for the Trend Vault stack.
 Replaces all .bat files with a dark-theme control panel.
 
-Build to .exe (run build-launcher.bat):
+Build to .exe (run bats/build-launcher.bat):
     pip install pyinstaller
     pyinstaller --onefile --windowed --name TrendVaultLauncher launcher.py
 """
@@ -17,15 +17,15 @@ from datetime import datetime
 ROOT = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
 
 # ── Service definitions ───────────────────────────────────────────────────────
-# Kokoro uses the venv Python written by setup-kokoro.bat. If the venv isn't
-# present we fall back to calling start-kokoro.bat which will print the right
-# "run setup-kokoro.bat first" error.
+# Kokoro uses the venv Python written by bats/setup-kokoro.bat. If the venv
+# isn't present we fall back to calling bats/start-kokoro.bat which will print
+# the right "run bats/setup-kokoro.bat first" error.
 _KOKORO_VENV_PY = os.path.join(ROOT, 'kokoro-tts', '.venv', 'Scripts', 'python.exe')
 _KOKORO_SCRIPT  = os.path.join(ROOT, 'kokoro-tts', 'kokoro_server.py')
 if os.path.isfile(_KOKORO_VENV_PY):
     _KOKORO_CMD = [_KOKORO_VENV_PY, _KOKORO_SCRIPT]
 else:
-    _KOKORO_CMD = ['start-kokoro.bat']
+    _KOKORO_CMD = [os.path.join(ROOT, 'bats', 'start-kokoro.bat')]
 
 _OLLAMA_UI_SERVER = os.path.join(ROOT, 'Ollama web ui', 'server.js')
 
@@ -58,7 +58,7 @@ SERVICES = [
         'name': 'Render Worker',
         'desc': 'Remotion worker  •  port 4000',
         'port': 4000,
-        'cmd':  ['npx', 'tsx', 'render-worker.ts'],
+        'cmd':  ['npx', 'tsx', 'server/render-worker.ts'],
         'url':  None,
         'needs_npm': True,
     },
@@ -618,7 +618,7 @@ class TrendVaultLauncher(tk.Tk):
             )
             kokoro_ready = os.path.isfile(os.path.join(ROOT, 'kokoro-tts', 'kokoro-v0_19.onnx'))
             self._log_line(
-                'Kokoro model'.ljust(15) + '  ' + ('OK' if kokoro_ready else 'MISSING -- run setup-kokoro.bat'),
+                'Kokoro model'.ljust(15) + '  ' + ('OK' if kokoro_ready else 'MISSING -- run bats/setup-kokoro.bat'),
                 TEXT if kokoro_ready else AMBER
             )
             ollama_path = resolve_ollama()

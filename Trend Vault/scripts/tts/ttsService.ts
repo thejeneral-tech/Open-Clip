@@ -12,7 +12,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const presetsRaw = require('./voicePresets.json') as unknown[];
 
-const CUSTOM_PRESETS_PATH = path.resolve('./custom-presets.json');
+const CUSTOM_PRESETS_PATH = path.resolve('./data/custom-presets.json');
 function readCustomPresets(): VoicePreset[] {
   if (!fs.existsSync(CUSTOM_PRESETS_PATH)) return [];
   try { return JSON.parse(fs.readFileSync(CUSTOM_PRESETS_PATH, 'utf8')) as VoicePreset[]; }
