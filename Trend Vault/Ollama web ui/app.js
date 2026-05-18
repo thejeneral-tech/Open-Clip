@@ -18,7 +18,6 @@
     lastModelChat:      "ollama-chat:lastModel",
     lastModelCode:      "ollama-chat:lastCodeModel",
     activeView:         "ollama-chat:activeView",
-    claudePermMode:     "ollama-chat:claudePermMode",
   };
 
   const DEFAULT_CODE_PROMPT =
@@ -31,7 +30,7 @@
     host: "",
     systemPrompt: "",
     codeSystemPrompt: DEFAULT_CODE_PROMPT,
-    claudeCwd: "",
+    codeCwd: "",
     temperature: 0.7,
     topP: 0.9,
     topK: 40,
@@ -59,11 +58,10 @@
   let allModels = [];
   let pullAbort = null;
 
-  // Claude Code state
-  let claudePermMode = localStorage.getItem(STORAGE.claudePermMode) || "bypassPermissions";
-  let claudeCheckInfo = null;        // { available, version, cwd, bin }
-  let currentClaudeJobId = null;
-  const claudeToolUseEls = new Map(); // toolUseId -> DOM element for in-flight tool blocks
+  // Local Code agent state
+  let codeCheckInfo = null;          // { available, cwd, models, toolCapableModels }
+  let currentCodeJobId = null;
+  const codeToolUseEls = new Map();  // tool-call id -> DOM block
 
   /* ----------------------------------------------------------
      Element refs
@@ -113,14 +111,11 @@
     modelsList: $("modelsList"),
     refreshModelsBtn: $("refreshModelsBtn"),
 
-    // Claude Code UI
-    claudeBanner: $("claudeBanner"),
-    claudeCwd: $("claudeCwd"),
-    claudeVersion: $("claudeVersion"),
-    claudeSession: $("claudeSession"),
-    claudeNewSessionBtn: $("claudeNewSessionBtn"),
-    claudePerm: $("claudePerm"),
-    claudePermMode: $("claudePermMode"),
+    // Local Code agent UI
+    codeBanner: $("codeBanner"),
+    codeCwd: $("codeCwd"),
+    codeStatus: $("codeStatus"),
+    codeToolCap: $("codeToolCap"),
 
     // settings modal
     modal: $("settingsModal"),
@@ -130,7 +125,7 @@
     hostInput: $("hostInput"),
     systemPrompt: $("systemPrompt"),
     codeSystemPrompt: $("codeSystemPrompt"),
-    claudeCwdInput: $("claudeCwdInput"),
+    codeCwdInput: $("codeCwdInput"),
     temperature: $("temperature"),
     tempValue: $("tempValue"),
     topP: $("topP"),
@@ -267,11 +262,11 @@
     el.chatView.hidden = (name === "models");
     el.modelsView.hidden = (name !== "models");
 
-    // Claude Code mode replaces the Ollama picker with its own permission picker.
+    // Local Code mode keeps the Ollama model picker (the agent calls Ollama)
+    // and shows an extra banner above the messages.
     const inCode = name === "code";
-    el.modelPickerWrap.style.display = (name === "models" || inCode) ? "none" : "";
-    if (el.claudePerm) el.claudePerm.hidden = !inCode;
-    if (el.claudeBanner) el.claudeBanner.hidden = !inCode;
+    el.modelPickerWrap.style.display = (name === "models") ? "none" : "";
+    if (el.codeBanner) el.codeBanner.hidden = !inCode;
     el.clearChatBtn.style.display = (name === "models") ? "none" : "";
 
     // Update labels
@@ -284,33 +279,37 @@
       el.welcomeTips.hidden = true;
       el.input.placeholder = "Message Ollama…";
     } else if (name === "code") {
-      el.viewTitle.textContent = "Claude Code";
+      el.viewTitle.textContent = "Local Code";
       el.newChatLabel.textContent = "New task";
-      el.welcomeTitle.textContent = "Claude Code";
+      el.welcomeTitle.textContent = "Local Code";
       el.welcomeSubtitle.textContent =
-        "Agentic coding with Claude — full read &  write access to the Trend Vault project. " +
-        "Ask for refactors, bug fixes, or whole features. Claude reads files, runs commands, and edits in place.";
+        "Agentic coding with your local Ollama model — full read & write access to the project. " +
+        "The agent loops through tool calls (read_file, write_file, edit_file, bash, glob, grep, list_dir) until done. " +
+        "Pick a tool-capable model: llama3.1, qwen2.5-coder, mistral-nemo, etc.";
       el.welcomeTips.hidden = false;
-      el.input.placeholder = "Tell Claude what to do — e.g. 'add a /healthz endpoint to server.ts'";
-      // Check claude availability + show cwd.
-      claudeCheck();
+      el.input.placeholder = "Tell the agent what to do — e.g. 'add a /healthz endpoint to server.ts'";
+      // Check Ollama availability + show cwd / tool support.
+      codeCheck();
     } else {
       el.viewTitle.textContent = "Models";
     }
 
     if (name !== "models") {
-      // Use the picker's per-view model memory (Ollama only — Claude has no model picker)
-      if (!inCode) {
-        const c = ctx();
-        const last = localStorage.getItem(c.lastModelKey);
-        const installed = Array.from(el.modelSelect.options).map((o) => o.value);
-        if (last && installed.includes(last)) {
-          el.modelSelect.value = last;
-        }
+      // Use the picker's per-view model memory (separate buckets for chat & code).
+      const c = ctx();
+      const last = localStorage.getItem(c.lastModelKey);
+      const installed = Array.from(el.modelSelect.options).map((o) => o.value);
+      if (last && installed.includes(last)) {
+        el.modelSelect.value = last;
+      } else if (inCode) {
+        // Prefer a tool-capable / coder model when entering Code mode for the first time.
+        const preferred = installed.find((n) => /^(qwen2\.5-coder|llama3\.[12]|mistral-nemo|qwen3|llama3\.3)/i.test(n))
+          || installed.find((n) => CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h)));
+        if (preferred) el.modelSelect.value = preferred;
       }
       renderConversations();
       renderMessages();
-      if (inCode) refreshClaudeBanner();
+      if (inCode) refreshCodeBanner();
       // Sidebar shows the "new" button only for chat/code
       el.newChatBtn.parentElement.style.display = "";
     } else {
@@ -367,7 +366,7 @@
       return;
     }
     el.welcome.classList.add("hidden");
-    const builder = activeView === "code" ? buildClaudeMessageEl : buildMessageEl;
+    const builder = activeView === "code" ? buildCodeMessageEl : buildMessageEl;
     for (const msg of conv.messages) {
       el.messages.appendChild(builder(msg));
     }
@@ -705,56 +704,56 @@
   }
 
   /* ----------------------------------------------------------
-     Claude Code: subprocess client
+     Local Code: Ollama tool-call agent client
      ---------------------------------------------------------- */
-  async function claudeCheck() {
+  async function codeCheck() {
     try {
-      const r = await fetch("/claude/check");
+      const r = await fetch("/local-code/check");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      claudeCheckInfo = await r.json();
+      codeCheckInfo = await r.json();
     } catch (err) {
-      claudeCheckInfo = { available: false, error: err.message };
+      codeCheckInfo = { available: false, error: err.message };
     }
-    refreshClaudeBanner();
-    return claudeCheckInfo;
+    refreshCodeBanner();
+    return codeCheckInfo;
   }
 
-  function refreshClaudeBanner() {
-    if (!el.claudeBanner) return;
-    const conv = activeView === "code" ? getActiveConversation() : null;
-    const info = claudeCheckInfo || {};
-
-    el.claudeCwd.textContent = info.cwd || (settings.claudeCwd || "(unknown cwd)");
-    el.claudeCwd.title = info.cwd || settings.claudeCwd || "";
+  function refreshCodeBanner() {
+    if (!el.codeBanner) return;
+    const info = codeCheckInfo || {};
+    const cwd = info.cwd || settings.codeCwd || "(unknown cwd)";
+    el.codeCwd.textContent = cwd;
+    el.codeCwd.title = cwd;
 
     if (info.available) {
-      el.claudeVersion.textContent = info.version || "installed";
-      el.claudeVersion.classList.remove("error");
-    } else if (info.error || info.available === false) {
-      el.claudeVersion.textContent = "claude not found";
-      el.claudeVersion.title = info.error || "Install Claude Code CLI";
-      el.claudeVersion.classList.add("error");
+      el.codeStatus.textContent = `Ollama: ${(info.models || []).length} models`;
+      el.codeStatus.title = info.ollamaHost || "";
+      el.codeStatus.classList.remove("error");
+    } else if (info.error) {
+      el.codeStatus.textContent = "Ollama unreachable";
+      el.codeStatus.title = info.error;
+      el.codeStatus.classList.add("error");
     } else {
-      el.claudeVersion.textContent = "checking…";
-      el.claudeVersion.classList.remove("error");
+      el.codeStatus.textContent = "checking…";
+      el.codeStatus.classList.remove("error");
     }
 
-    const sid = conv?.claudeSessionId;
-    if (sid) {
-      el.claudeSession.textContent = `session ${sid.slice(0, 8)}`;
-      el.claudeSession.title = sid;
+    const model = el.modelSelect?.value || "";
+    const toolModels = info.toolCapableModels || [];
+    if (!model) {
+      el.codeToolCap.textContent = "no model picked";
+      el.codeToolCap.classList.remove("error");
+    } else if (toolModels.includes(model)) {
+      el.codeToolCap.textContent = "tools: yes";
+      el.codeToolCap.title = "Model is in the known-tool-capable list.";
+      el.codeToolCap.classList.remove("error");
     } else {
-      el.claudeSession.textContent = "no session";
-      el.claudeSession.title = "";
+      el.codeToolCap.textContent = "tools: maybe";
+      el.codeToolCap.title =
+        "Not in the known-tool-capable list. The agent will still try, " +
+        "but may fall back to plain chat if the model can't emit tool_calls.";
+      el.codeToolCap.classList.remove("error");
     }
-  }
-
-  function resetClaudeSession() {
-    const conv = getActiveConversation();
-    if (!conv) return;
-    conv.claudeSessionId = null;
-    ctx().save();
-    refreshClaudeBanner();
   }
 
   function buildToolUseBlock(toolName, input) {
@@ -805,32 +804,30 @@
 
   function toolIcon(name) {
     const n = (name || "").toLowerCase();
-    if (n === "read") return "📖";
-    if (n === "edit" || n === "multiedit") return "✏️";
-    if (n === "write") return "📝";
-    if (n === "bash" || n === "powershell") return "▶";
+    if (n === "read_file") return "📖";
+    if (n === "edit_file") return "✏️";
+    if (n === "write_file") return "📝";
+    if (n === "bash") return "▶";
     if (n === "grep") return "🔎";
     if (n === "glob") return "📁";
-    if (n.startsWith("web")) return "🌐";
-    if (n === "task" || n === "agent") return "🤖";
-    if (n === "todowrite") return "✅";
+    if (n === "list_dir") return "📂";
     return "⚙";
   }
 
   function summarizeToolInput(name, input) {
     if (!input || typeof input !== "object") return "";
     const n = (name || "").toLowerCase();
-    if (n === "read" || n === "edit" || n === "write" || n === "multiedit") {
-      return input.file_path || input.path || "";
+    if (n === "read_file" || n === "write_file" || n === "edit_file") {
+      return input.path || "";
     }
-    if (n === "bash" || n === "powershell") {
+    if (n === "bash") {
       const cmd = (input.command || "").toString();
       return cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd;
     }
-    if (n === "grep") return input.pattern || "";
-    if (n === "glob") return input.pattern || "";
-    if (n === "webfetch" || n === "websearch") return input.url || input.query || "";
-    if (n === "task" || n === "agent") return input.description || "";
+    if (n === "grep" || n === "glob") {
+      return input.pattern || "";
+    }
+    if (n === "list_dir") return input.path || ".";
     return "";
   }
 
@@ -865,13 +862,13 @@
     }
   }
 
-  function buildClaudeMessageEl(msg) {
+  function buildCodeMessageEl(msg) {
     const wrapper = document.createElement("div");
-    wrapper.className = "message " + msg.role + " claude-msg";
+    wrapper.className = "message " + msg.role + " code-msg";
 
     const avatar = document.createElement("div");
     avatar.className = "avatar";
-    avatar.textContent = msg.role === "user" ? "U" : "C";
+    avatar.textContent = msg.role === "user" ? "U" : "AG";
     wrapper.appendChild(avatar);
 
     const body = document.createElement("div");
@@ -879,7 +876,7 @@
 
     const role = document.createElement("div");
     role.className = "message-role";
-    role.textContent = msg.role === "user" ? "You" : "Claude";
+    role.textContent = msg.role === "user" ? "You" : "Agent";
     body.appendChild(role);
 
     const blocksEl = document.createElement("div");
@@ -915,36 +912,52 @@
     return null;
   }
 
-  async function sendClaudeMessage(text) {
-    if (!claudeCheckInfo?.available) {
-      // Try one more check in case the server just started.
-      await claudeCheck();
-      if (!claudeCheckInfo?.available) {
-        alert(
-          "Claude Code CLI not found.\n\n" +
-          (claudeCheckInfo?.error || "") +
-          "\n\nInstall: https://docs.claude.com/en/docs/claude-code/quickstart"
-        );
-        return;
-      }
+  // Convert this conversation's prior messages into the wire format the
+  // server expects under `history`. We strip our display-only fields and
+  // pass plain Ollama-shaped messages.
+  function buildAgentHistory(conv) {
+    const out = [];
+    // Messages on the conversation are pairs of { role, content, blocks? }.
+    // For the agent's purposes we only need user/assistant text turns from
+    // history — tool calls and their results are reconstructed by the server
+    // each turn from the prompt.
+    for (const m of conv.messages || []) {
+      if (m.role !== "user" && m.role !== "assistant") continue;
+      const text = (m.content || (m.blocks || [])
+        .filter((b) => b.type === "text").map((b) => b.text).join("\n\n")).trim();
+      if (!text) continue;
+      out.push({ role: m.role, content: text });
+    }
+    return out;
+  }
+
+  async function sendCodeMessage(text) {
+    const model = el.modelSelect.value;
+    if (!model) {
+      alert("Pick a model in the top bar first (the agent uses Ollama tool calling).");
+      return;
     }
 
     const c = ctx();
     let conv = getActiveConversation();
     if (!conv) conv = createConversation();
 
-    // Append user message.
+    // History includes everything BEFORE the new user turn.
+    const history = buildAgentHistory(conv);
+
+    // Append user message visibly.
     const userMsg = { role: "user", content: text, blocks: [{ type: "text", text }] };
     conv.messages.push(userMsg);
     setConversationTitle(conv, text);
+    conv.model = model;
     c.save();
     el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildClaudeMessageEl(userMsg));
+    el.messages.appendChild(buildCodeMessageEl(userMsg));
 
-    // Prepare a streaming assistant message.
+    // Streaming assistant placeholder.
     const assistantMsg = { role: "assistant", content: "", blocks: [] };
     conv.messages.push(assistantMsg);
-    const assistantEl = buildClaudeMessageEl(assistantMsg);
+    const assistantEl = buildCodeMessageEl(assistantMsg);
     const blocksEl = assistantEl._blocksEl;
     const typing = document.createElement("div");
     typing.className = "typing";
@@ -953,9 +966,7 @@
     el.messages.appendChild(assistantEl);
     scrollToBottom();
 
-    claudeToolUseEls.clear();
-    let currentTextBlock = null;
-
+    codeToolUseEls.clear();
     isStreaming = true;
     el.sendBtn.classList.add("hidden");
     el.stopBtn.classList.remove("hidden");
@@ -963,13 +974,20 @@
 
     const body = {
       prompt: text,
-      sessionId: conv.claudeSessionId || null,
-      permissionMode: claudePermMode,
-      cwd: settings.claudeCwd || undefined,
+      model,
+      history,
+      cwd: settings.codeCwd || undefined,
+      systemPrompt: (settings.codeSystemPrompt || "").trim() || undefined,
+      options: {
+        temperature: settings.temperature,
+        top_p: settings.topP,
+        top_k: settings.topK,
+        repeat_penalty: settings.repeatPenalty,
+      },
     };
 
     try {
-      const res = await fetch("/claude/chat", {
+      const res = await fetch("/local-code/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1003,114 +1021,82 @@
           }
 
           if (env.kind === "meta") {
-            currentClaudeJobId = env.jobId;
-          } else if (env.kind === "event") {
-            currentTextBlock = handleClaudeEvent(env.event, conv, assistantMsg, blocksEl, currentTextBlock);
-            c.save();
-          } else if (env.kind === "stderr") {
-            // Soft-fold stderr into a debug block, but only the first time.
-            // (Most of it is informational from claude itself.)
-          } else if (env.kind === "error") {
-            appendBlockEl(blocksEl, { type: "text", text: `**Error:** ${env.message}` });
-            assistantMsg.blocks.push({ type: "text", text: `**Error:** ${env.message}` });
-          } else if (env.kind === "exit") {
-            if (env.code !== 0 && env.code !== null) {
-              const tail = env.stderr ? `\n\`\`\`\n${env.stderr.trim()}\n\`\`\`` : "";
-              appendBlockEl(blocksEl, { type: "text", text: `_Claude Code exited with code ${env.code}._${tail}` });
-              assistantMsg.blocks.push({ type: "text", text: `_Claude Code exited with code ${env.code}._${tail}` });
+            currentCodeJobId = env.jobId;
+            if (!env.toolCapable) {
+              const warn = {
+                type: "text",
+                text: `_Heads up: \`${env.model}\` isn't in the known tool-capable list — the agent will try anyway, but may just chat back._`,
+              };
+              assistantMsg.blocks.push(warn);
+              appendBlockEl(blocksEl, warn);
             }
+          } else if (env.kind === "assistant_text") {
+            const block = { type: "text", text: env.text || "" };
+            assistantMsg.blocks.push(block);
+            appendBlockEl(blocksEl, block);
+          } else if (env.kind === "tool_use") {
+            const block = { type: "tool_use", id: env.id, name: env.name, input: env.input };
+            assistantMsg.blocks.push(block);
+            const domBlock = buildToolUseBlock(env.name, env.input);
+            blocksEl.appendChild(domBlock);
+            codeToolUseEls.set(env.id, { domBlock, block });
+          } else if (env.kind === "tool_result") {
+            const entry = codeToolUseEls.get(env.id);
+            if (entry) {
+              attachToolResult(entry.domBlock, env.output, env.isError);
+              entry.block.result = env.output;
+              entry.block.isError = !!env.isError;
+            }
+          } else if (env.kind === "warning") {
+            const w = { type: "text", text: `_${env.message}_` };
+            assistantMsg.blocks.push(w);
+            appendBlockEl(blocksEl, w);
+          } else if (env.kind === "error") {
+            const e = { type: "text", text: `**Error:** ${env.message}` };
+            assistantMsg.blocks.push(e);
+            appendBlockEl(blocksEl, e);
+          } else if (env.kind === "done") {
+            // Agent finished cleanly; no extra rendering needed.
           }
+          c.save();
           scrollToBottom();
         }
       }
     } catch (err) {
       if (err.name === "AbortError") {
-        appendBlockEl(blocksEl, { type: "text", text: "_(stopped)_" });
-        assistantMsg.blocks.push({ type: "text", text: "_(stopped)_" });
+        const stop = { type: "text", text: "_(stopped)_" };
+        assistantMsg.blocks.push(stop);
+        appendBlockEl(blocksEl, stop);
       } else {
         console.error(err);
-        const errText = `**Error:** ${err.message}`;
-        appendBlockEl(blocksEl, { type: "text", text: errText });
-        assistantMsg.blocks.push({ type: "text", text: errText });
+        const e = { type: "text", text: `**Error:** ${err.message}` };
+        assistantMsg.blocks.push(e);
+        appendBlockEl(blocksEl, e);
       }
     } finally {
       if (typing.parentElement) typing.remove();
       isStreaming = false;
       currentAbortController = null;
-      currentClaudeJobId = null;
+      currentCodeJobId = null;
       el.sendBtn.classList.remove("hidden");
       el.stopBtn.classList.add("hidden");
-      // Collapse blocks into a `content` text for legacy fallback / searching.
       assistantMsg.content = assistantMsg.blocks
         .filter((b) => b.type === "text")
         .map((b) => b.text).join("\n\n");
       c.save();
-      refreshClaudeBanner();
+      localStorage.setItem(c.lastModelKey, model);
+      refreshCodeBanner();
     }
   }
 
-  function handleClaudeEvent(ev, conv, assistantMsg, blocksEl, currentTextBlock) {
-    if (!ev || typeof ev !== "object") return currentTextBlock;
-
-    if (ev.type === "system" && ev.subtype === "init" && ev.session_id) {
-      conv.claudeSessionId = ev.session_id;
-      refreshClaudeBanner();
-      return currentTextBlock;
-    }
-
-    if (ev.type === "assistant" && ev.message?.content) {
-      for (const part of ev.message.content) {
-        if (part.type === "text") {
-          // Each text part becomes its own block (streaming append).
-          const block = { type: "text", text: part.text || "" };
-          assistantMsg.blocks.push(block);
-          appendBlockEl(blocksEl, block);
-          currentTextBlock = block;
-        } else if (part.type === "tool_use") {
-          const block = { type: "tool_use", id: part.id, name: part.name, input: part.input };
-          assistantMsg.blocks.push(block);
-          const domBlock = buildToolUseBlock(part.name, part.input);
-          blocksEl.appendChild(domBlock);
-          claudeToolUseEls.set(part.id, { domBlock, block });
-        } else if (part.type === "thinking") {
-          // Skip thinking blocks for the UI; could surface as collapsible later.
-        }
-      }
-      return currentTextBlock;
-    }
-
-    if (ev.type === "user" && ev.message?.content) {
-      // Tool result is the "user" turn sent back to Claude with the tool output.
-      for (const part of ev.message.content) {
-        if (part.type === "tool_result") {
-          const entry = claudeToolUseEls.get(part.tool_use_id);
-          if (entry) {
-            attachToolResult(entry.domBlock, part.content, part.is_error);
-            entry.block.result = part.content;
-            entry.block.isError = !!part.is_error;
-          }
-        }
-      }
-      return currentTextBlock;
-    }
-
-    if (ev.type === "result") {
-      if (ev.session_id) conv.claudeSessionId = ev.session_id;
-      // Final result text — already streamed via assistant events, no extra rendering needed.
-      return currentTextBlock;
-    }
-
-    return currentTextBlock;
-  }
-
-  async function stopClaudeJob() {
+  async function stopCodeJob() {
     if (currentAbortController) currentAbortController.abort();
-    if (currentClaudeJobId) {
+    if (currentCodeJobId) {
       try {
-        await fetch("/claude/stop", {
+        await fetch("/local-code/stop", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: currentClaudeJobId }),
+          body: JSON.stringify({ jobId: currentCodeJobId }),
         });
       } catch { /* best effort */ }
     }
@@ -1123,9 +1109,9 @@
     text = text.trim();
     if (!text || isStreaming) return;
 
-    // Code view goes through Claude Code subprocess instead of Ollama.
+    // Code view goes through the local-code agent loop (Ollama + tool calls).
     if (activeView === "code") {
-      return sendClaudeMessage(text);
+      return sendCodeMessage(text);
     }
 
     const model = el.modelSelect.value;
@@ -1237,7 +1223,7 @@
 
   function stopGeneration() {
     if (activeView === "code") {
-      stopClaudeJob();
+      stopCodeJob();
       return;
     }
     if (currentAbortController) currentAbortController.abort();
@@ -1250,7 +1236,7 @@
     el.hostInput.value = settings.host;
     el.systemPrompt.value = settings.systemPrompt;
     el.codeSystemPrompt.value = settings.codeSystemPrompt;
-    if (el.claudeCwdInput) el.claudeCwdInput.value = settings.claudeCwd || "";
+    if (el.codeCwdInput) el.codeCwdInput.value = settings.codeCwd || "";
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
     el.topP.value = settings.topP;
@@ -1269,7 +1255,7 @@
     settings.host = el.hostInput.value.trim().replace(/\/+$/, "") || DEFAULTS.host;
     settings.systemPrompt = el.systemPrompt.value;
     settings.codeSystemPrompt = el.codeSystemPrompt.value;
-    if (el.claudeCwdInput) settings.claudeCwd = el.claudeCwdInput.value.trim();
+    if (el.codeCwdInput) settings.codeCwd = el.codeCwdInput.value.trim();
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);
     settings.topK = parseInt(el.topK.value, 10);
@@ -1277,7 +1263,7 @@
     settings.repeatPenalty = parseFloat(el.repeatPenalty.value);
     saveSettings();
     fetchModels();
-    if (activeView === "code") claudeCheck();
+    if (activeView === "code") codeCheck();
   }
   function resetSettingsForm() {
     settings = { ...DEFAULTS };
@@ -1343,11 +1329,10 @@
       if (confirm("Clear all messages in this chat?")) {
         conv.messages = [];
         conv.title = activeView === "code" ? "New task" : "New chat";
-        if (activeView === "code") conv.claudeSessionId = null;
         ctx().save();
         renderConversations();
         renderMessages();
-        if (activeView === "code") refreshClaudeBanner();
+        if (activeView === "code") refreshCodeBanner();
       }
     });
 
@@ -1389,20 +1374,11 @@
       }
     });
 
-    // Claude Code controls
-    if (el.claudePermMode) {
-      el.claudePermMode.value = claudePermMode;
-      el.claudePermMode.addEventListener("change", () => {
-        claudePermMode = el.claudePermMode.value;
-        localStorage.setItem(STORAGE.claudePermMode, claudePermMode);
-      });
-    }
-    if (el.claudeNewSessionBtn) {
-      el.claudeNewSessionBtn.addEventListener("click", () => {
-        if (!confirm("Reset the Claude Code session for this task? Future turns will start a fresh conversation.")) return;
-        resetClaudeSession();
-      });
-    }
+    // Local Code: refresh banner when the user picks a different model so
+    // the "tools: yes/maybe" hint stays in sync.
+    el.modelSelect.addEventListener("change", () => {
+      if (activeView === "code") refreshCodeBanner();
+    });
 
     // Models view: pull form
     el.pullForm.addEventListener("submit", (e) => {

@@ -1140,7 +1140,7 @@ input, textarea, select {
 }
 .claude-banner[hidden] { display: none; }
 .claude-banner-badge {
-  background: linear-gradient(135deg, #d97706 0%, #c2410c 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #fff;
   padding: 2px 8px;
   border-radius: 4px;
@@ -1268,9 +1268,11 @@ input, textarea, select {
 .tool-use-result { border-left: 2px solid var(--text-dim); }
 .tool-use-result.hidden { display: none; }
 
-.message.claude-msg .avatar {
-  background: linear-gradient(135deg, #d97706 0%, #c2410c 100%);
+.message.code-msg .avatar {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #fff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* Settings: small "applies to ollama only" tag */

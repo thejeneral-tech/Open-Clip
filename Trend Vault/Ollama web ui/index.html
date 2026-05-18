@@ -20,7 +20,7 @@
           </svg>
           <span>Chat</span>
         </button>
-        <button class="nav-tab" data-view="code" role="tab" aria-selected="false" title="Claude Code">
+        <button class="nav-tab" data-view="code" role="tab" aria-selected="false" title="Local Code agent">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 18 22 12 16 6"></polyline>
             <polyline points="8 6 2 12 8 18"></polyline>
@@ -82,16 +82,6 @@
           <span class="status-dot" id="statusDot" title="Connection status"></span>
         </div>
 
-        <!-- Claude Code permission picker (visible only in Code mode) -->
-        <div class="claude-perm" id="claudePerm" hidden>
-          <label for="claudePermMode" class="claude-perm-label">Permissions:</label>
-          <select id="claudePermMode" aria-label="Claude Code permission mode">
-            <option value="bypassPermissions" selected>bypass (full read/write)</option>
-            <option value="acceptEdits">accept edits</option>
-            <option value="plan">plan only (read-only)</option>
-            <option value="default">default (ask)</option>
-          </select>
-        </div>
 
         <div class="topbar-spacer"></div>
 
@@ -107,16 +97,14 @@
 
       <!-- Chat view (also used by Code view, with different state) -->
       <div class="view view-chat" id="chatView">
-        <!-- Claude Code banner — visible only in Code mode -->
-        <div class="claude-banner" id="claudeBanner" hidden>
-          <span class="claude-banner-badge">Claude Code</span>
-          <span class="claude-banner-cwd" id="claudeCwd" title="Working directory">…</span>
+        <!-- Local Code banner — visible only in Code mode -->
+        <div class="claude-banner" id="codeBanner" hidden>
+          <span class="claude-banner-badge">Local Code</span>
+          <span class="claude-banner-cwd" id="codeCwd" title="Working directory">…</span>
           <span class="claude-banner-sep">·</span>
-          <span class="claude-banner-version" id="claudeVersion">checking…</span>
+          <span class="claude-banner-version" id="codeStatus">checking Ollama…</span>
           <span class="claude-banner-sep">·</span>
-          <span class="claude-banner-session" id="claudeSession">no session</span>
-          <span class="claude-banner-spacer"></span>
-          <button type="button" class="btn-link" id="claudeNewSessionBtn" title="Start a fresh Claude Code session">Reset session</button>
+          <span class="claude-banner-session" id="codeToolCap" title="Whether the picked model supports tool calling">tools: ?</span>
         </div>
         <section class="chat" id="chat">
           <div class="welcome" id="welcome">
@@ -230,15 +218,15 @@
         </label>
 
         <label class="field" id="codeSystemPromptField">
-          <span class="field-label">Code system prompt <span class="field-tag">Ollama Code only</span></span>
-          <textarea id="codeSystemPrompt" rows="4" placeholder="You are an expert pair programmer..."></textarea>
-          <span class="field-hint">Prepended to coding conversations. <strong>Not used by Claude Code</strong> — Claude has its own system prompt.</span>
+          <span class="field-label">Code system prompt <span class="field-tag">Override</span></span>
+          <textarea id="codeSystemPrompt" rows="4" placeholder="(leave empty to use the built-in agent prompt)"></textarea>
+          <span class="field-hint">Used by both Ollama Chat and the Local Code agent. Leave empty to fall back to the agent's built-in prompt describing the available tools.</span>
         </label>
 
-        <div class="field" id="claudeCwdField">
-          <span class="field-label">Claude Code working directory</span>
-          <input type="text" id="claudeCwdInput" placeholder="(auto: parent of Ollama web ui/)" />
-          <span class="field-hint">Where Claude Code is allowed to read &amp; edit. Leave empty to use the server default. Changes apply to new sessions.</span>
+        <div class="field" id="codeCwdField">
+          <span class="field-label">Local Code working directory</span>
+          <input type="text" id="codeCwdInput" placeholder="(auto: parent of Ollama web ui/)" />
+          <span class="field-hint">Where the agent is allowed to read &amp; edit files. Leave empty to use the server default (the Trend Vault project root).</span>
         </div>
 
         <div class="field-row">
