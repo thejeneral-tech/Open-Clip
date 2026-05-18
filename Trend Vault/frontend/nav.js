@@ -19,7 +19,6 @@
       items: [
         { href: '/trend-vault',  iconHTML: '<img src="/vault-icon.svg" width="14" height="14" alt="" draggable="false" style="vertical-align:-2px">', label: 'The Vault',  accent: '#a855f7' },
         { href: '/voice-lab',    icon: '🎙️', label: 'Voice Lab',    accent: '#c4b5fd' },
-        { href: '/voice-editor', icon: '🎤', label: 'MP3 Editor',   accent: '#f0c040' },
         { href: '/',             icon: '✂️', label: 'Clip Tool',    accent: '#FFE500' },
       ],
     },

@@ -15,8 +15,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
 import { generateTrendVaultScript, generateFallbackScript } from './scripts/trend-vault-generate';
-import { generateVoice, VOICE_PRESETS } from './scripts/tts/ttsService';
-import { probeLocalTts } from './scripts/tts/localTtsAdapter';
+import {
+  generateVoice,
+  VOICE_PRESETS,
+  runKokoroRenderPreflight,
+  debugChunkSynthesis,
+  forceWorkingVoiceRender,
+} from './scripts/tts/ttsService';
+import { probeLocalTts, probeKokoroAlive, waitForKokoroReady } from './scripts/tts/localTtsAdapter';
 import { aiComplete, parseAIJson } from './scripts/ai-completion';
 import { AssemblyAI } from 'assemblyai';
 import {
@@ -1664,10 +1670,6 @@ app.get('/voice-lab', (_req, res) => {
   res.sendFile(path.join(ROOT, 'frontend', 'voice-lab.html'));
 });
 
-// ── Serve MP3 Voice Editor page ──────────────────────────────────────────────
-app.get('/voice-editor', (_req, res) => {
-  res.sendFile(path.join(ROOT, 'frontend', 'voice-editor.html'));
-});
 
 // ── Custom presets storage ────────────────────────────────────────────────────
 const CUSTOM_PRESETS_FILE = path.join(ROOT, 'custom-presets.json');
@@ -1945,6 +1947,56 @@ app.get('/api/trend-vault/engine-status', async (_req, res) => {
   });
 });
 
+// ── Kokoro real-render preflight ────────────────────────────────────────
+// Synthesizes "This is a render test." through the SAME function the render
+// path uses, then validates duration. This is the only honest readiness check.
+app.get('/api/tts/preflight', async (req, res) => {
+  try {
+    const presetId = (req.query.presetId as string) || '';
+    const preset = VOICE_PRESETS.find(p => p.id === presetId);
+    const edgeId = preset ? preset.edgeId : '';
+    console.log('[TTS preflight] preset:', presetId || '(none)');
+    const r = await runKokoroRenderPreflight(edgeId, (line: string) => console.log('[TTS preflight]', line));
+    res.json(r);
+  } catch (e) {
+    console.error('[TTS preflight] error:', e);
+    res.status(500).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// ── Debug a single chunk through A / B / C variants ─────────────────────
+// Saves results into ./debug/kokoro/
+app.post('/api/tts/debug-chunk', express.json(), async (req, res) => {
+  const { text, presetId } = req.body as { text: string; presetId?: string };
+  if (!text) { res.status(400).json({ ok: false, error: 'text required' }); return; }
+  try {
+    const preset = VOICE_PRESETS.find(p => p.id === (presetId || ''));
+    const edgeId = preset ? preset.edgeId : '';
+    const reports = await debugChunkSynthesis(text, edgeId, (line: string) => console.log('[TTS debug-chunk]', line));
+    res.json({ ok: true, reports });
+  } catch (e) {
+    console.error('[TTS debug-chunk] error:', e);
+    res.status(500).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// ── Force Working Voice Render ──────────────────────────────────────────
+// Synthesizes the whole script with safe defaults + automatic engine
+// fallback. Returns the merged MP3 buffer plus the engine that produced it.
+app.post('/api/trend-vault/force-render-voice', express.json(), async (req, res) => {
+  const { text } = req.body as { text: string };
+  if (!text) { res.status(400).json({ ok: false, error: 'text required' }); return; }
+  try {
+    const r = await forceWorkingVoiceRender(text, (line: string) => console.log('[FORCE-VOICE]', line));
+    res.setHeader('Content-Type', r.mimeType);
+    res.setHeader('X-TTS-Engine', r.engine);
+    res.send(r.buffer);
+  } catch (e) {
+    console.error('[FORCE-VOICE] error:', e);
+    res.status(500).json({ ok: false, error: (e as Error).message });
+  }
+});
+
 app.post('/api/trend-vault/generate-voice', async (req, res) => {
   const {
     text, presetId, pitch, rate, speed, volume, intensity, preview, engine,
@@ -2014,6 +2066,9 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
       volume: voice.volume, intensity: voice.intensity,
       throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
       royalPace:   voice.royalPace,   chamberSpace: voice.chamberSpace,
+      // Mirror chunk-level logs to the server console so a preview that fails
+      // gives you exactly the same diagnostics a render would.
+      logger:      (line: string) => console.log('[VOICE-PREVIEW]', line),
     });
     const buffer = result.buffer;
 
@@ -2293,9 +2348,31 @@ app.post('/api/trend-vault/render', async (req, res) => {
       const voiceFile      = `trend_vault_voice_${jobId}.mp3`;
       const voicePath      = path.join(AUDIO_DIR, voiceFile);
       const selectedPreset = voiceParams.presetId || 'tiktok_female';
+      const safeMode       = !!settings.safeMode;
 
-      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=kokoro`);
+      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=kokoro${safeMode ? ' (safe mode)' : ''}`);
       pushLog(`[TTS] text length: ${fullText.length} chars across ${scriptLines.length} lines`);
+
+      // ── Pre-flight: confirm Kokoro is actually alive (synth test, not just
+      //    a port check). The launcher's green dot only checks the port;
+      //    a frozen Kokoro process passes that check but produces silent
+      //    audio. waitForKokoroReady() retries every 2s for up to 60s.
+      pushLog('🔎 Checking Kokoro server...');
+      const fastProbe = await probeKokoroAlive();
+      if (!fastProbe.ok) {
+        pushLog(`⚠ Kokoro not ready on first try: ${fastProbe.reason || 'unknown'} — retrying for up to 60s`);
+        const waited = await waitForKokoroReady({ maxMs: 60_000, intervalMs: 2_000, logger: pushLog });
+        if (!waited.ready) {
+          throw new Error(
+            'Kokoro TTS server is not responding after 60s of retries. ' +
+            'Last reason: ' + (waited.lastReason || 'unknown') + '. ' +
+            'Make sure Kokoro is running (start-kokoro.bat or the launcher card), ' +
+            'and that nothing else is bound to port 5070.'
+          );
+        }
+      } else {
+        pushLog(`✓ Kokoro server ready (test audio ${fastProbe.bytes || 0} bytes)`);
+      }
 
       let voiceBuffer: Buffer;
       try {
@@ -2312,6 +2389,10 @@ app.post('/api/trend-vault/render', async (req, res) => {
           ancientRasp:  voiceParams.ancientRasp,
           royalPace:    voiceParams.royalPace,
           chamberSpace: voiceParams.chamberSpace,
+          // Per-chunk progress goes straight to the render SSE log
+          logger:    pushLog,
+          // "Force Working Render" — skip the FX chain, just loudnorm
+          safeMode,
         });
         voiceBuffer = result.buffer;
       } catch (ttsErr) {
@@ -2799,6 +2880,35 @@ app.get('/api/trend-vault/outputs', (_req, res) => {
     .filter(d => d.hasVideo)
     .reverse();
   res.json({ folders });
+});
+
+// ── Delete one output folder ──────────────────────────────────────────────────
+app.delete('/api/trend-vault/outputs/:folder', (req, res) => {
+  const { folder } = req.params;
+  if (!folder || /[./\\]/.test(folder)) { res.status(400).json({ error: 'Invalid folder name' }); return; }
+  const target = path.join(TREND_VAULT_OUT, folder);
+  if (!target.startsWith(TREND_VAULT_OUT)) { res.status(400).json({ error: 'Invalid path' }); return; }
+  try {
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+// ── Delete multiple (or all) output folders ───────────────────────────────────
+app.delete('/api/trend-vault/outputs', (req, res) => {
+  if (!fs.existsSync(TREND_VAULT_OUT)) { res.json({ ok: true, deleted: 0 }); return; }
+  const { folders } = (req.body || {}) as { folders?: string[] };
+  const all = fs.readdirSync(TREND_VAULT_OUT, { withFileTypes: true })
+    .filter(d => d.isDirectory()).map(d => d.name);
+  const targets = (folders && Array.isArray(folders) && folders.length) ? folders : all;
+  let deleted = 0;
+  for (const f of targets) {
+    if (/[./\\]/.test(f)) continue;
+    const t = path.join(TREND_VAULT_OUT, f);
+    if (!t.startsWith(TREND_VAULT_OUT)) continue;
+    try { if (fs.existsSync(t)) { fs.rmSync(t, { recursive: true, force: true }); deleted++; } } catch { /* ignore */ }
+  }
+  res.json({ ok: true, deleted });
 });
 
 // ── Analyze reference video style ────────────────────────────────────────────
@@ -3538,17 +3648,22 @@ async function resolveUrl(url: string): Promise<string> {
 // ── Import audio/video from URL (yt-dlp) — background queue ──────────────────
 app.post('/api/trend-vault/import-url', async (req, res) => {
   const { url, type } = req.body as { url: string; type: 'audio' | 'video' };
-  if (!url) { res.status(400).json({ error: 'url required' }); return; }
+  if (!url) { res.status(400).json({ ok: false, error: 'url required' }); return; }
 
-  // Quick yt-dlp availability check
-  const ytdlp = await new Promise<boolean>(resolve => {
-    const check = spawn('yt-dlp', ['--version'], { shell: true });
-    check.on('close', code => resolve(code === 0));
-    check.on('error', () => resolve(false));
-  });
-  if (!ytdlp) {
-    res.status(503).json({ error: 'yt-dlp not installed. Run: pip install yt-dlp' }); return;
+  // Resolve yt-dlp (bin → root → python → PATH). NEVER throw.
+  console.log('[import-url] URL submitted:', url, '| type:', type, '| cwd:', process.cwd());
+  const ytd = await resolveYtDlp().catch(() => null);
+  if (!ytd || !ytd.found) {
+    const status = await _downloaderStatusPayload().catch(() => null);
+    res.status(503).json({
+      ok: false,
+      error: 'yt-dlp not found. Click "Fix Downloader" or place yt-dlp.exe in the bin/ folder.',
+      hint: 'yt-dlp not installed',
+      status,
+    });
+    return;
   }
+  console.log('[import-url] yt-dlp source:', ytd.source, '| version:', ytd.version);
 
   // Create job and respond immediately — process in background
   const job: DownloadJob = {
@@ -3556,7 +3671,7 @@ app.post('/api/trend-vault/import-url', async (req, res) => {
     url, type, status: 'queued', startedAt: Date.now(),
   };
   addJob(job);
-  res.json({ ok: true, jobId: job.id, type });
+  res.json({ ok: true, jobId: job.id, type, downloader: { source: ytd.source, version: ytd.version } });
 
   // Background processing
   (async () => {
@@ -3565,57 +3680,89 @@ app.post('/api/trend-vault/import-url', async (req, res) => {
       const resolvedUrl = await resolveUrl(url);
       job.status = 'downloading';
 
-      const destDir  = type === 'video' ? BACKGROUNDS : MUSIC_DIR;
-      const safeFmt  = type === 'video' ? 'bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best' : 'bestaudio/best';
+      const destDir = type === 'video' ? BACKGROUNDS : MUSIC_DIR;
+      try { if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true }); } catch {}
       const outTmpl  = path.join(destDir, '%(title).40s.%(ext)s');
 
-      await new Promise<void>((resolve, reject) => {
+      // Fallback format chain — try richer formats first, then fall back.
+      // For audio we still want bestaudio first, then any audio source.
+      const videoFmts: string[] = [
+        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+        'bestvideo+bestaudio/best',
+        'best',
+        'mp4',
+      ];
+      const audioFmts: string[] = [
+        'bestaudio[ext=m4a]/bestaudio/best',
+        'best',
+      ];
+      const formatChain = type === 'video' ? videoFmts : audioFmts;
+
+      let lastErr = '';
+      let succeeded = false;
+
+      for (let i = 0; i < formatChain.length; i++) {
+        const fmt = formatChain[i];
         const args = [
+          ...ytd.prefixArgs,
           '--no-playlist',
           '--no-warnings',
           '--retries', '3',
           '--output', outTmpl,
-          '--format', safeFmt,
+          '--format', fmt,
           '--print', 'after_move:filepath',
         ];
         if (type === 'audio') {
           args.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
           job.status = 'extracting';
+        } else if (i === 0) {
+          // First video attempt: prefer merging into mp4 if both streams chosen
+          args.push('--merge-output-format', 'mp4');
         }
         args.push(resolvedUrl);
 
-        const proc = spawn('yt-dlp', args, { shell: true });
-        let stdout = '';
-        let stderr = '';
-        proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
-        proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
-        proc.on('close', code => {
-          if (code === 0) {
-            // Pick last printed filepath
-            const lines = stdout.trim().split('\n').filter(Boolean);
-            const lastPath = lines.pop()?.trim();
-            if (lastPath) {
-              job.filename = path.basename(lastPath);
-              job.savePath = type === 'video'
-                ? `Project > Backgrounds > ${job.filename}`
-                : `Project > Music > ${job.filename}`;
-            }
-            resolve();
-          } else {
-            // Friendlier error messages
-            const out = stderr || stdout;
-            let friendly = '';
-            if (/Private video|This video is private/i.test(out)) friendly = 'This video is private';
-            else if (/HTTP Error 404/i.test(out)) friendly = 'Video not found (deleted or invalid URL)';
-            else if (/Sign in to confirm|age-restricted/i.test(out)) friendly = 'Age-restricted or login required';
-            else if (/Unable to extract|Unsupported URL/i.test(out)) friendly = 'URL format not supported by yt-dlp';
-            else if (/HTTP Error 403/i.test(out)) friendly = 'Access blocked (try again or check URL)';
-            else friendly = out.slice(-300) || `yt-dlp exit ${code}`;
-            reject(new Error(friendly));
-          }
+        console.log(`[import-url] attempt ${i + 1}/${formatChain.length} — cmd:`, ytd.cmd, args.join(' '));
+        const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+          let stdout = '';
+          let stderr = '';
+          const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
+          proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+          proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+          proc.on('close', code => resolve({ code: code ?? 1, stdout, stderr }));
+          proc.on('error', err => resolve({ code: 1, stdout: '', stderr: (err as Error).message }));
         });
-        proc.on('error', reject);
-      });
+
+        if (result.code === 0) {
+          const lines = result.stdout.trim().split('\n').filter(Boolean);
+          const lastPath = lines.pop()?.trim();
+          if (lastPath) {
+            job.filename = path.basename(lastPath);
+            job.savePath = type === 'video'
+              ? `Project > Backgrounds > ${job.filename}`
+              : `Project > Music > ${job.filename}`;
+            console.log('[import-url] SUCCESS — file:', lastPath);
+          } else {
+            console.log('[import-url] yt-dlp exit 0 but no filepath printed');
+          }
+          succeeded = true;
+          break;
+        }
+
+        const out = (result.stderr || result.stdout || '').trim();
+        console.warn(`[import-url] attempt ${i + 1} failed (exit ${result.code}). Tail:`, out.slice(-500));
+
+        // Permanent errors — don't retry with another format
+        if (/Private video|This video is private/i.test(out)) { lastErr = 'This video is private'; break; }
+        if (/HTTP Error 404/i.test(out))                       { lastErr = 'Video not found (deleted or invalid URL)'; break; }
+        if (/Sign in to confirm|age-restricted/i.test(out))    { lastErr = 'Age-restricted or login required'; break; }
+        if (/Unable to extract|Unsupported URL/i.test(out))    { lastErr = 'URL format not supported by yt-dlp'; break; }
+        if (/HTTP Error 403/i.test(out))                       { lastErr = 'Access blocked (try again or check URL)'; break; }
+
+        // Otherwise keep trying the next fallback format
+        lastErr = out.slice(-300) || `yt-dlp exit ${result.code}`;
+      }
+
+      if (!succeeded) throw new Error(lastErr || 'Download failed');
 
       job.status = 'complete';
       job.completedAt = Date.now();
@@ -3623,8 +3770,467 @@ app.post('/api/trend-vault/import-url', async (req, res) => {
       job.status = 'failed';
       job.error = (e as Error).message;
       job.completedAt = Date.now();
+      console.error('[import-url] FAILED:', job.error);
     }
   })();
+});
+
+// ── yt-dlp resolver (bin → root → python module → PATH) ─────────────────────
+// Returns BOTH a "cmd + args prefix" pair AND a string description so
+// callers can spawn(cmd, [...prefixArgs, ...userArgs]) and we never have to
+// build unsafe command strings.
+type YtDlpResolved = {
+  found: boolean;
+  cmd: string;
+  prefixArgs: string[];
+  // 'binary' = direct exe (./bin/, ./, PATH); 'python' = python -m yt_dlp
+  kind: 'binary' | 'python' | 'missing';
+  source: string;       // human readable: 'bin/yt-dlp.exe' | 'python -m yt_dlp' | …
+  version?: string;     // populated by probe
+  checked: string[];    // every candidate we tried, in order
+};
+
+let _ytDlpCache: YtDlpResolved | null = null;
+
+function _projectDirs(): string[] {
+  return [...new Set([
+    __dirname,
+    process.cwd(),
+    typeof ROOT === 'string' ? ROOT : '',
+    path.resolve('.'),
+    process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : '',
+    process.argv[2] ? path.dirname(path.resolve(process.argv[2])) : '',
+  ].filter(Boolean))];
+}
+
+async function _probeVersion(cmd: string, args: string[]): Promise<string | null> {
+  return new Promise(resolve => {
+    let resolved = false;
+    let out = '';
+    let err = '';
+    try {
+      // shell:false + windowsHide:true → no extra console pop-ups, no command-string parsing.
+      const p = spawn(cmd, [...args, '--version'], { shell: false, windowsHide: true });
+      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      p.stderr.on('data', (d: Buffer) => { err += d.toString(); });
+      p.on('close', code => {
+        if (resolved) return;
+        resolved = true;
+        if (code === 0) {
+          const v = out.trim().split(/\r?\n/)[0] || '';
+          resolve(v || '(installed)');
+        } else {
+          resolve(null);
+        }
+      });
+      p.on('error', () => { if (!resolved) { resolved = true; resolve(null); } });
+      // Hard timeout — should never take more than 3s for --version
+      setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve(null); } }, 3000);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function resolveYtDlp(force = false): Promise<YtDlpResolved> {
+  if (!force && _ytDlpCache && _ytDlpCache.found) return _ytDlpCache;
+
+  const exe = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+  const dirs = _projectDirs();
+  const checked: string[] = [];
+
+  const candidates: Array<{ cmd: string; prefixArgs: string[]; kind: 'binary'|'python'; source: string }> = [];
+
+  // A. Project local: <dir>/bin/yt-dlp[.exe]
+  for (const d of dirs) {
+    const p = path.join(d, 'bin', exe);
+    candidates.push({ cmd: p, prefixArgs: [], kind: 'binary', source: `bin/${exe} (${d})` });
+  }
+  // B. Project root: <dir>/yt-dlp[.exe]
+  for (const d of dirs) {
+    const p = path.join(d, exe);
+    candidates.push({ cmd: p, prefixArgs: [], kind: 'binary', source: `${exe} (${d})` });
+  }
+  // C. Python modules
+  const pyCmds = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
+  for (const py of pyCmds) {
+    candidates.push({ cmd: py, prefixArgs: ['-m', 'yt_dlp'], kind: 'python', source: `${py} -m yt_dlp` });
+  }
+  // D. Global PATH
+  candidates.push({ cmd: exe, prefixArgs: [], kind: 'binary', source: `${exe} (PATH)` });
+  if (process.platform !== 'win32') {
+    candidates.push({ cmd: 'yt-dlp', prefixArgs: [], kind: 'binary', source: 'yt-dlp (PATH)' });
+  }
+
+  for (const c of candidates) {
+    checked.push(c.source);
+    // For binary candidates with an absolute-ish path, skip if file doesn't exist
+    if (c.kind === 'binary' && (c.cmd.includes('/') || c.cmd.includes('\\'))) {
+      try { if (!fs.existsSync(c.cmd)) continue; } catch { continue; }
+    }
+    const v = await _probeVersion(c.cmd, c.prefixArgs);
+    if (v) {
+      _ytDlpCache = { found: true, cmd: c.cmd, prefixArgs: c.prefixArgs, kind: c.kind, source: c.source, version: v, checked };
+      console.log('[yt-dlp] resolved via:', c.source, '— version:', v);
+      return _ytDlpCache;
+    }
+  }
+
+  _ytDlpCache = { found: false, cmd: '', prefixArgs: [], kind: 'missing', source: '', checked };
+  console.warn('[yt-dlp] not found. Checked:', checked);
+  return _ytDlpCache;
+}
+
+// Legacy synchronous helper — kept for the streaming endpoint that runs
+// before we get a chance to await. Falls back to the resolver cache.
+function getYtDlpBin(): string {
+  if (_ytDlpCache && _ytDlpCache.found && _ytDlpCache.kind === 'binary') return _ytDlpCache.cmd;
+  const exe = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+  for (const d of _projectDirs()) {
+    const p = path.join(d, 'bin', exe);
+    try { if (fs.existsSync(p)) return p; } catch { /* skip */ }
+  }
+  for (const d of _projectDirs()) {
+    const p = path.join(d, exe);
+    try { if (fs.existsSync(p)) return p; } catch { /* skip */ }
+  }
+  return exe;
+}
+
+// Ensure ./bin and ./downloads exist at startup
+function ensureDownloaderDirs(): { binDir: string; downloadsDir: string } {
+  const binDir = path.join(ROOT, 'bin');
+  const downloadsDir = path.join(ROOT, 'downloads');
+  try { if (!fs.existsSync(binDir))       fs.mkdirSync(binDir, { recursive: true }); } catch {}
+  try { if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true }); } catch {}
+  return { binDir, downloadsDir };
+}
+ensureDownloaderDirs();
+// Probe yt-dlp asynchronously at startup so the first request is fast
+resolveYtDlp(true).catch(() => {});
+
+// ── Downloader / yt-dlp availability (also reports ffmpeg + folders) ────────
+async function _probeFfmpeg(): Promise<string | null> {
+  return new Promise(resolve => {
+    let resolved = false;
+    try {
+      const p = spawn('ffmpeg', ['-version'], { shell: false, windowsHide: true });
+      let out = '';
+      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+      p.on('close', code => { if (!resolved) { resolved = true; resolve(code === 0 ? (out.split(/\r?\n/)[0] || '(ffmpeg)') : null); } });
+      p.on('error', () => { if (!resolved) { resolved = true; resolve(null); } });
+      setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve(null); } }, 3000);
+    } catch { resolve(null); }
+  });
+}
+
+async function _downloaderStatusPayload() {
+  const r = await resolveYtDlp(true);
+  const ff = await _probeFfmpeg();
+  const { binDir, downloadsDir } = ensureDownloaderDirs();
+  return {
+    ytdlp: {
+      available: r.found,
+      version: r.version || null,
+      source: r.source || null,
+      kind: r.kind,                   // 'binary' | 'python' | 'missing'
+      cmd: r.cmd || null,
+      prefixArgs: r.prefixArgs,
+      checked: r.checked,
+    },
+    ffmpeg: {
+      available: !!ff,
+      version: ff || null,
+    },
+    folders: {
+      bin: { path: binDir, exists: fs.existsSync(binDir) },
+      downloads: { path: downloadsDir, exists: fs.existsSync(downloadsDir) },
+    },
+  };
+}
+
+// Legacy alias — kept so old front-end code keeps working
+app.get('/api/ytdlp/status', async (_req, res) => {
+  try {
+    const s = await _downloaderStatusPayload();
+    res.json({
+      available: s.ytdlp.available,
+      version:   s.ytdlp.version,
+      bin:       s.ytdlp.cmd,
+      binExists: s.ytdlp.available && s.ytdlp.kind === 'binary',
+      source:    s.ytdlp.source,
+      kind:      s.ytdlp.kind,
+      checked:   s.ytdlp.checked,
+      ffmpeg:    s.ffmpeg,
+      folders:   s.folders,
+    });
+  } catch (e) {
+    res.status(500).json({ available: false, error: (e as Error).message });
+  }
+});
+
+// New canonical status endpoint
+app.get('/api/downloader/status', async (_req, res) => {
+  try { res.json(await _downloaderStatusPayload()); }
+  catch (e) { res.status(500).json({ error: (e as Error).message }); }
+});
+
+// One-click "Fix Downloader" — runs `python -m pip install -U yt-dlp` and
+// re-probes. Always returns JSON, never crashes the request.
+app.post('/api/downloader/fix', async (_req, res) => {
+  const log: string[] = [];
+  const ensureDirs = ensureDownloaderDirs();
+  log.push(`[fix] bin: ${ensureDirs.binDir} (${fs.existsSync(ensureDirs.binDir) ? 'exists' : 'missing'})`);
+  log.push(`[fix] downloads: ${ensureDirs.downloadsDir} (${fs.existsSync(ensureDirs.downloadsDir) ? 'exists' : 'missing'})`);
+
+  const tryPipInstall = async (pyCmd: string): Promise<{ ok: boolean; out: string }> => {
+    return new Promise(resolve => {
+      let resolved = false;
+      let out = '';
+      try {
+        const p = spawn(pyCmd, ['-m', 'pip', 'install', '-U', 'yt-dlp', '--quiet'], { shell: false, windowsHide: true });
+        p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+        p.stderr.on('data', (d: Buffer) => { out += d.toString(); });
+        p.on('close', code => { if (!resolved) { resolved = true; resolve({ ok: code === 0, out: out.trim() }); } });
+        p.on('error', err => { if (!resolved) { resolved = true; resolve({ ok: false, out: `spawn error: ${(err as Error).message}` }); } });
+        // Long timeout — pip can take a while
+        setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve({ ok: false, out: 'pip install timed out' }); } }, 120_000);
+      } catch (e) {
+        resolve({ ok: false, out: `spawn threw: ${(e as Error).message}` });
+      }
+    });
+  };
+
+  const pyCandidates = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
+  let pipOk = false;
+  for (const py of pyCandidates) {
+    log.push(`[fix] trying: ${py} -m pip install -U yt-dlp`);
+    const r = await tryPipInstall(py);
+    log.push(r.out ? r.out.slice(-400) : '(no output)');
+    if (r.ok) { pipOk = true; log.push(`[fix] ${py} -m pip install — OK`); break; }
+  }
+  if (!pipOk) log.push('[fix] all pip attempts failed');
+
+  // Re-probe
+  const status = await _downloaderStatusPayload();
+  res.json({
+    ok: status.ytdlp.available,
+    pipInstall: pipOk,
+    status,
+    log,
+    note: status.ytdlp.available
+      ? `yt-dlp resolved via: ${status.ytdlp.source}`
+      : 'yt-dlp still not found. Either install Python with pip, or drop yt-dlp.exe into the bin/ folder manually.',
+  });
+});
+
+// In-memory map of active yt-dlp download jobs for the Clip Tool
+type ClipDlJob = {
+  id: string; url: string;
+  status: 'queued' | 'downloading' | 'done' | 'error';
+  pct: number; eta: string; speed: string;
+  filename?: string; error?: string;
+};
+const clipDlJobs = new Map<string, ClipDlJob>();
+
+// POST /api/clip/ytdlp — start a yt-dlp download to the uploads folder
+app.post('/api/clip/ytdlp', express.json(), async (req, res) => {
+  const { url } = req.body as { url: string };
+  if (!url) { res.status(400).json({ ok: false, error: 'url required' }); return; }
+
+  console.log('[clip/ytdlp] URL submitted:', url, '| cwd:', process.cwd());
+  const ytd = await resolveYtDlp().catch(() => null);
+  if (!ytd || !ytd.found) {
+    res.status(503).json({
+      ok: false,
+      error: 'yt-dlp not found. Click Fix Downloader or place yt-dlp.exe in the bin/ folder.',
+      hint: 'yt-dlp not installed',
+    });
+    return;
+  }
+  console.log('[clip/ytdlp] resolver source:', ytd.source);
+
+  const jobId = `cydl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const job: ClipDlJob = { id: jobId, url, status: 'queued', pct: 0, eta: '—', speed: '' };
+  clipDlJobs.set(jobId, job);
+  res.json({ ok: true, jobId, downloader: { source: ytd.source, version: ytd.version } });
+
+  // Background download
+  (async () => {
+    try {
+      job.status = 'downloading';
+      if (!fs.existsSync(UPLOADS)) fs.mkdirSync(UPLOADS, { recursive: true });
+      const outTmpl = path.join(UPLOADS, '%(title).60s.%(ext)s');
+
+      // Fallback format chain
+      const fmts = [
+        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+        'bestvideo+bestaudio/best',
+        'best',
+        'mp4',
+      ];
+
+      let lastErr = '';
+      let succeeded = false;
+      let lastPath = '';
+
+      for (let i = 0; i < fmts.length; i++) {
+        lastPath = '';
+        const args = [
+          ...ytd.prefixArgs,
+          '--no-playlist', '--retries', '3',
+          '-f', fmts[i],
+          '--merge-output-format', 'mp4',
+          '--output', outTmpl,
+          '--progress', '--newline',
+          '--print', 'after_move:filepath',
+          url,
+        ];
+        console.log(`[clip/ytdlp] attempt ${i + 1}/${fmts.length} fmt=${fmts[i]}`);
+
+        const result = await new Promise<{ code: number; stderr: string }>((resolve) => {
+          let stderr = '';
+          const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
+          proc.stdout.on('data', (d: Buffer) => {
+            const text = d.toString();
+            const m = text.match(/\[download\]\s+([\d.]+)%.*?at\s+([\d.]+\S+)\s+ETA\s+(\S+)/);
+            if (m) { job.pct = parseFloat(m[1]); job.speed = m[2]; job.eta = m[3]; }
+            for (const line of text.split('\n')) {
+              const l = line.trim();
+              if (l && !l.startsWith('[') && /\.(mp4|mkv|webm|mov)$/i.test(l)) lastPath = l;
+            }
+          });
+          proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+          proc.on('close', code => resolve({ code: code ?? 1, stderr }));
+          proc.on('error', err => resolve({ code: 1, stderr: (err as Error).message }));
+        });
+
+        if (result.code === 0 && lastPath) {
+          job.filename = path.basename(lastPath);
+          succeeded = true;
+          console.log('[clip/ytdlp] SUCCESS — file:', lastPath);
+          break;
+        } else if (result.code === 0) {
+          // exit 0 but no path captured — fall through to "pick newest" branch below
+          try {
+            const newest = fs.readdirSync(UPLOADS)
+              .filter(f => /\.(mp4|mkv|webm|mov)$/i.test(f))
+              .map(f => ({ f, mt: fs.statSync(path.join(UPLOADS, f)).mtimeMs }))
+              .sort((a, b) => b.mt - a.mt)[0];
+            if (newest) { job.filename = newest.f; succeeded = true; break; }
+          } catch {}
+        }
+
+        const out = result.stderr.slice(-500);
+        console.warn(`[clip/ytdlp] attempt ${i + 1} failed (exit ${result.code}). Tail:`, out);
+        if (/Private video|This video is private/i.test(out)) { lastErr = 'This video is private'; break; }
+        if (/HTTP Error 404/i.test(out))                       { lastErr = 'Video not found'; break; }
+        if (/Sign in to confirm|age-restricted/i.test(out))    { lastErr = 'Age-restricted or login required'; break; }
+        if (/Unable to extract|Unsupported URL/i.test(out))    { lastErr = 'URL format not supported'; break; }
+        if (/HTTP Error 403/i.test(out))                       { lastErr = 'Access blocked'; break; }
+        lastErr = out || `yt-dlp exit ${result.code}`;
+      }
+
+      if (!succeeded) throw new Error(lastErr || 'Download failed');
+
+      job.status = 'done';
+      job.pct = 100;
+      return;
+    } catch (e) {
+      job.status = 'error';
+      job.error  = (e as Error).message;
+      console.error('[clip/ytdlp] FAILED:', job.error);
+      return;
+    }
+  })();
+
+});
+
+// GET /api/clip/ytdlp/:jobId — poll download status
+app.get('/api/clip/ytdlp/:jobId', (req, res) => {
+  const job = clipDlJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: 'job not found' }); return; }
+  res.json(job);
+});
+
+// POST /api/clip/process-local — run clip pipeline on a file already in uploads/
+app.post('/api/clip/process-local', express.json(), (req, res) => {
+  const { filename } = req.body as { filename: string };
+  if (!filename) { res.status(400).json({ error: 'filename required' }); return; }
+
+  const videoPath = path.join(UPLOADS, path.basename(filename));
+  if (!fs.existsSync(videoPath)) { res.status(404).json({ error: 'file not found in uploads/' }); return; }
+  if (activeJob?.status === 'running') { res.status(409).json({ error: 'A job is already running.' }); return; }
+
+  const folder = toFolderName(filename);
+  const jobId  = Date.now().toString();
+  activeJob = {
+    id: jobId, status: 'running', logs: [], folder,
+    filename, startTime: Date.now(),
+    stage: 0, currentClip: 0, totalClips: 10,
+    clipPct: 0, clipsFinished: [], overallPct: 0,
+  };
+
+  res.json({ ok: true, jobId, filename, folder });
+  saveJobState(videoPath, activeJob);
+  clearIntermediateFiles();
+  broadcast(jobId, { status: 'starting', filename, folder });
+  broadcastProgress(activeJob);
+});
+
+// GET /api/clip/download-direct?url=...
+// Pipes yt-dlp stdout straight to the browser — nothing is saved on the server.
+// Pre-checks yt-dlp availability so we never blank-page the user with a 503
+// text body. If yt-dlp is missing, we redirect the user back to /api/clip
+// with a friendly error payload instead.
+app.get('/api/clip/download-direct', async (req, res) => {
+  const url = ((req.query.url as string) || '').trim();
+  if (!url) { res.status(400).json({ ok: false, error: 'url required' }); return; }
+
+  const ytd = await resolveYtDlp().catch(() => null);
+  if (!ytd || !ytd.found) {
+    // JSON response so an accidental navigation prints structured text in the browser
+    // instead of looking like a "white page" of plain server text.
+    res.status(503).json({
+      ok: false,
+      error: 'yt-dlp not found. Click Fix Downloader or place yt-dlp.exe in the bin/ folder.',
+      hint: 'yt-dlp not installed',
+    });
+    return;
+  }
+
+  console.log('[download-direct] URL submitted:', url, '| via:', ytd.source);
+
+  // Stream the best pre-muxed format directly to stdout (-o -)
+  const args = [
+    ...ytd.prefixArgs,
+    '--no-playlist',
+    '--retries', '3',
+    '-f', 'best[ext=mp4]/best[ext=webm]/best',
+    '-o', '-',
+    url,
+  ];
+
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
+
+  const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
+
+  proc.stdout.pipe(res);
+  proc.stderr.resume(); // drain stderr so it doesn't block the process
+
+  proc.on('error', err => {
+    console.error('[download-direct] spawn error:', err);
+    if (!res.headersSent) {
+      res.status(503).json({ ok: false, error: 'Spawn error: ' + (err as Error).message });
+    } else {
+      try { res.end(); } catch {}
+    }
+  });
+
+  proc.on('close', () => { if (!res.writableEnded) res.end(); });
+
+  req.on('close', () => { try { proc.kill(); } catch { /* ignore */ } });
 });
 
 // ─── Stock Media Browser ────────────────────────────────────────────────────
@@ -3761,65 +4367,53 @@ app.get('/api/stock/audio', async (req, res) => {
   }
 });
 
-// POST /api/stock/download — download a stock video or audio file to disk
-// Body: { type: 'video'|'audio', downloadUrl: string, filename: string }
-// Returns: { ok: true, filename: string } — filename usable by selectBackground / selectMusic
-app.post('/api/stock/download', async (req, res) => {
-  const { type, downloadUrl, filename } = req.body as {
-    type: 'video' | 'audio';
-    downloadUrl: string;
-    filename: string;
-  };
-
-  if (!downloadUrl || !filename) {
-    res.status(400).json({ ok: false, error: 'Missing downloadUrl or filename' });
-    return;
-  }
-
-  // Determine destination directory and file extension
-  const isVideo   = type === 'video';
-  const ext       = isVideo ? '.mp4' : '.mp3';
-  const safeBase  = filename.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  const outName   = safeBase.endsWith(ext) ? safeBase : safeBase + ext;
-  const destDir   = isVideo
-    ? path.join(__dirname, 'public', 'backgrounds')
-    : path.join(__dirname, 'public', 'music');
-
-  fs.mkdirSync(destDir, { recursive: true });
-  const destPath = path.join(destDir, outName);
-
-  try {
-    const r = await fetch(downloadUrl);
-    if (!r.ok) throw new Error(`Upstream ${r.status}: ${r.statusText}`);
-    const buf = Buffer.from(await r.arrayBuffer());
-    fs.writeFileSync(destPath, buf);
-    res.json({ ok: true, filename: outName });
-  } catch (e) {
-    console.error('[stock/download]', (e as Error).message);
-    res.status(500).json({ ok: false, error: (e as Error).message });
-  }
-});
-
-// GET /api/stock/audio-proxy?url=<encoded> — proxy Jamendo audio to bypass CORS
+// GET /api/stock/audio-proxy?url=...
+// Proxies a Jamendo audio stream through the server to avoid CORS issues in the browser
 app.get('/api/stock/audio-proxy', async (req, res) => {
-  const rawUrl = String(req.query.url || '');
-  if (!rawUrl) { res.status(400).send('Missing url'); return; }
-
+  const url = String(req.query.url ?? '');
+  if (!url) { res.status(400).end(); return; }
   try {
-    const upstream = await fetch(rawUrl);
-    if (!upstream.ok) throw new Error(`Upstream ${upstream.status}`);
-    const ct = upstream.headers.get('content-type') || 'audio/mpeg';
-    res.setHeader('Content-Type', ct);
-    // Stream the body directly to the client
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.send(buf);
+    const upstream = await fetch(url, {
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!upstream.ok) { res.status(upstream.status).end(); return; }
+    res.setHeader('Content-Type',  upstream.headers.get('content-type')  ?? 'audio/mpeg');
+    res.setHeader('Content-Length', upstream.headers.get('content-length') ?? '');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Stream body - works in Node 18+ where Response.body is a ReadableStream
+    const { Readable } = await import('stream');
+    Readable.fromWeb(upstream.body as any).pipe(res);
   } catch (e) {
-    console.error('[stock/audio-proxy]', (e as Error).message);
-    res.status(502).send('Proxy error: ' + (e as Error).message);
+    res.status(500).json({ error: (e as Error).message });
   }
 });
 
-// ── Start server ──────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n  Trend Vault Studio  —  http://localhost:${PORT}/trend-vault\n`);
+// POST /api/stock/download  { type:'video'|'audio', downloadUrl, filename }
+// Note: this is a NO-OP placeholder — the real /api/stock/download route
+// is registered earlier in this file (Express uses the first registration).
+// Kept here only so the surgical tail-rewrite has a deterministic insertion
+// point if it needs to run again.
+
+// ─── Start server ───────────────────────────────────────────────────────────
+const server = app.listen(PORT, () => {
+  console.log('');
+  console.log('  Trend Vault Studio  —  http://localhost:' + PORT + '/trend-vault');
+  console.log('');
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('');
+    console.error('  ====================================================');
+    console.error('  ERROR: Port ' + PORT + ' is already in use.');
+    console.error('  An old Trend Vault window is still running in the background.');
+    console.error('  Fix: run  stop_trend_vault_system.bat  then try again.');
+    console.error('  Or close all Trend Vault windows in the taskbar first.');
+    console.error('  ====================================================');
+    process.exit(1);
+  } else {
+    throw err;
+  }
 });

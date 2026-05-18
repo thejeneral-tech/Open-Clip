@@ -480,6 +480,51 @@ input:focus,textarea:focus,select:focus{
   box-shadow:0 0 0 2px rgba(167,139,250,.12)!important;
 }
 
+/* ── YouTube / Web Downloader card ── */
+#ytCard .card-title { margin-bottom: 14px; }
+#ytUrlRow { display: flex; gap: 10px; align-items: center; }
+#ytUrl {
+  flex: 1;
+  padding: 11px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+#ytUrl::placeholder { color: var(--muted); }
+#ytUrl:focus { border-color: var(--accent) !important; }
+#ytFetchBtn {
+  padding: 11px 20px;
+  background: var(--accent);
+  color: #000;
+  font-weight: 900;
+  font-size: 0.88rem;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+#ytFetchBtn:hover { opacity: 0.85; }
+#ytFetchBtn:disabled { background: var(--surface2) !important; color: var(--muted) !important; cursor: not-allowed; border: 1px solid var(--border); }
+#ytAvail { display: none; font-size: 0.73rem; margin-top: 10px; padding: 7px 11px; border-radius: 8px; }
+#ytAvail.show { display: block; }
+#ytAvail.ok  { background: rgba(29,185,84,0.08);  color: var(--green); border: 1px solid rgba(29,185,84,0.18); }
+#ytAvail.err { background: rgba(254,44,85,0.08);  color: var(--red);   border: 1px solid rgba(254,44,85,0.18); }
+#ytProgress { display: none; margin-top: 14px; }
+#ytProgress.show { display: block; }
+#ytStatus { font-size: 0.83rem; font-weight: 700; margin-bottom: 6px; }
+#ytStatus.ok  { color: var(--green); }
+#ytStatus.err { color: var(--red);   }
+#ytStatus.act { color: var(--accent);}
+#ytProgBar { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+#ytProgFill { height: 100%; background: linear-gradient(90deg, #b89000, var(--accent)); border-radius: 4px; transition: width 0.5s ease; min-width: 0; }
+#ytProgMeta { display: flex; justify-content: space-between; font-size: 0.74rem; color: var(--muted); margin-top: 5px; }
+
 </style>
 </head>
 <body>
@@ -512,6 +557,24 @@ input:focus,textarea:focus,select:focus{
       <button class="fi-x" id="fiX">✕</button>
     </div>
     <button id="startBtn">🚀 Start Processing</button>
+  </div>
+
+  <!-- YouTube / Web downloader card -->
+  <div class="card" id="ytCard">
+    <div class="card-title">⬇ YouTube / Web Download</div>
+    <div id="ytUrlRow">
+      <input id="ytUrl" type="url" placeholder="Paste a YouTube, TikTok, Instagram… URL" autocomplete="off" spellcheck="false"/>
+      <button id="ytFetchBtn">⬇ Download</button>
+    </div>
+    <div id="ytAvail"></div>
+    <div id="ytProgress">
+      <div id="ytStatus" class="act">Starting…</div>
+      <div id="ytProgBar"><div id="ytProgFill" style="width:0%"></div></div>
+      <div id="ytProgMeta">
+        <span id="ytPct">0%</span>
+        <span id="ytSpeedEta"></span>
+      </div>
+    </div>
   </div>
 
   <!-- Processing dashboard -->
@@ -812,7 +875,6 @@ function connectSSE(jobId) {
       startBtn.textContent = '🚀 Start Processing';
     }
   };
-
   sse.onerror = () => appendLog('[connection lost — will retry]');
 }
 
@@ -853,7 +915,6 @@ function renderLibrary(videos) {
     }
   }
 
-  // Download-all per section
   library.querySelectorAll('.vs-dl').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.closest('.vs').querySelectorAll('.clip-dl')
@@ -870,14 +931,213 @@ async function loadLibrary() {
   } catch { return null; }
 }
 
+// ─── start job ───────────────────────────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ Uploading…';
+
+  const fd = new FormData();
+  fd.append('video', selectedFile);
+
+  let data;
+  try {
+    const r = await fetch('/upload', { method: 'POST', body: fd });
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Upload failed');
+  } catch (e) {
+    startBtn.disabled = false;
+    startBtn.textContent = '🚀 Start Processing';
+    alert('Upload error: ' + e.message);
+    return;
+  }
+
+  currentJobId = data.jobId;
+  uploadCard.style.display  = 'none';
+  E('ytCard').style.display = 'none';
+  dashboard.classList.add('show');
+  procName.textContent   = data.filename;
+  procFolder.textContent = `→ output/final/${data.folder}/`;
+  liveDot.className   = 'live-dot';
+  liveLabel.className = 'live-label';
+  liveLabel.textContent = 'LIVE';
+  startElapsed();
+  connectSSE(data.jobId);
+});
+
 // ─── new video ────────────────────────────────────────────────────────────────
 newVideoBtn.addEventListener('click', () => {
   clearFile();
-  logBox.innerHTML = '';
+  logBox.innerHTML   = '';
   liveGrid.innerHTML = '';
   liveClips = [];
   newVideoBtn.classList.remove('show');
   dashboard.classList.remove('show');
   liveSection.classList.remove('show');
-  uploadCard.style.display = '';
+  uploadCard.style.display  = '';
+  E('ytCard').style.display = '';
   overallBar.style.width = '0%';
+  overallPct.textContent = '0%';
+  clipBarRow.classList.remove('show');
+  stageEls.forEach((el, i) => {
+    el.className = 'stage-item';
+    el.querySelector('.stage-circle').textContent = i + 1;
+  });
+  statElapsed.textContent = '0:00';
+  statETA.textContent     = '—';
+  statClips.textContent   = '0 / 10';
+  statStage.textContent   = 'Starting';
+  logToggle.classList.remove('open');
+  logBox.classList.remove('show');
+  logToggle.querySelector('span:last-child').textContent = 'Show log';
+});
+
+// ─── YouTube / Web downloader (fetch-based, no white-page navigation) ──────
+(function initYtDl() {
+  const ytUrl      = E('ytUrl');
+  const ytFetchBtn = E('ytFetchBtn');
+  const ytProgress = E('ytProgress');
+  const ytStatus   = E('ytStatus');
+  const ytAvail    = E('ytAvail');
+
+  // ---- shared helpers --------------------------------------------------
+  function setStatus(state, msg){
+    // state: 'idle' | 'checking' | 'ready' | 'queued' | 'downloading'
+    //      | 'processing' | 'complete' | 'failed'
+    if (!ytStatus) return;
+    const cls = {
+      idle:'', checking:'act', ready:'ok', queued:'act',
+      downloading:'act', processing:'act', complete:'ok', failed:'err',
+    }[state] || '';
+    ytStatus.className = cls;
+    ytStatus.textContent = msg;
+  }
+
+  function renderAvail(d){
+    if (!ytAvail) return;
+    ytAvail.classList.add('show');
+    if (d && d.available) {
+      ytAvail.className   = 'show ok';
+      ytAvail.textContent = '✓ yt-dlp ' + (d.version || '(ready)') + ' — via ' + (d.source || (d.kind === 'python' ? 'python -m yt_dlp' : 'binary'));
+    } else {
+      ytAvail.className = 'show err';
+      ytAvail.innerHTML =
+        '✗ yt-dlp not found — ' +
+        '<button id="ytFixBtn" style="background:rgba(124,58,237,.25);border:1px solid var(--purple,#7c3aed);color:#fff;border-radius:6px;padding:3px 10px;font-size:.72rem;font-weight:700;cursor:pointer;margin-left:6px">🔧 Fix Downloader</button>' +
+        ' &nbsp;or place <code>yt-dlp.exe</code> in a <code>bin/</code> folder, or run <code>pip install yt-dlp</code>';
+      const fixBtn = document.getElementById('ytFixBtn');
+      if (fixBtn) fixBtn.addEventListener('click', runFixDownloader);
+    }
+  }
+
+  async function probeStatus(){
+    try {
+      const r = await fetch('/api/ytdlp/status');
+      const d = await r.json();
+      renderAvail(d);
+      return d;
+    } catch (e) {
+      renderAvail({ available: false });
+      return { available: false };
+    }
+  }
+
+  async function runFixDownloader(){
+    setStatus('checking', '⏳ Running Fix Downloader…');
+    const fixBtn = document.getElementById('ytFixBtn');
+    if (fixBtn) { fixBtn.disabled = true; fixBtn.textContent = '⏳ Fixing…'; }
+    try {
+      const r = await fetch('/api/downloader/fix', { method:'POST' });
+      const d = await r.json();
+      if (d && d.ok) {
+        setStatus('ready', '✓ ' + (d.note || 'Downloader fixed.'));
+        await probeStatus();
+      } else {
+        setStatus('failed', '❌ Fix failed — ' + ((d && d.note) || 'see server log'));
+        await probeStatus();
+      }
+    } catch (e) {
+      setStatus('failed', '❌ Fix request failed: ' + (e && e.message ? e.message : e));
+    }
+  }
+  // Expose so other UI can call it
+  window.runFixDownloader = runFixDownloader;
+
+  // Initial status probe
+  probeStatus();
+
+  // ---- Download button: pre-check status, then fetch-blob download ----
+  ytFetchBtn.addEventListener('click', async (ev) => {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    const url = (ytUrl.value || '').trim();
+    if (!url) { ytUrl.focus(); return; }
+
+    ytFetchBtn.disabled    = true;
+    ytFetchBtn.textContent = '⏳ Preparing…';
+    ytProgress.classList.add('show');
+    setStatus('checking', '⏳ Checking downloader…');
+
+    try {
+      // 1. Pre-flight: make sure yt-dlp is available before we go anywhere near
+      //    the streaming endpoint. This is what prevents the "white page" bug —
+      //    we never navigate to a server URL that could return raw text.
+      const stat = await fetch('/api/ytdlp/status').then(r => r.json()).catch(() => null);
+      if (!stat || !stat.available) {
+        setStatus('failed', '❌ Failed: yt-dlp not found. Click "Fix Downloader" above.');
+        renderAvail(stat || { available: false });
+        return;
+      }
+      setStatus('queued', '✓ Downloader found (' + (stat.source || stat.kind || 'ready') + ')');
+
+      // 2. Stream the download as a blob — stay on this page the entire time.
+      setStatus('downloading', '⬇ Starting download…');
+      const r = await fetch('/api/clip/download-direct?url=' + encodeURIComponent(url));
+      if (!r.ok) {
+        // Try to parse a JSON error from our server (we now always emit JSON
+        // on 4xx/5xx); fall back to text if needed.
+        let msg = 'Download failed (HTTP ' + r.status + ')';
+        try {
+          const errBody = await r.clone().json();
+          if (errBody && errBody.error) msg = errBody.error;
+        } catch {
+          try { const t = await r.text(); if (t) msg = t.slice(0, 200); } catch {}
+        }
+        setStatus('failed', '❌ ' + msg);
+        return;
+      }
+
+      setStatus('processing', '⚙ Processing stream…');
+      const blob = await r.blob();
+      if (!blob || blob.size === 0) {
+        setStatus('failed', '❌ Download returned empty file');
+        return;
+      }
+
+      // 3. Trigger the browser save dialog from a real Blob — never a
+      //    navigation, never a white page.
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = 'video.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+
+      setStatus('complete', '✅ Complete — ' + (blob.size / 1048576).toFixed(1) + ' MB saved');
+      ytUrl.value = '';
+    } catch (e) {
+      setStatus('failed', '❌ ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      ytFetchBtn.disabled    = false;
+      ytFetchBtn.textContent = '⬇ Download';
+    }
+  });
+})();
+
+// ─── init ─────────────────────────────────────────────────────────────────────
+loadLibrary();
+
+</script>
+</body>
+</html>
