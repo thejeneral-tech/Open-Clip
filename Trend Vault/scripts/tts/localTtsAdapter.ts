@@ -1,63 +1,94 @@
 /**
  * Kokoro TTS Adapter
  * ─────────────────────────────────────────────────────────────────────────────
- * Talks to the local Kokoro HTTP server (Trend Vault/kokoro-tts/kokoro_server.py).
+ * Talks to the local Kokoro HTTP server.
  *
- * Setup is a single-time `setup-kokoro.bat`; daily use is `start-kokoro.bat`
- * or the Kokoro card in the launcher. The server listens on
- * http://127.0.0.1:5070 by default; override with LOCAL_TTS_URL in .env.
- *
- * If the server isn't reachable this returns null and the caller surfaces a
- * clear "start kokoro" error — there is no Edge / ElevenLabs / Piper fallback.
+ * Return contract for generateVoiceLocal:
+ *   - returns LocalTtsResult on success.
+ *   - returns null ONLY when Kokoro is genuinely unreachable.
+ *   - throws KokoroTimeoutError on timeout.
+ *   - throws Error on every other failure.
  */
 
 import * as fs from 'fs';
 
 export interface LocalTtsRequest {
   text:    string;
-  voice?:  string;     // Edge Neural id (mapped by the Kokoro server) or raw Kokoro id
-  speed?:  number;     // 0.5-2.0
-  outPath: string;     // where to write the WAV/MP3
+  voice?:  string;
+  speed?:  number;
+  outPath: string;
+  timeoutMs?: number;
 }
 
 export interface LocalTtsResult {
   outPath:  string;
   mimeType: string;
+  bytes:    number;
 }
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:5070';
+const DEFAULT_TIMEOUT_MS = 600_000;
 
 function baseUrl(): string {
   return (process.env.LOCAL_TTS_URL || DEFAULT_BASE_URL).trim();
 }
 
-/**
- * Synthesize via the local Kokoro server.
- * Returns null if the server is unreachable — caller is responsible for the
- * "start the kokoro server" error message.
- */
+export class KokoroTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KokoroTimeoutError';
+  }
+}
+
+function isConnectionRefused(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'AbortError' || err.name === 'TimeoutError') return false;
+  const cause = (err as { cause?: { code?: string } }).cause;
+  const code = (cause && cause.code) || '';
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ECONNRESET') {
+    return true;
+  }
+  const msg = err.message.toLowerCase();
+  return msg.indexOf('econnrefused') >= 0 || msg === 'fetch failed';
+}
+
 export async function generateVoiceLocal(req: LocalTtsRequest): Promise<LocalTtsResult | null> {
+  const url = new URL('/tts', baseUrl());
+  const timeoutMs = req.timeoutMs !== undefined ? req.timeoutMs : DEFAULT_TIMEOUT_MS;
   let res: Response;
   try {
-    res = await fetch(new URL('/tts', baseUrl()), {
+    res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: req.text, voice: req.voice, speed: req.speed ?? 1.0 }),
-      signal: AbortSignal.timeout(60_000),
+      body: JSON.stringify({ text: req.text, voice: req.voice, speed: req.speed !== undefined ? req.speed : 1.0 }),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-  } catch {
-    return null; // Connection refused, timeout, etc.
+  } catch (err) {
+    if (isConnectionRefused(err)) return null;
+    if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+      throw new KokoroTimeoutError(
+        'Kokoro TTS request timed out after ' + Math.round(timeoutMs / 1000) + 's for ' +
+        req.text.length + ' chars - try a shorter script or restart Kokoro.'
+      );
+    }
+    const msg = (err instanceof Error ? err.message : String(err)) || 'unknown';
+    throw new Error('Kokoro TTS request failed: ' + msg);
   }
-  if (!res.ok) return null;
+  if (!res.ok) {
+    let body = '';
+    try { body = (await res.text()).slice(0, 200); } catch { /* ignore */ }
+    throw new Error('Kokoro TTS returned HTTP ' + res.status + (body ? ': ' + body : ''));
+  }
 
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(req.outPath, buf);
-  return { outPath: req.outPath, mimeType: res.headers.get('content-type') || 'audio/wav' };
+  return {
+    outPath: req.outPath,
+    mimeType: res.headers.get('content-type') || 'audio/wav',
+    bytes: buf.length,
+  };
 }
 
-/**
- * Health probe used by the studio status dashboard.
- */
 export async function probeLocalTts(): Promise<{ ok: boolean; engine?: 'kokoro'; url?: string }> {
   const url = baseUrl();
   try {
@@ -66,4 +97,48 @@ export async function probeLocalTts(): Promise<{ ok: boolean; engine?: 'kokoro';
   } catch {
     return { ok: false };
   }
+}
+
+export async function probeKokoroAlive(): Promise<{ ok: boolean; reason?: string; bytes?: number }> {
+  const url = new URL('/tts', baseUrl());
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'test.', voice: 'en-US-JennyNeural', speed: 1.0 }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return { ok: false, reason: 'HTTP ' + res.status };
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 1024) return { ok: false, reason: 'response too small (' + buf.length + ' bytes)', bytes: buf.length };
+    return { ok: true, bytes: buf.length };
+  } catch (err) {
+    if (isConnectionRefused(err)) return { ok: false, reason: 'connection refused' };
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: msg };
+  }
+}
+
+export async function waitForKokoroReady(
+  options: { maxMs?: number; intervalMs?: number; logger?: (line: string) => void } = {},
+): Promise<{ ready: boolean; elapsedMs: number; lastReason?: string }> {
+  const maxMs = options.maxMs ?? 60_000;
+  const intervalMs = options.intervalMs ?? 2_000;
+  const log = options.logger || (() => {});
+  const start = Date.now();
+  let attempt = 0;
+  let lastReason: string | undefined;
+  while (Date.now() - start < maxMs) {
+    attempt++;
+    const probe = await probeKokoroAlive();
+    if (probe.ok) {
+      const elapsed = Date.now() - start;
+      log('Kokoro ready (attempt ' + attempt + ', ' + elapsed + 'ms, test audio ' + probe.bytes + ' bytes)');
+      return { ready: true, elapsedMs: elapsed };
+    }
+    lastReason = probe.reason;
+    log('Kokoro not ready (attempt ' + attempt + '): ' + (probe.reason || 'unknown') + ' - retrying in ' + Math.round(intervalMs / 1000) + 's');
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return { ready: false, elapsedMs: Date.now() - start, lastReason };
 }

@@ -697,8 +697,9 @@ async function loadPresets(){
       {id:'velvet_static',name:'Velvet Static',icon:'🎙️',description:'Baritone • Smoky • Midnight Podcast',category:'dark_storytelling',favorite:false,edgeId:'en-US-EricNeural',defaults:{pitch:-5,rate:-10,speed:0.88,volume:2,intensity:40},energyRating:7,realismRating:10,retentionRating:10,exampleLine:'Some people disappear. Not because they stopped caring.',tags:['baritone','smoky']},
     ];
   }
-  // Apply saved favorites
-  allPresets.forEach(p => { if(favorites.has(p.id)) p.favorite = true; });
+  // localStorage is the single source of truth — override any hardcoded
+  // favorite:true values in the JSON so unsaved voices stay unsaved.
+  allPresets.forEach(p => { p.favorite = favorites.has(p.id); });
   renderVoiceGrid();
 }
 
@@ -1630,6 +1631,20 @@ async function generateCloned(){
     btn.innerHTML='🎤 Generate'; btn.disabled=false;
   }
 }
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer = null;
+function showToast(msg, type = 'info'){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => { init().catch(console.error); });
 </script>
 </body>
 </html>
