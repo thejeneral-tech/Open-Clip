@@ -27,6 +27,7 @@
       group: 'Hub',
       items: [
         { href: '/mainframe',    icon: '⚡', label: 'Mainframe',    accent: '#c9a227' },
+        { href: '/accounts',     icon: '👥', label: 'Accounts',     accent: '#a855f7' },
       ],
     },
     {
