@@ -213,16 +213,22 @@ function isToolCapable(modelName) {
   return TOOL_CAPABLE_PATTERNS.some((re) => re.test(modelName || ""));
 }
 
-// Path containment: resolve `p` relative to cwd and refuse if it escapes.
-function resolveInside(cwd, p) {
+// Path containment: a path is allowed if, after resolution, it lives inside
+// the working directory OR any of the explicitly allowed dirs the user added.
+//
+// `p` may be relative (resolved against cwd) or absolute. Returns the absolute
+// path on success, throws otherwise.
+function resolveInsideAllowed(cwd, allowedDirs, p) {
   if (typeof p !== "string" || !p) throw new Error("Path required");
   const abs = path.resolve(cwd, p);
-  const cwdAbs = path.resolve(cwd);
-  // Ensure abs === cwdAbs or starts with cwdAbs + sep.
-  if (abs !== cwdAbs && !abs.startsWith(cwdAbs + path.sep)) {
-    throw new Error(`Path escapes working directory: ${p}`);
+  const roots = [cwd, ...(allowedDirs || [])].map((d) => path.resolve(d));
+  for (const root of roots) {
+    if (abs === root || abs.startsWith(root + path.sep)) return abs;
   }
-  return abs;
+  throw new Error(
+    `Path is outside the allowed directories: ${p}. ` +
+    `Allowed roots: ${roots.join(", ")}`
+  );
 }
 
 /* ----------------------------------------------------------
@@ -356,13 +362,10 @@ function trimOutput(text, max) {
   return text.slice(0, max) + `\n…\n[truncated, ${text.length} chars total]`;
 }
 
-async function tool_read_file(cwd, args) {
-  const abs = resolveInside(cwd, args.path);
+async function tool_read_file(ctx, args) {
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
   const stat = await fs.promises.stat(abs);
   if (!stat.isFile()) throw new Error("Not a file");
-  if (stat.size > AGENT_FILE_READ_BYTES * 8) {
-    // Even reading a 2 MB file fully into memory is OK, but warn the model.
-  }
   let content = await fs.promises.readFile(abs, "utf8");
   if (typeof args.offset === "number" || typeof args.limit === "number") {
     const lines = content.split(/\r?\n/);
@@ -373,15 +376,15 @@ async function tool_read_file(cwd, args) {
   return { content: trimOutput(content, AGENT_FILE_READ_BYTES), bytes: stat.size };
 }
 
-async function tool_write_file(cwd, args) {
-  const abs = resolveInside(cwd, args.path);
+async function tool_write_file(ctx, args) {
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
   await fs.promises.writeFile(abs, String(args.content ?? ""), "utf8");
   const stat = await fs.promises.stat(abs);
   return { ok: true, path: args.path, bytes: stat.size };
 }
 
-async function tool_edit_file(cwd, args) {
-  const abs = resolveInside(cwd, args.path);
+async function tool_edit_file(ctx, args) {
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
   const original = await fs.promises.readFile(abs, "utf8");
   const oldStr = String(args.old_string ?? "");
   const newStr = String(args.new_string ?? "");
@@ -395,8 +398,8 @@ async function tool_edit_file(cwd, args) {
   return { ok: true, path: args.path, replacedAt: first };
 }
 
-async function tool_list_dir(cwd, args) {
-  const abs = resolveInside(cwd, args.path || ".");
+async function tool_list_dir(ctx, args) {
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path || ".");
   const entries = await fs.promises.readdir(abs, { withFileTypes: true });
   return {
     path: args.path || ".",
@@ -426,9 +429,9 @@ function globToRegex(pattern) {
   return new RegExp("^" + re + "$");
 }
 
-async function walkFiles(cwd, max, filter) {
+async function walkFiles(root, max, filter) {
   const out = [];
-  const stack = [cwd];
+  const stack = [root];
   const SKIP = new Set(["node_modules", ".git", "dist", "build", ".next", "out", ".cache"]);
   while (stack.length && out.length < max) {
     const dir = stack.pop();
@@ -441,9 +444,9 @@ async function walkFiles(cwd, max, filter) {
         if (SKIP.has(d.name)) continue;
         stack.push(full);
       } else if (d.isFile()) {
-        const rel = path.relative(cwd, full).replace(/\\/g, "/");
+        const rel = path.relative(root, full).replace(/\\/g, "/");
         if (!filter || filter(rel)) {
-          out.push(rel);
+          out.push({ root, rel, full });
           if (out.length >= max) break;
         }
       }
@@ -452,55 +455,96 @@ async function walkFiles(cwd, max, filter) {
   return out;
 }
 
-async function tool_glob(cwd, args) {
-  const re = globToRegex(args.pattern);
-  const matches = await walkFiles(cwd, 200, (rel) => re.test(rel));
-  return { pattern: args.pattern, count: matches.length, paths: matches };
+// Tag a relative path with its root so the model can tell two unrelated trees apart.
+// Files inside the primary cwd render without a root prefix (the common case);
+// files inside an extra allowed dir get a `«root»/...` prefix.
+function tagPath(ctx, rootAbs, rel) {
+  if (rootAbs === path.resolve(ctx.cwd)) return rel;
+  const label = path.basename(rootAbs) || rootAbs;
+  return `«${label}»/${rel}`;
 }
 
-async function tool_grep(cwd, args) {
+async function tool_glob(ctx, args) {
+  const re = globToRegex(args.pattern);
+  const roots = [ctx.cwd, ...(ctx.allowedDirs || [])].map((d) => path.resolve(d));
+  const seen = new Set();
+  const out = [];
+  for (const root of roots) {
+    if (seen.has(root)) continue;
+    seen.add(root);
+    const found = await walkFiles(root, 200 - out.length, ({ rel }) => re.test(rel));
+    for (const f of found) {
+      out.push(tagPath(ctx, root, f.rel));
+      if (out.length >= 200) break;
+    }
+    if (out.length >= 200) break;
+  }
+  return { pattern: args.pattern, count: out.length, paths: out, rootsSearched: roots };
+}
+
+async function tool_grep(ctx, args) {
   const pattern = String(args.pattern || "");
   if (!pattern) throw new Error("pattern is required");
   let re;
   try { re = new RegExp(pattern); }
   catch (e) { throw new Error(`Bad regex: ${e.message}`); }
 
-  const searchRoot = args.path ? resolveInside(cwd, args.path) : cwd;
-  const stat = await fs.promises.stat(searchRoot);
   const fileFilter = args.glob ? globToRegex(args.glob) : null;
-
-  let files;
-  if (stat.isFile()) {
-    files = [path.relative(cwd, searchRoot).replace(/\\/g, "/")];
-  } else {
-    files = await walkFiles(searchRoot, 2000, (rel) => !fileFilter || fileFilter(path.basename(rel)));
-  }
-
   const hits = [];
-  for (const rel of files) {
-    const abs = path.join(stat.isFile() ? cwd : searchRoot, rel);
-    let content;
-    try { content = await fs.promises.readFile(abs, "utf8"); }
-    catch { continue; }
-    const lines = content.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      if (re.test(lines[i])) {
-        hits.push(`${rel}:${i + 1}: ${lines[i]}`);
-        if (hits.length >= 200) break;
+
+  if (args.path) {
+    // Explicit path → resolve & validate once, scan only it.
+    const searchRoot = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
+    const stat = await fs.promises.stat(searchRoot);
+    const files = stat.isFile()
+      ? [{ root: path.dirname(searchRoot), rel: path.basename(searchRoot), full: searchRoot }]
+      : await walkFiles(searchRoot, 2000, ({ rel }) => !fileFilter || fileFilter(path.basename(rel)));
+    for (const { full, rel } of files) {
+      const display = stat.isFile() ? args.path : path.posix.join(args.path, rel);
+      let content;
+      try { content = await fs.promises.readFile(full, "utf8"); }
+      catch { continue; }
+      const lines = content.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        if (re.test(lines[i])) {
+          hits.push(`${display}:${i + 1}: ${lines[i]}`);
+          if (hits.length >= 200) return { pattern, count: hits.length, hits };
+        }
       }
     }
-    if (hits.length >= 200) break;
+  } else {
+    // No path → scan across all allowed roots.
+    const roots = [ctx.cwd, ...(ctx.allowedDirs || [])].map((d) => path.resolve(d));
+    const seen = new Set();
+    for (const root of roots) {
+      if (seen.has(root)) continue;
+      seen.add(root);
+      const files = await walkFiles(root, 2000, ({ rel }) => !fileFilter || fileFilter(path.basename(rel)));
+      for (const { full, rel } of files) {
+        const display = tagPath(ctx, root, rel);
+        let content;
+        try { content = await fs.promises.readFile(full, "utf8"); }
+        catch { continue; }
+        const lines = content.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+          if (re.test(lines[i])) {
+            hits.push(`${display}:${i + 1}: ${lines[i]}`);
+            if (hits.length >= 200) return { pattern, count: hits.length, hits };
+          }
+        }
+      }
+    }
   }
   return { pattern, count: hits.length, hits };
 }
 
-function tool_bash(cwd, args, signal) {
+function tool_bash(ctx, args, signal) {
   return new Promise((resolve) => {
     const command = String(args.command || "");
     if (!command.trim()) return resolve({ ok: false, error: "Empty command" });
 
     const child = spawn(command, {
-      cwd,
+      cwd: ctx.cwd,
       shell: true,
       windowsHide: true,
       env: { ...process.env, FORCE_COLOR: "0" },
@@ -541,16 +585,16 @@ function tool_bash(cwd, args, signal) {
   });
 }
 
-async function executeTool(name, args, cwd, signal) {
+async function executeTool(name, args, ctx, signal) {
   const safeArgs = args && typeof args === "object" ? args : {};
   switch (name) {
-    case "read_file": return tool_read_file(cwd, safeArgs);
-    case "write_file": return tool_write_file(cwd, safeArgs);
-    case "edit_file": return tool_edit_file(cwd, safeArgs);
-    case "list_dir": return tool_list_dir(cwd, safeArgs);
-    case "glob": return tool_glob(cwd, safeArgs);
-    case "grep": return tool_grep(cwd, safeArgs);
-    case "bash": return tool_bash(cwd, safeArgs, signal);
+    case "read_file": return tool_read_file(ctx, safeArgs);
+    case "write_file": return tool_write_file(ctx, safeArgs);
+    case "edit_file": return tool_edit_file(ctx, safeArgs);
+    case "list_dir": return tool_list_dir(ctx, safeArgs);
+    case "glob": return tool_glob(ctx, safeArgs);
+    case "grep": return tool_grep(ctx, safeArgs);
+    case "bash": return tool_bash(ctx, safeArgs, signal);
     default: throw new Error(`Unknown tool: ${name}`);
   }
 }
@@ -658,26 +702,37 @@ async function handleLocalCodeCheck(req, res) {
   }
 }
 
-function defaultCodeSystemPrompt(cwd) {
-  return [
-    "You are a coding agent operating inside a local project directory.",
-    `Working directory: ${cwd}`,
-    "",
-    "You have these tools available:",
-    "  • read_file(path, offset?, limit?)  — read a text file",
-    "  • write_file(path, content)         — create or overwrite a file",
-    "  • edit_file(path, old_string, new_string) — replace one unique substring",
-    "  • list_dir(path)                    — list a directory",
-    "  • glob(pattern)                     — find files (e.g. '**/*.ts')",
-    "  • grep(pattern, path?, glob?)       — regex search file contents",
-    "  • bash(command)                     — run a shell command (60s timeout)",
-    "",
-    "Guidelines:",
-    "  – Prefer reading a file before editing it.",
-    "  – edit_file requires old_string to be unique; include surrounding context.",
-    "  – Keep responses concise. After completing the task, summarise what changed in one sentence.",
-    "  – If the user's request is ambiguous, ask one clarifying question instead of guessing.",
-  ].join("\n");
+function defaultCodeSystemPrompt(cwd, allowedDirs) {
+  const lines = [
+    "You are a coding agent operating across one or more local directories the user has authorised.",
+    `Primary working directory (relative paths resolve here, and bash runs here):`,
+    `  ${cwd}`,
+  ];
+  if (allowedDirs && allowedDirs.length) {
+    lines.push("Additional read/write directories (use absolute paths to reach them):");
+    for (const d of allowedDirs) lines.push(`  ${d}`);
+    lines.push(
+      "When glob/grep run without an explicit `path`, they search across ALL of the above roots. " +
+      "Results from non-primary roots are prefixed «<root-basename>»/… so you can tell them apart."
+    );
+  }
+  lines.push("");
+  lines.push("Tools available:");
+  lines.push("  • read_file(path, offset?, limit?)  — read a text file");
+  lines.push("  • write_file(path, content)         — create or overwrite a file");
+  lines.push("  • edit_file(path, old_string, new_string) — replace one unique substring");
+  lines.push("  • list_dir(path)                    — list a directory");
+  lines.push("  • glob(pattern)                     — find files (e.g. '**/*.ts')");
+  lines.push("  • grep(pattern, path?, glob?)       — regex search file contents");
+  lines.push("  • bash(command)                     — run a shell command (60s timeout)");
+  lines.push("");
+  lines.push("Guidelines:");
+  lines.push("  – Prefer reading a file before editing it.");
+  lines.push("  – edit_file requires old_string to be unique; include surrounding context.");
+  lines.push("  – Any path you give must resolve inside the primary cwd or one of the additional roots.");
+  lines.push("  – Keep responses concise. After completing the task, summarise what changed in one sentence.");
+  lines.push("  – If the user's request is ambiguous, ask one clarifying question instead of guessing.");
+  return lines.join("\n");
 }
 
 async function handleLocalCodeChat(req, res) {
@@ -689,18 +744,39 @@ async function handleLocalCodeChat(req, res) {
   const model = (body.model || "").toString();
   const cwd = body.cwd ? String(body.cwd) : CODE_CWD;
   const history = Array.isArray(body.history) ? body.history : [];
-  const systemPrompt = (body.systemPrompt || "").trim() || defaultCodeSystemPrompt(cwd);
 
+  // Validate cwd + optional allowedDirs (extra roots the agent can touch).
   if (!prompt.trim()) return writeJson(res, 400, { error: "Empty prompt" });
   if (!model) return writeJson(res, 400, { error: "model is required" });
-
-  // Validate cwd exists.
   try {
     const stat = fs.statSync(cwd);
     if (!stat.isDirectory()) throw new Error("cwd is not a directory");
   } catch (e) {
     return writeJson(res, 400, { error: `cwd not usable: ${e.message}` });
   }
+
+  const rawAllowed = Array.isArray(body.allowedDirs) ? body.allowedDirs : [];
+  const allowedDirs = [];
+  for (const d of rawAllowed) {
+    const s = typeof d === "string" ? d.trim() : "";
+    if (!s) continue;
+    let abs;
+    try {
+      abs = path.resolve(s);
+      const stat = fs.statSync(abs);
+      if (!stat.isDirectory()) {
+        return writeJson(res, 400, { error: `allowedDirs entry is not a directory: ${s}` });
+      }
+    } catch (e) {
+      return writeJson(res, 400, { error: `allowedDirs entry not usable: ${s} (${e.message})` });
+    }
+    // Don't duplicate the primary cwd.
+    if (abs !== path.resolve(cwd) && !allowedDirs.includes(abs)) allowedDirs.push(abs);
+  }
+
+  const ctx = { cwd, allowedDirs };
+  const systemPrompt =
+    (body.systemPrompt || "").trim() || defaultCodeSystemPrompt(cwd, allowedDirs);
 
   const jobId = crypto.randomBytes(8).toString("hex");
   const abort = new AbortController();
@@ -713,7 +789,7 @@ async function handleLocalCodeChat(req, res) {
     "X-Code-Job": jobId,
   });
   const emit = (obj) => res.write(JSON.stringify(obj) + "\n");
-  emit({ kind: "meta", jobId, cwd, model, toolCapable: isToolCapable(model) });
+  emit({ kind: "meta", jobId, cwd, allowedDirs, model, toolCapable: isToolCapable(model) });
 
   res.on("close", () => {
     if (!res.writableEnded) abort.abort();
@@ -781,7 +857,7 @@ async function handleLocalCodeChat(req, res) {
 
         let result, isError = false;
         try {
-          result = await executeTool(name, toolArgs, cwd, abort.signal);
+          result = await executeTool(name, toolArgs, ctx, abort.signal);
         } catch (err) {
           result = { error: err.message };
           isError = true;
@@ -808,6 +884,29 @@ async function handleLocalCodeChat(req, res) {
       res.end();
     }
   }
+}
+
+async function handleLocalCodeVerifyDirs(req, res) {
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (e) { return writeJson(res, 400, { error: `Bad JSON: ${e.message}` }); }
+
+  const raw = Array.isArray(body.dirs) ? body.dirs : [];
+  const results = raw.map((d) => {
+    const input = typeof d === "string" ? d.trim() : "";
+    if (!input) return { input, ok: false, reason: "empty" };
+    let abs;
+    try { abs = path.resolve(input); }
+    catch (e) { return { input, ok: false, reason: `resolve failed: ${e.message}` }; }
+    try {
+      const stat = fs.statSync(abs);
+      if (!stat.isDirectory()) return { input, abs, ok: false, reason: "not a directory" };
+      return { input, abs, ok: true };
+    } catch (e) {
+      return { input, abs, ok: false, reason: e.code === "ENOENT" ? "does not exist" : e.message };
+    }
+  });
+  writeJson(res, 200, { results });
 }
 
 async function handleLocalCodeStop(req, res) {
@@ -844,6 +943,8 @@ const server = http.createServer((req, res) => {
     handleLocalCodeChat(req, res);
   } else if (pathname === "/local-code/stop" && req.method === "POST") {
     handleLocalCodeStop(req, res);
+  } else if (pathname === "/local-code/verify-dirs" && req.method === "POST") {
+    handleLocalCodeVerifyDirs(req, res);
   } else if (pathname.startsWith("/api/")) {
     proxyToOllama(req, res);
   } else if (req.method === "GET" || req.method === "HEAD") {

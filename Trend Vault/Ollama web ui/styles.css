@@ -1289,3 +1289,15 @@ input, textarea, select {
   letter-spacing: 0.04em;
 }
 
+/* Settings: row that pairs a small button with an inline status line. */
+.field-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.field-actions .field-hint { margin: 0; }
+#codeVerifyDirsStatus.ok { color: #22c55e; }
+#codeVerifyDirsStatus.error { color: var(--danger, #ef4444); }
+

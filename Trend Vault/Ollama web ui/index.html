@@ -100,7 +100,9 @@
         <!-- Local Code banner — visible only in Code mode -->
         <div class="claude-banner" id="codeBanner" hidden>
           <span class="claude-banner-badge">Local Code</span>
-          <span class="claude-banner-cwd" id="codeCwd" title="Working directory">…</span>
+          <span class="claude-banner-cwd" id="codeCwd" title="Primary working directory">…</span>
+          <span class="claude-banner-sep">·</span>
+          <span class="claude-banner-session" id="codeDirsBadge" title="Additional directories the agent can read &amp; edit">+0 dirs</span>
           <span class="claude-banner-sep">·</span>
           <span class="claude-banner-version" id="codeStatus">checking Ollama…</span>
           <span class="claude-banner-sep">·</span>
@@ -224,9 +226,20 @@
         </label>
 
         <div class="field" id="codeCwdField">
-          <span class="field-label">Local Code working directory</span>
+          <span class="field-label">Local Code primary directory</span>
           <input type="text" id="codeCwdInput" placeholder="(auto: parent of Ollama web ui/)" />
-          <span class="field-hint">Where the agent is allowed to read &amp; edit files. Leave empty to use the server default (the Trend Vault project root).</span>
+          <span class="field-hint">Relative paths resolve here and <code>bash</code> runs here. Leave empty to use the server default (the Trend Vault project root).</span>
+        </div>
+
+        <div class="field" id="codeAllowedDirsField">
+          <span class="field-label">Additional directories
+            <span class="field-tag" id="codeAllowedDirsCount">0</span>
+          </span>
+          <textarea id="codeAllowedDirsInput" rows="4" placeholder="One absolute path per line, e.g.&#10;C:\Users\kevin\Documents\notes&#10;D:\projects\side-project"></textarea>
+          <div class="field-actions">
+            <button type="button" class="btn-secondary" id="codeVerifyDirsBtn">Verify paths</button>
+            <span class="field-hint" id="codeVerifyDirsStatus">The agent can read &amp; edit files in any of these directories (in addition to the primary one).</span>
+          </div>
         </div>
 
         <div class="field-row">

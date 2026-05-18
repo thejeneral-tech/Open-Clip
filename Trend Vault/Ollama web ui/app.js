@@ -31,6 +31,7 @@
     systemPrompt: "",
     codeSystemPrompt: DEFAULT_CODE_PROMPT,
     codeCwd: "",
+    codeAllowedDirs: [],
     temperature: 0.7,
     topP: 0.9,
     topK: 40,
@@ -114,6 +115,7 @@
     // Local Code agent UI
     codeBanner: $("codeBanner"),
     codeCwd: $("codeCwd"),
+    codeDirsBadge: $("codeDirsBadge"),
     codeStatus: $("codeStatus"),
     codeToolCap: $("codeToolCap"),
 
@@ -126,6 +128,10 @@
     systemPrompt: $("systemPrompt"),
     codeSystemPrompt: $("codeSystemPrompt"),
     codeCwdInput: $("codeCwdInput"),
+    codeAllowedDirsInput: $("codeAllowedDirsInput"),
+    codeAllowedDirsCount: $("codeAllowedDirsCount"),
+    codeVerifyDirsBtn: $("codeVerifyDirsBtn"),
+    codeVerifyDirsStatus: $("codeVerifyDirsStatus"),
     temperature: $("temperature"),
     tempValue: $("tempValue"),
     topP: $("topP"),
@@ -706,6 +712,15 @@
   /* ----------------------------------------------------------
      Local Code: Ollama tool-call agent client
      ---------------------------------------------------------- */
+  function parseAllowedDirsText(text) {
+    if (!text) return [];
+    return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  function allowedDirsAsText(arr) {
+    return Array.isArray(arr) ? arr.join("\n") : "";
+  }
+
   async function codeCheck() {
     try {
       const r = await fetch("/local-code/check");
@@ -724,6 +739,16 @@
     const cwd = info.cwd || settings.codeCwd || "(unknown cwd)";
     el.codeCwd.textContent = cwd;
     el.codeCwd.title = cwd;
+
+    const dirs = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [];
+    if (el.codeDirsBadge) {
+      el.codeDirsBadge.textContent = dirs.length === 0
+        ? "no extra dirs"
+        : `+${dirs.length} dir${dirs.length === 1 ? "" : "s"}`;
+      el.codeDirsBadge.title = dirs.length
+        ? "Additional roots the agent can read/edit:\n" + dirs.join("\n")
+        : "Add directories in Settings to give the agent access to more roots.";
+    }
 
     if (info.available) {
       el.codeStatus.textContent = `Ollama: ${(info.models || []).length} models`;
@@ -912,6 +937,52 @@
     return null;
   }
 
+  function updateAllowedDirsCount() {
+    if (!el.codeAllowedDirsCount || !el.codeAllowedDirsInput) return;
+    const n = parseAllowedDirsText(el.codeAllowedDirsInput.value).length;
+    el.codeAllowedDirsCount.textContent = String(n);
+  }
+
+  async function verifyAllowedDirs() {
+    if (!el.codeAllowedDirsInput || !el.codeVerifyDirsStatus) return;
+    const dirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
+    if (dirs.length === 0) {
+      el.codeVerifyDirsStatus.textContent = "Nothing to verify — add at least one path.";
+      el.codeVerifyDirsStatus.classList.remove("error", "ok");
+      return;
+    }
+    el.codeVerifyDirsBtn.disabled = true;
+    el.codeVerifyDirsStatus.textContent = "Verifying…";
+    el.codeVerifyDirsStatus.classList.remove("error", "ok");
+    try {
+      const r = await fetch("/local-code/verify-dirs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dirs }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const results = Array.isArray(data.results) ? data.results : [];
+      const bad = results.filter((x) => !x.ok);
+      if (bad.length === 0) {
+        el.codeVerifyDirsStatus.textContent = `All ${results.length} paths look good ✓`;
+        el.codeVerifyDirsStatus.classList.add("ok");
+        el.codeVerifyDirsStatus.classList.remove("error");
+      } else {
+        const detail = bad.map((b) => `${b.input || "(empty)"} — ${b.reason}`).join("; ");
+        el.codeVerifyDirsStatus.textContent = `${bad.length} of ${results.length} failed: ${detail}`;
+        el.codeVerifyDirsStatus.classList.add("error");
+        el.codeVerifyDirsStatus.classList.remove("ok");
+      }
+    } catch (err) {
+      el.codeVerifyDirsStatus.textContent = `Verify failed: ${err.message}`;
+      el.codeVerifyDirsStatus.classList.add("error");
+      el.codeVerifyDirsStatus.classList.remove("ok");
+    } finally {
+      el.codeVerifyDirsBtn.disabled = false;
+    }
+  }
+
   // Convert this conversation's prior messages into the wire format the
   // server expects under `history`. We strip our display-only fields and
   // pass plain Ollama-shaped messages.
@@ -977,6 +1048,7 @@
       model,
       history,
       cwd: settings.codeCwd || undefined,
+      allowedDirs: Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [],
       systemPrompt: (settings.codeSystemPrompt || "").trim() || undefined,
       options: {
         temperature: settings.temperature,
@@ -1237,6 +1309,15 @@
     el.systemPrompt.value = settings.systemPrompt;
     el.codeSystemPrompt.value = settings.codeSystemPrompt;
     if (el.codeCwdInput) el.codeCwdInput.value = settings.codeCwd || "";
+    if (el.codeAllowedDirsInput) {
+      el.codeAllowedDirsInput.value = allowedDirsAsText(settings.codeAllowedDirs);
+      updateAllowedDirsCount();
+    }
+    if (el.codeVerifyDirsStatus) {
+      el.codeVerifyDirsStatus.classList.remove("error", "ok");
+      el.codeVerifyDirsStatus.textContent =
+        "The agent can read & edit files in any of these directories (in addition to the primary one).";
+    }
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
     el.topP.value = settings.topP;
@@ -1256,6 +1337,9 @@
     settings.systemPrompt = el.systemPrompt.value;
     settings.codeSystemPrompt = el.codeSystemPrompt.value;
     if (el.codeCwdInput) settings.codeCwd = el.codeCwdInput.value.trim();
+    if (el.codeAllowedDirsInput) {
+      settings.codeAllowedDirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
+    }
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);
     settings.topK = parseInt(el.topK.value, 10);
@@ -1379,6 +1463,14 @@
     el.modelSelect.addEventListener("change", () => {
       if (activeView === "code") refreshCodeBanner();
     });
+
+    // Local Code: allowed-dirs UI in Settings.
+    if (el.codeAllowedDirsInput) {
+      el.codeAllowedDirsInput.addEventListener("input", updateAllowedDirsCount);
+    }
+    if (el.codeVerifyDirsBtn) {
+      el.codeVerifyDirsBtn.addEventListener("click", verifyAllowedDirs);
+    }
 
     // Models view: pull form
     el.pullForm.addEventListener("submit", (e) => {
