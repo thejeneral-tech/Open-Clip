@@ -427,10 +427,15 @@
       renderConversations();
       renderMessages();
       if (inCode) refreshCodeBanner();
-      // Sidebar shows the "new" button only for chat/code
+      // Sidebar shows the "new" button and the conversations list for
+      // chat/code views.
       el.newChatBtn.parentElement.style.display = "";
+      if (el.conversations) el.conversations.style.display = "";
     } else {
+      // Models view: hide conversation-related sidebar chrome — the model
+      // list lives in the main pane, not in the sidebar.
       el.newChatBtn.parentElement.style.display = "none";
+      if (el.conversations) el.conversations.style.display = "none";
       renderInstalledModels();
     }
     refreshComposerForView();
