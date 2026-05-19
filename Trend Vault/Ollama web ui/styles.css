@@ -1663,4 +1663,199 @@ input, textarea, select {
   color: var(--danger, #ef4444);
 }
 
+/* ============================================================
+   Projects (Code section): grid + cards + sidebar link
+   ============================================================ */
+.view-projects {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 
+.projects-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px 32px 60px;
+}
+
+.projects-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.projects-header h1 {
+  margin: 0;
+  flex: 1;
+  font-size: 32px;
+  font-weight: 600;
+  font-family: Georgia, "Iowan Old Style", "Palatino", serif;
+  letter-spacing: 0.005em;
+  color: var(--text);
+}
+.projects-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.projects-header-actions .icon-only {
+  padding: 8px;
+  color: var(--text-muted);
+  border-radius: 6px;
+}
+.projects-header-actions .icon-only:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.projects-header-actions .btn-primary {
+  padding: 8px 16px;
+  font-weight: 500;
+}
+
+.projects-search-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.projects-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  min-height: 110px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+}
+.project-card:hover {
+  background: #353535;
+  border-color: #4a4a4a;
+}
+.project-card:active { transform: scale(0.995); }
+.project-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.project-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.project-card-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.project-card-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.project-card:hover .project-card-edit { opacity: 1; }
+.project-card-edit:hover { background: var(--bg-hover); color: var(--text); }
+
+.project-card-meta {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.projects-empty {
+  grid-column: 1 / -1;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.projects-empty p { margin: 0 0 6px; }
+.projects-empty-hint { font-size: 13px; color: var(--text-dim); }
+
+/* Sidebar "Projects" link (visible only in Code mode). */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 6px 12px 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.sidebar-link:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.sidebar-link.active {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border);
+}
+.sidebar-link svg { flex-shrink: 0; }
+.sidebar-link-count {
+  margin-left: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Project modal footer: spacer pushes Cancel/Save right; Delete sits left. */
+.modal-footer-spacer { flex: 1; }
+.btn-link.danger {
+  color: var(--danger, #ef4444);
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+.btn-link.danger:hover { background: rgba(239, 68, 68, 0.1); }

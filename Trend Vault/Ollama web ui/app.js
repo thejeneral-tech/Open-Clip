@@ -18,6 +18,9 @@
     lastModelChat:      "ollama-chat:lastModel",
     lastModelCode:      "ollama-chat:lastCodeModel",
     activeView:         "ollama-chat:activeView",
+    projects:           "ollama-chat:projects",
+    activeProject:      "ollama-chat:activeProject",
+    inProjectsView:     "ollama-chat:codeShowingProjects",
   };
 
   const DEFAULT_CODE_PROMPT =
@@ -59,6 +62,13 @@
   let isStreaming = false;
   let allModels = [];
   let pullAbort = null;
+
+  // Projects (Code section): { id, name, cwd, allowedDirs, unrestrictedFs, createdAt, updatedAt }
+  let projects = loadJSON(STORAGE.projects, []);
+  let activeProjectId = localStorage.getItem(STORAGE.activeProject) || null;
+  // When true (and we're in Code view), the main pane shows the projects grid
+  // instead of the chat. Toggled by the "Projects" sidebar button.
+  let inCodeProjectsView = localStorage.getItem(STORAGE.inProjectsView) === "1";
 
   // Local Code agent state
   let codeCheckInfo = null;          // { available, cwd, models, toolCapableModels }
@@ -158,6 +168,34 @@
     codePickCwdSettingsBtn: $("codePickCwdSettingsBtn"),
     codeAddDirSettingsBtn: $("codeAddDirSettingsBtn"),
 
+    // Projects
+    codeProjectsView: $("codeProjectsView"),
+    projectsGrid: $("projectsGrid"),
+    projectsEmpty: $("projectsEmpty"),
+    newProjectBtn: $("newProjectBtn"),
+    projectsSortBtn: $("projectsSortBtn"),
+    projectsSearchBtn: $("projectsSearchBtn"),
+    projectsSearchInput: $("projectsSearchInput"),
+    projectsLinkBtn: $("projectsLinkBtn"),
+    projectsLinkCount: $("projectsLinkCount"),
+    codeProjectChip: $("codeProjectChip"),
+    codeProjectName: $("codeProjectName"),
+
+    // Project modal
+    projectModal: $("projectModal"),
+    projectModalTitle: $("projectModalTitle"),
+    projectModalClose: $("projectModalClose"),
+    projectNameInput: $("projectNameInput"),
+    projectCwdInput: $("projectCwdInput"),
+    projectCwdBrowseBtn: $("projectCwdBrowseBtn"),
+    projectAllowedDirsInput: $("projectAllowedDirsInput"),
+    projectAllowedDirsCount: $("projectAllowedDirsCount"),
+    projectAddDirBtn: $("projectAddDirBtn"),
+    projectUnrestrictedInput: $("projectUnrestrictedInput"),
+    projectDeleteBtn: $("projectDeleteBtn"),
+    projectCancelBtn: $("projectCancelBtn"),
+    projectSaveBtn: $("projectSaveBtn"),
+
     // settings modal
     modal: $("settingsModal"),
     closeSettings: $("closeSettings"),
@@ -255,9 +293,23 @@
       createdAt: Date.now(),
       view: c.view,
     };
+    // Tag Code-mode conversations with the active project so the sidebar can
+    // filter, and the project's chat count stays in sync.
+    if (c.view === "code") {
+      conv.projectId = activeProjectId || null;
+    }
     c.convs.unshift(conv);
     c.activeId = conv.id;
     c.save();
+    // Same as setActiveConversation: pop out of the projects grid so the
+    // newly-created chat is actually visible.
+    if (activeView === "code" && inCodeProjectsView) {
+      inCodeProjectsView = false;
+      localStorage.setItem(STORAGE.inProjectsView, "0");
+      refreshViewPanes();
+      refreshProjectsLinkBtn();
+      if (el.codeBanner) el.codeBanner.hidden = false;
+    }
     renderConversations();
     renderMessages();
     return conv;
@@ -278,6 +330,15 @@
     const c = ctx();
     c.activeId = id;
     c.save();
+    // If we were viewing the projects grid in Code mode, jump back to the
+    // chat so the clicked conversation is actually visible.
+    if (activeView === "code" && inCodeProjectsView) {
+      inCodeProjectsView = false;
+      localStorage.setItem(STORAGE.inProjectsView, "0");
+      refreshViewPanes();
+      refreshProjectsLinkBtn();
+      if (el.codeBanner) el.codeBanner.hidden = false;
+    }
     renderConversations();
     renderMessages();
   }
@@ -305,16 +366,25 @@
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
 
-    // Toggle main panels
-    el.chatView.hidden = (name === "models");
-    el.modelsView.hidden = (name !== "models");
+    const inCode = name === "code";
+    // First-time Code entry with projects but no active one → show grid.
+    if (inCode && !activeProjectId && projects.length > 0 && !inCodeProjectsView) {
+      inCodeProjectsView = true;
+      localStorage.setItem(STORAGE.inProjectsView, "1");
+    }
+    // Leaving Code resets the projects-view sub-state.
+    if (!inCode) {
+      inCodeProjectsView = false;
+    }
+    refreshViewPanes();
 
     // Local Code mode keeps the Ollama model picker (the agent calls Ollama)
     // and shows an extra banner above the messages.
-    const inCode = name === "code";
     el.modelPickerWrap.style.display = (name === "models") ? "none" : "";
-    if (el.codeBanner) el.codeBanner.hidden = !inCode;
-    el.clearChatBtn.style.display = (name === "models") ? "none" : "";
+    if (el.codeBanner) el.codeBanner.hidden = !inCode || inCodeProjectsView;
+    el.clearChatBtn.style.display = (name === "models" || inCodeProjectsView) ? "none" : "";
+    refreshProjectsLinkBtn();
+    if (inCode && inCodeProjectsView) renderProjects();
 
     // Update labels
     if (name === "chat") {
@@ -372,15 +442,22 @@
   function renderConversations() {
     const c = ctx();
     el.conversations.innerHTML = "";
-    if (c.convs.length === 0) {
+    // In Code mode with an active project, only show that project's chats.
+    // Otherwise (no active project, or in Chat mode) show all.
+    const visible = (c.view === "code" && activeProjectId)
+      ? c.convs.filter((x) => x.projectId === activeProjectId)
+      : c.convs;
+    if (visible.length === 0) {
       const empty = document.createElement("div");
       empty.className = "convs-empty";
       empty.textContent =
-        c.view === "code" ? "No coding tasks yet" : "No conversations yet";
+        c.view === "code"
+          ? (activeProjectId ? "No chats in this project yet" : "No coding tasks yet")
+          : "No conversations yet";
       el.conversations.appendChild(empty);
       return;
     }
-    for (const conv of c.convs) {
+    for (const conv of visible) {
       const item = document.createElement("div");
       item.className = "conv-item" + (conv.id === c.activeId ? " active" : "");
       item.dataset.id = conv.id;
@@ -778,20 +855,32 @@
   function refreshCodeBanner() {
     if (!el.codeBanner) return;
     const info = codeCheckInfo || {};
-    // Prefer the user's pick (Settings or Browse) — that's what gets sent as
-    // body.cwd to the agent. Server default is only the fallback.
-    const cwd = settings.codeCwd || info.cwd || "(unknown cwd)";
+    const eff = effectiveCodeContext();
+    // Effective cwd: project value (if any) → Settings → server default.
+    const cwd = eff.cwd || info.cwd || "(unknown cwd)";
     el.codeCwd.textContent = cwd;
-    el.codeCwd.title = cwd;
+    el.codeCwd.title = cwd + (eff.source === "project" ? `  (from project "${eff.projectName}")` : "");
 
-    const dirs = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [];
+    const dirs = eff.allowedDirs;
     if (el.codeDirsBadge) {
       el.codeDirsBadge.textContent = dirs.length === 0
         ? "no extra dirs"
         : `+${dirs.length} dir${dirs.length === 1 ? "" : "s"}`;
       el.codeDirsBadge.title = dirs.length
         ? "Additional roots the agent can read/edit:\n" + dirs.join("\n")
-        : "Add directories in Settings to give the agent access to more roots.";
+        : "Add directories to give the agent access to more roots.";
+    }
+
+    // Active project chip — visible only when a project is active.
+    if (el.codeProjectChip && el.codeProjectName) {
+      const proj = getActiveProject();
+      if (proj) {
+        el.codeProjectChip.hidden = false;
+        el.codeProjectName.textContent = proj.name || derivedProjectName(proj.cwd) || "Project";
+        el.codeProjectChip.title = `Active project: ${proj.name}\nClick to switch projects.`;
+      } else {
+        el.codeProjectChip.hidden = true;
+      }
     }
 
     if (info.available) {
@@ -825,7 +914,7 @@
     }
 
     if (el.codeUnrestrictedBadge) {
-      el.codeUnrestrictedBadge.hidden = settings.codeUnrestrictedFs !== true;
+      el.codeUnrestrictedBadge.hidden = eff.unrestrictedFs !== true;
     }
   }
 
@@ -1147,10 +1236,13 @@
   // validate the upload target against the same cwd + allowedDirs the chat
   // endpoint sees.
   function buildCodeContextHeader() {
-    const cwd = settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
-    const allowedDirs = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [];
-    const unrestrictedFs = settings.codeUnrestrictedFs === true;
-    const json = JSON.stringify({ cwd, allowedDirs, unrestrictedFs });
+    const eff = effectiveCodeContext();
+    const cwd = eff.cwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
+    const json = JSON.stringify({
+      cwd,
+      allowedDirs: eff.allowedDirs,
+      unrestrictedFs: eff.unrestrictedFs,
+    });
     return btoa(unescape(encodeURIComponent(json)));
   }
 
@@ -1463,6 +1555,284 @@
     });
   }
 
+  /* ----------------------------------------------------------
+     Projects — bundles of (name, cwd, allowedDirs, unrestrictedFs)
+     that scope a set of Code conversations.
+     ---------------------------------------------------------- */
+  function saveProjects() {
+    saveJSON(STORAGE.projects, projects);
+    if (activeProjectId) localStorage.setItem(STORAGE.activeProject, activeProjectId);
+    else localStorage.removeItem(STORAGE.activeProject);
+  }
+
+  function getActiveProject() {
+    if (!activeProjectId) return null;
+    return projects.find((p) => p.id === activeProjectId) || null;
+  }
+
+  // The cwd / allowedDirs / unrestrictedFs that should ACTUALLY be used right
+  // now: project values override the global Settings values when a project
+  // is active. Used by sendCodeMessage, file uploads, and the banner.
+  function effectiveCodeContext() {
+    const proj = getActiveProject();
+    if (proj) {
+      return {
+        cwd: proj.cwd || "",
+        allowedDirs: Array.isArray(proj.allowedDirs) ? proj.allowedDirs : [],
+        unrestrictedFs: proj.unrestrictedFs === true,
+        source: "project",
+        projectId: proj.id,
+        projectName: proj.name,
+      };
+    }
+    return {
+      cwd: settings.codeCwd || "",
+      allowedDirs: Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [],
+      unrestrictedFs: settings.codeUnrestrictedFs === true,
+      source: "settings",
+      projectId: null,
+      projectName: null,
+    };
+  }
+
+  function setActiveProject(id, opts = {}) {
+    activeProjectId = id || null;
+    saveProjects();
+    // Make sure we're not stuck on a conversation from a different project.
+    const conv = getActiveConversation();
+    if (conv && conv.projectId && conv.projectId !== activeProjectId) {
+      codeActiveId = null;
+      saveCodeConvs();
+    }
+    if (!opts.silent) {
+      inCodeProjectsView = false;
+      localStorage.setItem(STORAGE.inProjectsView, "0");
+      renderConversations();
+      renderMessages();
+      refreshCodeBanner();
+      refreshProjectsLinkBtn();
+      refreshViewPanes();
+      codeCheck();
+    }
+  }
+
+  function createProjectObject(name, cwd, allowedDirs, unrestrictedFs) {
+    const id = "p_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const now = Date.now();
+    return {
+      id,
+      name: (name || "").trim() || derivedProjectName(cwd) || "Untitled project",
+      cwd: (cwd || "").trim(),
+      allowedDirs: Array.isArray(allowedDirs) ? allowedDirs.slice() : [],
+      unrestrictedFs: !!unrestrictedFs,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  // "C:\\path\\to\\Ollama web ui" → "Ollama web ui"
+  // "/home/me/projects/foo"       → "foo"
+  function derivedProjectName(p) {
+    if (!p) return "";
+    const trimmed = String(p).replace(/[\\/]+$/, "");
+    const lastSlash = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+    return lastSlash === -1 ? trimmed : trimmed.slice(lastSlash + 1);
+  }
+
+  function deleteProject(id) {
+    const idx = projects.findIndex((p) => p.id === id);
+    if (idx === -1) return;
+    const proj = projects[idx];
+    const orphaned = codeConvs.filter((c) => c.projectId === id).length;
+    const ok = confirm(
+      `Delete project "${proj.name}"?\n\n` +
+      (orphaned > 0
+        ? `${orphaned} conversation${orphaned === 1 ? "" : "s"} will be unlinked from this project (the conversations stay).`
+        : "No conversations belong to this project.")
+    );
+    if (!ok) return;
+    // Unlink conversations rather than delete them — preserves the user's history.
+    for (const c of codeConvs) {
+      if (c.projectId === id) c.projectId = null;
+    }
+    saveCodeConvs();
+    projects.splice(idx, 1);
+    if (activeProjectId === id) activeProjectId = null;
+    saveProjects();
+    renderProjects();
+    renderConversations();
+    refreshCodeBanner();
+    refreshProjectsLinkBtn();
+  }
+
+  /* ---- Projects grid rendering ---------------------------------------- */
+  let projectsSearchOpen = false;
+  let projectsSearchQuery = "";
+
+  function refreshProjectsLinkBtn() {
+    if (!el.projectsLinkBtn) return;
+    el.projectsLinkBtn.hidden = activeView !== "code";
+    if (el.projectsLinkCount) el.projectsLinkCount.textContent = String(projects.length);
+    el.projectsLinkBtn.classList.toggle("active", activeView === "code" && inCodeProjectsView);
+  }
+
+  function renderProjects() {
+    if (!el.projectsGrid) return;
+    // Sort: most-recently-updated first (matches the picture's "X ago" feel).
+    const q = (projectsSearchQuery || "").trim().toLowerCase();
+    const list = projects
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.cwd || "").toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    // Clear everything except the empty-state node (kept so we can toggle it).
+    Array.from(el.projectsGrid.children).forEach((c) => {
+      if (c !== el.projectsEmpty) c.remove();
+    });
+
+    if (el.projectsEmpty) {
+      el.projectsEmpty.hidden = list.length !== 0;
+    }
+    if (list.length === 0) return;
+
+    for (const proj of list) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "project-card" + (proj.id === activeProjectId ? " active" : "");
+      card.dataset.id = proj.id;
+
+      const top = document.createElement("div");
+      top.className = "project-card-top";
+
+      const name = document.createElement("div");
+      name.className = "project-card-name";
+      name.textContent = proj.name || derivedProjectName(proj.cwd) || "Untitled";
+      name.title = proj.cwd || "";
+      top.appendChild(name);
+
+      const edit = document.createElement("span");
+      edit.className = "project-card-edit";
+      edit.title = "Edit project";
+      edit.innerHTML =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>';
+      edit.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openProjectModal(proj.id);
+      });
+      top.appendChild(edit);
+
+      card.appendChild(top);
+
+      const meta = document.createElement("div");
+      meta.className = "project-card-meta";
+      const when = proj.updatedAt ? formatRelative(new Date(proj.updatedAt).toISOString()) : "";
+      const convCount = codeConvs.filter((c) => c.projectId === proj.id).length;
+      meta.textContent =
+        (when || "just now") +
+        (convCount ? `  ·  ${convCount} chat${convCount === 1 ? "" : "s"}` : "");
+      card.appendChild(meta);
+
+      card.addEventListener("click", () => setActiveProject(proj.id));
+      el.projectsGrid.appendChild(card);
+    }
+  }
+
+  /* ---- Project modal (new / edit) ------------------------------------- */
+  let editingProjectId = null;
+
+  function openProjectModal(id) {
+    editingProjectId = id || null;
+    const proj = id ? projects.find((p) => p.id === id) : null;
+    el.projectModalTitle.textContent = proj ? "Edit project" : "New project";
+    el.projectNameInput.value = proj ? proj.name : "";
+    el.projectCwdInput.value = proj ? proj.cwd : "";
+    el.projectAllowedDirsInput.value = proj ? allowedDirsAsText(proj.allowedDirs) : "";
+    el.projectUnrestrictedInput.checked = proj ? !!proj.unrestrictedFs : false;
+    el.projectDeleteBtn.hidden = !proj;
+    el.projectAllowedDirsCount.textContent =
+      String(parseAllowedDirsText(el.projectAllowedDirsInput.value).length);
+    el.projectModal.classList.remove("hidden");
+    el.projectModal.setAttribute("aria-hidden", "false");
+    setTimeout(() => el.projectNameInput.focus(), 0);
+  }
+
+  function closeProjectModal() {
+    el.projectModal.classList.add("hidden");
+    el.projectModal.setAttribute("aria-hidden", "true");
+    editingProjectId = null;
+  }
+
+  function saveProjectFromModal() {
+    const name = el.projectNameInput.value.trim();
+    const cwd = el.projectCwdInput.value.trim();
+    if (!cwd) {
+      alert("Pick a working directory for this project.");
+      el.projectCwdInput.focus();
+      return;
+    }
+    const allowedDirs = parseAllowedDirsText(el.projectAllowedDirsInput.value);
+    const unrestrictedFs = !!el.projectUnrestrictedInput.checked;
+
+    if (editingProjectId) {
+      const proj = projects.find((p) => p.id === editingProjectId);
+      if (!proj) return closeProjectModal();
+      proj.name = name || derivedProjectName(cwd) || proj.name || "Untitled";
+      proj.cwd = cwd;
+      proj.allowedDirs = allowedDirs;
+      proj.unrestrictedFs = unrestrictedFs;
+      proj.updatedAt = Date.now();
+      saveProjects();
+      if (activeProjectId === proj.id) {
+        refreshCodeBanner();
+        codeCheck();
+      }
+    } else {
+      const proj = createProjectObject(name, cwd, allowedDirs, unrestrictedFs);
+      projects.unshift(proj);
+      saveProjects();
+      // Auto-activate the newly created project.
+      setActiveProject(proj.id, { silent: true });
+      // Open the chat view for it; rendering happens below.
+      inCodeProjectsView = false;
+      localStorage.setItem(STORAGE.inProjectsView, "0");
+    }
+    closeProjectModal();
+    renderProjects();
+    renderConversations();
+    refreshCodeBanner();
+    refreshProjectsLinkBtn();
+    refreshViewPanes();
+  }
+
+  /* ---- View toggling: chat ↔ projects-grid (within Code) -------------- */
+  function showCodeProjectsView() {
+    if (activeView !== "code") return;
+    inCodeProjectsView = true;
+    localStorage.setItem(STORAGE.inProjectsView, "1");
+    renderProjects();
+    refreshViewPanes();
+    refreshProjectsLinkBtn();
+  }
+
+  function hideCodeProjectsView() {
+    inCodeProjectsView = false;
+    localStorage.setItem(STORAGE.inProjectsView, "0");
+    refreshViewPanes();
+    refreshProjectsLinkBtn();
+  }
+
+  // Single source of truth for which main pane is visible. Called after any
+  // state change that should affect it (entering Code, toggling projects, …).
+  function refreshViewPanes() {
+    const inCode = activeView === "code";
+    const inModels = activeView === "models";
+    const inProjects = inCode && inCodeProjectsView;
+    el.chatView.hidden = inModels || inProjects;
+    el.modelsView.hidden = !inModels;
+    if (el.codeProjectsView) el.codeProjectsView.hidden = !inProjects;
+  }
+
   // Convert this conversation's prior messages into the wire format the
   // server expects under `history`. We strip our display-only fields and
   // pass plain Ollama-shaped messages.
@@ -1535,6 +1905,15 @@
     conv.messages.push(userMsg);
     setConversationTitle(conv, text);
     conv.model = model;
+    // Tag (or re-tag) the conv with the active project; bump project recency.
+    if (activeProjectId && conv.projectId !== activeProjectId) {
+      conv.projectId = activeProjectId;
+    }
+    const activeProj = getActiveProject();
+    if (activeProj) {
+      activeProj.updatedAt = Date.now();
+      saveProjects();
+    }
     c.save();
     el.welcome.classList.add("hidden");
     el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
@@ -1563,13 +1942,14 @@
     el.stopBtn.classList.remove("hidden");
     currentAbortController = new AbortController();
 
+    const eff = effectiveCodeContext();
     const body = {
       prompt: promptToSend,
       model,
       history,
-      cwd: settings.codeCwd || undefined,
-      allowedDirs: Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [],
-      unrestrictedFs: settings.codeUnrestrictedFs === true,
+      cwd: eff.cwd || undefined,
+      allowedDirs: eff.allowedDirs,
+      unrestrictedFs: eff.unrestrictedFs,
       systemPrompt: (settings.codeSystemPrompt || "").trim() || undefined,
       options: {
         temperature: settings.temperature,
@@ -2104,6 +2484,107 @@
       });
     }
     installDropHandlers();
+
+    /* ---- Projects wiring ---- */
+    // Sidebar "Projects" link toggles the projects grid in the main pane.
+    if (el.projectsLinkBtn) {
+      el.projectsLinkBtn.addEventListener("click", () => {
+        if (inCodeProjectsView) hideCodeProjectsView();
+        else showCodeProjectsView();
+      });
+    }
+    // Banner "project" chip → re-open the projects grid.
+    if (el.codeProjectChip) {
+      el.codeProjectChip.addEventListener("click", showCodeProjectsView);
+    }
+    // New project button (in the grid).
+    if (el.newProjectBtn) {
+      el.newProjectBtn.addEventListener("click", () => openProjectModal(null));
+    }
+    // Search toggle in projects header.
+    if (el.projectsSearchBtn && el.projectsSearchInput) {
+      el.projectsSearchBtn.addEventListener("click", () => {
+        projectsSearchOpen = !projectsSearchOpen;
+        el.projectsSearchInput.hidden = !projectsSearchOpen;
+        if (projectsSearchOpen) setTimeout(() => el.projectsSearchInput.focus(), 0);
+        else { projectsSearchQuery = ""; el.projectsSearchInput.value = ""; renderProjects(); }
+      });
+      el.projectsSearchInput.addEventListener("input", () => {
+        projectsSearchQuery = el.projectsSearchInput.value;
+        renderProjects();
+      });
+    }
+    // Sort button — for now just toggles between recency and name.
+    let projectsSortByName = false;
+    if (el.projectsSortBtn) {
+      el.projectsSortBtn.addEventListener("click", () => {
+        projectsSortByName = !projectsSortByName;
+        // Cheap implementation: re-sort the array in place before rendering.
+        projects.sort(projectsSortByName
+          ? (a, b) => a.name.localeCompare(b.name)
+          : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        renderProjects();
+      });
+    }
+
+    // Project modal buttons.
+    if (el.projectModalClose) el.projectModalClose.addEventListener("click", closeProjectModal);
+    if (el.projectCancelBtn) el.projectCancelBtn.addEventListener("click", closeProjectModal);
+    if (el.projectSaveBtn) el.projectSaveBtn.addEventListener("click", saveProjectFromModal);
+    if (el.projectDeleteBtn) {
+      el.projectDeleteBtn.addEventListener("click", () => {
+        if (editingProjectId) {
+          const id = editingProjectId;
+          closeProjectModal();
+          deleteProject(id);
+        }
+      });
+    }
+    if (el.projectModal) {
+      el.projectModal.addEventListener("click", (e) => {
+        if (e.target === el.projectModal) closeProjectModal();
+      });
+    }
+    if (el.projectCwdBrowseBtn) {
+      el.projectCwdBrowseBtn.addEventListener("click", () => {
+        openDirPicker({
+          title: "Pick the project's working directory",
+          selectLabel: "Use as project directory",
+          initialPath: el.projectCwdInput.value.trim() || "",
+          onSelect: (abs) => {
+            el.projectCwdInput.value = abs;
+            if (!el.projectNameInput.value.trim()) {
+              el.projectNameInput.value = derivedProjectName(abs);
+            }
+          },
+        });
+      });
+    }
+    if (el.projectAddDirBtn) {
+      el.projectAddDirBtn.addEventListener("click", () => {
+        openDirPicker({
+          title: "Add a directory to this project",
+          selectLabel: "Add this directory",
+          initialPath: "",
+          onSelect: (abs) => {
+            const current = parseAllowedDirsText(el.projectAllowedDirsInput.value);
+            if (current.includes(abs)) {
+              alert("That directory is already in this project.");
+              return;
+            }
+            current.push(abs);
+            el.projectAllowedDirsInput.value = allowedDirsAsText(current);
+            el.projectAllowedDirsCount.textContent = String(current.length);
+          },
+        });
+      });
+    }
+    if (el.projectAllowedDirsInput) {
+      el.projectAllowedDirsInput.addEventListener("input", () => {
+        el.projectAllowedDirsCount.textContent =
+          String(parseAllowedDirsText(el.projectAllowedDirsInput.value).length);
+      });
+    }
 
     // Models view: pull form
     el.pullForm.addEventListener("submit", (e) => {
