@@ -97,26 +97,6 @@
 
       <!-- Chat view (also used by Code view, with different state) -->
       <div class="view view-chat" id="chatView">
-        <!-- Local Code banner — visible only in Code mode -->
-        <div class="claude-banner" id="codeBanner" hidden>
-          <span class="claude-banner-badge">Local Code</span>
-          <span class="claude-banner-cwd" id="codeCwd" title="Primary working directory">…</span>
-          <button type="button" class="banner-btn" id="codePickCwdBtn" title="Pick primary working directory">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-            <span>Browse</span>
-          </button>
-          <span class="claude-banner-sep">·</span>
-          <span class="claude-banner-session" id="codeDirsBadge" title="Additional directories the agent can read &amp; edit">+0 dirs</span>
-          <button type="button" class="banner-btn" id="codeAddDirBtn" title="Add a directory the agent can read &amp; edit">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>Add dir</span>
-          </button>
-          <span class="claude-banner-sep">·</span>
-          <span class="claude-banner-version" id="codeStatus">checking Ollama…</span>
-          <span class="claude-banner-sep">·</span>
-          <span class="claude-banner-session" id="codeToolCap" title="Whether the picked model supports tool calling">tools: ?</span>
-          <span class="claude-banner-badge danger" id="codeUnrestrictedBadge" hidden title="The agent can read &amp; edit any path on this computer. Turn off in Settings.">FULL DISK</span>
-        </div>
         <section class="chat" id="chat">
           <div class="welcome" id="welcome">
             <h1 id="welcomeTitle">Ollama Chat</h1>
@@ -130,6 +110,101 @@
           </div>
           <div class="messages" id="messages"></div>
         </section>
+
+        <!-- Local Code banner — chip strip, sits right above the composer in Code mode -->
+        <div class="claude-banner" id="codeBanner" hidden>
+          <div class="banner-chip chip-brand" title="Local code agent">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span class="chip-label">LOCAL CODE</span>
+          </div>
+
+          <div class="banner-chip" id="codeCwdChip" title="Primary working directory">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="chip-label chip-mono" id="codeCwd">…</span>
+          </div>
+
+          <button type="button" class="banner-chip banner-chip-btn" id="codePickCwdBtn" title="Pick primary working directory">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 14 12 11 15 14"></polyline>
+              <line x1="12" y1="11" x2="12" y2="18"></line>
+            </svg>
+            <span class="chip-label">Browse</span>
+          </button>
+
+          <div class="banner-chip" id="codeDirsChip" title="Additional directories the agent can read &amp; edit">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            <span class="chip-label" id="codeDirsBadge">no extra dirs</span>
+          </div>
+
+          <button type="button" class="banner-chip banner-chip-btn" id="codeAddDirBtn" title="Add a directory the agent can read &amp; edit">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span class="chip-label">Add dir</span>
+          </button>
+
+          <div class="banner-chip" id="codeStatusChip" title="Ollama">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="2" width="20" height="8" rx="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            <span class="chip-label" id="codeStatus">checking Ollama…</span>
+          </div>
+
+          <div class="banner-chip" id="codeToolChip" title="Whether the picked model supports tool calling">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+            </svg>
+            <span class="chip-label" id="codeToolCap">tools: ?</span>
+          </div>
+
+          <div class="banner-chip chip-danger" id="codeUnrestrictedBadge" hidden title="The agent can read &amp; edit any path on this computer. Turn off in Settings.">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span class="chip-label">FULL DISK</span>
+          </div>
+
+          <div class="banner-spacer"></div>
+
+          <!-- Pixel-art mascot (Space-Invaders-style) -->
+          <svg class="banner-creature" viewBox="0 0 11 8" width="44" height="32" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#e76b56">
+              <rect x="3" y="0" width="1" height="1"></rect>
+              <rect x="7" y="0" width="1" height="1"></rect>
+              <rect x="4" y="1" width="1" height="1"></rect>
+              <rect x="6" y="1" width="1" height="1"></rect>
+              <rect x="2" y="2" width="7" height="1"></rect>
+              <rect x="1" y="3" width="2" height="1"></rect>
+              <rect x="4" y="3" width="3" height="1"></rect>
+              <rect x="8" y="3" width="2" height="1"></rect>
+              <rect x="0" y="4" width="11" height="1"></rect>
+              <rect x="0" y="5" width="1" height="1"></rect>
+              <rect x="2" y="5" width="7" height="1"></rect>
+              <rect x="10" y="5" width="1" height="1"></rect>
+              <rect x="2" y="6" width="1" height="1"></rect>
+              <rect x="8" y="6" width="1" height="1"></rect>
+              <rect x="1" y="7" width="1" height="1"></rect>
+              <rect x="9" y="7" width="1" height="1"></rect>
+            </g>
+          </svg>
+        </div>
 
         <footer class="composer">
           <!-- Staged attachments (Code view only): shown above the input -->
