@@ -673,10 +673,13 @@ function ollamaChatStream(body, signal, onChunk) {
     const req = proxyAgent.request(opts, (resp) => {
       let buf = "";
       let accumContent = "";
+      let accumThinking = "";
       let toolCalls = [];
       let role = "assistant";
       const final = {};
       let httpErr = null;
+      let chunkCount = 0;
+      const tStart = Date.now();
       resp.setEncoding("utf8");
       resp.on("data", (c) => {
         buf += c;
@@ -693,14 +696,28 @@ function ollamaChatStream(body, signal, onChunk) {
           }
           const msg = obj.message || {};
           if (msg.role) role = msg.role;
-          const piece = typeof msg.content === "string" ? msg.content : "";
+
+          // Reasoning models (Qwen3, DeepSeek-R1, etc.) on recent Ollama
+          // versions emit their chain-of-thought in `message.thinking`,
+          // separate from `message.content`. Count BOTH as live tokens so
+          // the in-flight counter ticks during the thinking phase, not
+          // just once the model starts producing the final answer.
+          const content  = typeof msg.content  === "string" ? msg.content  : "";
+          const thinking = typeof msg.thinking === "string" ? msg.thinking : "";
+          if (content)  accumContent  += content;
+          if (thinking) accumThinking += thinking;
+          const piece = content || thinking;
           if (piece) {
-            accumContent += piece;
+            chunkCount++;
             try { onChunk && onChunk(piece); } catch { /* listener errors are not fatal */ }
           }
           if (Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
             // Some backends fragment tool_calls into multiple chunks; just collect.
             toolCalls = toolCalls.concat(msg.tool_calls);
+            // A tool-call decision is "work" too — bump the counter so the
+            // user sees something move on tool-only turns.
+            chunkCount += msg.tool_calls.length;
+            try { onChunk && onChunk(""); } catch { /* */ }
           }
           if (obj.done) {
             final.eval_count = obj.eval_count || 0;
@@ -709,6 +726,12 @@ function ollamaChatStream(body, signal, onChunk) {
             final.prompt_eval_duration = obj.prompt_eval_duration || 0;
             final.total_duration = obj.total_duration || 0;
             final.load_duration = obj.load_duration || 0;
+            const ms = Date.now() - tStart;
+            console.log(
+              `[ollama-stream] done in ${ms}ms — chunks=${chunkCount} ` +
+              `content=${accumContent.length}B thinking=${accumThinking.length}B ` +
+              `tool_calls=${toolCalls.length} eval_count=${final.eval_count}`
+            );
           }
         }
       });
