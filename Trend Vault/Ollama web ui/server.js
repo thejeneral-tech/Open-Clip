@@ -222,16 +222,23 @@ function isToolCapable(modelName) {
 //
 // `p` may be relative (resolved against cwd) or absolute. Returns the absolute
 // path on success, throws otherwise.
-function resolveInsideAllowed(cwd, allowedDirs, p) {
+//
+// When `unrestricted` is true, the containment check is skipped entirely and
+// any resolvable absolute path is returned — the user has opted in to full
+// disk access for the agent.
+function resolveInsideAllowed(cwd, allowedDirs, p, unrestricted) {
   if (typeof p !== "string" || !p) throw new Error("Path required");
   const abs = path.resolve(cwd, p);
+  if (unrestricted) return abs;
   const roots = [cwd, ...(allowedDirs || [])].map((d) => path.resolve(d));
   for (const root of roots) {
     if (abs === root || abs.startsWith(root + path.sep)) return abs;
   }
   throw new Error(
     `Path is outside the allowed directories: ${p}. ` +
-    `Allowed roots: ${roots.join(", ")}`
+    `Allowed roots: ${roots.join(", ")}. ` +
+    `(Tip: enable "Full disk access" in Settings to let the agent reach any path, ` +
+    `or add the containing folder under "Additional directories".)`
   );
 }
 
@@ -367,7 +374,7 @@ function trimOutput(text, max) {
 }
 
 async function tool_read_file(ctx, args) {
-  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path, ctx.unrestricted);
   const stat = await fs.promises.stat(abs);
   if (!stat.isFile()) throw new Error("Not a file");
   let content = await fs.promises.readFile(abs, "utf8");
@@ -381,14 +388,19 @@ async function tool_read_file(ctx, args) {
 }
 
 async function tool_write_file(ctx, args) {
-  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path, ctx.unrestricted);
+  // Ensure the parent directory exists in unrestricted mode where the user
+  // might be writing somewhere new outside their primary root.
+  if (ctx.unrestricted) {
+    try { await fs.promises.mkdir(path.dirname(abs), { recursive: true }); } catch {}
+  }
   await fs.promises.writeFile(abs, String(args.content ?? ""), "utf8");
   const stat = await fs.promises.stat(abs);
   return { ok: true, path: args.path, bytes: stat.size };
 }
 
 async function tool_edit_file(ctx, args) {
-  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path, ctx.unrestricted);
   const original = await fs.promises.readFile(abs, "utf8");
   const oldStr = String(args.old_string ?? "");
   const newStr = String(args.new_string ?? "");
@@ -403,7 +415,7 @@ async function tool_edit_file(ctx, args) {
 }
 
 async function tool_list_dir(ctx, args) {
-  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path || ".");
+  const abs = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path || ".", ctx.unrestricted);
   const entries = await fs.promises.readdir(abs, { withFileTypes: true });
   return {
     path: args.path || ".",
@@ -498,7 +510,7 @@ async function tool_grep(ctx, args) {
 
   if (args.path) {
     // Explicit path → resolve & validate once, scan only it.
-    const searchRoot = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path);
+    const searchRoot = resolveInsideAllowed(ctx.cwd, ctx.allowedDirs, args.path, ctx.unrestricted);
     const stat = await fs.promises.stat(searchRoot);
     const files = stat.isFile()
       ? [{ root: path.dirname(searchRoot), rel: path.basename(searchRoot), full: searchRoot }]
@@ -770,7 +782,7 @@ function extractEmbeddedToolCalls(text) {
   return { calls: out, cleanedText: cleaned };
 }
 
-function defaultCodeSystemPrompt(cwd, allowedDirs) {
+function defaultCodeSystemPrompt(cwd, allowedDirs, unrestricted) {
   const lines = [
     "You are a coding agent operating across one or more local directories the user has authorised.",
     `Primary working directory (relative paths resolve here, and bash runs here):`,
@@ -783,6 +795,13 @@ function defaultCodeSystemPrompt(cwd, allowedDirs) {
       "When glob/grep run without an explicit `path`, they search across ALL of the above roots. " +
       "Results from non-primary roots are prefixed «<root-basename>»/… so you can tell them apart."
     );
+  }
+  if (unrestricted) {
+    lines.push("");
+    lines.push("⚠ FULL DISK ACCESS is enabled. You may pass any absolute path on this");
+    lines.push("computer to read_file, write_file, edit_file, list_dir, glob, and grep");
+    lines.push("— the usual containment check is off. Stay inside the user's intent and");
+    lines.push("only touch files relevant to the requested task.");
   }
   lines.push("");
   lines.push("Tools available:");
@@ -842,9 +861,10 @@ async function handleLocalCodeChat(req, res) {
     if (abs !== path.resolve(cwd) && !allowedDirs.includes(abs)) allowedDirs.push(abs);
   }
 
-  const ctx = { cwd, allowedDirs };
+  const unrestrictedFs = body.unrestrictedFs === true;
+  const ctx = { cwd, allowedDirs, unrestricted: unrestrictedFs };
   const systemPrompt =
-    (body.systemPrompt || "").trim() || defaultCodeSystemPrompt(cwd, allowedDirs);
+    (body.systemPrompt || "").trim() || defaultCodeSystemPrompt(cwd, allowedDirs, unrestrictedFs);
 
   const jobId = crypto.randomBytes(8).toString("hex");
   const abort = new AbortController();
@@ -857,7 +877,10 @@ async function handleLocalCodeChat(req, res) {
     "X-Code-Job": jobId,
   });
   const emit = (obj) => res.write(JSON.stringify(obj) + "\n");
-  emit({ kind: "meta", jobId, cwd, allowedDirs, model, toolCapable: isToolCapable(model) });
+  emit({
+    kind: "meta", jobId, cwd, allowedDirs, model,
+    toolCapable: isToolCapable(model), unrestrictedFs,
+  });
 
   res.on("close", () => {
     if (!res.writableEnded) abort.abort();
@@ -1133,12 +1156,14 @@ async function handleLocalCodeUpload(req, res) {
   // header to avoid trusting the query string alone for path containment.
   let cwd = CODE_CWD;
   let allowedDirs = [];
+  let unrestrictedFs = false;
   try {
     const ctxJson = req.headers["x-code-context"];
     if (ctxJson) {
       const parsed = JSON.parse(Buffer.from(ctxJson, "base64").toString("utf8"));
       if (typeof parsed.cwd === "string" && parsed.cwd.trim()) cwd = parsed.cwd;
       if (Array.isArray(parsed.allowedDirs)) allowedDirs = parsed.allowedDirs.filter(s => typeof s === "string");
+      if (parsed.unrestrictedFs === true) unrestrictedFs = true;
     }
   } catch { /* malformed header → fall back to defaults */ }
 
@@ -1160,7 +1185,8 @@ async function handleLocalCodeUpload(req, res) {
     targetRoot = roots[idx];
   } else {
     const abs = path.resolve(targetParam);
-    if (!roots.some(r => abs === r || abs.startsWith(r + path.sep))) {
+    // In unrestricted mode, any resolvable absolute path is OK as a target.
+    if (!unrestrictedFs && !roots.some(r => abs === r || abs.startsWith(r + path.sep))) {
       return writeJson(res, 400, { error: "target is not inside an allowed root" });
     }
     targetRoot = abs;

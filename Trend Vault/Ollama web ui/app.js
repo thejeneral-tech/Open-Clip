@@ -32,6 +32,7 @@
     codeSystemPrompt: DEFAULT_CODE_PROMPT,
     codeCwd: "",
     codeAllowedDirs: [],
+    codeUnrestrictedFs: false,
     temperature: 0.7,
     topP: 0.9,
     topK: 40,
@@ -170,6 +171,8 @@
     codeAllowedDirsCount: $("codeAllowedDirsCount"),
     codeVerifyDirsBtn: $("codeVerifyDirsBtn"),
     codeVerifyDirsStatus: $("codeVerifyDirsStatus"),
+    codeUnrestrictedInput: $("codeUnrestrictedInput"),
+    codeUnrestrictedBadge: $("codeUnrestrictedBadge"),
     temperature: $("temperature"),
     tempValue: $("tempValue"),
     topP: $("topP"),
@@ -818,6 +821,10 @@
         "but may fall back to plain chat if the model can't emit tool_calls.";
       el.codeToolCap.classList.remove("error");
     }
+
+    if (el.codeUnrestrictedBadge) {
+      el.codeUnrestrictedBadge.hidden = settings.codeUnrestrictedFs !== true;
+    }
   }
 
   function buildToolUseBlock(toolName, input) {
@@ -1124,7 +1131,8 @@
   function buildCodeContextHeader() {
     const cwd = settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
     const allowedDirs = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [];
-    const json = JSON.stringify({ cwd, allowedDirs });
+    const unrestrictedFs = settings.codeUnrestrictedFs === true;
+    const json = JSON.stringify({ cwd, allowedDirs, unrestrictedFs });
     return btoa(unescape(encodeURIComponent(json)));
   }
 
@@ -1541,6 +1549,7 @@
       history,
       cwd: settings.codeCwd || undefined,
       allowedDirs: Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [],
+      unrestrictedFs: settings.codeUnrestrictedFs === true,
       systemPrompt: (settings.codeSystemPrompt || "").trim() || undefined,
       options: {
         temperature: settings.temperature,
@@ -1810,6 +1819,9 @@
       el.codeVerifyDirsStatus.textContent =
         "The agent can read & edit files in any of these directories (in addition to the primary one).";
     }
+    if (el.codeUnrestrictedInput) {
+      el.codeUnrestrictedInput.checked = !!settings.codeUnrestrictedFs;
+    }
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
     el.topP.value = settings.topP;
@@ -1831,6 +1843,25 @@
     if (el.codeCwdInput) settings.codeCwd = el.codeCwdInput.value.trim();
     if (el.codeAllowedDirsInput) {
       settings.codeAllowedDirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
+    }
+    if (el.codeUnrestrictedInput) {
+      const wasOn = settings.codeUnrestrictedFs === true;
+      const nowOn = !!el.codeUnrestrictedInput.checked;
+      if (nowOn && !wasOn) {
+        const ok = confirm(
+          "Enable Full Disk Access?\n\n" +
+          "The agent will be able to read & edit ANY file on this computer — " +
+          "including system files, credentials, and anything outside your project folder.\n\n" +
+          "Only enable this if you trust both the model and the prompts you send."
+        );
+        if (!ok) {
+          el.codeUnrestrictedInput.checked = false;
+        } else {
+          settings.codeUnrestrictedFs = true;
+        }
+      } else {
+        settings.codeUnrestrictedFs = nowOn;
+      }
     }
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);

@@ -115,6 +115,7 @@
           <span class="claude-banner-version" id="codeStatus">checking Ollama…</span>
           <span class="claude-banner-sep">·</span>
           <span class="claude-banner-session" id="codeToolCap" title="Whether the picked model supports tool calling">tools: ?</span>
+          <span class="claude-banner-badge danger" id="codeUnrestrictedBadge" hidden title="The agent can read &amp; edit any path on this computer. Turn off in Settings.">FULL DISK</span>
         </div>
         <section class="chat" id="chat">
           <div class="welcome" id="welcome">
@@ -274,6 +275,22 @@
             <span class="field-hint" id="codeVerifyDirsStatus">The agent can read &amp; edit files in any of these directories (in addition to the primary one).</span>
           </div>
         </div>
+
+        <label class="field field-checkbox" id="codeUnrestrictedField">
+          <span class="field-checkbox-row">
+            <input type="checkbox" id="codeUnrestrictedInput" />
+            <span class="field-label">
+              Full disk access
+              <span class="field-tag danger" id="codeUnrestrictedTag" hidden>DANGER</span>
+            </span>
+          </span>
+          <span class="field-hint">
+            When enabled, the agent can read &amp; edit <em>any</em> absolute path on this computer — the
+            primary &amp; additional directories list is ignored for containment.
+            Use with caution; the agent can also run <code>bash</code> in your primary working
+            directory, so file destruction is possible.
+          </span>
+        </label>
 
         <div class="field-row">
           <label class="field">

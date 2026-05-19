@@ -1609,3 +1609,27 @@ input, textarea, select {
 }
 .field-row-inline > input { flex: 1; min-width: 0; }
 
+/* Checkbox field (Settings: full disk access toggle). */
+.field-checkbox .field-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.field-checkbox .field-label { margin: 0; }
+.field-tag.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger, #ef4444);
+}
+
+/* Banner badge variant: red "FULL DISK" warning. */
+.claude-banner-badge.danger {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #fff;
+}
+
