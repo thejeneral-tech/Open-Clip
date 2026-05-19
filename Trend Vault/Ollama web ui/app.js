@@ -416,7 +416,7 @@
     el.welcome.classList.add("hidden");
     const builder = activeView === "code" ? buildCodeMessageEl : buildMessageEl;
     for (const msg of conv.messages) {
-      el.messages.appendChild(builder(msg));
+      el.messages.appendChild(builder(msg, conv));
     }
     scrollToBottom();
   }
@@ -996,13 +996,29 @@
     return "done";
   }
 
-  function buildCodeMessageEl(msg) {
+  // Two-letter avatar derived from the model name, e.g.
+  //   "qwen2.5-coder:7b" → "QW"   "llama3.2" → "LL"   "deepseek-coder" → "DE"
+  // Falls back to "AG" if no model is known.
+  function modelAvatar(modelName) {
+    if (!modelName) return "AG";
+    const alpha = modelName.replace(/[^a-zA-Z]/g, "");
+    const seed = alpha.length >= 2 ? alpha : modelName;
+    return seed.slice(0, 2).toUpperCase() || "AG";
+  }
+
+  function buildCodeMessageEl(msg, conv) {
     const wrapper = document.createElement("div");
     wrapper.className = "message " + msg.role + " code-msg";
 
+    // Use the model stored on the message (or the conversation, or the
+    // currently-picked model as a last resort) so the assistant turn is
+    // labelled with whatever produced it.
+    const modelName = msg.model || (conv && conv.model) || el.modelSelect.value || "";
+
     const avatar = document.createElement("div");
     avatar.className = "avatar";
-    avatar.textContent = msg.role === "user" ? "U" : "AG";
+    avatar.textContent = msg.role === "user" ? "U" : modelAvatar(modelName);
+    if (msg.role !== "user" && modelName) avatar.title = modelName;
     wrapper.appendChild(avatar);
 
     const body = document.createElement("div");
@@ -1010,7 +1026,7 @@
 
     const role = document.createElement("div");
     role.className = "message-role";
-    role.textContent = msg.role === "user" ? "You" : "Agent";
+    role.textContent = msg.role === "user" ? "You" : (modelName || "Agent");
     body.appendChild(role);
 
     const blocksEl = document.createElement("div");
@@ -1521,16 +1537,18 @@
     conv.model = model;
     c.save();
     el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildCodeMessageEl(userMsg));
+    el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
 
     // Clear the staged attachments — they've been "sent".
     stagedAttachments.length = 0;
     renderAttachments();
 
-    // Streaming assistant placeholder.
-    const assistantMsg = { role: "assistant", content: "", blocks: [] };
+    // Streaming assistant placeholder. Stamp the model on this turn so the
+    // bubble keeps showing the right name even if the user later picks a
+    // different model in the dropdown.
+    const assistantMsg = { role: "assistant", content: "", blocks: [], model };
     conv.messages.push(assistantMsg);
-    const assistantEl = buildCodeMessageEl(assistantMsg);
+    const assistantEl = buildCodeMessageEl(assistantMsg, conv);
     const blocksEl = assistantEl._blocksEl;
     const typing = document.createElement("div");
     typing.className = "typing";
