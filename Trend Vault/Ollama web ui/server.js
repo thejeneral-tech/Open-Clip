@@ -53,6 +53,10 @@ const AGENT_FILE_READ_BYTES = 256 * 1024;     // 256 KB per read
 const AGENT_BASH_TIMEOUT_MS = 60_000;
 const AGENT_BASH_OUTPUT_BYTES = 64 * 1024;     // 64 KB per bash output
 
+// File-upload limits.
+const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;     // 50 MB per file
+const UPLOAD_SUBDIR = "uploads";               // <targetRoot>/uploads/...
+
 // Parse the URL once and pin the hostname to an explicit IP if the user
 // gave us "localhost", to avoid IPv4/IPv6 DNS surprises on Windows.
 function pathnameOf(reqUrl) {
@@ -992,6 +996,232 @@ async function handleLocalCodeVerifyDirs(req, res) {
   writeJson(res, 200, { results });
 }
 
+/* ----------------------------------------------------------
+   FS browse: list a directory (or drives on Windows root)
+   ---------------------------------------------------------- */
+function listWindowsDrives() {
+  const drives = [];
+  for (let c = 65; c <= 90; c++) {
+    const letter = String.fromCharCode(c);
+    const root = `${letter}:\\`;
+    try {
+      // statSync is cheap on existing drives and throws on non-existent ones.
+      fs.statSync(root);
+      drives.push({ name: `${letter}:`, path: root, type: "drive" });
+    } catch { /* skip */ }
+  }
+  return drives;
+}
+
+async function handleLocalCodeFsList(req, res) {
+  const u = new URL(req.url, "http://x");
+  const reqPath = u.searchParams.get("path") || "";
+  const includeFiles = u.searchParams.get("files") === "1";
+  const showHidden = u.searchParams.get("hidden") === "1";
+
+  try {
+    // Windows root: show drives instead of trying to list "/".
+    if (IS_WIN && !reqPath) {
+      const drives = listWindowsDrives();
+      return writeJson(res, 200, {
+        path: "",
+        parent: null,
+        isRoot: true,
+        platform: process.platform,
+        entries: drives,
+      });
+    }
+
+    // Non-Windows or absolute path supplied.
+    const abs = reqPath ? path.resolve(reqPath) : (IS_WIN ? "C:\\" : "/");
+    let stat;
+    try { stat = await fs.promises.stat(abs); }
+    catch (e) {
+      return writeJson(res, 200, {
+        path: abs, parent: null, isRoot: false, platform: process.platform,
+        entries: [], error: e.code === "ENOENT" ? "Path does not exist" : e.message,
+      });
+    }
+    if (!stat.isDirectory()) {
+      return writeJson(res, 400, { error: "Path is not a directory", path: abs });
+    }
+
+    let entries;
+    try { entries = await fs.promises.readdir(abs, { withFileTypes: true }); }
+    catch (e) {
+      return writeJson(res, 200, {
+        path: abs, parent: null, isRoot: false, platform: process.platform,
+        entries: [], error: e.code === "EACCES" ? "Permission denied" : e.message,
+      });
+    }
+
+    const dirs = [];
+    const files = [];
+    for (const d of entries) {
+      if (!showHidden && d.name.startsWith(".")) continue;
+      const isDir = d.isDirectory();
+      if (!isDir && !includeFiles) continue;
+      const item = {
+        name: d.name,
+        path: path.join(abs, d.name),
+        type: isDir ? "dir" : (d.isSymbolicLink() ? "symlink" : "file"),
+      };
+      if (!isDir) {
+        try { item.size = (await fs.promises.stat(item.path)).size; }
+        catch { /* skip size */ }
+      }
+      (isDir ? dirs : files).push(item);
+    }
+    dirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+    // Parent: one level up; null if we're at a drive root on Windows.
+    const parent = (() => {
+      const up = path.dirname(abs);
+      if (up === abs) return IS_WIN ? "" : null; // Windows: bubble to drive list
+      return up;
+    })();
+
+    writeJson(res, 200, {
+      path: abs,
+      parent,
+      isRoot: false,
+      platform: process.platform,
+      entries: [...dirs, ...files],
+    });
+  } catch (err) {
+    writeJson(res, 500, { error: err.message });
+  }
+}
+
+/* ----------------------------------------------------------
+   Uploads: stream raw POST body into <targetRoot>/uploads/<safeName>
+   ---------------------------------------------------------- */
+function safeUploadFilename(raw) {
+  let name = String(raw || "").trim();
+  // Strip any path component the browser might have sent (some send full paths).
+  name = name.replace(/^.*[\\/]/, "");
+  // Disallow ".." just in case.
+  if (!name || name === "." || name === "..") name = "upload";
+  // Allow letters, digits, dot, dash, underscore, space, parentheses, brackets.
+  name = name.replace(/[^\w.\-()\[\] ]+/g, "_");
+  if (name.length > 200) name = name.slice(0, 200);
+  return name;
+}
+
+async function ensureUniquePath(dir, baseName) {
+  const ext = path.extname(baseName);
+  const stem = baseName.slice(0, baseName.length - ext.length);
+  let candidate = baseName;
+  let n = 1;
+  while (true) {
+    const full = path.join(dir, candidate);
+    try {
+      await fs.promises.stat(full);
+      candidate = `${stem}-${n}${ext}`;
+      n++;
+    } catch { return full; }
+  }
+}
+
+async function handleLocalCodeUpload(req, res) {
+  const u = new URL(req.url, "http://x");
+  const filenameRaw = u.searchParams.get("filename") || "upload.bin";
+  const targetParam = u.searchParams.get("target") || "primary";
+  // The client tells us which of its known roots to drop the file under.
+  // We re-validate against the actual cwd + the user-supplied allowedDirs JSON
+  // header to avoid trusting the query string alone for path containment.
+  let cwd = CODE_CWD;
+  let allowedDirs = [];
+  try {
+    const ctxJson = req.headers["x-code-context"];
+    if (ctxJson) {
+      const parsed = JSON.parse(Buffer.from(ctxJson, "base64").toString("utf8"));
+      if (typeof parsed.cwd === "string" && parsed.cwd.trim()) cwd = parsed.cwd;
+      if (Array.isArray(parsed.allowedDirs)) allowedDirs = parsed.allowedDirs.filter(s => typeof s === "string");
+    }
+  } catch { /* malformed header → fall back to defaults */ }
+
+  // Resolve and validate cwd.
+  try {
+    const stat = fs.statSync(cwd);
+    if (!stat.isDirectory()) return writeJson(res, 400, { error: "cwd is not a directory" });
+  } catch (e) { return writeJson(res, 400, { error: `cwd not usable: ${e.message}` }); }
+
+  // Pick the target root: "primary" → cwd, "N" → allowedDirs[N], or an
+  // absolute path that must match one of the roots.
+  const roots = [path.resolve(cwd), ...allowedDirs.map(d => path.resolve(d))];
+  let targetRoot;
+  if (targetParam === "primary") {
+    targetRoot = roots[0];
+  } else if (/^\d+$/.test(targetParam)) {
+    const idx = parseInt(targetParam, 10);
+    if (idx < 0 || idx >= roots.length) return writeJson(res, 400, { error: `target index out of range: ${idx}` });
+    targetRoot = roots[idx];
+  } else {
+    const abs = path.resolve(targetParam);
+    if (!roots.some(r => abs === r || abs.startsWith(r + path.sep))) {
+      return writeJson(res, 400, { error: "target is not inside an allowed root" });
+    }
+    targetRoot = abs;
+  }
+
+  // Ensure <targetRoot>/uploads/ exists.
+  const uploadsDir = path.join(targetRoot, UPLOAD_SUBDIR);
+  try { await fs.promises.mkdir(uploadsDir, { recursive: true }); }
+  catch (e) { return writeJson(res, 500, { error: `mkdir failed: ${e.message}` }); }
+
+  const safeName = safeUploadFilename(filenameRaw);
+  const finalPath = await ensureUniquePath(uploadsDir, safeName);
+
+  // Stream the raw body into the target file with a hard size cap.
+  let total = 0;
+  let aborted = false;
+  const writeStream = fs.createWriteStream(finalPath);
+
+  await new Promise((resolve) => {
+    req.on("data", (chunk) => {
+      if (aborted) return;
+      total += chunk.length;
+      if (total > UPLOAD_MAX_BYTES) {
+        aborted = true;
+        writeStream.destroy();
+        // Drop the partial file.
+        fs.promises.unlink(finalPath).catch(() => {});
+        if (!res.headersSent) {
+          writeJson(res, 413, { error: `Upload too large (>${UPLOAD_MAX_BYTES} bytes)` });
+        }
+        try { req.destroy(); } catch {}
+        return resolve();
+      }
+      writeStream.write(chunk);
+    });
+    req.on("end", () => {
+      if (aborted) return;
+      writeStream.end(() => {
+        const rel = path.relative(targetRoot, finalPath).replace(/\\/g, "/");
+        writeJson(res, 200, {
+          ok: true,
+          name: path.basename(finalPath),
+          path: finalPath,
+          relPath: rel,
+          targetRoot,
+          bytes: total,
+        });
+        resolve();
+      });
+    });
+    req.on("error", (err) => {
+      if (aborted) return;
+      aborted = true;
+      writeStream.destroy();
+      fs.promises.unlink(finalPath).catch(() => {});
+      if (!res.headersSent) writeJson(res, 500, { error: `Upload failed: ${err.message}` });
+      resolve();
+    });
+  });
+}
+
 async function handleLocalCodeStop(req, res) {
   let body;
   try { body = await readJsonBody(req); }
@@ -1028,6 +1258,10 @@ const server = http.createServer((req, res) => {
     handleLocalCodeStop(req, res);
   } else if (pathname === "/local-code/verify-dirs" && req.method === "POST") {
     handleLocalCodeVerifyDirs(req, res);
+  } else if (pathname === "/local-code/fs/list" && req.method === "GET") {
+    handleLocalCodeFsList(req, res);
+  } else if (pathname === "/local-code/upload" && req.method === "POST") {
+    handleLocalCodeUpload(req, res);
   } else if (pathname.startsWith("/api/")) {
     proxyToOllama(req, res);
   } else if (req.method === "GET" || req.method === "HEAD") {

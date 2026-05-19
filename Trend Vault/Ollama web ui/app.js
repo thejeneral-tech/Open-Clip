@@ -64,6 +64,19 @@
   let currentCodeJobId = null;
   const codeToolUseEls = new Map();  // tool-call id -> DOM block
 
+  // Files staged for the next outgoing Code message. Each entry:
+  //   { id, name, sizeBytes, status: "uploading"|"done"|"error",
+  //     relPath?, absPath?, error?, el }
+  // Cleared after the message is sent so the agent only sees them once in-band.
+  const stagedAttachments = [];
+  let attachmentIdSeq = 0;
+  let dragDepth = 0;
+
+  // Directory picker modal state.
+  let dirPickerCurrentPath = "";
+  let dirPickerOnSelect = null;     // (absolutePath) => void
+  let dirPickerSelectLabel = "Select this folder";
+
   /* ----------------------------------------------------------
      Element refs
      ---------------------------------------------------------- */
@@ -118,6 +131,31 @@
     codeDirsBadge: $("codeDirsBadge"),
     codeStatus: $("codeStatus"),
     codeToolCap: $("codeToolCap"),
+    codePickCwdBtn: $("codePickCwdBtn"),
+    codeAddDirBtn: $("codeAddDirBtn"),
+
+    // Composer: file upload + drop zone (Code view only)
+    composer: document.querySelector(".composer"),
+    attachBtn: $("attachBtn"),
+    attachInput: $("attachInput"),
+    attachments: $("attachments"),
+    composerHint: $("composerHint"),
+    dropOverlay: $("dropOverlay"),
+    dropSub: $("dropSub"),
+
+    // Directory picker modal
+    dirPickerModal: $("dirPickerModal"),
+    dirPickerClose: $("dirPickerClose"),
+    dirPickerCancel: $("dirPickerCancel"),
+    dirPickerSelect: $("dirPickerSelect"),
+    dirPickerUp: $("dirPickerUp"),
+    dirPickerHome: $("dirPickerHome"),
+    dirPickerPath: $("dirPickerPath"),
+    dirPickerGo: $("dirPickerGo"),
+    dirPickerList: $("dirPickerList"),
+    dirPickerCurrent: $("dirPickerCurrent"),
+    codePickCwdSettingsBtn: $("codePickCwdSettingsBtn"),
+    codeAddDirSettingsBtn: $("codeAddDirSettingsBtn"),
 
     // settings modal
     modal: $("settingsModal"),
@@ -322,6 +360,7 @@
       el.newChatBtn.parentElement.style.display = "none";
       renderInstalledModels();
     }
+    refreshComposerForView();
   }
 
   /* ----------------------------------------------------------
@@ -995,6 +1034,31 @@
       blocksEl.appendChild(block);
       return block;
     }
+    if (b.type === "attachments") {
+      const wrap = document.createElement("div");
+      wrap.className = "message-attachments";
+      for (const it of (b.items || [])) {
+        const chip = document.createElement("div");
+        chip.className = "attachment-chip status-done in-message";
+        const icon = document.createElement("span");
+        icon.className = "attachment-icon"; icon.textContent = "📄";
+        chip.appendChild(icon);
+        const name = document.createElement("span");
+        name.className = "attachment-name";
+        name.textContent = it.relPath || it.name || "(file)";
+        name.title = it.relPath || it.name || "";
+        chip.appendChild(name);
+        if (Number.isFinite(it.sizeBytes) && it.sizeBytes > 0) {
+          const size = document.createElement("span");
+          size.className = "attachment-size";
+          size.textContent = formatChipSize(it.sizeBytes);
+          chip.appendChild(size);
+        }
+        wrap.appendChild(chip);
+      }
+      blocksEl.appendChild(wrap);
+      return wrap;
+    }
     return null;
   }
 
@@ -1044,6 +1108,335 @@
     }
   }
 
+  /* ----------------------------------------------------------
+     File uploads — drop / pick → POST /local-code/upload
+     ---------------------------------------------------------- */
+  function formatChipSize(n) {
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (n < 1024) return `${n}B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  // Build the X-Code-Context header value (base64 JSON) so the server can
+  // validate the upload target against the same cwd + allowedDirs the chat
+  // endpoint sees.
+  function buildCodeContextHeader() {
+    const cwd = settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
+    const allowedDirs = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [];
+    const json = JSON.stringify({ cwd, allowedDirs });
+    return btoa(unescape(encodeURIComponent(json)));
+  }
+
+  function renderAttachments() {
+    if (!el.attachments) return;
+    if (stagedAttachments.length === 0) {
+      el.attachments.hidden = true;
+      el.attachments.innerHTML = "";
+      return;
+    }
+    el.attachments.hidden = false;
+    el.attachments.innerHTML = "";
+    for (const att of stagedAttachments) {
+      const chip = document.createElement("div");
+      chip.className = `attachment-chip status-${att.status}`;
+      chip.dataset.id = att.id;
+
+      const icon = document.createElement("span");
+      icon.className = "attachment-icon";
+      icon.textContent =
+        att.status === "uploading" ? "⏳" :
+        att.status === "error" ? "✕" : "📄";
+      chip.appendChild(icon);
+
+      const name = document.createElement("span");
+      name.className = "attachment-name";
+      name.title = att.error || att.relPath || att.name;
+      name.textContent = att.name;
+      chip.appendChild(name);
+
+      const size = document.createElement("span");
+      size.className = "attachment-size";
+      size.textContent =
+        att.status === "uploading" ? "uploading…" :
+        att.status === "error" ? (att.error || "failed") :
+        formatChipSize(att.sizeBytes);
+      chip.appendChild(size);
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "attachment-remove";
+      del.title = "Remove";
+      del.textContent = "×";
+      del.addEventListener("click", () => {
+        const idx = stagedAttachments.findIndex((x) => x.id === att.id);
+        if (idx !== -1) stagedAttachments.splice(idx, 1);
+        renderAttachments();
+      });
+      chip.appendChild(del);
+
+      el.attachments.appendChild(chip);
+    }
+  }
+
+  async function uploadOneFile(file) {
+    const id = "att_" + (++attachmentIdSeq);
+    const entry = {
+      id,
+      name: file.name || "upload",
+      sizeBytes: file.size || 0,
+      status: "uploading",
+    };
+    stagedAttachments.push(entry);
+    renderAttachments();
+    try {
+      const ab = await file.arrayBuffer();
+      const qs = new URLSearchParams({
+        filename: file.name || "upload.bin",
+        target: "primary",
+      });
+      const res = await fetch(`/local-code/upload?${qs}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          "X-Code-Context": buildCodeContextHeader(),
+        },
+        body: ab,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      entry.status = "done";
+      entry.relPath = data.relPath;
+      entry.absPath = data.path;
+      entry.sizeBytes = data.bytes ?? entry.sizeBytes;
+      entry.name = data.name || entry.name;
+    } catch (err) {
+      entry.status = "error";
+      entry.error = err.message;
+    }
+    renderAttachments();
+  }
+
+  async function handlePickedFiles(files) {
+    if (!files || files.length === 0) return;
+    for (const f of Array.from(files)) {
+      // Run uploads in parallel — they're independent POSTs.
+      uploadOneFile(f).catch((err) => console.error("upload failed:", err));
+    }
+  }
+
+  function setDropOverlayShown(show) {
+    if (!el.dropOverlay) return;
+    el.dropOverlay.classList.toggle("hidden", !show);
+  }
+
+  // Install drag-and-drop on the chat area. Active only in Code view.
+  function installDropHandlers() {
+    const target = el.chatView;
+    if (!target) return;
+    const isInCodeView = () => activeView === "code";
+
+    target.addEventListener("dragenter", (e) => {
+      if (!isInCodeView()) return;
+      if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+      e.preventDefault();
+      dragDepth++;
+      setDropOverlayShown(true);
+    });
+    target.addEventListener("dragover", (e) => {
+      if (!isInCodeView()) return;
+      if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    target.addEventListener("dragleave", (e) => {
+      if (!isInCodeView()) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setDropOverlayShown(false);
+    });
+    target.addEventListener("drop", (e) => {
+      if (!isInCodeView()) return;
+      e.preventDefault();
+      dragDepth = 0;
+      setDropOverlayShown(false);
+      const files = e.dataTransfer?.files;
+      if (files && files.length) handlePickedFiles(files);
+    });
+  }
+
+  // Show / hide composer chrome when entering/leaving Code view.
+  function refreshComposerForView() {
+    const inCode = activeView === "code";
+    if (el.attachBtn) el.attachBtn.classList.toggle("hidden", !inCode);
+    if (!inCode) {
+      stagedAttachments.length = 0;
+      renderAttachments();
+      setDropOverlayShown(false);
+    } else {
+      renderAttachments();
+    }
+    if (el.composerHint) {
+      el.composerHint.textContent = inCode
+        ? "Enter to send · Shift+Enter for newline · drop files to attach"
+        : "Press Enter to send · Shift+Enter for newline";
+    }
+  }
+
+  /* ----------------------------------------------------------
+     Directory picker modal — browses the real server-side filesystem
+     ---------------------------------------------------------- */
+  function openDirPicker({ title, selectLabel, initialPath, onSelect }) {
+    dirPickerOnSelect = typeof onSelect === "function" ? onSelect : null;
+    dirPickerSelectLabel = selectLabel || "Select this folder";
+    const titleEl = document.getElementById("dirPickerTitle");
+    if (titleEl) titleEl.textContent = title || "Pick a directory";
+    if (el.dirPickerSelect) el.dirPickerSelect.textContent = dirPickerSelectLabel;
+    el.dirPickerModal.classList.remove("hidden");
+    el.dirPickerModal.setAttribute("aria-hidden", "false");
+    loadDirPicker(initialPath || "");
+  }
+
+  function closeDirPicker() {
+    el.dirPickerModal.classList.add("hidden");
+    el.dirPickerModal.setAttribute("aria-hidden", "true");
+    dirPickerOnSelect = null;
+  }
+
+  async function loadDirPicker(absPath) {
+    dirPickerCurrentPath = absPath || "";
+    if (el.dirPickerPath) el.dirPickerPath.value = absPath || "";
+    if (el.dirPickerCurrent) {
+      el.dirPickerCurrent.textContent = absPath || "(drives)";
+      el.dirPickerCurrent.title = absPath || "";
+    }
+    if (el.dirPickerList) {
+      el.dirPickerList.innerHTML = '<div class="dir-picker-empty">Loading…</div>';
+    }
+    let data;
+    try {
+      const qs = new URLSearchParams({ path: absPath || "" });
+      const res = await fetch(`/local-code/fs/list?${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } catch (err) {
+      el.dirPickerList.innerHTML =
+        `<div class="dir-picker-empty error">Couldn't list: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    renderDirPickerEntries(data);
+  }
+
+  function renderDirPickerEntries(data) {
+    if (!el.dirPickerList) return;
+    el.dirPickerList.innerHTML = "";
+
+    if (data.error) {
+      const empty = document.createElement("div");
+      empty.className = "dir-picker-empty error";
+      empty.textContent = data.error;
+      el.dirPickerList.appendChild(empty);
+    }
+
+    if (!data.isRoot && data.parent !== null) {
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "dir-picker-row dir-picker-up";
+      up.innerHTML =
+        '<span class="dir-picker-icon">⬆</span>' +
+        '<span class="dir-picker-name">.. (up one level)</span>';
+      up.addEventListener("click", () => loadDirPicker(data.parent || ""));
+      el.dirPickerList.appendChild(up);
+    }
+
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    if (entries.length === 0 && !data.error) {
+      const empty = document.createElement("div");
+      empty.className = "dir-picker-empty";
+      empty.textContent = data.isRoot ? "No drives detected." : "(empty)";
+      el.dirPickerList.appendChild(empty);
+      return;
+    }
+
+    for (const entry of entries) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "dir-picker-row";
+      const icon = entry.type === "drive" ? "💽" :
+                   entry.type === "dir" ? "📁" :
+                   entry.type === "symlink" ? "🔗" : "📄";
+      row.innerHTML =
+        `<span class="dir-picker-icon">${icon}</span>` +
+        `<span class="dir-picker-name">${escapeHtml(entry.name)}</span>`;
+      // Only dirs/drives are navigable; we don't list files in the picker by default.
+      if (entry.type === "dir" || entry.type === "drive") {
+        row.addEventListener("click", () => loadDirPicker(entry.path));
+      } else {
+        row.disabled = true;
+      }
+      el.dirPickerList.appendChild(row);
+    }
+  }
+
+  function confirmDirPicker() {
+    const chosen = dirPickerCurrentPath || (el.dirPickerPath ? el.dirPickerPath.value.trim() : "");
+    if (!chosen) {
+      alert("Pick a folder first (or paste an absolute path).");
+      return;
+    }
+    const cb = dirPickerOnSelect;
+    closeDirPicker();
+    if (cb) cb(chosen);
+  }
+
+  // Use the picker to set the primary cwd: writes back to settings and to
+  // both the banner and the open-Settings input if visible.
+  function pickPrimaryCwd() {
+    openDirPicker({
+      title: "Pick primary working directory",
+      selectLabel: "Use as primary directory",
+      initialPath: settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "",
+      onSelect: (absPath) => {
+        settings.codeCwd = absPath;
+        saveSettings();
+        if (el.codeCwdInput) el.codeCwdInput.value = absPath;
+        refreshCodeBanner();
+        // Re-check Ollama / cwd; this also picks up the new primary in the banner.
+        codeCheck();
+      },
+    });
+  }
+
+  // Use the picker to add an entry to the allowed-dirs list.
+  function pickAdditionalDir() {
+    openDirPicker({
+      title: "Add a directory the agent can read & edit",
+      selectLabel: "Add this directory",
+      initialPath: "",
+      onSelect: (absPath) => {
+        const list = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs.slice() : [];
+        const primary = settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
+        if (primary && absPath === primary) {
+          alert("That's already the primary directory.");
+          return;
+        }
+        if (list.includes(absPath)) {
+          alert("That directory is already in the list.");
+          return;
+        }
+        list.push(absPath);
+        settings.codeAllowedDirs = list;
+        saveSettings();
+        if (el.codeAllowedDirsInput) {
+          el.codeAllowedDirsInput.value = allowedDirsAsText(list);
+          updateAllowedDirsCount();
+        }
+        refreshCodeBanner();
+      },
+    });
+  }
+
   // Convert this conversation's prior messages into the wire format the
   // server expects under `history`. We strip our display-only fields and
   // pass plain Ollama-shaped messages.
@@ -1070,6 +1463,13 @@
       return;
     }
 
+    // If any uploads are still in flight, ask the user to wait.
+    const pendingUpload = stagedAttachments.find((a) => a.status === "uploading");
+    if (pendingUpload) {
+      alert("An upload is still in progress — please wait a moment.");
+      return;
+    }
+
     const c = ctx();
     let conv = getActiveConversation();
     if (!conv) conv = createConversation();
@@ -1077,14 +1477,45 @@
     // History includes everything BEFORE the new user turn.
     const history = buildAgentHistory(conv);
 
-    // Append user message visibly.
-    const userMsg = { role: "user", content: text, blocks: [{ type: "text", text }] };
+    // If the user attached files, prepend a small "attached" preamble so the
+    // agent sees the saved paths in-band. Only successful uploads are listed;
+    // failed ones are shown to the user as chips but not sent.
+    const okAttachments = stagedAttachments.filter((a) => a.status === "done");
+    let promptToSend = text;
+    if (okAttachments.length > 0) {
+      const lines = okAttachments.map((a) => {
+        const size = formatChipSize(a.sizeBytes);
+        return `  • ${a.relPath || a.name}${size ? ` (${size})` : ""}`;
+      });
+      promptToSend =
+        `[The user attached ${okAttachments.length} file${okAttachments.length === 1 ? "" : "s"}, ` +
+        `saved into the primary working directory:\n${lines.join("\n")}\n` +
+        `You can read or edit them with the file tools.]\n\n${text}`;
+    }
+
+    // Append user message visibly. We render the attachments inline in the
+    // bubble so the conversation history makes sense on re-open.
+    const userBlocks = [];
+    if (okAttachments.length > 0) {
+      userBlocks.push({
+        type: "attachments",
+        items: okAttachments.map((a) => ({
+          name: a.name, relPath: a.relPath, sizeBytes: a.sizeBytes,
+        })),
+      });
+    }
+    userBlocks.push({ type: "text", text });
+    const userMsg = { role: "user", content: text, blocks: userBlocks };
     conv.messages.push(userMsg);
     setConversationTitle(conv, text);
     conv.model = model;
     c.save();
     el.welcome.classList.add("hidden");
     el.messages.appendChild(buildCodeMessageEl(userMsg));
+
+    // Clear the staged attachments — they've been "sent".
+    stagedAttachments.length = 0;
+    renderAttachments();
 
     // Streaming assistant placeholder.
     const assistantMsg = { role: "assistant", content: "", blocks: [] };
@@ -1105,7 +1536,7 @@
     currentAbortController = new AbortController();
 
     const body = {
-      prompt: text,
+      prompt: promptToSend,
       model,
       history,
       cwd: settings.codeCwd || undefined,
@@ -1532,6 +1963,96 @@
     if (el.codeVerifyDirsBtn) {
       el.codeVerifyDirsBtn.addEventListener("click", verifyAllowedDirs);
     }
+
+    // Local Code: directory picker buttons in the banner.
+    if (el.codePickCwdBtn) el.codePickCwdBtn.addEventListener("click", pickPrimaryCwd);
+    if (el.codeAddDirBtn) el.codeAddDirBtn.addEventListener("click", pickAdditionalDir);
+
+    // Local Code: directory picker buttons in Settings.
+    if (el.codePickCwdSettingsBtn) {
+      el.codePickCwdSettingsBtn.addEventListener("click", () => {
+        openDirPicker({
+          title: "Pick primary working directory",
+          selectLabel: "Use as primary directory",
+          initialPath: (el.codeCwdInput && el.codeCwdInput.value.trim()) ||
+                       settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "",
+          onSelect: (abs) => {
+            if (el.codeCwdInput) el.codeCwdInput.value = abs;
+          },
+        });
+      });
+    }
+    if (el.codeAddDirSettingsBtn) {
+      el.codeAddDirSettingsBtn.addEventListener("click", () => {
+        openDirPicker({
+          title: "Add a directory the agent can read & edit",
+          selectLabel: "Add this directory",
+          initialPath: "",
+          onSelect: (abs) => {
+            if (!el.codeAllowedDirsInput) return;
+            const current = parseAllowedDirsText(el.codeAllowedDirsInput.value);
+            if (current.includes(abs)) {
+              alert("That directory is already in the list.");
+              return;
+            }
+            current.push(abs);
+            el.codeAllowedDirsInput.value = allowedDirsAsText(current);
+            updateAllowedDirsCount();
+          },
+        });
+      });
+    }
+
+    // Directory picker modal — wiring.
+    if (el.dirPickerClose) el.dirPickerClose.addEventListener("click", closeDirPicker);
+    if (el.dirPickerCancel) el.dirPickerCancel.addEventListener("click", closeDirPicker);
+    if (el.dirPickerSelect) el.dirPickerSelect.addEventListener("click", confirmDirPicker);
+    if (el.dirPickerUp) {
+      el.dirPickerUp.addEventListener("click", async () => {
+        // Re-fetch parent of current path. The list endpoint also returns parent,
+        // but we can re-derive client-side by asking the server again.
+        const qs = new URLSearchParams({ path: dirPickerCurrentPath || "" });
+        try {
+          const res = await fetch(`/local-code/fs/list?${qs}`);
+          const data = await res.json();
+          if (data.parent !== null && data.parent !== undefined) {
+            loadDirPicker(data.parent);
+          }
+        } catch { /* ignore */ }
+      });
+    }
+    if (el.dirPickerHome) {
+      el.dirPickerHome.addEventListener("click", () => loadDirPicker(""));
+    }
+    if (el.dirPickerGo) {
+      el.dirPickerGo.addEventListener("click", () => {
+        const p = el.dirPickerPath ? el.dirPickerPath.value.trim() : "";
+        loadDirPicker(p);
+      });
+    }
+    if (el.dirPickerPath) {
+      el.dirPickerPath.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          loadDirPicker(el.dirPickerPath.value.trim());
+        }
+      });
+    }
+    if (el.dirPickerModal) {
+      el.dirPickerModal.addEventListener("click", (e) => {
+        if (e.target === el.dirPickerModal) closeDirPicker();
+      });
+    }
+
+    // File upload: button + hidden input + drop overlay.
+    if (el.attachBtn && el.attachInput) {
+      el.attachBtn.addEventListener("click", () => el.attachInput.click());
+      el.attachInput.addEventListener("change", () => {
+        handlePickedFiles(el.attachInput.files);
+        el.attachInput.value = ""; // allow re-picking the same file
+      });
+    }
+    installDropHandlers();
 
     // Models view: pull form
     el.pullForm.addEventListener("submit", (e) => {
