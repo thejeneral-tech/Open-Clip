@@ -778,7 +778,9 @@
   function refreshCodeBanner() {
     if (!el.codeBanner) return;
     const info = codeCheckInfo || {};
-    const cwd = info.cwd || settings.codeCwd || "(unknown cwd)";
+    // Prefer the user's pick (Settings or Browse) — that's what gets sent as
+    // body.cwd to the agent. Server default is only the fallback.
+    const cwd = settings.codeCwd || info.cwd || "(unknown cwd)";
     el.codeCwd.textContent = cwd;
     el.codeCwd.title = cwd;
 
