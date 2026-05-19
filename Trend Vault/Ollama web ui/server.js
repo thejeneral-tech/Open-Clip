@@ -654,6 +654,87 @@ function ollamaPost(pathname, body, signal) {
   });
 }
 
+// Streaming variant of /api/chat. Consumes the ndjson stream Ollama sends
+// back, fires `onChunk(piece)` for every non-empty content fragment, then
+// resolves with the same shape ollamaPost would have returned (so the
+// agent loop can keep reading `resp.message` and `resp.eval_count`).
+function ollamaChatStream(body, signal, onChunk) {
+  return new Promise((resolve, reject) => {
+    const target = new URL("/api/chat", OLLAMA_HOST);
+    const opts = {
+      protocol: ollamaUrl.protocol,
+      hostname: ollamaUrl.hostname,
+      port: ollamaUrl.port || (ollamaUrl.protocol === "https:" ? 443 : 80),
+      path: target.pathname + target.search,
+      method: "POST",
+      family: 4,
+      headers: { "Content-Type": "application/json" },
+    };
+    const req = proxyAgent.request(opts, (resp) => {
+      let buf = "";
+      let accumContent = "";
+      let toolCalls = [];
+      let role = "assistant";
+      const final = {};
+      let httpErr = null;
+      resp.setEncoding("utf8");
+      resp.on("data", (c) => {
+        buf += c;
+        let nl;
+        while ((nl = buf.indexOf("\n")) !== -1) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let obj;
+          try { obj = JSON.parse(line); } catch { continue; }
+          if (resp.statusCode >= 400) {
+            httpErr = obj.error || `HTTP ${resp.statusCode}`;
+            continue;
+          }
+          const msg = obj.message || {};
+          if (msg.role) role = msg.role;
+          const piece = typeof msg.content === "string" ? msg.content : "";
+          if (piece) {
+            accumContent += piece;
+            try { onChunk && onChunk(piece); } catch { /* listener errors are not fatal */ }
+          }
+          if (Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+            // Some backends fragment tool_calls into multiple chunks; just collect.
+            toolCalls = toolCalls.concat(msg.tool_calls);
+          }
+          if (obj.done) {
+            final.eval_count = obj.eval_count || 0;
+            final.eval_duration = obj.eval_duration || 0;
+            final.prompt_eval_count = obj.prompt_eval_count || 0;
+            final.prompt_eval_duration = obj.prompt_eval_duration || 0;
+            final.total_duration = obj.total_duration || 0;
+            final.load_duration = obj.load_duration || 0;
+          }
+        }
+      });
+      resp.on("end", () => {
+        if (httpErr) return reject(new Error(httpErr));
+        resolve({
+          message: {
+            role,
+            content: accumContent,
+            tool_calls: toolCalls.length ? toolCalls : undefined,
+          },
+          ...final,
+        });
+      });
+      resp.on("error", reject);
+    });
+    req.on("error", reject);
+    if (signal) {
+      const onAbort = () => req.destroy(new Error("aborted"));
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    }
+    req.end(JSON.stringify({ ...body, stream: true }));
+  });
+}
+
 function ollamaGet(pathname, signal) {
   return new Promise((resolve, reject) => {
     const target = new URL(pathname, OLLAMA_HOST);
@@ -904,13 +985,17 @@ async function handleLocalCodeChat(req, res) {
 
       let resp;
       try {
-        resp = await ollamaPost("/api/chat", {
+        // Stream from Ollama so we can forward each text chunk to the client
+        // (powers the live tokens/seconds/t-s counter while the model is
+        // still generating, instead of going dark until the turn finishes).
+        resp = await ollamaChatStream({
           model,
           messages,
           tools: AGENT_TOOLS,
-          stream: false,
           options: body.options || {},
-        }, abort.signal);
+        }, abort.signal, (piece) => {
+          emit({ kind: "live_token", text: piece });
+        });
       } catch (err) {
         emit({ kind: "error", message: `Ollama request failed: ${err.message}` });
         break;

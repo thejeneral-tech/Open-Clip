@@ -2332,6 +2332,11 @@
               entry.block.result = env.output;
               entry.block.isError = !!env.isError;
             }
+          } else if (env.kind === "live_token") {
+            // Server forwards each Ollama text chunk while the agent's
+            // turn is still in progress — bump the live counter so the
+            // user sees tokens ticking instead of just a clock.
+            live.addTokens(1);
           } else if (env.kind === "turn_stats") {
             // Tally per-turn perf counters from each /api/chat round-trip
             // the server made on our behalf, and push the running total
