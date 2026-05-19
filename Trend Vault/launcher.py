@@ -148,8 +148,12 @@ class TrendVaultLauncher(tk.Tk):
         self._procs: dict[str, subprocess.Popen] = {}
         self._lock  = threading.Lock()
         self._installing_ollama = False
-        self._cached_model: str | None = None
-        self._busy_prompt = False
+        # CLI runner state
+        self._cli_proc: subprocess.Popen | None = None
+        self._cli_busy = False
+        self._cli_history: list[str] = []
+        self._cli_history_idx: int = -1   # index into _cli_history while browsing
+        self._cli_draft: str = ''         # what was typed before browsing history
 
         self._build_ui()
         self._poll()                                 # start status polling loop
@@ -218,9 +222,10 @@ class TrendVaultLauncher(tk.Tk):
         rhdr.pack(fill='x', padx=20, pady=(18, 6))
         tk.Label(rhdr, text='CONSOLE', bg=BG2, fg=ACCENT,
                  font=('Segoe UI', 9, 'bold')).pack(side='left')
-        self._model_var = tk.StringVar(value='ollama: not connected')
-        tk.Label(rhdr, textvariable=self._model_var, bg=BG2, fg=MUTED,
-                 font=('Segoe UI', 8)).pack(side='left', padx=(12, 0))
+        # Shows the cwd that CLI commands run in.
+        self._cwd_var = tk.StringVar(value='cwd: ' + ROOT)
+        tk.Label(rhdr, textvariable=self._cwd_var, bg=BG2, fg=MUTED,
+                 font=('Consolas', 8)).pack(side='left', padx=(12, 0))
         self._btn(rhdr, 'clear', self._clear_log, BG2, MUTED,
                   font=('Segoe UI', 8)).pack(side='right')
 
@@ -236,14 +241,15 @@ class TrendVaultLauncher(tk.Tk):
         self._log.pack(fill='both', expand=True, padx=1, pady=1)
         self._log.tag_configure('inline', foreground=TEXT)
 
-        # ── Prompt input row ──
-        tk.Label(right, text='PROMPT  (Enter to send to Ollama)', bg=BG2, fg=MUTED,
-                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=20, pady=(2, 4))
+        # ── CLI input row ──
+        tk.Label(right, text='CLI  (Enter to run a shell command  ·  Up/Down for history)',
+                 bg=BG2, fg=MUTED, font=('Segoe UI', 8, 'bold')
+                 ).pack(anchor='w', padx=20, pady=(2, 4))
         prompt_wrap = tk.Frame(right, bg=BORDER)
         prompt_wrap.pack(fill='x', padx=20, pady=(0, 18))
         prompt_row = tk.Frame(prompt_wrap, bg=BG)
         prompt_row.pack(fill='x', padx=1, pady=1)
-        tk.Label(prompt_row, text='>', bg=BG, fg=ACCENT,
+        tk.Label(prompt_row, text='$', bg=BG, fg=ACCENT,
                  font=('Consolas', 13, 'bold')).pack(side='left', padx=(10, 6), pady=4)
         self._prompt_var = tk.StringVar()
         self._prompt_entry = tk.Entry(
@@ -253,12 +259,19 @@ class TrendVaultLauncher(tk.Tk):
             font=('Consolas', 10),
         )
         self._prompt_entry.pack(side='left', fill='x', expand=True, ipady=8)
-        self._prompt_entry.bind('<Return>', lambda e: self._send_prompt())
-        self._btn(prompt_row, 'SEND', self._send_prompt, BTN_GO, GREEN,
-                  font=('Segoe UI', 9, 'bold')).pack(side='left', padx=(6, 6), pady=4)
-
-        # Fetch the active ollama model in the background to populate the chip
-        self.after(1500, lambda: threading.Thread(target=self._refresh_model, daemon=True).start())
+        self._prompt_entry.bind('<Return>',   lambda e: self._run_cli())
+        self._prompt_entry.bind('<Up>',       lambda e: self._history_prev())
+        self._prompt_entry.bind('<Down>',     lambda e: self._history_next())
+        # Stop the currently-running command (Ctrl+C is a no-op in tk Entry,
+        # so we use Esc and a STOP button).
+        self._prompt_entry.bind('<Escape>',   lambda e: self._stop_cli())
+        self._run_btn = self._btn(prompt_row, 'RUN', self._run_cli, BTN_GO, GREEN,
+                                  font=('Segoe UI', 9, 'bold'))
+        self._run_btn.pack(side='left', padx=(6, 3), pady=4)
+        self._stop_btn = self._btn(prompt_row, 'STOP', self._stop_cli, BTN_STP, RED,
+                                   font=('Segoe UI', 9, 'bold'))
+        self._stop_btn.pack(side='left', padx=(0, 6), pady=4)
+        self._stop_btn.configure(state='disabled')
 
     def _make_card(self, parent: tk.Frame, svc: dict) -> dict:
         card = tk.Frame(parent, bg=CARD, bd=0, padx=16, pady=12,
@@ -643,83 +656,120 @@ class TrendVaultLauncher(tk.Tk):
         webbrowser.open(url)
         self._log_line('Opening ' + url, ACCENT)
 
-    # ── Ollama prompt sender ─────────────────────────────────────────────────
-    def _refresh_model(self):
-        """Fetch the first available ollama model and cache it for prompts."""
-        import urllib.request, json
-        try:
-            with urllib.request.urlopen('http://127.0.0.1:11434/api/tags', timeout=3) as resp:
-                data = json.load(resp)
-            models = data.get('models') or []
-            if not models:
-                self.after(0, lambda: self._model_var.set('ollama: no models -- run `ollama pull llama3.2`'))
-                self._cached_model = None
-                return
-            name = models[0].get('name') or models[0].get('model')
-            self._cached_model = name
-            self.after(0, lambda: self._model_var.set('ollama: ' + str(name)))
-        except Exception:
-            self.after(0, lambda: self._model_var.set('ollama: not connected'))
-            self._cached_model = None
+    # ── CLI runner ───────────────────────────────────────────────────────────
+    def _set_cli_busy(self, busy: bool):
+        """Toggle RUN/STOP button enablement to reflect command state."""
+        self._cli_busy = busy
+        def _do():
+            try:
+                self._run_btn.configure(state='disabled' if busy else 'normal')
+                self._stop_btn.configure(state='normal' if busy else 'disabled')
+            except Exception:
+                pass
+        self.after(0, _do)
 
-    def _send_prompt(self):
-        text = self._prompt_var.get().strip()
-        if not text:
+    def _run_cli(self):
+        cmd = self._prompt_var.get().strip()
+        if not cmd:
             return
-        if self._busy_prompt:
-            self._log_line('Still streaming previous response, please wait...', AMBER)
+        if self._cli_busy:
+            self._log_line('A command is still running -- click STOP first or wait', AMBER)
             return
+        # History bookkeeping (dedupe consecutive repeats).
+        if not self._cli_history or self._cli_history[-1] != cmd:
+            self._cli_history.append(cmd)
+            # Keep the buffer bounded.
+            if len(self._cli_history) > 200:
+                self._cli_history = self._cli_history[-200:]
+        self._cli_history_idx = -1
+        self._cli_draft = ''
         self._prompt_var.set('')
-        if not resolve_ollama():
-            self._log_line('Ollama not installed -- click START on the Ollama card to install', AMBER)
-            return
-        if not port_in_use(11434):
-            self._log_line('Ollama not running -- click START on the Ollama card', AMBER)
-            return
-        self._log_line('> ' + text, ACCENT)
-        threading.Thread(target=self._stream_ollama, args=(text,), daemon=True).start()
 
-    def _stream_ollama(self, prompt: str):
-        import urllib.request, json
-        self._busy_prompt = True
+        # Render the command in the log like a real shell prompt.
+        self._log_line('$ ' + cmd, ACCENT)
+        threading.Thread(target=self._spawn_cli, args=(cmd,), daemon=True).start()
+
+    def _spawn_cli(self, cmd: str):
+        """Run `cmd` via the shell, streaming stdout+stderr to the log."""
+        self._set_cli_busy(True)
         try:
-            model = self._cached_model
-            if not model:
-                self._refresh_model()
-                model = self._cached_model
-            if not model:
-                self._log_line('No ollama models installed. Run: ollama pull llama3.2', RED)
-                return
-            payload = json.dumps({
-                'model': model,
-                'prompt': prompt,
-                'stream': True,
-            }).encode('utf-8')
-            req = urllib.request.Request(
-                'http://127.0.0.1:11434/api/generate',
-                data=payload,
-                headers={'Content-Type': 'application/json'},
+            proc = subprocess.Popen(
+                cmd,
+                cwd=ROOT,
+                env={**os.environ},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding='utf-8',
+                errors='replace',
+                bufsize=1,
+                shell=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
             )
-            self._append_inline('  ', leading_ts=True)
-            with urllib.request.urlopen(req, timeout=300) as resp:
-                for raw in resp:
-                    raw = raw.strip()
-                    if not raw:
-                        continue
-                    try:
-                        obj = json.loads(raw)
-                    except Exception:
-                        continue
-                    chunk = obj.get('response') or ''
-                    if chunk:
-                        self._append_inline(chunk)
-                    if obj.get('done'):
-                        self._append_inline('\n')
-                        break
+            self._cli_proc = proc
+            self._append_inline('', leading_ts=True)
+            for raw in proc.stdout:
+                line = raw.rstrip('\r\n')
+                # Stream each line as it arrives. We use _append_inline so we
+                # don't stamp every line with [HH:MM:SS], keeping the output
+                # readable for long commands.
+                self._append_inline(line + '\n')
+            proc.wait()
+            code = proc.returncode
+            self._log_line(
+                '(exit ' + str(code) + ')',
+                GREEN if code == 0 else RED,
+            )
+        except FileNotFoundError as e:
+            self._log_line('command not found: ' + str(e), RED)
         except Exception as e:
-            self._log_line('Ollama error: ' + str(e), RED)
+            self._log_line('CLI error: ' + str(e), RED)
         finally:
-            self._busy_prompt = False
+            self._cli_proc = None
+            self._set_cli_busy(False)
+
+    def _stop_cli(self):
+        """Terminate the currently-running CLI command, if any."""
+        proc = self._cli_proc
+        if not proc:
+            return
+        self._log_line('^C -- stopping command...', AMBER)
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        except Exception as e:
+            self._log_line('stop failed: ' + str(e), RED)
+
+    # ── CLI history navigation (Up/Down) ─────────────────────────────────────
+    def _history_prev(self):
+        """Up arrow: walk one step further back in history."""
+        if not self._cli_history:
+            return 'break'
+        if self._cli_history_idx == -1:
+            # First Up press — remember what the user was typing.
+            self._cli_draft = self._prompt_var.get()
+            self._cli_history_idx = len(self._cli_history) - 1
+        elif self._cli_history_idx > 0:
+            self._cli_history_idx -= 1
+        self._prompt_var.set(self._cli_history[self._cli_history_idx])
+        # Move caret to end after the variable update.
+        self.after(0, lambda: self._prompt_entry.icursor('end'))
+        return 'break'
+
+    def _history_next(self):
+        """Down arrow: walk one step forward; past the newest restores the draft."""
+        if self._cli_history_idx == -1:
+            return 'break'
+        if self._cli_history_idx < len(self._cli_history) - 1:
+            self._cli_history_idx += 1
+            self._prompt_var.set(self._cli_history[self._cli_history_idx])
+        else:
+            self._cli_history_idx = -1
+            self._prompt_var.set(self._cli_draft)
+        self.after(0, lambda: self._prompt_entry.icursor('end'))
+        return 'break'
 
     def _append_inline(self, text: str, leading_ts: bool = False):
         """Stream raw text into the log without per-token timestamps."""
@@ -741,6 +791,10 @@ class TrendVaultLauncher(tk.Tk):
             if proc:
                 try: proc.terminate()
                 except Exception: pass
+        # Also kill any in-flight CLI command so the launcher can exit cleanly.
+        if self._cli_proc:
+            try: self._cli_proc.terminate()
+            except Exception: pass
         super().destroy()
 
 
