@@ -1343,6 +1343,41 @@
     });
   }
 
+  // Live, in-flight stats element used in place of the typing dots while the
+  // model generates. Returns the element + an update() function the caller
+  // can call whenever tokens are accumulated. Caller is responsible for
+  // remove()'ing it when generation finishes.
+  function buildLiveStats() {
+    const wrap = document.createElement("div");
+    wrap.className = "live-stats";
+    const pulse = document.createElement("span");
+    pulse.className = "live-pulse";
+    wrap.appendChild(pulse);
+    const label = document.createElement("span");
+    label.className = "live-stats-label";
+    label.textContent = "waiting…";
+    wrap.appendChild(label);
+    const start = performance.now();
+    let tokens = 0;
+    const render = () => {
+      const elapsed = (performance.now() - start) / 1000;
+      if (tokens <= 0) {
+        label.textContent = `thinking… ${elapsed.toFixed(1)}s`;
+        return;
+      }
+      const tps = elapsed > 0 ? tokens / elapsed : 0;
+      label.textContent =
+        `${tokens.toLocaleString()} tokens · ${elapsed.toFixed(1)}s · ${tps.toFixed(2)} t/s`;
+    };
+    const tick = setInterval(render, 150);
+    return {
+      el: wrap,
+      addTokens(n) { tokens += n; render(); },
+      setTokens(n) { tokens = n; render(); },
+      stop() { clearInterval(tick); },
+    };
+  }
+
   function regenerateMessage(conv, msg) {
     if (msg.role !== "assistant") return;
     const idx = conv.messages.indexOf(msg);
@@ -2209,10 +2244,11 @@
     conv.messages.push(assistantMsg);
     const assistantEl = buildCodeMessageEl(assistantMsg, conv);
     const blocksEl = assistantEl._blocksEl;
-    const typing = document.createElement("div");
-    typing.className = "typing";
-    typing.innerHTML = "<span></span><span></span><span></span>";
-    blocksEl.appendChild(typing);
+    // Live stats line — replaces the old bouncing-dots typing indicator.
+    // Token count is fed from server-emitted "turn_stats" events as the
+    // agent loops; the timer starts immediately so the user sees activity.
+    const live = buildLiveStats();
+    assistantEl.querySelector(".message-body").appendChild(live.el);
     el.messages.appendChild(assistantEl);
     scrollToBottom();
 
@@ -2254,7 +2290,6 @@
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let firstChunkSeen = false;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -2267,11 +2302,6 @@
           if (!line) continue;
           let env;
           try { env = JSON.parse(line); } catch { continue; }
-
-          if (!firstChunkSeen) {
-            firstChunkSeen = true;
-            if (typing.parentElement) typing.remove();
-          }
 
           if (env.kind === "meta") {
             currentCodeJobId = env.jobId;
@@ -2302,13 +2332,15 @@
             }
           } else if (env.kind === "turn_stats") {
             // Tally per-turn perf counters from each /api/chat round-trip
-            // the server made on our behalf.
+            // the server made on our behalf, and push the running total
+            // into the live indicator so the user sees it climb.
             if (!assistantMsg.stats) {
               assistantMsg.stats = { model, tokens: 0, evalDurNs: 0, totalDurNs: 0 };
             }
             assistantMsg.stats.tokens += env.evalCount || 0;
             assistantMsg.stats.evalDurNs += env.evalDuration || 0;
             assistantMsg.stats.totalDurNs += env.totalDuration || 0;
+            live.setTokens(assistantMsg.stats.tokens);
           } else if (env.kind === "warning") {
             const w = { type: "text", text: `_${env.message}_` };
             assistantMsg.blocks.push(w);
@@ -2336,7 +2368,9 @@
         appendBlockEl(blocksEl, e);
       }
     } finally {
-      if (typing.parentElement) typing.remove();
+      // Tear down the live counter; the final stats bar takes its place.
+      live.stop();
+      if (live.el.parentElement) live.el.remove();
       isStreaming = false;
       currentAbortController = null;
       currentCodeJobId = null;
@@ -2415,8 +2449,10 @@
     conv.messages.push(assistantMsg);
     const assistantEl = buildMessageEl(assistantMsg, conv);
     const contentEl = assistantEl.querySelector(".message-content");
-    contentEl.innerHTML =
-      '<div class="typing"><span></span><span></span><span></span></div>';
+    // Live stats line — replaces the old bouncing-dots typing indicator
+    // and updates every 150ms while the model streams.
+    const live = buildLiveStats();
+    assistantEl.querySelector(".message-body").appendChild(live.el);
     el.messages.appendChild(assistantEl);
     scrollToBottom();
 
@@ -2471,10 +2507,11 @@
             const chunk = JSON.parse(line);
             const piece = chunk.message?.content || "";
             if (piece) {
-              if (!firstTokenSeen) {
-                firstTokenSeen = true;
-                contentEl.innerHTML = "";
-              }
+              firstTokenSeen = true;
+              // Each /api/chat chunk is approximately one token for the
+              // running counter; the final stats bar uses Ollama's
+              // authoritative eval_count.
+              live.addTokens(1);
               assistantMsg.content += piece;
               contentEl.innerHTML = renderMarkdown(assistantMsg.content);
               scrollToBottom();
@@ -2512,7 +2549,9 @@
       el.stopBtn.classList.add("hidden");
       c.save();
       localStorage.setItem(c.lastModelKey, model);
-      // Append the stats bar + action buttons under the just-finished bubble.
+      // Tear down the live-stats line; the final stats bar takes its place.
+      live.stop();
+      if (live.el.parentElement) live.el.remove();
       const statsBar = buildStatsBar(assistantMsg.stats);
       if (statsBar) assistantEl.querySelector(".message-body").appendChild(statsBar);
       const actionBar = buildActionBar(getActiveConversation(), assistantMsg);
