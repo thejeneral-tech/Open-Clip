@@ -1847,6 +1847,112 @@ input, textarea, select {
   text-align: center;
 }
 
+/* ============================================================
+   Per-message stats bar + action buttons (LM-Studio style)
+   ============================================================ */
+.msg-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.msg-stats .stats-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+}
+.msg-stats .stats-chip svg { opacity: 0.75; flex-shrink: 0; }
+.msg-stats .stats-model { padding: 3px 4px 3px 10px; }
+.msg-stats .stats-model-name {
+  font-weight: 500;
+}
+.msg-stats .stats-sub {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.msg-stats .stats-sub-quant { letter-spacing: 0.02em; }
+
+.msg-stats .stats-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.msg-stats .stats-info svg { opacity: 0.7; }
+
+/* Action row: copy / edit / regenerate / delete */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+.msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.msg-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-subtle);
+}
+.msg-action-btn.status-ok { color: #10b981; }
+.msg-action-btn svg { display: block; }
+
+/* Code-mode messages use monospace globally; keep stats labels tighter. */
+.message.code-msg .msg-stats { margin-top: 12px; }
+
+/* Inline edit mode (when you click the pencil) */
+.msg-edit {
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.msg-edit-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  resize: vertical;
+  min-height: 80px;
+}
+.msg-edit-textarea:focus { outline: none; border-color: var(--accent); }
+.msg-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 /* Project modal footer: spacer pushes Cancel/Save right; Delete sits left. */
 .modal-footer-spacer { flex: 1; }
 .btn-link.danger {

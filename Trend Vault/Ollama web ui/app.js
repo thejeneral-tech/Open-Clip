@@ -503,7 +503,7 @@
     scrollToBottom();
   }
 
-  function buildMessageEl(msg) {
+  function buildMessageEl(msg, conv) {
     const wrapper = document.createElement("div");
     wrapper.className = "message " + msg.role;
 
@@ -524,6 +524,15 @@
     content.className = "message-content";
     content.innerHTML = renderMarkdown(msg.content || "");
     body.appendChild(content);
+
+    // Replay stats + actions for assistant turns when re-rendering history.
+    // Skipped for the live streaming placeholder (empty content) — the
+    // sendMessage finally-block adds them after the stream completes.
+    if (msg.role === "assistant" && msg.content && msg.content.trim()) {
+      const statsBar = buildStatsBar(msg.stats);
+      if (statsBar) body.appendChild(statsBar);
+      body.appendChild(buildActionBar(conv, msg));
+    }
 
     wrapper.appendChild(body);
     return wrapper;
@@ -1100,6 +1109,260 @@
     return seed.slice(0, 2).toUpperCase() || "AG";
   }
 
+  /* ----------------------------------------------------------
+     Per-message stats bar + action buttons (LM-Studio style)
+     ---------------------------------------------------------- */
+  function getModelDetails(modelName) {
+    if (!modelName) return { paramSize: "", quantization: "" };
+    const m = allModels.find((x) => x.name === modelName);
+    if (!m || !m.details) return { paramSize: "", quantization: "" };
+    return {
+      paramSize: m.details.parameter_size || "",
+      quantization: m.details.quantization_level || "",
+    };
+  }
+
+  function formatNumberCompact(n) {
+    if (!Number.isFinite(n)) return "0";
+    if (n < 10000) return n.toLocaleString();
+    if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    return (n / 1_000_000).toFixed(2) + "M";
+  }
+
+  function formatDurationShort(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return "0s";
+    if (seconds < 1) return Math.max(1, Math.round(seconds * 1000)) + "ms";
+    if (seconds < 10) return seconds.toFixed(1) + "s";
+    if (seconds < 60) return Math.round(seconds) + "s";
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds - m * 60);
+    if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+    const h = Math.floor(m / 60);
+    const mm = m - h * 60;
+    return mm ? `${h}h ${mm}m` : `${h}h`;
+  }
+
+  // Plain message text, regardless of whether content is a flat string
+  // (chat mode) or a list of typed blocks (code mode).
+  function messagePlainText(msg) {
+    if (!msg) return "";
+    if (typeof msg.content === "string" && msg.content) return msg.content;
+    const blocks = Array.isArray(msg.blocks) ? msg.blocks : [];
+    return blocks.filter((b) => b && b.type === "text")
+      .map((b) => b.text || "")
+      .join("\n\n");
+  }
+
+  // Inline SVG factory — keeps the inline icons consistent.
+  function svgEl(width, height, paths) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.innerHTML = paths;
+    return svg;
+  }
+
+  // Build the chip strip you see right under a completed assistant turn:
+  //   ◇ model 9B Q8_0    ≣ 382 tokens    ⏱ 14s    ◔ 26.83 t/s
+  function buildStatsBar(stats) {
+    if (!stats) return null;
+    const bar = document.createElement("div");
+    bar.className = "msg-stats";
+
+    const details = getModelDetails(stats.model);
+
+    const modelChip = document.createElement("span");
+    modelChip.className = "stats-chip stats-model";
+    modelChip.appendChild(svgEl(13, 13,
+      '<path d="M12 2 L22 8 L22 16 L12 22 L2 16 L2 8 Z"/><path d="M2 8 L12 14 L22 8"/><line x1="12" y1="14" x2="12" y2="22"/>'));
+    const name = document.createElement("span");
+    name.className = "stats-model-name";
+    name.textContent = stats.model || "(unknown model)";
+    modelChip.appendChild(name);
+    if (details.paramSize) {
+      const sub = document.createElement("span");
+      sub.className = "stats-sub";
+      sub.textContent = details.paramSize.replace(/\s+/g, "").toUpperCase();
+      modelChip.appendChild(sub);
+    }
+    if (details.quantization) {
+      const sub = document.createElement("span");
+      sub.className = "stats-sub stats-sub-quant";
+      sub.textContent = `${details.quantization}.gguf`;
+      modelChip.appendChild(sub);
+    }
+    bar.appendChild(modelChip);
+
+    const items = [
+      {
+        title: "Tokens generated",
+        svg: '<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><line x1="4" y1="6" x2="5" y2="6"/><line x1="4" y1="12" x2="5" y2="12"/><line x1="4" y1="18" x2="5" y2="18"/>',
+        text: `${formatNumberCompact(stats.tokens || 0)} tokens`,
+      },
+      {
+        title: "Total time",
+        svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+        text: formatDurationShort(stats.durationSec || 0),
+      },
+      {
+        title: "Generation speed",
+        svg: '<path d="M12 14a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M21.17 8H12V2.83A9 9 0 1 0 21.17 8z"/>',
+        text: `${(stats.tps || 0).toFixed(2)} t/s`,
+      },
+    ];
+    for (const it of items) {
+      const span = document.createElement("span");
+      span.className = "stats-info";
+      span.title = it.title;
+      span.appendChild(svgEl(12, 12, it.svg));
+      const t = document.createElement("span");
+      t.textContent = it.text;
+      span.appendChild(t);
+      bar.appendChild(span);
+    }
+    return bar;
+  }
+
+  // The four action buttons (copy / edit / regenerate / delete).
+  function buildActionBar(conv, msg) {
+    const bar = document.createElement("div");
+    bar.className = "msg-actions";
+    const specs = [
+      { act: "copy",       title: "Copy",       svg: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' },
+      { act: "edit",       title: "Edit",       svg: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>' },
+      { act: "regenerate", title: "Regenerate", svg: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>' },
+      { act: "delete",     title: "Delete",     svg: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>' },
+    ];
+    for (const s of specs) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "msg-action-btn";
+      btn.title = s.title;
+      btn.dataset.act = s.act;
+      btn.appendChild(svgEl(14, 14, s.svg));
+      btn.addEventListener("click", () => handleMsgAction(s.act, conv, msg, btn));
+      bar.appendChild(btn);
+    }
+    return bar;
+  }
+
+  function handleMsgAction(action, conv, msg, btn) {
+    if (action === "copy") {
+      const text = messagePlainText(msg);
+      navigator.clipboard.writeText(text).then(() => {
+        // Brief checkmark flash on the copy button.
+        const orig = btn.innerHTML;
+        btn.innerHTML = "";
+        btn.appendChild(svgEl(14, 14, '<polyline points="20 6 9 17 4 12"/>'));
+        btn.classList.add("status-ok");
+        setTimeout(() => { btn.innerHTML = orig; btn.classList.remove("status-ok"); }, 1200);
+      }).catch(() => alert("Copy failed."));
+      return;
+    }
+    if (action === "delete") {
+      if (!confirm("Delete this message? This cannot be undone.")) return;
+      const idx = conv.messages.indexOf(msg);
+      if (idx === -1) return;
+      conv.messages.splice(idx, 1);
+      ctx().save();
+      renderMessages();
+      return;
+    }
+    if (action === "edit") {
+      startEditMessage(conv, msg);
+      return;
+    }
+    if (action === "regenerate") {
+      regenerateMessage(conv, msg);
+      return;
+    }
+  }
+
+  function startEditMessage(conv, msg) {
+    // Re-render so we can find and replace just this bubble's content.
+    const text = messagePlainText(msg);
+    const ta = document.createElement("textarea");
+    ta.className = "msg-edit-textarea";
+    ta.value = text;
+    ta.rows = Math.min(20, Math.max(3, text.split("\n").length + 1));
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "btn-primary msg-edit-save";
+    save.textContent = "Save";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "btn-secondary msg-edit-cancel";
+    cancel.textContent = "Cancel";
+    const wrap = document.createElement("div");
+    wrap.className = "msg-edit";
+    wrap.appendChild(ta);
+    const row = document.createElement("div");
+    row.className = "msg-edit-actions";
+    row.appendChild(cancel);
+    row.appendChild(save);
+    wrap.appendChild(row);
+
+    // Find the bubble's body and swap its first .message-content / .message-blocks
+    // for the editor; on save/cancel re-render the whole list.
+    const all = el.messages.querySelectorAll(".message");
+    const idx = conv.messages.indexOf(msg);
+    if (idx === -1 || idx >= all.length) return;
+    const bubble = all[idx];
+    const body = bubble.querySelector(".message-body");
+    if (!body) return;
+    body.appendChild(wrap);
+    setTimeout(() => ta.focus(), 0);
+
+    const close = () => renderMessages();
+    cancel.addEventListener("click", close);
+    save.addEventListener("click", () => {
+      const newText = ta.value;
+      msg.content = newText;
+      if (Array.isArray(msg.blocks)) {
+        // Replace the first text block (or prepend) — keep tool blocks intact.
+        let replaced = false;
+        for (const b of msg.blocks) {
+          if (b && b.type === "text") {
+            b.text = newText;
+            replaced = true;
+            break;
+          }
+        }
+        if (!replaced) msg.blocks.unshift({ type: "text", text: newText });
+      }
+      ctx().save();
+      renderMessages();
+    });
+  }
+
+  function regenerateMessage(conv, msg) {
+    if (msg.role !== "assistant") return;
+    const idx = conv.messages.indexOf(msg);
+    if (idx <= 0) return;
+    // Walk back to the most-recent user turn before this assistant turn.
+    let userIdx = idx - 1;
+    while (userIdx >= 0 && conv.messages[userIdx].role !== "user") userIdx--;
+    if (userIdx < 0) return;
+    const userText = messagePlainText(conv.messages[userIdx]);
+    if (!userText.trim()) return;
+    // Drop everything from the user turn forward (the regenerate replaces the
+    // whole back-and-forth that followed it, just like LM Studio does).
+    conv.messages.splice(userIdx);
+    ctx().save();
+    renderMessages();
+    // Fire the request again with the same text.
+    if (activeView === "code") sendCodeMessage(userText);
+    else                       sendMessage(userText);
+  }
+
   function buildCodeMessageEl(msg, conv) {
     const wrapper = document.createElement("div");
     wrapper.className = "message " + msg.role + " code-msg";
@@ -1134,6 +1397,18 @@
     const blocks = msg.blocks || (msg.content ? [{ type: "text", text: msg.content }] : []);
     for (const b of blocks) {
       appendBlockEl(blocksEl, b);
+    }
+
+    // Stats bar + action buttons under completed assistant turns. Same shape
+    // as chat-mode: chips of model/tokens/time/t/s plus 4 action buttons.
+    // Skipped for the live streaming placeholder (no blocks yet) — the
+    // sendCodeMessage finally-block adds them after the agent loop ends.
+    const hasContent = (msg.content && msg.content.trim()) ||
+                       (Array.isArray(msg.blocks) && msg.blocks.length > 0);
+    if (msg.role === "assistant" && hasContent) {
+      const statsBar = buildStatsBar(msg.stats);
+      if (statsBar) body.appendChild(statsBar);
+      body.appendChild(buildActionBar(conv, msg));
     }
     return wrapper;
   }
@@ -2025,6 +2300,15 @@
               entry.block.result = env.output;
               entry.block.isError = !!env.isError;
             }
+          } else if (env.kind === "turn_stats") {
+            // Tally per-turn perf counters from each /api/chat round-trip
+            // the server made on our behalf.
+            if (!assistantMsg.stats) {
+              assistantMsg.stats = { model, tokens: 0, evalDurNs: 0, totalDurNs: 0 };
+            }
+            assistantMsg.stats.tokens += env.evalCount || 0;
+            assistantMsg.stats.evalDurNs += env.evalDuration || 0;
+            assistantMsg.stats.totalDurNs += env.totalDuration || 0;
           } else if (env.kind === "warning") {
             const w = { type: "text", text: `_${env.message}_` };
             assistantMsg.blocks.push(w);
@@ -2061,8 +2345,26 @@
       assistantMsg.content = assistantMsg.blocks
         .filter((b) => b.type === "text")
         .map((b) => b.text).join("\n\n");
+
+      // Finalize the stats object: convert nanoseconds → seconds and derive
+      // the t/s figure from Ollama's eval timing (which excludes prompt
+      // processing, so it reflects actual generation speed).
+      if (assistantMsg.stats) {
+        const s = assistantMsg.stats;
+        s.durationSec = s.totalDurNs > 0 ? s.totalDurNs / 1e9 : 0;
+        s.tps = s.evalDurNs > 0 ? s.tokens / (s.evalDurNs / 1e9) : 0;
+      }
+
       c.save();
       localStorage.setItem(c.lastModelKey, model);
+
+      // Append stats + action buttons under the just-finished bubble.
+      const body = assistantEl.querySelector(".message-body");
+      if (body) {
+        const statsBar = buildStatsBar(assistantMsg.stats);
+        if (statsBar) body.appendChild(statsBar);
+        body.appendChild(buildActionBar(conv, assistantMsg));
+      }
       refreshCodeBanner();
     }
   }
@@ -2107,11 +2409,11 @@
     setConversationTitle(conv, text);
     c.save();
     el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildMessageEl(conv.messages[conv.messages.length - 1]));
+    el.messages.appendChild(buildMessageEl(conv.messages[conv.messages.length - 1], conv));
 
     const assistantMsg = { role: "assistant", content: "" };
     conv.messages.push(assistantMsg);
-    const assistantEl = buildMessageEl(assistantMsg);
+    const assistantEl = buildMessageEl(assistantMsg, conv);
     const contentEl = assistantEl.querySelector(".message-content");
     contentEl.innerHTML =
       '<div class="typing"><span></span><span></span><span></span></div>';
@@ -2155,6 +2457,7 @@
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const wallStart = performance.now();
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -2176,7 +2479,20 @@
               contentEl.innerHTML = renderMarkdown(assistantMsg.content);
               scrollToBottom();
             }
-            if (chunk.done) c.save();
+            if (chunk.done) {
+              // Pull Ollama's perf counters off the final chunk. Fall back
+              // to wall-clock + 0 tokens if a backend doesn't send them.
+              const evalCount = chunk.eval_count || 0;
+              const evalDurNs = chunk.eval_duration || 0;
+              const totalDurNs = chunk.total_duration || 0;
+              assistantMsg.stats = {
+                model,
+                tokens: evalCount,
+                durationSec: totalDurNs > 0 ? totalDurNs / 1e9 : (performance.now() - wallStart) / 1000,
+                tps: evalDurNs > 0 ? evalCount / (evalDurNs / 1e9) : 0,
+              };
+              c.save();
+            }
           } catch (e) { /* ignore */ }
         }
       }
@@ -2196,6 +2512,11 @@
       el.stopBtn.classList.add("hidden");
       c.save();
       localStorage.setItem(c.lastModelKey, model);
+      // Append the stats bar + action buttons under the just-finished bubble.
+      const statsBar = buildStatsBar(assistantMsg.stats);
+      if (statsBar) assistantEl.querySelector(".message-body").appendChild(statsBar);
+      const actionBar = buildActionBar(getActiveConversation(), assistantMsg);
+      assistantEl.querySelector(".message-body").appendChild(actionBar);
     }
   }
 

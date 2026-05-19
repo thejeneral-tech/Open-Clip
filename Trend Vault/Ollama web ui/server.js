@@ -918,6 +918,19 @@ async function handleLocalCodeChat(req, res) {
 
       const msg = resp.message || {};
 
+      // Surface Ollama's perf counters for this turn so the client can
+      // tally an LM-Studio-style stats bar after the agent loop finishes.
+      // Numbers are nanoseconds for *_duration, plain ints for counts.
+      emit({
+        kind: "turn_stats",
+        evalCount: resp.eval_count || 0,
+        evalDuration: resp.eval_duration || 0,
+        promptEvalCount: resp.prompt_eval_count || 0,
+        promptEvalDuration: resp.prompt_eval_duration || 0,
+        totalDuration: resp.total_duration || 0,
+        loadDuration: resp.load_duration || 0,
+      });
+
       // Real Ollama tool_calls field if the model used it natively.
       let calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
       let displayText = msg.content || "";
