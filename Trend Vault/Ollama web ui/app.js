@@ -100,6 +100,7 @@
     newChatLabel: $("newChatLabel"),
     conversations: $("conversations"),
     toggleSidebar: $("toggleSidebar"),
+    sidebarBackdrop: $("sidebarBackdrop"),
     settingsBtn: $("settingsBtn"),
 
     // topbar
@@ -312,6 +313,8 @@
     }
     renderConversations();
     renderMessages();
+    // Mobile: drawer closes on new-chat so the user sees the empty thread.
+    closeMobileSidebar();
     return conv;
   }
 
@@ -341,6 +344,8 @@
     }
     renderConversations();
     renderMessages();
+    // Mobile: opening a chat from the drawer should close the drawer.
+    closeMobileSidebar();
   }
 
   function setConversationTitle(conv, text) {
@@ -349,6 +354,38 @@
       conv.title = trimmed;
       ctx().save();
       renderConversations();
+    }
+  }
+
+  /* ----------------------------------------------------------
+     Mobile drawer helpers
+     ---------------------------------------------------------- */
+  function isMobileViewport() {
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+  function closeMobileSidebar() {
+    if (!isMobileViewport()) return;
+    el.sidebar.classList.add("collapsed");
+    document.body.classList.remove("sidebar-open");
+  }
+  // Keep the sidebar's open/closed state sensible across viewport changes.
+  // Mobile defaults to closed; desktop defaults to open. Called on init
+  // and whenever the window resizes past the breakpoint.
+  function syncSidebarForViewport() {
+    if (isMobileViewport()) {
+      // Don't yank an open drawer closed mid-resize if the user just opened
+      // it; only set the default on the very first call (when there's no
+      // explicit state yet).
+      if (!el.sidebar.dataset.mobileSynced) {
+        el.sidebar.classList.add("collapsed");
+        document.body.classList.remove("sidebar-open");
+        el.sidebar.dataset.mobileSynced = "1";
+      }
+    } else {
+      // Desktop: drawer concept doesn't apply; remove the body flag and
+      // un-collapse unless the user previously collapsed it on desktop.
+      document.body.classList.remove("sidebar-open");
+      delete el.sidebar.dataset.mobileSynced;
     }
   }
 
@@ -385,6 +422,8 @@
     el.clearChatBtn.style.display = (name === "models" || inCodeProjectsView) ? "none" : "";
     refreshProjectsLinkBtn();
     if (inCode && inCodeProjectsView) renderProjects();
+    // Mobile: dismiss the drawer when the user picks a top-level view.
+    closeMobileSidebar();
 
     // Update labels
     if (name === "chat") {
@@ -2667,9 +2706,32 @@
 
     // Sidebar
     el.newChatBtn.addEventListener("click", () => createConversation());
-    el.toggleSidebar.addEventListener("click", () =>
-      el.sidebar.classList.toggle("collapsed")
-    );
+    el.toggleSidebar.addEventListener("click", () => {
+      const willOpen = el.sidebar.classList.contains("collapsed");
+      el.sidebar.classList.toggle("collapsed");
+      // On mobile, mirror the open/closed state on <body> so the backdrop
+      // becomes interactive (and the page can lock scroll if we want to
+      // later).
+      if (isMobileViewport()) {
+        document.body.classList.toggle("sidebar-open", willOpen);
+      }
+    });
+    if (el.sidebarBackdrop) {
+      el.sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+    }
+    // Keyboard escape closes the drawer too.
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && isMobileViewport() &&
+          !el.sidebar.classList.contains("collapsed")) {
+        closeMobileSidebar();
+      }
+    });
+    // When the window crosses the mobile/desktop boundary, reset state so
+    // we don't get a desktop with a collapsed-by-default sidebar (or a
+    // mobile with the drawer open underneath everything).
+    window.addEventListener("resize", syncSidebarForViewport);
+    // Initial mobile state: drawer starts CLOSED.
+    syncSidebarForViewport();
 
     // Settings
     el.settingsBtn.addEventListener("click", openSettings);
@@ -2863,6 +2925,8 @@
       el.projectsLinkBtn.addEventListener("click", () => {
         if (inCodeProjectsView) hideCodeProjectsView();
         else showCodeProjectsView();
+        // Mobile: close the drawer so the user sees the grid (or chat).
+        closeMobileSidebar();
       });
     }
     // Banner "project" chip → re-open the projects grid.

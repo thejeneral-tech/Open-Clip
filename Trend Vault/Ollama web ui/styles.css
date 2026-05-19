@@ -774,31 +774,161 @@ input, textarea, select {
 }
 
 /* ============================================================
-   Responsive
+   Responsive — desktop default; mobile drawer behavior below
    ============================================================ */
+
+/* Backdrop is desktop-hidden; the mobile breakpoint un-hides it. */
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  /* ── Sidebar: full-height drawer that slides in from the left ── */
   .sidebar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 50;
-    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 320px);
+    z-index: 200;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5);
+    transition: transform 0.22s ease;
+    /* Default = visible. .collapsed hides it (see below). */
+    transform: translateX(0);
   }
-
   .sidebar.collapsed {
-    margin-left: -260px;
+    transform: translateX(-100%);
     box-shadow: none;
+    /* Cancel the desktop margin-trick that we no longer use here. */
+    margin-left: 0;
+  }
+  /* Backdrop fills the screen behind the drawer on mobile. */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 199;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  body.sidebar-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
   }
 
+  /* ── Topbar: tighter spacing, smaller picker ── */
+  .topbar { padding: 8px 12px; gap: 8px; }
+  .view-title { font-size: 15px; }
+  .model-picker select {
+    max-width: 38vw;
+    font-size: 12px;
+    padding: 6px 26px 6px 10px;
+  }
+  .topbar-spacer { min-width: 0; }
+  /* Hide the trash icon on phones; clear-chat is reachable in settings. */
+  #clearChatBtn { display: none; }
+
+  /* ── Chat + composer ── */
   .messages,
   .composer-form,
   .hint {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
+  .composer { padding: 8px 10px 14px; }
+  .composer-form {
+    border-radius: 18px;
+    padding: 6px 6px 6px 14px;
+    gap: 6px;
+  }
+  .composer-input { font-size: 16px; /* avoids iOS zoom on focus */ }
+  .send-btn, .stop-btn, .attach-btn {
+    width: 38px; height: 38px;
+  }
+
+  /* ── Welcome screen + tip cards ── */
+  .welcome h1 { font-size: 22px; }
+  .welcome p { font-size: 14px; }
+  .welcome-tips {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    max-width: 90vw;
+  }
+
+  /* ── Local Code banner: smaller chips, wrap freely ── */
+  .claude-banner {
+    padding: 6px 10px;
+    gap: 4px;
+  }
+  .banner-chip {
+    font-size: 11px;
+    padding: 4px 8px;
+    max-width: 92vw;
+  }
+  #codeCwdChip { max-width: 80vw; }
+  .banner-chip svg { width: 12px; height: 12px; }
+  .banner-creature { width: 32px; height: 24px; margin-left: 0; }
+
+  /* ── Attachments + drop overlay ── */
+  .attachments { padding: 0 2px; }
+  .attachment-chip { max-width: 86vw; }
+  /* Mobile browsers don't drag-and-drop files into the page reliably,
+     and the overlay can swallow taps on touchstart. Always hide here. */
+  .drop-overlay { display: none !important; }
+
+  /* ── Modals: near-fullscreen on phones, no max-width gap ── */
+  .modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+  .modal.modal-wide { width: 100vw; max-width: 100vw; }
+  .modal-body { padding: 16px; gap: 14px; }
+  .modal-header { padding: 12px 14px; }
+  .modal-footer { padding: 12px 14px; flex-wrap: wrap; }
 
   .field-row {
     grid-template-columns: 1fr;
   }
+  .field-row-inline { flex-direction: column; }
+  .field-row-inline > input { width: 100%; }
+  .field-row-inline > button { width: 100%; }
+
+  /* Directory picker: list takes more vertical room. */
+  .dir-picker-toolbar { padding: 10px 12px; gap: 6px; }
+  .dir-picker-path { min-width: 0; width: 100%; }
+  .dir-picker-toolbar > * { flex: 0 0 auto; }
+  .dir-picker-toolbar > .dir-picker-path { flex: 1 1 100%; order: 99; }
+  .dir-picker-list { max-height: 56vh; min-height: 240px; }
+
+  /* ── Projects grid: single column, tighter header ── */
+  .projects-wrap { padding: 22px 14px 40px; }
+  .projects-header { margin-bottom: 18px; gap: 8px; }
+  .projects-header h1 { font-size: 22px; }
+  .projects-header-actions .btn-primary { padding: 6px 12px; font-size: 13px; }
+  .projects-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .project-card { padding: 14px 16px; min-height: 90px; }
+  .project-card-edit { opacity: 1; } /* hover doesn't exist on touch */
+
+  /* ── Models view ── */
+  .models-wrap { padding: 18px 14px 40px; }
+  .pull-form { flex-direction: column; gap: 8px; }
+  .pull-form input,
+  .pull-form button { width: 100%; }
+  .suggested { gap: 6px; }
+  .suggest-chip { font-size: 12px; padding: 5px 10px; }
+  .models-list-header { flex-direction: column; align-items: stretch; gap: 8px; }
+
+  /* ── Stats / action bar wraps cleanly ── */
+  .stats-bar { flex-wrap: wrap; row-gap: 4px; font-size: 11px; }
+  .action-bar { flex-wrap: wrap; gap: 4px; }
+  .action-bar button { padding: 6px 8px; }
 }
 
 /* ============================================================
