@@ -1365,9 +1365,11 @@
         label.textContent = `thinking… ${elapsed.toFixed(1)}s`;
         return;
       }
+      // Keep the "thinking…" prefix visible the whole time so the user
+      // knows the model is still working — append the running counts.
       const tps = elapsed > 0 ? tokens / elapsed : 0;
       label.textContent =
-        `${tokens.toLocaleString()} tokens · ${elapsed.toFixed(1)}s · ${tps.toFixed(2)} t/s`;
+        `thinking… ${tokens.toLocaleString()} tokens · ${elapsed.toFixed(1)}s · ${tps.toFixed(2)} t/s`;
     };
     const tick = setInterval(render, 150);
     return {
