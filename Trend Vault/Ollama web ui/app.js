@@ -975,6 +975,26 @@
       el.codeCwd.title = cwd + (eff.source === "project" ? `  (from project "${eff.projectName}")` : "");
     }
 
+    // Additional-dirs chip: counts whatever effectiveCodeContext gives us
+    // (project's allowedDirs override Settings if a project is active).
+    const dirs = eff.allowedDirs;
+    if (el.codeDirsBadge) {
+      el.codeDirsBadge.textContent = dirs.length === 0
+        ? "no extra dirs"
+        : `+${dirs.length} dir${dirs.length === 1 ? "" : "s"}`;
+    }
+    const codeDirsChip = document.getElementById("codeDirsChip");
+    if (codeDirsChip) {
+      codeDirsChip.title = dirs.length
+        ? "Aider will see these as positional args (read & edit):\n" + dirs.join("\n")
+        : "Add directories to extend aider's read/edit scope beyond the working dir.";
+    }
+
+    // FULL DISK badge — shown when the user has lifted aider's --subtree-only.
+    if (el.codeUnrestrictedBadge) {
+      el.codeUnrestrictedBadge.hidden = eff.unrestrictedFs !== true;
+    }
+
     // Active project chip — visible only when a project is active.
     if (el.codeProjectChip && el.codeProjectName) {
       const proj = getActiveProject();
@@ -2639,6 +2659,11 @@
       cwd: eff.cwd || undefined,
       model: aiderModel,
       files,
+      // Aider read/write scope: each allowedDir becomes a positional arg
+      // so aider can read & edit files inside it. unrestrictedFs=false
+      // adds --subtree-only on the server so aider can't roam beyond cwd.
+      allowedDirs: eff.allowedDirs,
+      unrestrictedFs: eff.unrestrictedFs,
       extraFlags: settings.aiderExtraFlags || "",
     };
 
@@ -2896,6 +2921,13 @@
     el.systemPrompt.value = settings.systemPrompt;
     if (el.codeSystemPrompt) el.codeSystemPrompt.value = settings.codeSystemPrompt;
     if (el.codeCwdInput) el.codeCwdInput.value = settings.codeCwd || "";
+    if (el.codeAllowedDirsInput) {
+      el.codeAllowedDirsInput.value = allowedDirsAsText(settings.codeAllowedDirs);
+      updateAllowedDirsCount();
+    }
+    if (el.codeUnrestrictedInput) {
+      el.codeUnrestrictedInput.checked = !!settings.codeUnrestrictedFs;
+    }
     if (el.aiderFlagsInput) el.aiderFlagsInput.value = settings.aiderExtraFlags || "";
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
@@ -2916,10 +2948,29 @@
     settings.systemPrompt = el.systemPrompt.value;
     if (el.codeSystemPrompt) settings.codeSystemPrompt = el.codeSystemPrompt.value;
     if (el.codeCwdInput) settings.codeCwd = el.codeCwdInput.value.trim();
+    if (el.codeAllowedDirsInput) {
+      settings.codeAllowedDirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
+    }
+    if (el.codeUnrestrictedInput) {
+      const wasOn = settings.codeUnrestrictedFs === true;
+      const nowOn = !!el.codeUnrestrictedInput.checked;
+      if (nowOn && !wasOn) {
+        const ok = confirm(
+          "Enable Full Disk Access?\n\n" +
+          "Aider will be able to read & edit ANY file on this computer that you mention in chat — " +
+          "including files outside your project folder.\n\n" +
+          "Only enable this if you trust both the model and the prompts you send."
+        );
+        if (!ok) {
+          el.codeUnrestrictedInput.checked = false;
+        } else {
+          settings.codeUnrestrictedFs = true;
+        }
+      } else {
+        settings.codeUnrestrictedFs = nowOn;
+      }
+    }
     if (el.aiderFlagsInput) settings.aiderExtraFlags = el.aiderFlagsInput.value.trim();
-    // codeBackend is locked to "aider" now; codeAllowedDirs / codeUnrestrictedFs
-    // are no longer surfaced. The values stay in settings (for old-data compat)
-    // but can't be edited from the UI any more.
     settings.codeBackend = "aider";
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);

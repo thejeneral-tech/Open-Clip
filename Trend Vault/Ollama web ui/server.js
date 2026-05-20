@@ -1224,7 +1224,7 @@ async function handleAiderCheck(req, res) {
   writeJson(res, 200, { available: true, bin, version });
 }
 
-// Build the aider command. Returns { cmd, args } for spawn().
+// Build the aider command. Returns the args list for spawn().
 //
 // We always pass:
 //   --message "<prompt>"        one-shot (don't open the REPL)
@@ -1235,9 +1235,16 @@ async function handleAiderCheck(req, res) {
 //   --no-fancy-input            avoids prompt_toolkit init issues
 //   --model <model>             explicit model identifier
 //
-// Custom user flags from settings.aiderFlags are split by whitespace and
-// appended last so they win.
-function buildAiderArgs({ model, prompt, files, extraFlags }) {
+// Path scope:
+//   allowedDirs[]               additional dirs aider can read/edit; each is
+//                               appended as a positional arg
+//   unrestrictedFs              when false, --subtree-only confines aider to
+//                               the cwd subtree; when true, aider can use
+//                               absolute paths to roam anywhere
+//
+// Custom user flags from settings.aiderFlags are split on whitespace and
+// appended last so they always win.
+function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, extraFlags }) {
   const args = [
     "--message", prompt,
     "--yes-always",
@@ -1249,13 +1256,22 @@ function buildAiderArgs({ model, prompt, files, extraFlags }) {
   if (model) {
     args.push("--model", model);
   }
+  // When NOT full-disk, confine aider to the cwd's subtree. When full-disk
+  // is on, leave the default off so aider can use absolute paths anywhere.
+  if (!unrestrictedFs) {
+    args.push("--subtree-only");
+  }
   if (Array.isArray(files) && files.length) {
     for (const f of files) {
       if (typeof f === "string" && f.trim()) args.push(f.trim());
     }
   }
+  if (Array.isArray(allowedDirs) && allowedDirs.length) {
+    for (const d of allowedDirs) {
+      if (typeof d === "string" && d.trim()) args.push(d.trim());
+    }
+  }
   if (extraFlags && typeof extraFlags === "string") {
-    // Naive but adequate: split on whitespace, keep non-empty.
     for (const tok of extraFlags.split(/\s+/)) {
       if (tok) args.push(tok);
     }
@@ -1288,8 +1304,15 @@ async function handleAiderChat(req, res) {
 
   const model = (body.model || "").toString();
   const files = Array.isArray(body.files) ? body.files : [];
+  const rawAllowed = Array.isArray(body.allowedDirs) ? body.allowedDirs : [];
+  const allowedDirs = rawAllowed
+    .filter((d) => typeof d === "string" && d.trim())
+    .map((d) => d.trim());
+  const unrestrictedFs = body.unrestrictedFs === true;
   const extraFlags = (body.extraFlags || "").toString();
-  const args = buildAiderArgs({ model, prompt, files, extraFlags });
+  const args = buildAiderArgs({
+    model, prompt, files, allowedDirs, unrestrictedFs, extraFlags,
+  });
 
   const jobId = crypto.randomBytes(8).toString("hex");
   const abort = new AbortController();
