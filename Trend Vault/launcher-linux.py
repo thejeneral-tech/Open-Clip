@@ -83,6 +83,27 @@ def _find_pip_cmd() -> list[str] | None:
             return [path]
     return None
 
+
+def _find_pipx_cmd() -> list[str] | None:
+    """Return a command list that can run pipx, or None if it isn't on PATH."""
+    p = shutil.which('pipx')
+    if p:
+        return [p]
+    # pipx is sometimes installed as a Python module but not exported to PATH.
+    for py in ('python3', 'python'):
+        path = shutil.which(py)
+        if path:
+            try:
+                r = subprocess.run(
+                    [path, '-m', 'pipx', '--version'],
+                    capture_output=True, timeout=4,
+                )
+                if r.returncode == 0:
+                    return [path, '-m', 'pipx']
+            except Exception:
+                pass
+    return None
+
 SERVICES = [
     {
         'key':  'webapp',
@@ -604,9 +625,58 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
+        """Install aider with two strategies:
+        1. If `pipx` is available, use it for an isolated install — recommended
+           by the aider docs and avoids dependency conflicts entirely.
+        2. Otherwise, upgrade pip + setuptools + wheel first (works around the
+           "AttributeError: module 'pkgutil' has no attribute 'ImpImporter'"
+           failure on Python 3.12+, where old setuptools tries to build numpy
+           with distutils which was removed from the stdlib), then
+           pip install --user --prefer-binary aider-chat.
+        """
         self._installing_aider = True
         self._set_status('Installing aider...')
-        cmd = pip + ['install', '--user', 'aider-chat']
+        try:
+            pipx = _find_pipx_cmd()
+            if pipx:
+                self._log_line('pipx detected — using isolated install', ACCENT)
+                ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
+            else:
+                self._log_line(
+                    'No pipx detected. Upgrading pip / setuptools / wheel first '
+                    '(avoids numpy build failures on Python 3.12+)...', ACCENT
+                )
+                self._run_pip_subprocess(
+                    pip + ['install', '--user', '--upgrade', 'pip', 'setuptools', 'wheel'],
+                    '[pip prep]'
+                )
+                self._log_line('Now installing aider-chat (preferring prebuilt wheels)...', ACCENT)
+                ok = self._run_pip_subprocess(
+                    pip + ['install', '--user', '--upgrade', '--prefer-binary', 'aider-chat'],
+                    '[pip aider]'
+                )
+                if not ok:
+                    self._log_line('Hint: installing pipx and retrying often fixes dep build errors:', AMBER)
+                    self._log_line('   ' + ' '.join(pip) + ' install --user pipx', AMBER)
+                    self._log_line('   then click INSTALL AIDER again', AMBER)
+            if ok:
+                self._log_line('Aider installed successfully', GREEN)
+                path = resolve_aider()
+                if path:
+                    self._log_line('Aider is now on PATH: ' + path, GREEN)
+                else:
+                    self._log_line(
+                        'Aider installed to ~/.local/bin but not on PATH yet. '
+                        'Add this to your shell rc:  export PATH="$HOME/.local/bin:$PATH"', AMBER
+                    )
+            else:
+                self._log_line('Aider install failed; see [pip] errors above', RED)
+        finally:
+            self._installing_aider = False
+            self._set_status('Ready')
+
+    def _run_pip_subprocess(self, cmd, label='[pip]'):
+        """Run a pip/pipx command, stream its output, return True on exit 0."""
         self._log_line('Running: ' + ' '.join(cmd), ACCENT)
         try:
             proc = subprocess.Popen(
@@ -625,26 +695,15 @@ class TrendVaultLauncher(tk.Tk):
                     else RED if 'error' in lo
                     else '#a0a0c0'
                 )
-                self._log_line('[pip] ' + line, color)
+                self._log_line(label + ' ' + line, color)
             proc.wait()
-            if proc.returncode == 0:
-                self._log_line('Aider installed successfully', GREEN)
-                if resolve_aider():
-                    self._log_line('Aider is now on PATH: ' + resolve_aider(), GREEN)
-                else:
-                    self._log_line(
-                        'Aider installed to ~/.local/bin but not on PATH yet. '
-                        'Add it to your shell rc:  export PATH="$HOME/.local/bin:$PATH"', AMBER
-                    )
-            else:
-                self._log_line('pip install failed (exit code ' + str(proc.returncode) + ')', RED)
+            return proc.returncode == 0
         except FileNotFoundError as e:
-            self._log_line('pip not runnable: ' + str(e), RED)
+            self._log_line(label + ' command not runnable: ' + str(e), RED)
+            return False
         except Exception as e:
-            self._log_line('Aider install error: ' + str(e), RED)
-        finally:
-            self._installing_aider = False
-            self._set_status('Ready')
+            self._log_line(label + ' error: ' + str(e), RED)
+            return False
 
     # ── Service control ─────────────────────────────────────────────────────
     def _start_one(self, key: str):
