@@ -71,10 +71,8 @@ def _aider_venv_bin() -> str | None:
 
 def resolve_aider() -> str | None:
     """Return the path to the aider binary, or None if not installed.
-    Search order: project venv → PATH → ~/.local/bin/aider."""
-    venv = _aider_venv_bin()
-    if venv:
-        return venv
+    Search order: PATH → ~/.local/bin (uv default, where aider-install
+    puts it) → project venv."""
     p = shutil.which('aider')
     if p:
         return p
@@ -83,6 +81,9 @@ def resolve_aider() -> str | None:
         guess = os.path.join(home, '.local', 'bin', 'aider')
         if os.path.isfile(guess):
             return guess
+    venv = _aider_venv_bin()
+    if venv:
+        return venv
     return None
 
 
@@ -640,13 +641,13 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider into <ROOT>/.venv-aider/ by default; pipx if present.
-
-        Distro Pythons on modern Debian/Ubuntu/Fedora reject system-wide
-        pip installs (PEP 668 'externally managed environment'), and even
-        --user installs can break when numpy needs to be source-built
-        against stale setuptools (the pkgutil.ImpImporter failure on
-        Python 3.12+). A dedicated venv sidesteps both problems.
+        """Install aider, trying three strategies in order:
+        1. pipx (cleanest) — if pipx is on PATH.
+        2. aider-install — the OFFICIAL installer from aider's docs. Tiny
+           meta-package that bootstraps uv internally and installs aider into
+           a self-contained env. Sidesteps PEP 668 "externally managed
+           environment" + numpy build failures.
+        3. project-local venv at <ROOT>/.venv-aider/ — last-resort.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
@@ -657,9 +658,16 @@ class TrendVaultLauncher(tk.Tk):
                 ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
             else:
                 self._log_line(
-                    'Installing aider into project-local venv at ' + _AIDER_VENV_DIR + ' ...', ACCENT
+                    'Trying official aider-install (uses uv internally; '
+                    'avoids numpy build issues + PEP 668 restrictions)...', ACCENT
                 )
-                ok = self._install_aider_into_venv(pip)
+                ok = self._install_aider_via_aider_install(pip)
+                if not ok:
+                    self._log_line(
+                        'aider-install path failed; falling back to project-local '
+                        'venv at ' + _AIDER_VENV_DIR + ' ...', AMBER
+                    )
+                    ok = self._install_aider_into_venv(pip)
             if ok:
                 self._log_line('Aider installed successfully', GREEN)
                 path = resolve_aider()
@@ -668,18 +676,46 @@ class TrendVaultLauncher(tk.Tk):
                 else:
                     self._log_line(
                         'Aider install reported success but resolve_aider() returned None. '
-                        'Restart the launcher to re-scan.', AMBER
+                        'It may have landed in ~/.local/bin/ — add it to PATH:  '
+                        'export PATH="$HOME/.local/bin:$PATH"', AMBER
                     )
             else:
-                self._log_line('Aider install failed; see [pip] / [venv] errors above', RED)
+                self._log_line('Aider install failed; see [pip] / [venv] / [aider-install] errors above', RED)
                 self._log_line(
-                    'Workaround: install pipx via your distro package manager, then re-click:', AMBER
+                    'Workaround: install pipx via your distro pkg manager, then re-click:', AMBER
                 )
                 self._log_line('   sudo apt install pipx      # or:  pip install --user pipx', AMBER)
-                self._log_line('   then click INSTALL AIDER again', AMBER)
         finally:
             self._installing_aider = False
             self._set_status('Ready')
+
+    def _install_aider_via_aider_install(self, pip) -> bool:
+        """Use the official aider-install meta-package.
+
+        aider-install is a tiny pure-Python package (no native deps), so even
+        PEP-668-locked or sandboxed Pythons can pip-install it with --user.
+        When run, it installs uv (a fast Rust-based installer) and uses
+        `uv tool install aider-chat`, producing a stand-alone aider binary
+        in ~/.local/bin/.
+        """
+        ok = self._run_pip_subprocess(
+            pip + ['install', '--user', '--upgrade', 'aider-install'],
+            '[pip meta]'
+        )
+        if not ok:
+            # Some distros need --break-system-packages on PEP 668 systems.
+            self._log_line('Retrying pip install with --break-system-packages...', AMBER)
+            ok = self._run_pip_subprocess(
+                pip + ['install', '--user', '--upgrade', '--break-system-packages',
+                       'aider-install'],
+                '[pip meta]'
+            )
+        if not ok:
+            return False
+        py_for_module = pip[0] if pip[0].endswith(('python', 'python3', 'py')) else 'python3'
+        self._log_line('Running aider-install — this may take a minute on first run...', ACCENT)
+        ok = self._run_pip_subprocess([py_for_module, '-m', 'aider_install'], '[aider-install]')
+        return ok or resolve_aider() is not None
 
     def _install_aider_into_venv(self, pip) -> bool:
         """Bootstrap <ROOT>/.venv-aider/ and install aider into it."""

@@ -66,14 +66,23 @@ def _aider_venv_bin() -> str | None:
 
 def resolve_aider() -> str | None:
     """Return the path to aider.exe, or None if it isn't installed.
-    Search order: project venv → PATH → common pip --user locations."""
-    venv = _aider_venv_bin()
-    if venv:
-        return venv
+    Search order: PATH → uv tool bin dir (where aider-install puts it) →
+    project venv → common pip --user locations."""
     p = shutil.which('aider')
     if p:
         return p
     home = os.environ.get('USERPROFILE')
+    if home:
+        # uv (via aider-install) installs tool launchers here by default.
+        for guess in (
+            os.path.join(home, '.local', 'bin', 'aider.exe'),
+            os.path.join(home, '.local', 'bin', 'aider'),
+        ):
+            if os.path.isfile(guess):
+                return guess
+    venv = _aider_venv_bin()
+    if venv:
+        return venv
     if home:
         for guess in (
             os.path.join(home, 'AppData', 'Roaming', 'Python', 'Scripts', 'aider.exe'),
@@ -614,18 +623,16 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider into <ROOT>/.venv-aider/ — a project-local venv.
-
-        Why a venv and not pip --user?
-          The WindowsApps PythonManager Python (and similar sandboxed Pythons)
-          break `pip install --user` when a transitive dep like numpy needs
-          to be built from source: pip's build isolation downloads an old
-          setuptools that references the removed pkgutil.ImpImporter and
-          crashes. A dedicated venv has its own fresh pip and is unaffected
-          by the user-site sandbox.
-
-        If `pipx` is available we prefer that — it does the same thing in
-        a globally-managed location and the resulting aider is on PATH.
+        """Install aider, trying three strategies in order:
+        1. pipx (cleanest, recommended) — if pipx is on PATH.
+        2. aider-install — the OFFICIAL installer from aider's docs
+           (https://aider.chat/docs/install.html). Tiny meta-package that
+           bootstraps uv internally and installs aider into a self-contained
+           env, sidestepping numpy build failures on Python 3.12+ and
+           sandboxed Pythons (WindowsApps PythonManager, distro Pythons
+           under PEP 668, etc.).
+        3. project-local venv at <ROOT>/.venv-aider/ — last-resort manual
+           bootstrap, also avoids the user-site sandbox.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
@@ -636,9 +643,16 @@ class TrendVaultLauncher(tk.Tk):
                 ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
             else:
                 self._log_line(
-                    'Installing aider into project-local venv at ' + _AIDER_VENV_DIR + ' ...', ACCENT
+                    'Trying official aider-install (uses uv internally; '
+                    'avoids numpy build issues)...', ACCENT
                 )
-                ok = self._install_aider_into_venv(pip)
+                ok = self._install_aider_via_aider_install(pip)
+                if not ok:
+                    self._log_line(
+                        'aider-install path failed; falling back to project-local '
+                        'venv at ' + _AIDER_VENV_DIR + ' ...', AMBER
+                    )
+                    ok = self._install_aider_into_venv(pip)
             if ok:
                 self._log_line('Aider installed successfully', GREEN)
                 path = resolve_aider()
@@ -647,18 +661,41 @@ class TrendVaultLauncher(tk.Tk):
                 else:
                     self._log_line(
                         'Aider install reported success but resolve_aider() returned None. '
-                        'Restart the launcher to re-scan.', AMBER
+                        'It may have landed in %USERPROFILE%\\.local\\bin\\ — add that '
+                        'to PATH (or restart the launcher to re-scan).', AMBER
                     )
             else:
-                self._log_line('Aider install failed; see [pip] / [venv] errors above', RED)
+                self._log_line('Aider install failed; see [pip] / [venv] / [aider-install] errors above', RED)
                 self._log_line(
-                    'Workaround: install pipx with the official Python from python.org, '
+                    'Workaround: install pipx via the official python.org Python, '
                     'then re-click INSTALL AIDER:', AMBER
                 )
                 self._log_line('   ' + ' '.join(pip) + ' install --user pipx', AMBER)
         finally:
             self._installing_aider = False
             self._set_status('Ready')
+
+    def _install_aider_via_aider_install(self, pip) -> bool:
+        """Use the official aider-install meta-package.
+
+        The aider-install package is tiny (no native deps), so even sandboxed
+        Pythons can `pip install --user` it. When run, it installs uv and
+        then uses `uv tool install aider-chat`, which produces a stand-alone
+        aider binary in %USERPROFILE%\\.local\\bin\\ on Windows.
+        """
+        ok = self._run_pip_subprocess(
+            pip + ['install', '--user', '--upgrade', 'aider-install'],
+            '[pip meta]'
+        )
+        if not ok:
+            return False
+        # Run it as a module so we don't have to know where the .exe ended up.
+        py_for_module = pip[0] if pip[0].endswith(('.exe', 'python', 'python3', 'py')) else 'python'
+        self._log_line('Running aider-install — this may take a minute on first run...', ACCENT)
+        ok = self._run_pip_subprocess([py_for_module, '-m', 'aider_install'], '[aider-install]')
+        # Either ok==True or resolve_aider() can already find the binary
+        # (some aider-install versions exit 1 but still complete the install).
+        return ok or resolve_aider() is not None
 
     def _install_aider_into_venv(self, pip) -> bool:
         """Bootstrap <ROOT>/.venv-aider/ and pip-install aider into it.

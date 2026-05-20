@@ -1153,17 +1153,7 @@ async function handleLocalCodeVerifyDirs(req, res) {
    conversation continuity automatically across our spawns.
    ---------------------------------------------------------- */
 function resolveAider() {
-  // 1. Project-local venv maintained by the launcher (default install target).
-  //    server.js lives at <projectRoot>/Ollama web ui/server.js, so the venv
-  //    is one level up.
-  const venvBin = IS_WIN
-    ? path.join(ROOT, "..", ".venv-aider", "Scripts", "aider.exe")
-    : path.join(ROOT, "..", ".venv-aider", "bin", "aider");
-  try {
-    if (fs.statSync(venvBin).isFile()) return venvBin;
-  } catch { /* not present */ }
-
-  // 2. PATH.
+  // 1. PATH.
   const fromPath = (() => {
     const r = spawnSync(IS_WIN ? "where" : "which", ["aider"], { encoding: "utf8" });
     if (r.status === 0) {
@@ -1174,15 +1164,36 @@ function resolveAider() {
   })();
   if (fromPath) return fromPath;
 
-  // 3. Common pip --user locations as a last resort.
   const home = process.env.USERPROFILE || process.env.HOME;
+
+  // 2. ~/.local/bin/aider — where the official aider-install + uv land it.
+  if (home) {
+    const uvGuesses = IS_WIN
+      ? [
+          path.join(home, ".local", "bin", "aider.exe"),
+          path.join(home, ".local", "bin", "aider"),
+        ]
+      : [path.join(home, ".local", "bin", "aider")];
+    for (const g of uvGuesses) {
+      try { if (fs.statSync(g).isFile()) return g; } catch { /* skip */ }
+    }
+  }
+
+  // 3. Project-local venv maintained by the launcher (fallback install).
+  //    server.js lives at <projectRoot>/Ollama web ui/server.js, so the venv
+  //    is one level up.
+  const venvBin = IS_WIN
+    ? path.join(ROOT, "..", ".venv-aider", "Scripts", "aider.exe")
+    : path.join(ROOT, "..", ".venv-aider", "bin", "aider");
+  try {
+    if (fs.statSync(venvBin).isFile()) return venvBin;
+  } catch { /* not present */ }
+
+  // 4. Plain pip --user locations.
   if (home) {
     const guesses = IS_WIN
       ? [path.join(home, "AppData", "Roaming", "Python", "Scripts", "aider.exe")]
-      : [
-          path.join(home, ".local", "bin", "aider"),
-          "/usr/local/bin/aider",
-        ];
+      : ["/usr/local/bin/aider"];
     for (const g of guesses) {
       try { if (fs.statSync(g).isFile()) return g; } catch { /* skip */ }
     }
