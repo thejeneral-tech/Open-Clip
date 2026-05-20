@@ -1377,10 +1377,39 @@ async function handleAiderChat(req, res) {
   // Strip ANSI escape sequences just in case --no-pretty leaks something.
   const stripAnsi = (s) => s.replace(/\x1B\[[0-9;?]*[ -/]*[@-~]/g, "");
 
+  // Aider's startup banner + per-turn footer lines are pure noise inside
+  // the chat bubble — they describe the CLI itself ("Aider v0.86.2",
+  // "Model: ollama_chat/...", "Git repo: ...", "Tokens: 805 sent, 15
+  // received."). The launcher already surfaces all of this through the
+  // banner chip + live counter, so we drop these lines instead of
+  // showing them.
+  const AIDER_NOISE = [
+    /^Detected dumb terminal/i,
+    /^Aider v\d/i,
+    /^Main model:\s+/i,
+    /^Weak model:\s+/i,
+    /^Editor model:\s+/i,
+    /^Model:\s+.+\s+with\s+.+\s+edit format\s*$/i,
+    /^Git repo:\s+/i,
+    /^Repo-map:\s+/i,
+    /^Tokens:\s+/i,
+    /^Cost:\s+/i,
+    /^Use \/help/i,
+    /^Loaded\s+\d+\s+files? added to chat/i,
+    /^Added\s+.+\s+to the chat\s*\.?$/i,
+  ];
+  const isAiderNoise = (line) => {
+    const t = line.trim();
+    if (!t) return false;
+    return AIDER_NOISE.some((re) => re.test(t));
+  };
+
   // Forward each line as an assistant_text event so the existing chat
-  // renderer shows it inline; aider doesn't speak tool-call JSON.
-  const forward = (stream, kind) => {
+  // renderer shows it inline. We track `realSeen` per-stream so leading
+  // blank lines are also dropped until aider produces real content.
+  const forward = (stream) => {
     let buf = "";
+    let realSeen = false;
     stream.setEncoding("utf8");
     stream.on("data", (chunk) => {
       buf += stripAnsi(chunk);
@@ -1388,17 +1417,23 @@ async function handleAiderChat(req, res) {
       while ((nl = buf.indexOf("\n")) !== -1) {
         const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        if (line.trim() !== "" || kind === "assistant_text") {
-          emit({ kind: "assistant_text", text: line + "\n" });
+        if (isAiderNoise(line)) continue;
+        if (!realSeen) {
+          if (line.trim() === "") continue;   // eat leading blank lines
+          realSeen = true;
         }
+        emit({ kind: "assistant_text", text: line + "\n" });
       }
     });
     stream.on("end", () => {
-      if (buf.length) emit({ kind: "assistant_text", text: buf });
+      if (!buf.length) return;
+      if (isAiderNoise(buf)) return;
+      if (!realSeen && buf.trim() === "") return;
+      emit({ kind: "assistant_text", text: buf });
     });
   };
-  forward(child.stdout, "assistant_text");
-  forward(child.stderr, "assistant_text");
+  forward(child.stdout);
+  forward(child.stderr);
 
   child.on("close", (code, sig) => {
     aiderJobs.delete(jobId);
