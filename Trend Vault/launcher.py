@@ -46,13 +46,33 @@ def resolve_ollama() -> str | None:
 
 # Aider: required for the Ollama Chat UI's Code section. The Code agent
 # spawns `aider --model ollama_chat/<model> --message ...` for every turn,
-# so this binary must be on PATH alongside Ollama.
+# so this binary must be resolvable (either on PATH, in a pipx-managed env,
+# or in the project-local venv we maintain).
+#
+# We default to installing aider into a dedicated venv at <ROOT>/.venv-aider/
+# because the WindowsApps PythonManager Python sandboxes `pip --user`
+# installs and breaks numpy source-builds with stale setuptools.
+_AIDER_VENV_DIR = os.path.join(ROOT, '.venv-aider')
+
+def _aider_venv_python() -> str | None:
+    """Return path to the venv's python.exe, or None if the venv isn't built."""
+    p = os.path.join(_AIDER_VENV_DIR, 'Scripts', 'python.exe')
+    return p if os.path.isfile(p) else None
+
+def _aider_venv_bin() -> str | None:
+    """Return path to aider.exe inside the venv, or None."""
+    p = os.path.join(_AIDER_VENV_DIR, 'Scripts', 'aider.exe')
+    return p if os.path.isfile(p) else None
+
 def resolve_aider() -> str | None:
-    """Return the path to aider.exe, or None if it isn't installed."""
+    """Return the path to aider.exe, or None if it isn't installed.
+    Search order: project venv → PATH → common pip --user locations."""
+    venv = _aider_venv_bin()
+    if venv:
+        return venv
     p = shutil.which('aider')
     if p:
         return p
-    # Common pip --user install locations on Windows.
     home = os.environ.get('USERPROFILE')
     if home:
         for guess in (
@@ -594,14 +614,18 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider with two strategies:
-        1. If `pipx` is available, use it for an isolated install — recommended
-           by the aider docs and avoids dependency conflicts entirely.
-        2. Otherwise, upgrade pip + setuptools + wheel first (works around the
-           "AttributeError: module 'pkgutil' has no attribute 'ImpImporter'"
-           failure on Python 3.12+, where old setuptools tries to build numpy
-           with distutils which was removed from the stdlib), then
-           pip install --user --prefer-binary aider-chat.
+        """Install aider into <ROOT>/.venv-aider/ — a project-local venv.
+
+        Why a venv and not pip --user?
+          The WindowsApps PythonManager Python (and similar sandboxed Pythons)
+          break `pip install --user` when a transitive dep like numpy needs
+          to be built from source: pip's build isolation downloads an old
+          setuptools that references the removed pkgutil.ImpImporter and
+          crashes. A dedicated venv has its own fresh pip and is unaffected
+          by the user-site sandbox.
+
+        If `pipx` is available we prefer that — it does the same thing in
+        a globally-managed location and the resulting aider is on PATH.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
@@ -612,38 +636,75 @@ class TrendVaultLauncher(tk.Tk):
                 ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
             else:
                 self._log_line(
-                    'No pipx detected. Upgrading pip / setuptools / wheel first '
-                    '(avoids numpy build failures on Python 3.12+)...', ACCENT
+                    'Installing aider into project-local venv at ' + _AIDER_VENV_DIR + ' ...', ACCENT
                 )
-                self._run_pip_subprocess(
-                    pip + ['install', '--user', '--upgrade', 'pip', 'setuptools', 'wheel'],
-                    '[pip prep]'
-                )
-                self._log_line('Now installing aider-chat (preferring prebuilt wheels)...', ACCENT)
-                ok = self._run_pip_subprocess(
-                    pip + ['install', '--user', '--upgrade', '--prefer-binary', 'aider-chat'],
-                    '[pip aider]'
-                )
-                if not ok:
-                    self._log_line('Hint: installing pipx + retrying often fixes dep build errors:', AMBER)
-                    self._log_line('   ' + ' '.join(pip) + ' install --user pipx', AMBER)
-                    self._log_line('   then click INSTALL AIDER again', AMBER)
+                ok = self._install_aider_into_venv(pip)
             if ok:
                 self._log_line('Aider installed successfully', GREEN)
                 path = resolve_aider()
                 if path:
-                    self._log_line('Aider is now on PATH: ' + path, GREEN)
+                    self._log_line('Aider resolved at: ' + path, GREEN)
                 else:
                     self._log_line(
-                        'Aider installed but not on PATH yet. Restart the launcher '
-                        '(or your terminal) so the new Scripts/ directory is picked up.',
-                        AMBER
+                        'Aider install reported success but resolve_aider() returned None. '
+                        'Restart the launcher to re-scan.', AMBER
                     )
             else:
-                self._log_line('Aider install failed; see [pip] errors above', RED)
+                self._log_line('Aider install failed; see [pip] / [venv] errors above', RED)
+                self._log_line(
+                    'Workaround: install pipx with the official Python from python.org, '
+                    'then re-click INSTALL AIDER:', AMBER
+                )
+                self._log_line('   ' + ' '.join(pip) + ' install --user pipx', AMBER)
         finally:
             self._installing_aider = False
             self._set_status('Ready')
+
+    def _install_aider_into_venv(self, pip) -> bool:
+        """Bootstrap <ROOT>/.venv-aider/ and pip-install aider into it.
+
+        Steps:
+          1. Create the venv with `python -m venv <dir>` (using `pip[0]`
+             which is the Python interpreter we resolved earlier).
+          2. Upgrade pip + setuptools + wheel inside the venv.
+          3. `pip install --upgrade --prefer-binary aider-chat` inside it.
+
+        Returns True iff the final aider install exits 0 AND aider.exe is
+        present at the expected venv path afterwards.
+        """
+        py_for_bootstrap = pip[0]   # _find_pip_cmd returns [python, '-m', 'pip']
+        if not os.path.isfile(py_for_bootstrap):
+            # User passed plain ['pip'] — find a python explicitly.
+            for cand in ('python', 'python3', 'py'):
+                p = shutil.which(cand)
+                if p:
+                    py_for_bootstrap = p
+                    break
+        # 1. Create the venv (skip if already there).
+        if os.path.isdir(_AIDER_VENV_DIR) and _aider_venv_python():
+            self._log_line('venv already exists at ' + _AIDER_VENV_DIR + ' — reusing', AMBER)
+        else:
+            ok = self._run_pip_subprocess(
+                [py_for_bootstrap, '-m', 'venv', _AIDER_VENV_DIR],
+                '[venv create]'
+            )
+            if not ok or not _aider_venv_python():
+                self._log_line('Could not create venv at ' + _AIDER_VENV_DIR, RED)
+                return False
+        venv_py = _aider_venv_python()
+        # 2. Upgrade pip / setuptools / wheel inside the venv.
+        self._log_line('Upgrading pip / setuptools / wheel inside venv...', ACCENT)
+        self._run_pip_subprocess(
+            [venv_py, '-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel'],
+            '[venv prep]'
+        )
+        # 3. Install aider into the venv.
+        self._log_line('Installing aider-chat into venv (preferring wheels)...', ACCENT)
+        ok = self._run_pip_subprocess(
+            [venv_py, '-m', 'pip', 'install', '--upgrade', '--prefer-binary', 'aider-chat'],
+            '[venv aider]'
+        )
+        return ok and _aider_venv_bin() is not None
 
     def _run_pip_subprocess(self, cmd, label='[pip]'):
         """Run a pip/pipx command, stream its output, return True on exit 0."""

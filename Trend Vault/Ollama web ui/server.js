@@ -1153,7 +1153,17 @@ async function handleLocalCodeVerifyDirs(req, res) {
    conversation continuity automatically across our spawns.
    ---------------------------------------------------------- */
 function resolveAider() {
-  // Prefer aider on PATH; fall back to a few common locations.
+  // 1. Project-local venv maintained by the launcher (default install target).
+  //    server.js lives at <projectRoot>/Ollama web ui/server.js, so the venv
+  //    is one level up.
+  const venvBin = IS_WIN
+    ? path.join(ROOT, "..", ".venv-aider", "Scripts", "aider.exe")
+    : path.join(ROOT, "..", ".venv-aider", "bin", "aider");
+  try {
+    if (fs.statSync(venvBin).isFile()) return venvBin;
+  } catch { /* not present */ }
+
+  // 2. PATH.
   const fromPath = (() => {
     const r = spawnSync(IS_WIN ? "where" : "which", ["aider"], { encoding: "utf8" });
     if (r.status === 0) {
@@ -1163,7 +1173,8 @@ function resolveAider() {
     return null;
   })();
   if (fromPath) return fromPath;
-  // Common venv locations relative to user home (best-effort).
+
+  // 3. Common pip --user locations as a last resort.
   const home = process.env.USERPROFILE || process.env.HOME;
   if (home) {
     const guesses = IS_WIN
