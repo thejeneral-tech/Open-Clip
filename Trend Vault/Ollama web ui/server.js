@@ -46,6 +46,8 @@ const TOOL_CAPABLE_PATTERNS = [
 
 // In-flight Local Code agent jobs keyed by jobId. Each entry is { abort: AbortController }.
 const codeJobs = new Map();
+// In-flight aider subprocess jobs keyed by jobId. Each entry is { child: ChildProcess }.
+const aiderJobs = new Map();
 
 // Hard caps so a runaway model loop can't hammer the filesystem forever.
 const AGENT_MAX_ITERS = 24;
@@ -1141,6 +1143,235 @@ async function handleLocalCodeVerifyDirs(req, res) {
 }
 
 /* ----------------------------------------------------------
+   Aider backend — wraps the `aider` CLI as a subprocess and
+   streams its stdout/stderr back to the client as text events.
+   ----------------------------------------------------------
+   Aider is an independent project (pip install aider-chat). We
+   spawn it per message in --message mode so each turn is a one-
+   shot from the CLI's perspective; aider keeps its own
+   .aider.chat.history.md inside the project cwd, which provides
+   conversation continuity automatically across our spawns.
+   ---------------------------------------------------------- */
+function resolveAider() {
+  // Prefer aider on PATH; fall back to a few common locations.
+  const fromPath = (() => {
+    const r = spawnSync(IS_WIN ? "where" : "which", ["aider"], { encoding: "utf8" });
+    if (r.status === 0) {
+      const first = (r.stdout || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0];
+      if (first) return first;
+    }
+    return null;
+  })();
+  if (fromPath) return fromPath;
+  // Common venv locations relative to user home (best-effort).
+  const home = process.env.USERPROFILE || process.env.HOME;
+  if (home) {
+    const guesses = IS_WIN
+      ? [path.join(home, "AppData", "Roaming", "Python", "Scripts", "aider.exe")]
+      : [
+          path.join(home, ".local", "bin", "aider"),
+          "/usr/local/bin/aider",
+        ];
+    for (const g of guesses) {
+      try { if (fs.statSync(g).isFile()) return g; } catch { /* skip */ }
+    }
+  }
+  return null;
+}
+
+async function handleAiderCheck(req, res) {
+  const bin = resolveAider();
+  if (!bin) {
+    return writeJson(res, 200, {
+      available: false,
+      error: "aider not found on PATH. Install with: pip install aider-chat",
+    });
+  }
+  // Run `aider --version` quickly; tolerate odd exit codes.
+  const proc = spawn(bin, ["--version"], { windowsHide: true });
+  let out = "", err = "";
+  proc.stdout.on("data", b => { out += b.toString("utf8"); });
+  proc.stderr.on("data", b => { err += b.toString("utf8"); });
+  const done = new Promise((resolve) => {
+    const t = setTimeout(() => { try { proc.kill(); } catch {} resolve(null); }, 6000);
+    proc.on("close", () => { clearTimeout(t); resolve(null); });
+    proc.on("error", () => { clearTimeout(t); resolve(null); });
+  });
+  await done;
+  const version = (out + err).trim().split(/\r?\n/, 1)[0] || "(unknown)";
+  writeJson(res, 200, { available: true, bin, version });
+}
+
+// Build the aider command. Returns { cmd, args } for spawn().
+//
+// We always pass:
+//   --message "<prompt>"        one-shot (don't open the REPL)
+//   --yes-always                auto-accept any "edit this file?" prompts
+//   --no-auto-commits           don't `git commit` automatically
+//   --no-stream                 buffered output is easier to parse
+//   --no-pretty                 strip ANSI colours
+//   --no-fancy-input            avoids prompt_toolkit init issues
+//   --model <model>             explicit model identifier
+//
+// Custom user flags from settings.aiderFlags are split by whitespace and
+// appended last so they win.
+function buildAiderArgs({ model, prompt, files, extraFlags }) {
+  const args = [
+    "--message", prompt,
+    "--yes-always",
+    "--no-auto-commits",
+    "--no-stream",
+    "--no-pretty",
+    "--no-fancy-input",
+  ];
+  if (model) {
+    args.push("--model", model);
+  }
+  if (Array.isArray(files) && files.length) {
+    for (const f of files) {
+      if (typeof f === "string" && f.trim()) args.push(f.trim());
+    }
+  }
+  if (extraFlags && typeof extraFlags === "string") {
+    // Naive but adequate: split on whitespace, keep non-empty.
+    for (const tok of extraFlags.split(/\s+/)) {
+      if (tok) args.push(tok);
+    }
+  }
+  return args;
+}
+
+async function handleAiderChat(req, res) {
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (e) { return writeJson(res, 400, { error: `Bad JSON: ${e.message}` }); }
+
+  const prompt = (body.prompt || "").toString();
+  if (!prompt.trim()) return writeJson(res, 400, { error: "Empty prompt" });
+
+  const cwd = body.cwd ? String(body.cwd) : CODE_CWD;
+  try {
+    const stat = fs.statSync(cwd);
+    if (!stat.isDirectory()) throw new Error("cwd is not a directory");
+  } catch (e) {
+    return writeJson(res, 400, { error: `cwd not usable: ${e.message}` });
+  }
+
+  const bin = resolveAider();
+  if (!bin) {
+    return writeJson(res, 400, {
+      error: "aider not installed. Install: pip install aider-chat",
+    });
+  }
+
+  const model = (body.model || "").toString();
+  const files = Array.isArray(body.files) ? body.files : [];
+  const extraFlags = (body.extraFlags || "").toString();
+  const args = buildAiderArgs({ model, prompt, files, extraFlags });
+
+  const jobId = crypto.randomBytes(8).toString("hex");
+  const abort = new AbortController();
+
+  res.writeHead(200, {
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+    "X-Code-Job": jobId,
+  });
+  const emit = (obj) => res.write(JSON.stringify(obj) + "\n");
+  emit({ kind: "meta", jobId, cwd, model, backend: "aider", bin, args });
+
+  const child = spawn(bin, args, {
+    cwd,
+    env: {
+      ...process.env,
+      // Ensure aider sees Ollama if we're using a local model.
+      OLLAMA_API_BASE: process.env.OLLAMA_API_BASE || OLLAMA_HOST,
+      // Stable output (no progress spinners that confuse line-buffering).
+      PYTHONUNBUFFERED: "1",
+      NO_COLOR: "1",
+      TERM: "dumb",
+    },
+    windowsHide: true,
+  });
+  aiderJobs.set(jobId, { child, abort });
+
+  const killChild = () => {
+    if (child.exitCode !== null) return;
+    try { child.kill(IS_WIN ? undefined : "SIGTERM"); } catch {}
+    setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, 1500).unref();
+  };
+
+  res.on("close", () => {
+    if (!res.writableEnded) abort.abort();
+    if (child.exitCode === null) killChild();
+    aiderJobs.delete(jobId);
+  });
+  abort.signal.addEventListener("abort", () => killChild(), { once: true });
+
+  // Strip ANSI escape sequences just in case --no-pretty leaks something.
+  const stripAnsi = (s) => s.replace(/\x1B\[[0-9;?]*[ -/]*[@-~]/g, "");
+
+  // Forward each line as an assistant_text event so the existing chat
+  // renderer shows it inline; aider doesn't speak tool-call JSON.
+  const forward = (stream, kind) => {
+    let buf = "";
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk) => {
+      buf += stripAnsi(chunk);
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (line.trim() !== "" || kind === "assistant_text") {
+          emit({ kind: "assistant_text", text: line + "\n" });
+        }
+      }
+    });
+    stream.on("end", () => {
+      if (buf.length) emit({ kind: "assistant_text", text: buf });
+    });
+  };
+  forward(child.stdout, "assistant_text");
+  forward(child.stderr, "assistant_text");
+
+  child.on("close", (code, sig) => {
+    aiderJobs.delete(jobId);
+    emit({
+      kind: code === 0 ? "done" : "warning",
+      message: code === 0
+        ? `aider finished (exit 0)`
+        : `aider exited with code ${code}${sig ? ` (signal ${sig})` : ""}`,
+    });
+    if (!res.writableEnded) {
+      emit({ kind: "exit" });
+      res.end();
+    }
+  });
+  child.on("error", (err) => {
+    aiderJobs.delete(jobId);
+    emit({ kind: "error", message: `aider failed to launch: ${err.message}` });
+    if (!res.writableEnded) {
+      emit({ kind: "exit" });
+      res.end();
+    }
+  });
+}
+
+async function handleAiderStop(req, res) {
+  let body;
+  try { body = await readJsonBody(req); }
+  catch (e) { return writeJson(res, 400, { error: `Bad JSON: ${e.message}` }); }
+  const jobId = (body.jobId || "").toString();
+  const job = aiderJobs.get(jobId);
+  if (!job) return writeJson(res, 404, { stopped: false, error: "Unknown jobId" });
+  try { job.abort.abort(); }
+  catch (e) { return writeJson(res, 500, { stopped: false, error: e.message }); }
+  aiderJobs.delete(jobId);
+  writeJson(res, 200, { stopped: true });
+}
+
+/* ----------------------------------------------------------
    FS browse: list a directory (or drives on Windows root)
    ---------------------------------------------------------- */
 function listWindowsDrives() {
@@ -1409,6 +1640,12 @@ const server = http.createServer((req, res) => {
     handleLocalCodeFsList(req, res);
   } else if (pathname === "/local-code/upload" && req.method === "POST") {
     handleLocalCodeUpload(req, res);
+  } else if (pathname === "/local-code/aider/check" && req.method === "GET") {
+    handleAiderCheck(req, res);
+  } else if (pathname === "/local-code/aider/chat" && req.method === "POST") {
+    handleAiderChat(req, res);
+  } else if (pathname === "/local-code/aider/stop" && req.method === "POST") {
+    handleAiderStop(req, res);
   } else if (pathname.startsWith("/api/")) {
     proxyToOllama(req, res);
   } else if (req.method === "GET" || req.method === "HEAD") {

@@ -131,6 +131,14 @@
             <span class="chip-label">LOCAL CODE</span>
           </div>
 
+          <div class="banner-chip" id="codeBackendChip" title="Active code agent backend (change in Settings)">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span class="chip-label" id="codeBackendName">agent: built-in</span>
+          </div>
+
           <button type="button" class="banner-chip banner-chip-btn" id="codeProjectChip" title="Active project — click to switch projects" hidden>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M2 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"></path>
@@ -402,6 +410,41 @@
             <span class="field-hint" id="codeVerifyDirsStatus">The agent can read &amp; edit files in any of these directories (in addition to the primary one).</span>
           </div>
         </div>
+
+        <label class="field" id="codeBackendField">
+          <span class="field-label">
+            Code agent backend
+            <span class="field-tag" id="codeBackendTag">built-in</span>
+          </span>
+          <select id="codeBackendSelect">
+            <option value="builtin">Built-in (Ollama tool-call agent)</option>
+            <option value="aider">Aider CLI (pip install aider-chat)</option>
+          </select>
+          <span class="field-hint">
+            <strong>Built-in</strong> uses the bundled tool-call loop with Ollama (read_file, edit_file, bash…).
+            <strong>Aider</strong> spawns the standalone <code>aider</code> CLI in your working directory; each message is one
+            aider turn. Aider has to be on your PATH — install with <code>pip install aider-chat</code>.
+          </span>
+        </label>
+
+        <label class="field" id="aiderModelField" hidden>
+          <span class="field-label">Aider model <span class="field-tag">override</span></span>
+          <input type="text" id="aiderModelInput" placeholder="(blank = ollama_chat/&lt;topbar pick&gt;)" />
+          <span class="field-hint">
+            Pass to aider's <code>--model</code> flag. Examples:
+            <code>ollama_chat/qwen2.5-coder:7b</code>, <code>claude-3-5-sonnet-20241022</code>,
+            <code>openai/gpt-4o</code>. Leave blank to auto-build from the topbar Ollama pick.
+          </span>
+        </label>
+
+        <label class="field" id="aiderFlagsField" hidden>
+          <span class="field-label">Aider extra flags <span class="field-tag">advanced</span></span>
+          <input type="text" id="aiderFlagsInput" placeholder="e.g. --architect --edit-format diff" />
+          <span class="field-hint">
+            Appended to every <code>aider</code> invocation. Whitespace-separated.
+            We already pass <code>--yes-always --no-auto-commits --no-stream --no-pretty --no-fancy-input</code>.
+          </span>
+        </label>
 
         <label class="field field-checkbox" id="codeUnrestrictedField">
           <span class="field-checkbox-row">

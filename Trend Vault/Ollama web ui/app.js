@@ -36,6 +36,14 @@
     codeCwd: "",
     codeAllowedDirs: [],
     codeUnrestrictedFs: false,
+    // Code agent backend: "builtin" (Ollama tool-call agent — the original)
+    // or "aider" (spawns the aider CLI per turn).
+    codeBackend: "builtin",
+    // Aider-specific knobs. The model string is what aider expects in
+    // its --model flag (e.g. "ollama_chat/qwen2.5-coder:7b", "claude-3-5-sonnet",
+    // "openai/gpt-4o"). Leave blank to auto-build from the topbar pick.
+    aiderModel: "",
+    aiderExtraFlags: "",
     temperature: 0.7,
     topP: 0.9,
     topK: 40,
@@ -72,7 +80,9 @@
 
   // Local Code agent state
   let codeCheckInfo = null;          // { available, cwd, models, toolCapableModels }
+  let aiderCheckInfo = null;         // { available, bin, version, error }
   let currentCodeJobId = null;
+  let currentCodeBackend = null;     // "builtin" | "aider" while a job is in flight
   const codeToolUseEls = new Map();  // tool-call id -> DOM block
 
   // Files staged for the next outgoing Code message. Each entry:
@@ -212,6 +222,14 @@
     codeVerifyDirsStatus: $("codeVerifyDirsStatus"),
     codeUnrestrictedInput: $("codeUnrestrictedInput"),
     codeUnrestrictedBadge: $("codeUnrestrictedBadge"),
+    codeBackendSelect: $("codeBackendSelect"),
+    codeBackendTag: $("codeBackendTag"),
+    aiderModelField: $("aiderModelField"),
+    aiderModelInput: $("aiderModelInput"),
+    aiderFlagsField: $("aiderFlagsField"),
+    aiderFlagsInput: $("aiderFlagsInput"),
+    codeBackendChip: $("codeBackendChip"),
+    codeBackendName: $("codeBackendName"),
     temperature: $("temperature"),
     tempValue: $("tempValue"),
     topP: $("topP"),
@@ -446,6 +464,8 @@
       el.input.placeholder = "Tell the agent what to do — e.g. 'add a /healthz endpoint to server.ts'";
       // Check Ollama availability + show cwd / tool support.
       codeCheck();
+      // If the user has aider selected, ping it so the chip is accurate.
+      if (settings.codeBackend === "aider") aiderCheck();
     } else {
       el.viewTitle.textContent = "Models";
     }
@@ -905,6 +925,20 @@
     return codeCheckInfo;
   }
 
+  // Ping the server to see whether aider is installed. Only run when needed
+  // (entering Code with aider selected, or saving Settings with aider chosen).
+  async function aiderCheck() {
+    try {
+      const r = await fetch("/local-code/aider/check");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      aiderCheckInfo = await r.json();
+    } catch (err) {
+      aiderCheckInfo = { available: false, error: err.message };
+    }
+    refreshCodeBanner();
+    return aiderCheckInfo;
+  }
+
   function refreshCodeBanner() {
     if (!el.codeBanner) return;
     const info = codeCheckInfo || {};
@@ -968,6 +1002,28 @@
 
     if (el.codeUnrestrictedBadge) {
       el.codeUnrestrictedBadge.hidden = eff.unrestrictedFs !== true;
+    }
+
+    // Backend chip: "agent: built-in" or "agent: aider — vX.Y.Z" / "(missing)".
+    if (el.codeBackendChip && el.codeBackendName) {
+      const backend = settings.codeBackend === "aider" ? "aider" : "builtin";
+      if (backend === "builtin") {
+        el.codeBackendName.textContent = "agent: built-in";
+        el.codeBackendChip.title = "Bundled Ollama tool-call agent. Change in Settings → Code agent backend.";
+        el.codeBackendName.classList.remove("error");
+      } else if (aiderCheckInfo && aiderCheckInfo.available) {
+        const v = (aiderCheckInfo.version || "").replace(/^aider\s+/i, "");
+        el.codeBackendName.textContent = v ? `agent: aider · ${v}` : "agent: aider";
+        el.codeBackendChip.title =
+          `aider CLI at ${aiderCheckInfo.bin || "?"}.\nClick Settings to change the backend or model.`;
+        el.codeBackendName.classList.remove("error");
+      } else {
+        el.codeBackendName.textContent = "agent: aider (not installed)";
+        el.codeBackendChip.title =
+          (aiderCheckInfo && aiderCheckInfo.error) ||
+          "Aider is not installed. Run: pip install aider-chat";
+        el.codeBackendName.classList.add("error");
+      }
     }
   }
 
@@ -2209,6 +2265,11 @@
   }
 
   async function sendCodeMessage(text) {
+    // Route to the configured backend. Both paths share the same DOM
+    // rendering — only the request shape + streaming source differ.
+    if (settings.codeBackend === "aider") {
+      return sendAiderMessage(text);
+    }
     const model = el.modelSelect.value;
     if (!model) {
       alert("Pick a model in the top bar first (the agent uses Ollama tool calling).");
@@ -2452,13 +2513,214 @@
   async function stopCodeJob() {
     if (currentAbortController) currentAbortController.abort();
     if (currentCodeJobId) {
+      const endpoint = currentCodeBackend === "aider"
+        ? "/local-code/aider/stop"
+        : "/local-code/stop";
       try {
-        await fetch("/local-code/stop", {
+        await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId: currentCodeJobId }),
         });
       } catch { /* best effort */ }
+    }
+  }
+
+  /* ----------------------------------------------------------
+     Aider backend — spawns the aider CLI via the server, streams
+     its stdout/stderr into the same chat bubble + live-stats UI.
+     ---------------------------------------------------------- */
+  async function sendAiderMessage(text) {
+    // Resolve the model aider should use. Either an explicit string in
+    // Settings (e.g. "claude-3-5-sonnet-20241022", "openai/gpt-4o") or,
+    // failing that, prefix the topbar Ollama pick with ollama_chat/.
+    const topModel = el.modelSelect.value || "";
+    const aiderModel = (settings.aiderModel || "").trim()
+      || (topModel ? `ollama_chat/${topModel}` : "");
+    if (!aiderModel) {
+      alert(
+        "Aider needs a model.\n\n" +
+        "Either pick one in the topbar (it'll be prefixed with ollama_chat/),\n" +
+        "or set an explicit Aider model in Settings (e.g. claude-3-5-sonnet)."
+      );
+      return;
+    }
+
+    // Make sure aider is installed before we promise a working chat.
+    if (!aiderCheckInfo) await aiderCheck();
+    if (!aiderCheckInfo || !aiderCheckInfo.available) {
+      alert(
+        "Aider is not installed.\n\n" +
+        "Install it with:\n  pip install aider-chat\n\n" +
+        (aiderCheckInfo && aiderCheckInfo.error ? `Detail: ${aiderCheckInfo.error}` : "")
+      );
+      return;
+    }
+
+    const pendingUpload = stagedAttachments.find((a) => a.status === "uploading");
+    if (pendingUpload) {
+      alert("An upload is still in progress — please wait a moment.");
+      return;
+    }
+
+    const c = ctx();
+    let conv = getActiveConversation();
+    if (!conv) conv = createConversation();
+
+    // Attachments: pass their relative paths to aider via --files so it
+    // adds them to the chat scope automatically.
+    const okAttachments = stagedAttachments.filter((a) => a.status === "done");
+    const files = okAttachments.map((a) => a.relPath || a.name).filter(Boolean);
+
+    // User message UI (matches sendCodeMessage layout exactly).
+    let promptToSend = text;
+    if (okAttachments.length > 0) {
+      const lines = okAttachments.map((a) => {
+        const size = formatChipSize(a.sizeBytes);
+        return `  • ${a.relPath || a.name}${size ? ` (${size})` : ""}`;
+      });
+      promptToSend =
+        `[The user attached ${okAttachments.length} file${okAttachments.length === 1 ? "" : "s"}:\n` +
+        `${lines.join("\n")}]\n\n${text}`;
+    }
+    const userBlocks = [];
+    if (okAttachments.length > 0) {
+      userBlocks.push({
+        type: "attachments",
+        items: okAttachments.map((a) => ({
+          name: a.name, relPath: a.relPath, sizeBytes: a.sizeBytes,
+        })),
+      });
+    }
+    userBlocks.push({ type: "text", text });
+    const userMsg = { role: "user", content: text, blocks: userBlocks };
+    conv.messages.push(userMsg);
+    setConversationTitle(conv, text);
+    conv.model = aiderModel;
+    if (activeProjectId && conv.projectId !== activeProjectId) {
+      conv.projectId = activeProjectId;
+    }
+    const activeProj = getActiveProject();
+    if (activeProj) {
+      activeProj.updatedAt = Date.now();
+      saveProjects();
+    }
+    c.save();
+    el.welcome.classList.add("hidden");
+    el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
+
+    stagedAttachments.length = 0;
+    renderAttachments();
+
+    // Assistant placeholder + live counter, identical to the built-in flow.
+    const assistantMsg = {
+      role: "assistant", content: "", blocks: [], model: aiderModel, backend: "aider",
+    };
+    conv.messages.push(assistantMsg);
+    const assistantEl = buildCodeMessageEl(assistantMsg, conv);
+    const blocksEl = assistantEl._blocksEl;
+    const live = buildLiveStats();
+    assistantEl.querySelector(".message-body").appendChild(live.el);
+    el.messages.appendChild(assistantEl);
+    scrollToBottom();
+
+    codeToolUseEls.clear();
+    isStreaming = true;
+    currentCodeBackend = "aider";
+    el.sendBtn.classList.add("hidden");
+    el.stopBtn.classList.remove("hidden");
+    currentAbortController = new AbortController();
+
+    const eff = effectiveCodeContext();
+    const body = {
+      prompt: promptToSend,
+      cwd: eff.cwd || undefined,
+      model: aiderModel,
+      files,
+      extraFlags: settings.aiderExtraFlags || "",
+    };
+
+    // Append text chunks into one growing text block so the user sees
+    // aider's narrative + diff blocks as Markdown.
+    let textBlock = { type: "text", text: "" };
+    assistantMsg.blocks.push(textBlock);
+    let textEl = appendBlockEl(blocksEl, textBlock);
+
+    try {
+      const res = await fetch("/local-code/aider/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: currentAbortController.signal,
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} — ${t || res.statusText}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          let env;
+          try { env = JSON.parse(line); } catch { continue; }
+
+          if (env.kind === "meta") {
+            currentCodeJobId = env.jobId;
+          } else if (env.kind === "assistant_text") {
+            const piece = env.text || "";
+            textBlock.text += piece;
+            if (textEl) textEl.innerHTML = renderMarkdown(textBlock.text);
+            if (piece.length) live.addTokens(1);
+          } else if (env.kind === "warning") {
+            const w = { type: "text", text: `_${env.message}_` };
+            assistantMsg.blocks.push(w);
+            appendBlockEl(blocksEl, w);
+            // Continue collecting subsequent text into a fresh block.
+            textBlock = { type: "text", text: "" };
+            assistantMsg.blocks.push(textBlock);
+            textEl = appendBlockEl(blocksEl, textBlock);
+          } else if (env.kind === "error") {
+            const e = { type: "text", text: `**Error:** ${env.message}` };
+            assistantMsg.blocks.push(e);
+            appendBlockEl(blocksEl, e);
+          }
+          c.save();
+          scrollToBottom();
+        }
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        const stop = { type: "text", text: "_(stopped)_" };
+        assistantMsg.blocks.push(stop);
+        appendBlockEl(blocksEl, stop);
+      } else {
+        console.error(err);
+        const e = { type: "text", text: `**Error:** ${err.message}` };
+        assistantMsg.blocks.push(e);
+        appendBlockEl(blocksEl, e);
+      }
+    } finally {
+      live.stop();
+      if (live.el.parentElement) live.el.remove();
+      isStreaming = false;
+      currentAbortController = null;
+      currentCodeJobId = null;
+      currentCodeBackend = null;
+      el.sendBtn.classList.remove("hidden");
+      el.stopBtn.classList.add("hidden");
+      assistantMsg.content = assistantMsg.blocks
+        .filter((b) => b.type === "text")
+        .map((b) => b.text).join("\n\n");
+      c.save();
+      refreshCodeBanner();
     }
   }
 
@@ -2616,6 +2878,17 @@
   /* ----------------------------------------------------------
      Settings UI
      ---------------------------------------------------------- */
+  // Show or hide the aider-specific Settings fields based on the current
+  // selection of codeBackend.
+  function syncAiderFieldsVisibility() {
+    const aider = (el.codeBackendSelect && el.codeBackendSelect.value === "aider");
+    if (el.aiderModelField) el.aiderModelField.hidden = !aider;
+    if (el.aiderFlagsField) el.aiderFlagsField.hidden = !aider;
+    if (el.codeBackendTag) {
+      el.codeBackendTag.textContent = aider ? "aider" : "built-in";
+    }
+  }
+
   function openSettings() {
     el.hostInput.value = settings.host;
     el.systemPrompt.value = settings.systemPrompt;
@@ -2633,6 +2906,12 @@
     if (el.codeUnrestrictedInput) {
       el.codeUnrestrictedInput.checked = !!settings.codeUnrestrictedFs;
     }
+    if (el.codeBackendSelect) {
+      el.codeBackendSelect.value = settings.codeBackend || "builtin";
+      syncAiderFieldsVisibility();
+    }
+    if (el.aiderModelInput) el.aiderModelInput.value = settings.aiderModel || "";
+    if (el.aiderFlagsInput) el.aiderFlagsInput.value = settings.aiderExtraFlags || "";
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
     el.topP.value = settings.topP;
@@ -2655,6 +2934,17 @@
     if (el.codeAllowedDirsInput) {
       settings.codeAllowedDirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
     }
+    if (el.codeBackendSelect) {
+      const newBackend = el.codeBackendSelect.value === "aider" ? "aider" : "builtin";
+      const switching = settings.codeBackend !== newBackend;
+      settings.codeBackend = newBackend;
+      if (switching && newBackend === "aider") {
+        // Re-check aider availability so the banner chip + alerts are accurate.
+        aiderCheck();
+      }
+    }
+    if (el.aiderModelInput) settings.aiderModel = el.aiderModelInput.value.trim();
+    if (el.aiderFlagsInput) settings.aiderExtraFlags = el.aiderFlagsInput.value.trim();
     if (el.codeUnrestrictedInput) {
       const wasOn = settings.codeUnrestrictedFs === true;
       const nowOn = !!el.codeUnrestrictedInput.checked;
@@ -2827,6 +3117,11 @@
     }
     if (el.codeVerifyDirsBtn) {
       el.codeVerifyDirsBtn.addEventListener("click", verifyAllowedDirs);
+    }
+
+    // Toggle aider Settings fields when the user flips the backend dropdown.
+    if (el.codeBackendSelect) {
+      el.codeBackendSelect.addEventListener("change", syncAiderFieldsVisibility);
     }
 
     // Local Code: directory picker buttons in the banner.
