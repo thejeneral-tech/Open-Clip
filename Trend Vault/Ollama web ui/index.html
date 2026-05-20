@@ -424,8 +424,9 @@
           <input type="text" id="aiderFlagsInput" placeholder="e.g. --architect --edit-format diff --cache-prompts" />
           <span class="field-hint">
             Appended to every <code>aider</code> invocation. Whitespace-separated.
-            We already pass <code>--yes-always --no-auto-commits --no-stream --no-pretty --no-fancy-input</code>
+            We already pass <code>--yes-always --no-auto-commits --stream --no-pretty --no-fancy-input --map-tokens 2048</code>
             and route through your local Ollama via <code>ollama_chat/&lt;model&gt;</code>.
+            Override any of these here (later flags win).
           </span>
         </label>
 

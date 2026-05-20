@@ -1230,14 +1230,18 @@ async function handleAiderCheck(req, res) {
 //   --message "<prompt>"        one-shot (don't open the REPL)
 //   --yes-always                auto-accept any "edit this file?" prompts
 //   --no-auto-commits           don't `git commit` automatically
-//   --no-stream                 buffered output is easier to parse
-//   --no-pretty                 strip ANSI colours
+//   --stream                    stream tokens as they arrive so the
+//                               live counter in the UI ticks accurately;
+//                               otherwise aider buffers the whole reply
+//                               and our t/s reads ~0 for the entire turn
+//                               then dumps it all at once at the end
+//   --no-pretty                 strip ANSI colours (still parseable)
 //   --no-fancy-input            avoids prompt_toolkit init issues
-//   --map-tokens 4096           generous repo map so the LLM can see file
-//                               structure even without explicit /add. This
-//                               is the single biggest factor in whether
-//                               weaker / non-coder models will admit they
-//                               can browse the project.
+//   --map-tokens 2048           moderate repo map. Bigger numbers (4096+)
+//                               make prompt-processing slow on small
+//                               models — for llama3.2:1b every 1024
+//                               tokens of prompt costs noticeable wall
+//                               time, so 2048 is the sweet spot.
 //   --model <model>             explicit model identifier
 //
 // Path scope:
@@ -1245,10 +1249,7 @@ async function handleAiderCheck(req, res) {
 //                               not try to auto-init a git repo in the cwd
 //   allowedDirs[]               extra dirs as positional args (editable)
 //   unrestrictedFs              kept for UI consistency; aider has no
-//                               sandboxing of its own. We do NOT pass
-//                               --subtree-only here because it would
-//                               shadow allowedDirs and shrink the repo
-//                               map to nothing.
+//                               sandboxing of its own.
 //
 // Custom user flags from settings.aiderFlags are split on whitespace and
 // appended last so they always win.
@@ -1257,10 +1258,10 @@ function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, ext
     "--message", prompt,
     "--yes-always",
     "--no-auto-commits",
-    "--no-stream",
+    "--stream",
     "--no-pretty",
     "--no-fancy-input",
-    "--map-tokens", "4096",
+    "--map-tokens", "2048",
   ];
   if (model) {
     args.push("--model", model);
