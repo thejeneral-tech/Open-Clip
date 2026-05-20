@@ -1233,18 +1233,26 @@ async function handleAiderCheck(req, res) {
 //   --no-stream                 buffered output is easier to parse
 //   --no-pretty                 strip ANSI colours
 //   --no-fancy-input            avoids prompt_toolkit init issues
+//   --map-tokens 4096           generous repo map so the LLM can see file
+//                               structure even without explicit /add. This
+//                               is the single biggest factor in whether
+//                               weaker / non-coder models will admit they
+//                               can browse the project.
 //   --model <model>             explicit model identifier
 //
 // Path scope:
-//   allowedDirs[]               additional dirs aider can read/edit; each is
-//                               appended as a positional arg
-//   unrestrictedFs              when false, --subtree-only confines aider to
-//                               the cwd subtree; when true, aider can use
-//                               absolute paths to roam anywhere
+//   isGit                       if false, --no-git is passed so aider does
+//                               not try to auto-init a git repo in the cwd
+//   allowedDirs[]               extra dirs as positional args (editable)
+//   unrestrictedFs              kept for UI consistency; aider has no
+//                               sandboxing of its own. We do NOT pass
+//                               --subtree-only here because it would
+//                               shadow allowedDirs and shrink the repo
+//                               map to nothing.
 //
 // Custom user flags from settings.aiderFlags are split on whitespace and
 // appended last so they always win.
-function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, extraFlags }) {
+function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, extraFlags, isGit }) {
   const args = [
     "--message", prompt,
     "--yes-always",
@@ -1252,14 +1260,15 @@ function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, ext
     "--no-stream",
     "--no-pretty",
     "--no-fancy-input",
+    "--map-tokens", "4096",
   ];
   if (model) {
     args.push("--model", model);
   }
-  // When NOT full-disk, confine aider to the cwd's subtree. When full-disk
-  // is on, leave the default off so aider can use absolute paths anywhere.
-  if (!unrestrictedFs) {
-    args.push("--subtree-only");
+  // Skip git completely if the cwd isn't a git repo, so aider doesn't
+  // surprise-init one (which it would, silently, thanks to --yes-always).
+  if (!isGit) {
+    args.push("--no-git");
   }
   if (Array.isArray(files) && files.length) {
     for (const f of files) {
@@ -1276,6 +1285,10 @@ function buildAiderArgs({ model, prompt, files, allowedDirs, unrestrictedFs, ext
       if (tok) args.push(tok);
     }
   }
+  // unrestrictedFs is kept on the request shape for forward-compat but is
+  // intentionally not turned into a flag: aider has no path containment of
+  // its own to disable.
+  void unrestrictedFs;
   return args;
 }
 
@@ -1310,8 +1323,14 @@ async function handleAiderChat(req, res) {
     .map((d) => d.trim());
   const unrestrictedFs = body.unrestrictedFs === true;
   const extraFlags = (body.extraFlags || "").toString();
+  // Is the cwd a git repo? If not, we'll pass --no-git so aider doesn't
+  // silently `git init` thanks to --yes-always.
+  const isGit = (() => {
+    try { return fs.statSync(path.join(cwd, ".git")).isDirectory(); }
+    catch { return false; }
+  })();
   const args = buildAiderArgs({
-    model, prompt, files, allowedDirs, unrestrictedFs, extraFlags,
+    model, prompt, files, allowedDirs, unrestrictedFs, extraFlags, isGit,
   });
 
   const jobId = crypto.randomBytes(8).toString("hex");

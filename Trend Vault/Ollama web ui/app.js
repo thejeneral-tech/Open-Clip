@@ -956,10 +956,15 @@
       el.welcomeTips.hidden = true;
     } else {
       el.welcomeTitle.textContent = "Local Code · Aider";
-      el.welcomeSubtitle.textContent =
+      el.welcomeSubtitle.innerHTML =
         "Pair-programming with the aider CLI, routed through your local Ollama models. " +
-        "Pick an Ollama model in the topbar — it'll be passed to aider as ollama_chat/<model>. " +
-        "Aider reads, edits, and applies SEARCH/REPLACE diffs inside the project working directory.";
+        "Pick an Ollama model in the topbar — it's passed to aider as " +
+        "<code>ollama_chat/&lt;model&gt;</code>. Aider reads, edits, and applies SEARCH/REPLACE " +
+        "diffs inside the working directory.<br><br>" +
+        "<em>Tip: aider works much better with a coder-tuned model. Try " +
+        "<code>qwen2.5-coder:7b</code>, <code>deepseek-coder-v2</code>, or " +
+        "<code>codestral</code> — general chat models often say \"I can't browse files\" " +
+        "because they don't follow aider's edit format.</em>";
       el.welcomeTips.hidden = false;
     }
   }
