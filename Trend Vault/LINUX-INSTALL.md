@@ -55,6 +55,29 @@ ollama pull llama3.2          # any model — this one is small + general-purpos
 
 The launcher detects Ollama on PATH and lights up its service card.
 
+### Aider (auto-installable from the launcher)
+
+The Code section of the Ollama Chat UI runs through the `aider` CLI. The
+launcher will detect it on first start and offer to install it — there's
+also an **INSTALL AIDER** button in the Actions row you can hit any time.
+
+If you prefer to install it yourself:
+
+```bash
+pip install --user aider-chat
+# verify
+aider --version
+```
+
+The `--user` install drops the binary into `~/.local/bin/`. Make sure
+that's on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+(add to your `~/.bashrc` / `~/.zshrc` to persist).
+
 ### Kokoro TTS (optional)
 
 If you want local voice synthesis, set up the Kokoro venv:

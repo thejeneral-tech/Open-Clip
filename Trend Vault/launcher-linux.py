@@ -53,6 +53,36 @@ def resolve_ollama() -> str | None:
     """Return the path to the ollama binary, or None if it isn't on PATH."""
     return shutil.which('ollama')
 
+
+# Aider: required for the Ollama Chat UI's Code section. The Code agent
+# spawns `aider --model ollama_chat/<model> --message ...` for every turn,
+# so this binary must be on PATH alongside Ollama.
+def resolve_aider() -> str | None:
+    """Return the path to the aider binary, or None if not installed."""
+    p = shutil.which('aider')
+    if p:
+        return p
+    # Common pip --user install location on Linux.
+    home = os.environ.get('HOME')
+    if home:
+        guess = os.path.join(home, '.local', 'bin', 'aider')
+        if os.path.isfile(guess):
+            return guess
+    return None
+
+
+def _find_pip_cmd() -> list[str] | None:
+    """Return a command list that can run pip. Prefers `python3 -m pip`."""
+    for py in ('python3', 'python'):
+        path = shutil.which(py)
+        if path:
+            return [path, '-m', 'pip']
+    for pip in ('pip3', 'pip'):
+        path = shutil.which(pip)
+        if path:
+            return [path]
+    return None
+
 SERVICES = [
     {
         'key':  'webapp',
@@ -222,6 +252,7 @@ class TrendVaultLauncher(tk.Tk):
         self._procs: dict[str, subprocess.Popen] = {}
         self._lock  = threading.Lock()
         self._installing_ollama = False
+        self._installing_aider = False
         # CLI runner state
         self._cli_proc: subprocess.Popen | None = None
         self._cli_busy = False
@@ -232,6 +263,7 @@ class TrendVaultLauncher(tk.Tk):
         self._build_ui()
         self._poll()
         self.after(800, self._check_ollama_on_start)
+        self.after(1200, self._check_aider_on_start)
 
     # ── UI construction ─────────────────────────────────────────────────────
     def _build_ui(self):
@@ -286,6 +318,7 @@ class TrendVaultLauncher(tk.Tk):
         self._btn(row1, '⬡  HEALTH',          self._health,       BTN,     AMBER ).pack(side='left', padx=3)
         self._btn(row2, '\U0001f310 OPEN STUDIO', self._open_browser, BTN, ACCENT).pack(side='left', padx=3)
         self._btn(row2, '\U0001f916 OPEN CHAT UI', self._open_chat,   BTN, ACCENT).pack(side='left', padx=3)
+        self._btn(row2, '\U0001f9f0 INSTALL AIDER', self._run_install_aider, BTN, AMBER).pack(side='left', padx=3)
 
         # ── RIGHT: console header ──
         rhdr = tk.Frame(right, bg=BG2)
@@ -532,6 +565,87 @@ class TrendVaultLauncher(tk.Tk):
             # always trigger it again via the Ollama Start button.
             pass
 
+    # ── Aider dependency ────────────────────────────────────────────────────
+    def _check_aider_on_start(self):
+        path = resolve_aider()
+        if path:
+            self._log_line('Aider detected: ' + path, GREEN)
+            return
+        self._log_line('Aider is not installed -- the Chat UI Code section needs it', AMBER)
+        self._prompt_install_aider()
+
+    def _prompt_install_aider(self):
+        if self._installing_aider:
+            self._log_line('Aider install already in progress...', AMBER)
+            return
+        pip = _find_pip_cmd()
+        if not pip:
+            self._log_line(
+                'python3 / pip not found on PATH -- install Python 3 first to use aider', RED
+            )
+            return
+        answer = messagebox.askyesno(
+            'Install Aider?',
+            'Aider is required for the Code section of the Chat UI.\n\n'
+            'Install with:\n'
+            '    ' + ' '.join(pip) + ' install --user aider-chat\n\n'
+            'Click Yes to install now (uses your system Python; no sudo needed).',
+        )
+        if not answer:
+            self._log_line('Aider install skipped by user', MUTED)
+            return
+        threading.Thread(target=self._install_aider, args=(pip,), daemon=True).start()
+
+    def _run_install_aider(self):
+        if resolve_aider():
+            self._log_line('Aider is already installed: ' + resolve_aider(), GREEN)
+            return
+        self._installing_aider = False
+        self._prompt_install_aider()
+
+    def _install_aider(self, pip):
+        self._installing_aider = True
+        self._set_status('Installing aider...')
+        cmd = pip + ['install', '--user', 'aider-chat']
+        self._log_line('Running: ' + ' '.join(cmd), ACCENT)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                encoding='utf-8', errors='replace', bufsize=1,
+                start_new_session=True,
+            )
+            for raw in proc.stdout:
+                line = raw.rstrip()
+                if not line:
+                    continue
+                lo = line.lower()
+                color = (
+                    GREEN if 'successfully installed' in lo
+                    else RED if 'error' in lo
+                    else '#a0a0c0'
+                )
+                self._log_line('[pip] ' + line, color)
+            proc.wait()
+            if proc.returncode == 0:
+                self._log_line('Aider installed successfully', GREEN)
+                if resolve_aider():
+                    self._log_line('Aider is now on PATH: ' + resolve_aider(), GREEN)
+                else:
+                    self._log_line(
+                        'Aider installed to ~/.local/bin but not on PATH yet. '
+                        'Add it to your shell rc:  export PATH="$HOME/.local/bin:$PATH"', AMBER
+                    )
+            else:
+                self._log_line('pip install failed (exit code ' + str(proc.returncode) + ')', RED)
+        except FileNotFoundError as e:
+            self._log_line('pip not runnable: ' + str(e), RED)
+        except Exception as e:
+            self._log_line('Aider install error: ' + str(e), RED)
+        finally:
+            self._installing_aider = False
+            self._set_status('Ready')
+
     # ── Service control ─────────────────────────────────────────────────────
     def _start_one(self, key: str):
         svc = next(s for s in SERVICES if s['key'] == key)
@@ -668,6 +782,11 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line(
                 'Ollama'.ljust(15) + '  ' + (ollama_path if ollama_path else 'MISSING -- install via ' + _OLLAMA_INSTALL_ONELINE),
                 TEXT if ollama_path else AMBER
+            )
+            aider_path = resolve_aider()
+            self._log_line(
+                'Aider'.ljust(15) + '  ' + (aider_path if aider_path else 'MISSING -- click INSTALL AIDER to add it'),
+                TEXT if aider_path else AMBER
             )
             for tool in ('node', 'npm', 'npx', 'lsof'):
                 p = shutil.which(tool)
