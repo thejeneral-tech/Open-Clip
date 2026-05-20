@@ -9,7 +9,7 @@ Build to .exe (run bats/build-launcher.bat):
     pyinstaller --onefile --windowed --name TrendVaultLauncher launcher.py
 """
 
-import os, sys, time, socket, subprocess, threading, webbrowser, shutil, tkinter as tk
+import os, sys, time, socket, subprocess, threading, webbrowser, shutil, platform, tkinter as tk
 from tkinter import font as tkfont, messagebox
 from datetime import datetime
 
@@ -126,6 +126,94 @@ def _find_pipx_cmd() -> list[str] | None:
             except Exception:
                 pass
     return None
+
+
+# ── uv: Rust-based Python installer. We use it because it doesn't go through
+#       pip's broken build-isolation path (which downloads its own stale
+#       setuptools and crashes on Python 3.12+ when numpy needs to build).
+_USER_LOCAL_BIN = os.path.join(
+    os.environ.get('USERPROFILE') or os.environ.get('HOME', ''),
+    '.local', 'bin'
+)
+
+def _resolve_uv() -> str | None:
+    """Return the path to the `uv` binary, or None if not installed."""
+    p = shutil.which('uv')
+    if p:
+        return p
+    for guess in (
+        os.path.join(_USER_LOCAL_BIN, 'uv.exe'),
+        os.path.join(_USER_LOCAL_BIN, 'uv'),
+        os.path.join(os.environ.get('USERPROFILE', ''), '.cargo', 'bin', 'uv.exe'),
+    ):
+        if guess and os.path.isfile(guess):
+            return guess
+    return None
+
+def _uv_release_url() -> str | None:
+    """Build the GitHub release URL for the current OS / arch."""
+    sys_name = platform.system()
+    mach = (platform.machine() or '').lower()
+    arch = {
+        'amd64': 'x86_64', 'x86_64': 'x86_64', 'x64': 'x86_64',
+        'arm64': 'aarch64', 'aarch64': 'aarch64',
+    }.get(mach)
+    if not arch:
+        return None
+    base = 'https://github.com/astral-sh/uv/releases/latest/download'
+    if sys_name == 'Windows':
+        return f'{base}/uv-{arch}-pc-windows-msvc.zip'
+    if sys_name == 'Linux':
+        return f'{base}/uv-{arch}-unknown-linux-gnu.tar.gz'
+    if sys_name == 'Darwin':
+        return f'{base}/uv-{arch}-apple-darwin.tar.gz'
+    return None
+
+def _download_uv(log) -> str | None:
+    """Download the uv binary from GitHub releases into ~/.local/bin/.
+    `log` is a callable(msg, color=None) used to stream progress.
+    Returns the resolved path on success, None on failure."""
+    import urllib.request, tempfile, zipfile, tarfile
+    url = _uv_release_url()
+    if not url:
+        log('No uv release for this OS/arch: ' + platform.system() + '/' + platform.machine(), RED)
+        return None
+    log('Downloading uv from ' + url, ACCENT)
+    os.makedirs(_USER_LOCAL_BIN, exist_ok=True)
+    suffix = '.zip' if url.endswith('.zip') else '.tar.gz'
+    archive = os.path.join(tempfile.gettempdir(), 'uv_dl' + suffix)
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'TrendVaultLauncher/1.0'})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            with open(archive, 'wb') as f:
+                shutil.copyfileobj(resp, f)
+    except Exception as e:
+        log('uv download failed: ' + str(e), RED)
+        return None
+    # Extract the uv binary into ~/.local/bin/.
+    try:
+        if suffix == '.zip':
+            with zipfile.ZipFile(archive) as z:
+                for name in z.namelist():
+                    base_name = os.path.basename(name)
+                    if base_name in ('uv.exe', 'uv'):
+                        with z.open(name) as src, open(os.path.join(_USER_LOCAL_BIN, base_name), 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+        else:
+            with tarfile.open(archive) as t:
+                for member in t.getmembers():
+                    base_name = os.path.basename(member.name)
+                    if base_name in ('uv', 'uvx') and member.isfile():
+                        member.name = base_name
+                        t.extract(member, _USER_LOCAL_BIN)
+                        os.chmod(os.path.join(_USER_LOCAL_BIN, base_name), 0o755)
+    except Exception as e:
+        log('uv extract failed: ' + str(e), RED)
+        return None
+    finally:
+        try: os.remove(archive)
+        except OSError: pass
+    return _resolve_uv()
 
 SERVICES = [
     {
@@ -623,30 +711,29 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider, trying three strategies in order:
-        1. pipx (cleanest, recommended) — if pipx is on PATH.
-        2. aider-install — the OFFICIAL installer from aider's docs
-           (https://aider.chat/docs/install.html). Tiny meta-package that
-           bootstraps uv internally and installs aider into a self-contained
-           env, sidestepping numpy build failures on Python 3.12+ and
-           sandboxed Pythons (WindowsApps PythonManager, distro Pythons
-           under PEP 668, etc.).
-        3. project-local venv at <ROOT>/.venv-aider/ — last-resort manual
-           bootstrap, also avoids the user-site sandbox.
+        """Install aider, trying strategies in order of robustness:
+        1. uv — download the uv binary directly from GitHub releases, then
+           `uv tool install aider-chat`. This bypasses pip ENTIRELY and is
+           the only path that reliably works on WindowsApps PythonManager
+           Python, where pip's build isolation downloads a stale setuptools
+           that crashes on Python 3.12+ (pkgutil.ImpImporter).
+        2. pipx — if pipx is on PATH, clean isolated install.
+        3. aider-install meta-package — the official path, which does (1)
+           but via Python tooling instead of a direct download.
+        4. Project-local venv at <ROOT>/.venv-aider/ — last resort.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
         try:
-            pipx = _find_pipx_cmd()
-            if pipx:
-                self._log_line('pipx detected — using isolated install', ACCENT)
-                ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
-            else:
-                self._log_line(
-                    'Trying official aider-install (uses uv internally; '
-                    'avoids numpy build issues)...', ACCENT
-                )
-                ok = self._install_aider_via_aider_install(pip)
+            ok = self._install_aider_via_uv()
+            if not ok:
+                pipx = _find_pipx_cmd()
+                if pipx:
+                    self._log_line('Falling back to pipx isolated install...', AMBER)
+                    ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
+                if not ok:
+                    self._log_line('Falling back to aider-install meta-package...', AMBER)
+                    ok = self._install_aider_via_aider_install(pip)
                 if not ok:
                     self._log_line(
                         'aider-install path failed; falling back to project-local '
@@ -661,19 +748,51 @@ class TrendVaultLauncher(tk.Tk):
                 else:
                     self._log_line(
                         'Aider install reported success but resolve_aider() returned None. '
-                        'It may have landed in %USERPROFILE%\\.local\\bin\\ — add that '
-                        'to PATH (or restart the launcher to re-scan).', AMBER
+                        'It may have landed in %USERPROFILE%\\.local\\bin\\ — restart '
+                        'the launcher to re-scan, or add that dir to PATH.', AMBER
                     )
             else:
-                self._log_line('Aider install failed; see [pip] / [venv] / [aider-install] errors above', RED)
+                self._log_line('Aider install failed; see errors above', RED)
                 self._log_line(
-                    'Workaround: install pipx via the official python.org Python, '
-                    'then re-click INSTALL AIDER:', AMBER
+                    'Manual fallback: open PowerShell and run:', AMBER
                 )
-                self._log_line('   ' + ' '.join(pip) + ' install --user pipx', AMBER)
+                self._log_line(
+                    '   irm https://astral.sh/uv/install.ps1 | iex', AMBER
+                )
+                self._log_line(
+                    '   & "$env:USERPROFILE\\.local\\bin\\uv.exe" tool install aider-chat',
+                    AMBER
+                )
         finally:
             self._installing_aider = False
             self._set_status('Ready')
+
+    def _install_aider_via_uv(self) -> bool:
+        """Download uv (if needed) and use it to install aider.
+
+        This is the primary path because uv is a single-binary Rust tool that
+        does its own dependency resolution and wheel fetching. It never
+        triggers pip's build-isolation flow (which is what downloads the
+        stale setuptools and crashes on Python 3.12+).
+        """
+        uv = _resolve_uv()
+        if not uv:
+            self._log_line('uv not found — downloading directly from astral.sh...', ACCENT)
+            uv = _download_uv(self._log_line)
+            if not uv:
+                self._log_line('uv install failed; will try other strategies', RED)
+                return False
+            self._log_line('uv installed at ' + uv, GREEN)
+        else:
+            self._log_line('uv detected at ' + uv, GREEN)
+        # `uv tool install` puts the aider launcher into ~/.local/bin/ by
+        # default, which resolve_aider() already searches.
+        self._log_line('Running uv tool install aider-chat...', ACCENT)
+        ok = self._run_pip_subprocess(
+            [uv, 'tool', 'install', '--force', 'aider-chat'],
+            '[uv]'
+        )
+        return ok and resolve_aider() is not None
 
     def _install_aider_via_aider_install(self, pip) -> bool:
         """Use the official aider-install meta-package.

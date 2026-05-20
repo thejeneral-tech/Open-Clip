@@ -15,7 +15,7 @@ Build a single-file binary:
     pyinstaller --onefile --name TrendVaultLauncher launcher-linux.py
 """
 
-import os, sys, time, socket, subprocess, threading, webbrowser, shutil, signal, re, tkinter as tk
+import os, sys, time, socket, subprocess, threading, webbrowser, shutil, signal, re, platform, tkinter as tk
 from tkinter import font as tkfont, messagebox
 from datetime import datetime
 
@@ -119,6 +119,76 @@ def _find_pipx_cmd() -> list[str] | None:
             except Exception:
                 pass
     return None
+
+
+# ── uv: Rust-based Python installer. We use it because it doesn't go through
+#       pip's broken build-isolation path (which downloads stale setuptools
+#       and crashes on Python 3.12+ when numpy needs to build).
+_USER_LOCAL_BIN = os.path.join(os.environ.get('HOME', ''), '.local', 'bin')
+
+def _resolve_uv() -> str | None:
+    """Return the path to the `uv` binary, or None if not installed."""
+    p = shutil.which('uv')
+    if p:
+        return p
+    for guess in (
+        os.path.join(_USER_LOCAL_BIN, 'uv'),
+        os.path.join(os.environ.get('HOME', ''), '.cargo', 'bin', 'uv'),
+    ):
+        if guess and os.path.isfile(guess):
+            return guess
+    return None
+
+def _uv_release_url() -> str | None:
+    """Build the GitHub release URL for the current OS / arch."""
+    sys_name = platform.system()
+    mach = (platform.machine() or '').lower()
+    arch = {
+        'amd64': 'x86_64', 'x86_64': 'x86_64', 'x64': 'x86_64',
+        'arm64': 'aarch64', 'aarch64': 'aarch64',
+    }.get(mach)
+    if not arch:
+        return None
+    base = 'https://github.com/astral-sh/uv/releases/latest/download'
+    if sys_name == 'Linux':
+        return f'{base}/uv-{arch}-unknown-linux-gnu.tar.gz'
+    if sys_name == 'Darwin':
+        return f'{base}/uv-{arch}-apple-darwin.tar.gz'
+    return None
+
+def _download_uv(log) -> str | None:
+    """Download the uv binary from GitHub releases into ~/.local/bin/."""
+    import urllib.request, tempfile, tarfile
+    url = _uv_release_url()
+    if not url:
+        log('No uv release for this OS/arch: ' + platform.system() + '/' + platform.machine(), RED)
+        return None
+    log('Downloading uv from ' + url, ACCENT)
+    os.makedirs(_USER_LOCAL_BIN, exist_ok=True)
+    archive = os.path.join(tempfile.gettempdir(), 'uv_dl.tar.gz')
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'TrendVaultLauncher/1.0'})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            with open(archive, 'wb') as f:
+                shutil.copyfileobj(resp, f)
+    except Exception as e:
+        log('uv download failed: ' + str(e), RED)
+        return None
+    try:
+        with tarfile.open(archive) as t:
+            for member in t.getmembers():
+                base_name = os.path.basename(member.name)
+                if base_name in ('uv', 'uvx') and member.isfile():
+                    member.name = base_name
+                    t.extract(member, _USER_LOCAL_BIN)
+                    os.chmod(os.path.join(_USER_LOCAL_BIN, base_name), 0o755)
+    except Exception as e:
+        log('uv extract failed: ' + str(e), RED)
+        return None
+    finally:
+        try: os.remove(archive)
+        except OSError: pass
+    return _resolve_uv()
 
 SERVICES = [
     {
@@ -641,27 +711,26 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider, trying three strategies in order:
-        1. pipx (cleanest) — if pipx is on PATH.
-        2. aider-install — the OFFICIAL installer from aider's docs. Tiny
-           meta-package that bootstraps uv internally and installs aider into
-           a self-contained env. Sidesteps PEP 668 "externally managed
-           environment" + numpy build failures.
-        3. project-local venv at <ROOT>/.venv-aider/ — last-resort.
+        """Install aider, trying strategies in order of robustness:
+        1. uv — download the uv binary from GitHub releases, then
+           `uv tool install aider-chat`. Bypasses pip entirely (avoids
+           PEP 668 + numpy build failures).
+        2. pipx — if pipx is available.
+        3. aider-install — official meta-package (does (1) via Python).
+        4. project venv at <ROOT>/.venv-aider/ — last resort.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
         try:
-            pipx = _find_pipx_cmd()
-            if pipx:
-                self._log_line('pipx detected — using isolated install', ACCENT)
-                ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
-            else:
-                self._log_line(
-                    'Trying official aider-install (uses uv internally; '
-                    'avoids numpy build issues + PEP 668 restrictions)...', ACCENT
-                )
-                ok = self._install_aider_via_aider_install(pip)
+            ok = self._install_aider_via_uv()
+            if not ok:
+                pipx = _find_pipx_cmd()
+                if pipx:
+                    self._log_line('Falling back to pipx isolated install...', AMBER)
+                    ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
+                if not ok:
+                    self._log_line('Falling back to aider-install meta-package...', AMBER)
+                    ok = self._install_aider_via_aider_install(pip)
                 if not ok:
                     self._log_line(
                         'aider-install path failed; falling back to project-local '
@@ -680,14 +749,32 @@ class TrendVaultLauncher(tk.Tk):
                         'export PATH="$HOME/.local/bin:$PATH"', AMBER
                     )
             else:
-                self._log_line('Aider install failed; see [pip] / [venv] / [aider-install] errors above', RED)
-                self._log_line(
-                    'Workaround: install pipx via your distro pkg manager, then re-click:', AMBER
-                )
-                self._log_line('   sudo apt install pipx      # or:  pip install --user pipx', AMBER)
+                self._log_line('Aider install failed; see errors above', RED)
+                self._log_line('Manual fallback — run in a terminal:', AMBER)
+                self._log_line('   curl -LsSf https://astral.sh/uv/install.sh | sh', AMBER)
+                self._log_line('   ~/.local/bin/uv tool install aider-chat', AMBER)
         finally:
             self._installing_aider = False
             self._set_status('Ready')
+
+    def _install_aider_via_uv(self) -> bool:
+        """Download uv (if needed) and use it to install aider."""
+        uv = _resolve_uv()
+        if not uv:
+            self._log_line('uv not found — downloading directly from astral.sh...', ACCENT)
+            uv = _download_uv(self._log_line)
+            if not uv:
+                self._log_line('uv install failed; will try other strategies', RED)
+                return False
+            self._log_line('uv installed at ' + uv, GREEN)
+        else:
+            self._log_line('uv detected at ' + uv, GREEN)
+        self._log_line('Running uv tool install aider-chat...', ACCENT)
+        ok = self._run_pip_subprocess(
+            [uv, 'tool', 'install', '--force', 'aider-chat'],
+            '[uv]'
+        )
+        return ok and resolve_aider() is not None
 
     def _install_aider_via_aider_install(self, pip) -> bool:
         """Use the official aider-install meta-package.
