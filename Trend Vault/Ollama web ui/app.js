@@ -32,16 +32,16 @@
   const DEFAULTS = {
     host: "",
     systemPrompt: "",
-    // Kept for compatibility with stored settings but no longer surfaced —
-    // aider builds its own prompts and uses ollama_chat/<topbar-pick>.
     codeSystemPrompt: DEFAULT_CODE_PROMPT,
     codeCwd: "",
     codeAllowedDirs: [],
     codeUnrestrictedFs: false,
-    // Code agent backend is locked to "aider"; the constant remains so
-    // upgrade paths from old localStorage don't crash on undefined.
-    codeBackend: "aider",
-    aiderModel: "",            // legacy; ignored (always ollama_chat/<topbar>)
+    // Code section backend: "builtin" = the bundled Ollama tool-call agent
+    // (default — faster + works with smaller models), "aider" = spawn the
+    // aider CLI per turn (slower + needs a coder-tuned model but supports
+    // SEARCH/REPLACE diffs natively).
+    codeBackend: "builtin",
+    aiderModel: "",            // legacy; aider always uses ollama_chat/<topbar>
     aiderExtraFlags: "",
     temperature: 0.7,
     topP: 0.9,
@@ -464,9 +464,9 @@
         "Aider reads, edits, and applies SEARCH/REPLACE diffs inside the project working directory.";
       el.welcomeTips.hidden = false;
       el.input.placeholder = "Tell aider what to do — e.g. 'add a /healthz endpoint to server.ts'";
-      // Check Ollama availability + ping aider every time we land here.
+      // Check Ollama availability + only ping aider if the user selected it.
       codeCheck();
-      aiderCheck();
+      if (settings.codeBackend === "aider") aiderCheck();
     } else {
       el.viewTitle.textContent = "Models";
     }
@@ -1082,28 +1082,36 @@
   function refreshCodeWelcome() {
     if (activeView !== "code") return;
     if (!el.welcomeTitle || !el.welcomeSubtitle) return;
-    if (aiderCheckInfo && !aiderCheckInfo.available) {
-      el.welcomeTitle.textContent = "Install aider to use Local Code";
+    const usingAider = settings.codeBackend === "aider";
+    if (usingAider && aiderCheckInfo && !aiderCheckInfo.available) {
+      el.welcomeTitle.textContent = "Install aider — or switch to the built-in agent";
       el.welcomeSubtitle.innerHTML =
-        "The Code section uses the <code>aider</code> CLI, routed through your local Ollama models. " +
-        "It isn't on PATH yet — install it once:<br><br>" +
-        "<code style=\"font-size:13px; background:var(--bg-elevated); padding:6px 10px; " +
-        "border-radius:6px; display:inline-block\">pip install aider-chat</code><br><br>" +
-        "Then restart the Ollama Chat UI server and reload this page.";
+        "You picked the aider backend in Settings, but the <code>aider</code> CLI isn't on PATH. " +
+        "Install it once with the launcher's <strong>INSTALL AIDER</strong> button, " +
+        "or flip <em>Settings → Code agent backend</em> back to <strong>Built-in</strong> " +
+        "to use the bundled Ollama tool-call agent instead.";
       el.welcomeTips.hidden = true;
-    } else {
+      return;
+    }
+    if (usingAider) {
       el.welcomeTitle.textContent = "Local Code · Aider";
       el.welcomeSubtitle.innerHTML =
-        "Pair-programming with the aider CLI, routed through your local Ollama models. " +
+        "Pair-programming via the <code>aider</code> CLI, routed through your local Ollama models. " +
         "Pick an Ollama model in the topbar — it's passed to aider as " +
-        "<code>ollama_chat/&lt;model&gt;</code>. Aider reads, edits, and applies SEARCH/REPLACE " +
-        "diffs inside the working directory.<br><br>" +
+        "<code>ollama_chat/&lt;model&gt;</code>.<br><br>" +
         "<em>Tip: aider works much better with a coder-tuned model. Try " +
-        "<code>qwen2.5-coder:7b</code>, <code>deepseek-coder-v2</code>, or " +
-        "<code>codestral</code> — general chat models often say \"I can't browse files\" " +
-        "because they don't follow aider's edit format.</em>";
-      el.welcomeTips.hidden = false;
+        "<code>qwen2.5-coder:7b</code>, <code>deepseek-coder-v2</code>, or <code>codestral</code>.</em>";
+    } else {
+      el.welcomeTitle.textContent = "Local Code";
+      el.welcomeSubtitle.innerHTML =
+        "Agentic coding with your local Ollama model — full read &amp; write access to the project. " +
+        "The agent loops through tool calls (<code>read_file</code>, <code>edit_file</code>, " +
+        "<code>bash</code>, <code>glob</code>, <code>grep</code>, <code>list_dir</code>) until done. " +
+        "Pick a tool-capable model: <code>llama3.1</code>, <code>qwen2.5-coder</code>, " +
+        "<code>mistral-nemo</code>, …<br><br>" +
+        "<em>Want SEARCH/REPLACE diffs instead? Flip Settings → Code agent backend to Aider.</em>";
     }
+    el.welcomeTips.hidden = false;
   }
 
   function refreshCodeBanner() {
@@ -1166,10 +1174,30 @@
       }
     }
 
-    // Aider backend chip — always present, surfaces version + active model.
+    // Backend chip — shows whichever agent is wired up right now.
     if (el.codeBackendChip && el.codeBackendName) {
       const topModel = el.modelSelect?.value || "";
-      if (aiderCheckInfo && aiderCheckInfo.available) {
+      const backend = settings.codeBackend === "aider" ? "aider" : "builtin";
+      if (backend === "builtin") {
+        // Built-in agent uses Ollama tool calling. Surface whether the
+        // picked model is in the known-tool-capable list so the user has
+        // a heads-up before sending.
+        const toolModels = (info.toolCapableModels || []);
+        let label = "agent: built-in";
+        let title = "Bundled Ollama tool-call agent. Switch backend in Settings.";
+        if (!topModel) {
+          label += " · pick a model";
+        } else if (toolModels.includes(topModel)) {
+          label += ` · ${topModel} (tools ✓)`;
+          title += "\nModel is in the known-tool-capable list.";
+        } else {
+          label += ` · ${topModel} (tools?)`;
+          title += "\nModel is not in the known-tool-capable list — the agent will try anyway.";
+        }
+        el.codeBackendName.textContent = label;
+        el.codeBackendChip.title = title;
+        el.codeBackendName.classList.remove("error");
+      } else if (aiderCheckInfo && aiderCheckInfo.available) {
         const v = (aiderCheckInfo.version || "").replace(/^aider\s+/i, "");
         const label = topModel
           ? `aider${v ? " " + v : ""} · ${topModel}`
@@ -1184,7 +1212,7 @@
         el.codeBackendName.textContent = "aider not installed";
         el.codeBackendChip.title =
           (aiderCheckInfo && aiderCheckInfo.error) ||
-          "Aider is not installed.\nRun:  pip install aider-chat";
+          "Aider is not installed. Switch to built-in in Settings, or run pip install aider-chat.";
         el.codeBackendName.classList.add("error");
       }
     }
@@ -2428,13 +2456,19 @@
   }
 
   async function sendCodeMessage(text) {
-    // Code section is now aider-only — always route through aider.
-    return sendAiderMessage(text);
+    // Route to the configured backend. Default = built-in (the bundled
+    // Ollama tool-call agent). Aider is an opt-in alternative that the
+    // user can flip on in Settings → Code agent backend.
+    if (settings.codeBackend === "aider") {
+      return sendAiderMessage(text);
+    }
+    return sendBuiltinCodeMessage(text);
   }
 
-  // The historical built-in agent loop kept below for back-compat with
-  // any in-flight conversation state; never invoked from new UI.
-  async function _builtinCodeMessageLegacy(text) {
+  // The bundled Ollama tool-call agent loop — talks to /local-code/chat
+  // on the server, executes read_file / write_file / edit_file / bash /
+  // glob / grep / list_dir, and emits live token counts as it goes.
+  async function sendBuiltinCodeMessage(text) {
     const model = el.modelSelect.value;
     if (!model) {
       alert("Pick a model in the top bar first (the agent uses Ollama tool calling).");
@@ -3062,6 +3096,10 @@
     el.hostInput.value = settings.host;
     el.systemPrompt.value = settings.systemPrompt;
     if (el.codeSystemPrompt) el.codeSystemPrompt.value = settings.codeSystemPrompt;
+    if (el.codeBackendSelect) {
+      el.codeBackendSelect.value = settings.codeBackend === "aider" ? "aider" : "builtin";
+      syncAiderFieldsVisibility();
+    }
     if (el.codeCwdInput) el.codeCwdInput.value = settings.codeCwd || "";
     if (el.codeAllowedDirsInput) {
       el.codeAllowedDirsInput.value = allowedDirsAsText(settings.codeAllowedDirs);
@@ -3113,7 +3151,17 @@
       }
     }
     if (el.aiderFlagsInput) settings.aiderExtraFlags = el.aiderFlagsInput.value.trim();
-    settings.codeBackend = "aider";
+    if (el.codeBackendSelect) {
+      const newBackend = el.codeBackendSelect.value === "aider" ? "aider" : "builtin";
+      const switching = settings.codeBackend !== newBackend;
+      settings.codeBackend = newBackend;
+      if (switching && newBackend === "aider") {
+        // Probe aider availability now so the banner chip is honest.
+        aiderCheck();
+      }
+    } else {
+      settings.codeBackend = settings.codeBackend || "builtin";
+    }
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);
     settings.topK = parseInt(el.topK.value, 10);

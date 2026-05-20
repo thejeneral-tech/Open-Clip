@@ -392,28 +392,47 @@
           <span class="field-hint">Prepended to chat conversations.</span>
         </label>
 
+        <label class="field" id="codeBackendField">
+          <span class="field-label">
+            Code agent backend
+            <span class="field-tag" id="codeBackendTag">built-in</span>
+          </span>
+          <select id="codeBackendSelect">
+            <option value="builtin">Built-in tool-call agent (default — fast, works with most models)</option>
+            <option value="aider">Aider CLI (SEARCH/REPLACE diffs, needs a coder model)</option>
+          </select>
+          <span class="field-hint">
+            <strong>Built-in</strong> talks to Ollama directly and runs tools (read_file, edit_file, bash, …)
+            in a loop until your task is done. Streams tokens in real time.<br>
+            <strong>Aider</strong> spawns the standalone <code>aider</code> CLI per turn; richer SEARCH/REPLACE
+            output on coder-tuned models but slower (subprocess startup + bigger prompt).
+          </span>
+        </label>
+
         <div class="field" id="codeCwdField">
-          <span class="field-label">Aider working directory</span>
+          <span class="field-label">Working directory</span>
           <div class="field-row-inline">
             <input type="text" id="codeCwdInput" placeholder="(auto: parent of Ollama web ui/)" />
             <button type="button" class="btn-secondary" id="codePickCwdSettingsBtn">Browse…</button>
           </div>
           <span class="field-hint">
-            Aider runs in this folder. Set per-project by clicking Browse in the banner, or pick a default here.
-            Leave empty to use the server default (the Trend Vault project root).
+            Where the agent reads/edits files and where <code>bash</code> runs (built-in) /
+            where aider is spawned (aider). Per-project value (from Projects) wins.
+            Leave empty for the server default.
           </span>
         </div>
 
         <div class="field" id="codeAllowedDirsField">
-          <span class="field-label">Additional directories aider can read &amp; edit
+          <span class="field-label">Additional directories the agent can read &amp; edit
             <span class="field-tag" id="codeAllowedDirsCount">0</span>
           </span>
           <textarea id="codeAllowedDirsInput" rows="3" placeholder="One absolute path per line, e.g.&#10;C:\Users\kevin\Documents\notes&#10;D:\projects\side-project"></textarea>
           <div class="field-actions">
             <button type="button" class="btn-secondary" id="codeAddDirSettingsBtn">Add directory…</button>
+            <button type="button" class="btn-secondary" id="codeVerifyDirsBtn">Verify paths</button>
             <span class="field-hint" id="codeVerifyDirsStatus">
-              Each directory is passed to aider as a positional argument, so it can
-              read and write files in any of them (in addition to the primary working dir).
+              Built-in: extra roots whose contents are inside the path-containment check.
+              Aider: appended as positional args so it can read/write them too.
             </span>
           </div>
         </div>
@@ -427,10 +446,10 @@
             </span>
           </span>
           <span class="field-hint">
-            Acknowledges that aider has no built-in path sandbox — once enabled, aider can
-            edit any file you mention in chat, including absolute paths outside the project.
-            Leaving this off is a soft reminder; it doesn't enforce anything on aider's side.
-            For sandboxing, point aider at a working directory whose subtree you trust.
+            <strong>Built-in:</strong> lifts the path-containment check so the agent can read
+            &amp; edit any absolute path on this computer. <strong>Aider:</strong> aider has no
+            sandbox of its own, so this is a soft acknowledgement. Either way: only enable if
+            you trust both the model and the prompts you'll send.
           </span>
         </label>
 
