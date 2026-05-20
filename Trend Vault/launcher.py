@@ -711,35 +711,29 @@ class TrendVaultLauncher(tk.Tk):
         self._prompt_install_aider()
 
     def _install_aider(self, pip):
-        """Install aider, trying strategies in order of robustness:
-        1. uv — download the uv binary directly from GitHub releases, then
-           `uv tool install aider-chat`. This bypasses pip ENTIRELY and is
-           the only path that reliably works on WindowsApps PythonManager
-           Python, where pip's build isolation downloads a stale setuptools
-           that crashes on Python 3.12+ (pkgutil.ImpImporter).
-        2. pipx — if pipx is on PATH, clean isolated install.
-        3. aider-install meta-package — the official path, which does (1)
-           but via Python tooling instead of a direct download.
-        4. Project-local venv at <ROOT>/.venv-aider/ — last resort.
+        """Install aider via uv (primary) or pipx (fallback).
+
+        We removed the pip --user, aider-install, and project-local-venv
+        strategies because they all eventually invoke pip's build-isolation
+        path which downloads a stale setuptools (pkgutil.ImpImporter crash
+        on Python 3.12+). The uv path is the only one that reliably works
+        on a sandboxed WindowsApps PythonManager Python because uv:
+          (a) is a standalone Rust binary (no Python needed to bootstrap)
+          (b) can download its OWN managed Python via python-build-standalone
+          (c) does its own dep resolution and never uses pip's broken
+              build-isolation environment.
         """
         self._installing_aider = True
         self._set_status('Installing aider...')
         try:
+            self._log_line('Attempting install via uv (downloads its own Python)...', ACCENT)
             ok = self._install_aider_via_uv()
             if not ok:
                 pipx = _find_pipx_cmd()
                 if pipx:
-                    self._log_line('Falling back to pipx isolated install...', AMBER)
+                    self._log_line('uv path failed — trying pipx isolated install...', AMBER)
                     ok = self._run_pip_subprocess(pipx + ['install', 'aider-chat'], '[pipx]')
-                if not ok:
-                    self._log_line('Falling back to aider-install meta-package...', AMBER)
-                    ok = self._install_aider_via_aider_install(pip)
-                if not ok:
-                    self._log_line(
-                        'aider-install path failed; falling back to project-local '
-                        'venv at ' + _AIDER_VENV_DIR + ' ...', AMBER
-                    )
-                    ok = self._install_aider_into_venv(pip)
+                    ok = ok and resolve_aider() is not None
             if ok:
                 self._log_line('Aider installed successfully', GREEN)
                 path = resolve_aider()
@@ -753,45 +747,69 @@ class TrendVaultLauncher(tk.Tk):
                     )
             else:
                 self._log_line('Aider install failed; see errors above', RED)
+                self._log_line('Manual install — open a NEW PowerShell window and run:', AMBER)
+                self._log_line('   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"', AMBER)
+                self._log_line('   & "$env:USERPROFILE\\.local\\bin\\uv.exe" tool install --python 3.12 aider-chat', AMBER)
                 self._log_line(
-                    'Manual fallback: open PowerShell and run:', AMBER
-                )
-                self._log_line(
-                    '   irm https://astral.sh/uv/install.ps1 | iex', AMBER
-                )
-                self._log_line(
-                    '   & "$env:USERPROFILE\\.local\\bin\\uv.exe" tool install aider-chat',
-                    AMBER
+                    'Then restart the launcher. If GitHub is blocked, install '
+                    'Python from python.org and pipx, then click INSTALL AIDER.', AMBER
                 )
         finally:
             self._installing_aider = False
             self._set_status('Ready')
 
     def _install_aider_via_uv(self) -> bool:
-        """Download uv (if needed) and use it to install aider.
+        """Download uv (if needed), install a managed Python under uv, then
+        install aider into it.
 
-        This is the primary path because uv is a single-binary Rust tool that
-        does its own dependency resolution and wheel fetching. It never
-        triggers pip's build-isolation flow (which is what downloads the
-        stale setuptools and crashes on Python 3.12+).
+        Two important tricks:
+        - Install uv as a standalone binary from GitHub releases, so we
+          never need Python's pip to bootstrap it.
+        - Tell uv to download its OWN Python (via uv's bundled
+          python-build-standalone builds). This guarantees we install
+          aider into a known-good Python 3.12, not the host's sandboxed
+          WindowsApps PythonManager that triggers all the build failures.
         """
+        # 1. Get uv on disk.
         uv = _resolve_uv()
         if not uv:
             self._log_line('uv not found — downloading directly from astral.sh...', ACCENT)
             uv = _download_uv(self._log_line)
             if not uv:
-                self._log_line('uv install failed; will try other strategies', RED)
+                self._log_line('uv download failed; cannot proceed via uv path', RED)
                 return False
             self._log_line('uv installed at ' + uv, GREEN)
         else:
             self._log_line('uv detected at ' + uv, GREEN)
-        # `uv tool install` puts the aider launcher into ~/.local/bin/ by
-        # default, which resolve_aider() already searches.
-        self._log_line('Running uv tool install aider-chat...', ACCENT)
+
+        # 2. Download a managed Python into uv's cache. This is the key
+        #    step — it isolates aider from the broken host Python entirely.
+        self._log_line('Ensuring uv has a managed Python 3.12 (may download ~30 MB on first run)...', ACCENT)
+        py_ok = self._run_pip_subprocess(
+            [uv, 'python', 'install', '3.12'],
+            '[uv python]'
+        )
+        if not py_ok:
+            self._log_line(
+                'uv python install failed — falling back to system Python (may still work)',
+                AMBER
+            )
+
+        # 3. Install aider into a uv-managed tool environment, pinned to
+        #    the managed Python 3.12.
+        self._log_line('Running uv tool install aider-chat (forcing managed Python 3.12)...', ACCENT)
         ok = self._run_pip_subprocess(
-            [uv, 'tool', 'install', '--force', 'aider-chat'],
+            [uv, 'tool', 'install', '--force', '--python', '3.12', 'aider-chat'],
             '[uv]'
         )
+        if not ok:
+            # Retry without --python in case 3.12 wasn't available for some
+            # arch — uv will pick whatever it has.
+            self._log_line('Retrying uv tool install without an explicit Python pin...', AMBER)
+            ok = self._run_pip_subprocess(
+                [uv, 'tool', 'install', '--force', 'aider-chat'],
+                '[uv]'
+            )
         return ok and resolve_aider() is not None
 
     def _install_aider_via_aider_install(self, pip) -> bool:
