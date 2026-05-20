@@ -145,6 +145,9 @@
     pullProgressDetail: $("pullProgressDetail"),
     modelsList: $("modelsList"),
     refreshModelsBtn: $("refreshModelsBtn"),
+    runningModelsList: $("runningModelsList"),
+    modelsTotalMem: $("modelsTotalMem"),
+    refreshRunningBtn: $("refreshRunningBtn"),
 
     // Local Code agent UI
     codeBanner: $("codeBanner"),
@@ -494,6 +497,12 @@
       el.newChatBtn.parentElement.style.display = "none";
       if (el.conversations) el.conversations.style.display = "none";
       renderInstalledModels();
+      // Keep "Running models" up to date every ~3s while the tab is open.
+      startRunningModelsPoll();
+    }
+    if (name !== "models") {
+      // Avoid polling /api/ps in the background when the user isn't looking.
+      stopRunningModelsPoll();
     }
     refreshComposerForView();
   }
@@ -799,6 +808,134 @@
          </div>`;
       el.modelsList.appendChild(row);
     }
+  }
+
+  /* ----------------------------------------------------------
+     Running models — /api/ps polling + Unload buttons
+     ---------------------------------------------------------- */
+  let runningModelsPollTimer = null;
+
+  async function fetchRunningModels() {
+    if (!el.runningModelsList) return;
+    try {
+      const r = await fetch(`${settings.host}/api/ps`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      renderRunningModels(Array.isArray(data.models) ? data.models : []);
+    } catch (err) {
+      el.runningModelsList.innerHTML =
+        `<div class="models-empty error">Couldn't reach Ollama: ${escapeHtml(err.message)}</div>`;
+      if (el.modelsTotalMem) el.modelsTotalMem.textContent = "—";
+    }
+  }
+
+  // "in 4m 12s" / "expired" — Ollama's expires_at is when it'll auto-unload.
+  function formatExpiry(date) {
+    const secs = Math.floor((date.getTime() - Date.now()) / 1000);
+    if (secs <= 0) return "any moment";
+    if (secs < 60) return `in ${secs}s`;
+    const mins = Math.floor(secs / 60);
+    const remSecs = secs % 60;
+    if (mins < 60) return remSecs ? `in ${mins}m ${remSecs}s` : `in ${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    if (hrs < 24) return remMins ? `in ${hrs}h ${remMins}m` : `in ${hrs}h`;
+    const days = Math.floor(hrs / 24);
+    return `in ${days}d`;
+  }
+
+  function renderRunningModels(models) {
+    if (!el.runningModelsList) return;
+    el.runningModelsList.innerHTML = "";
+    if (models.length === 0) {
+      el.runningModelsList.innerHTML =
+        '<div class="models-empty">No models currently loaded in memory. ' +
+        'Send a chat message to load one.</div>';
+      if (el.modelsTotalMem) el.modelsTotalMem.textContent = "0 B used";
+      return;
+    }
+    let totalSize = 0, totalVram = 0;
+    for (const m of models) {
+      const size = m.size || 0;
+      const vram = m.size_vram || 0;
+      const vramPct = size > 0 ? Math.round((vram / size) * 100) : 0;
+      const expiry = m.expires_at ? new Date(m.expires_at) : null;
+      const expiryLabel = expiry && Number.isFinite(expiry.getTime())
+        ? formatExpiry(expiry) : "—";
+      const location = vramPct >= 99 ? "GPU"
+                     : vramPct <= 1  ? "CPU"
+                     : `${vramPct}% GPU / ${100 - vramPct}% CPU`;
+
+      const row = document.createElement("div");
+      row.className = "model-row running-row";
+      row.innerHTML =
+        `<div class="model-info">
+           <div class="model-name">${escapeHtml(m.name)}
+             <span class="run-loc-pill" title="Where the weights are loaded">${escapeHtml(location)}</span>
+           </div>
+           <div class="model-meta">
+             <span title="Total memory used">${formatBytes(size)} RAM</span>
+             <span class="dot-sep">•</span>
+             <span title="In VRAM">${formatBytes(vram)} VRAM</span>
+             <span class="dot-sep">•</span>
+             <span title="${expiry ? expiry.toLocaleString() : ''}">auto-unloads ${escapeHtml(expiryLabel)}</span>
+           </div>
+         </div>
+         <div class="model-actions">
+           <button class="btn-link danger" data-act="unload" data-name="${escapeHtml(m.name)}">Unload</button>
+         </div>`;
+      el.runningModelsList.appendChild(row);
+      totalSize += size;
+      totalVram += vram;
+    }
+    if (el.modelsTotalMem) {
+      el.modelsTotalMem.textContent =
+        `${formatBytes(totalSize)} RAM · ${formatBytes(totalVram)} VRAM across ${models.length} model${models.length === 1 ? "" : "s"}`;
+    }
+  }
+
+  async function unloadModel(name) {
+    if (!name) return;
+    try {
+      // Ollama's documented way to evict a model: POST /api/generate with
+      // keep_alive: 0 and an empty prompt. Returns immediately.
+      const r = await fetch(`${settings.host}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: name, keep_alive: 0, prompt: "" }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // Give Ollama a beat to release the weights, then refresh.
+      setTimeout(fetchRunningModels, 400);
+    } catch (err) {
+      alert(`Failed to unload ${name}: ${err.message}`);
+    }
+  }
+
+  function startRunningModelsPoll() {
+    if (runningModelsPollTimer) return;
+    fetchRunningModels();
+    runningModelsPollTimer = setInterval(fetchRunningModels, 3000);
+  }
+  function stopRunningModelsPoll() {
+    if (!runningModelsPollTimer) return;
+    clearInterval(runningModelsPollTimer);
+    runningModelsPollTimer = null;
+  }
+
+  // Wire the Unload buttons (delegated). Also handle the manual Refresh.
+  if (el.runningModelsList) {
+    el.runningModelsList.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act='unload']");
+      if (!btn) return;
+      const name = btn.dataset.name;
+      btn.disabled = true;
+      btn.textContent = "Unloading…";
+      unloadModel(name);
+    });
+  }
+  if (el.refreshRunningBtn) {
+    el.refreshRunningBtn.addEventListener("click", () => fetchRunningModels());
   }
 
   el.modelsList.addEventListener("click", async (e) => {

@@ -308,6 +308,21 @@
       <div class="view view-models" id="modelsView" hidden>
         <div class="models-wrap">
           <section class="models-section">
+            <div class="models-list-header">
+              <h2>Running models</h2>
+              <span class="models-total-mem" id="modelsTotalMem">—</span>
+              <button type="button" class="btn-secondary" id="refreshRunningBtn">Refresh</button>
+            </div>
+            <p class="section-hint">
+              Models currently loaded in memory by Ollama. They auto-unload after a few minutes of
+              inactivity, or you can Unload them here to free RAM/VRAM right now.
+            </p>
+            <div class="models-list" id="runningModelsList">
+              <div class="models-empty">Loading…</div>
+            </div>
+          </section>
+
+          <section class="models-section">
             <h2>Pull a model</h2>
             <p class="section-hint">Download from <a href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a>. Pull progress streams below.</p>
             <form id="pullForm" class="pull-form" autocomplete="off">

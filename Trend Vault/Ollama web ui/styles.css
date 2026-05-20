@@ -1795,6 +1795,43 @@ input, textarea, select {
 }
 
 /* ============================================================
+   Running models (Models tab): RAM/VRAM rows + Unload
+   ============================================================ */
+.models-list-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.models-total-mem {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-row.running-row {
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
+  border: 1px solid var(--border);
+}
+.run-loc-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  vertical-align: middle;
+  font-weight: 500;
+}
+.models-empty.error { color: var(--danger, #ef4444); }
+
+/* ============================================================
    Projects (Code section): grid + cards + sidebar link
    ============================================================ */
 .view-projects {
