@@ -190,6 +190,106 @@ def _download_uv(log) -> str | None:
         except OSError: pass
     return _resolve_uv()
 
+
+# ── Node.js: distro Node packages on Linux are often stale or missing, and
+#       PEP-668 sandboxes mean `npm` may simply not be on PATH. When we can't
+#       find it we download the official binary tarball into a private dir
+#       and prepend its bin/ to PATH so subprocesses can find npm/npx/node.
+_NODE_VERSION = 'v22.11.0'
+_NODE_DIR = os.path.join(os.environ.get('HOME', '') or os.getcwd(),
+                         '.local', 'share', 'trend-vault-node')
+
+def _node_release_url() -> str | None:
+    """Build the nodejs.org tarball URL for the current OS / arch."""
+    if platform.system() != 'Linux':
+        return None
+    mach = (platform.machine() or '').lower()
+    arch = {
+        'amd64':   'x64',
+        'x86_64':  'x64',
+        'x64':     'x64',
+        'arm64':   'arm64',
+        'aarch64': 'arm64',
+        'armv7l':  'armv7l',
+    }.get(mach)
+    if not arch:
+        return None
+    return ('https://nodejs.org/dist/' + _NODE_VERSION +
+            '/node-' + _NODE_VERSION + '-linux-' + arch + '.tar.xz')
+
+def _node_bin_dir() -> str | None:
+    """Return the bin/ dir of the bundled Node install, or None."""
+    if not os.path.isdir(_NODE_DIR):
+        return None
+    try:
+        entries = sorted(os.listdir(_NODE_DIR), reverse=True)
+    except OSError:
+        return None
+    for name in entries:
+        full = os.path.join(_NODE_DIR, name)
+        if not (os.path.isdir(full) and name.startswith('node-')):
+            continue
+        bin_dir = os.path.join(full, 'bin')
+        if os.path.isfile(os.path.join(bin_dir, 'npm')):
+            return bin_dir
+    return None
+
+def _ensure_bundled_node_on_path() -> str | None:
+    """If a bundled Node install exists, prepend its bin to PATH. Returns the bin dir or None."""
+    bin_dir = _node_bin_dir()
+    if not bin_dir:
+        return None
+    cur = os.environ.get('PATH', '')
+    parts = cur.split(os.pathsep) if cur else []
+    if bin_dir not in parts:
+        os.environ['PATH'] = bin_dir + (os.pathsep + cur if cur else '')
+    return bin_dir
+
+def _download_node(log) -> str | None:
+    """Download Node.js binary tarball and extract into _NODE_DIR. Returns the bin dir on success."""
+    import urllib.request, tempfile, tarfile
+    url = _node_release_url()
+    if not url:
+        log('No Node.js release for this OS/arch: ' +
+            platform.system() + '/' + platform.machine(), RED)
+        return None
+    log('Downloading Node.js ' + _NODE_VERSION + ' from ' + url, ACCENT)
+    log('This may take 30-60 seconds (~25 MB)...', MUTED)
+    os.makedirs(_NODE_DIR, exist_ok=True)
+    archive = os.path.join(tempfile.gettempdir(), 'trend_vault_node_dl.tar.xz')
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'TrendVaultLauncher/1.0'})
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            with open(archive, 'wb') as f:
+                shutil.copyfileobj(resp, f)
+    except Exception as e:
+        log('Node.js download failed: ' + str(e), RED)
+        return None
+    try:
+        with tarfile.open(archive, mode='r:xz') as t:
+            try:
+                t.extractall(_NODE_DIR, filter='data')
+            except TypeError:
+                # Python < 3.12 doesn't accept the filter kwarg.
+                t.extractall(_NODE_DIR)
+    except Exception as e:
+        log('Node.js extract failed: ' + str(e), RED)
+        return None
+    finally:
+        try: os.remove(archive)
+        except OSError: pass
+    bin_dir = _node_bin_dir()
+    if not bin_dir:
+        log('Node.js archive extracted but bin/ not found inside ' + _NODE_DIR, RED)
+        return None
+    _ensure_bundled_node_on_path()
+    return bin_dir
+
+# If a prior auto-install left a Node.js bundle in place, wire it onto PATH
+# now so npm/npx are resolvable for service launches and child processes.
+_ensure_bundled_node_on_path()
+
+
 SERVICES = [
     {
         'key':  'webapp',
@@ -360,6 +460,8 @@ class TrendVaultLauncher(tk.Tk):
         self._lock  = threading.Lock()
         self._installing_ollama = False
         self._installing_aider = False
+        self._installing_node = False
+        self._node_install_lock = threading.Lock()
         # CLI runner state
         self._cli_proc: subprocess.Popen | None = None
         self._cli_busy = False
@@ -369,7 +471,8 @@ class TrendVaultLauncher(tk.Tk):
 
         self._build_ui()
         self._poll()
-        self.after(800, self._check_ollama_on_start)
+        self.after(400,  self._check_node_on_start)
+        self.after(800,  self._check_ollama_on_start)
         self.after(1200, self._check_aider_on_start)
 
     # ── UI construction ─────────────────────────────────────────────────────
@@ -558,6 +661,8 @@ class TrendVaultLauncher(tk.Tk):
         nm = os.path.join(ROOT, 'node_modules')
         if os.path.isdir(nm):
             return True
+        if not self._ensure_node():
+            return False
         self._log_line('node_modules not found -- running npm install...', AMBER)
         self._set_status('Installing dependencies...')
         try:
@@ -600,6 +705,10 @@ class TrendVaultLauncher(tk.Tk):
         def _do():
             self._log_line('--- npm install ---', ACCENT)
             self._set_status('Installing dependencies...')
+            if not self._ensure_node():
+                self._set_status('Ready')
+                self._log_line('--- End ---', ACCENT)
+                return
             try:
                 proc = subprocess.Popen(
                     ['npm', 'install'],
@@ -632,6 +741,43 @@ class TrendVaultLauncher(tk.Tk):
                 self._set_status('Ready')
                 self._log_line('--- End ---', ACCENT)
         threading.Thread(target=_do, daemon=True).start()
+
+    # ── Node.js dependency ──────────────────────────────────────────────────
+    def _check_node_on_start(self):
+        npm = shutil.which('npm')
+        if npm:
+            self._log_line('Node.js detected: ' + npm, GREEN)
+            return
+        # Don't auto-download here -- the 25 MB pull would feel like a surprise
+        # at app launch. The first START/INSTALL click triggers the install.
+        self._log_line('Node.js not on PATH -- will auto-download on first install', AMBER)
+
+    def _ensure_node(self) -> bool:
+        """Make sure `npm` is available. Downloads Node.js LTS on demand if not."""
+        with self._node_install_lock:
+            if shutil.which('npm'):
+                return True
+            bundled = _ensure_bundled_node_on_path()
+            if bundled and shutil.which('npm'):
+                self._log_line('Using bundled Node.js at ' + bundled, GREEN)
+                return True
+            self._installing_node = True
+            try:
+                self._log_line('npm not found on PATH -- downloading Node.js '
+                               + _NODE_VERSION + ' into ' + _NODE_DIR, AMBER)
+                self._set_status('Downloading Node.js...')
+                bin_dir = _download_node(self._log_line)
+                if not bin_dir:
+                    self._log_line('Could not auto-install Node.js. Manual options:', RED)
+                    self._log_line('  Ubuntu/Debian:  sudo apt install nodejs npm', AMBER)
+                    self._log_line('  Fedora:         sudo dnf install nodejs npm', AMBER)
+                    self._log_line('  Arch:           sudo pacman -S nodejs npm', AMBER)
+                    self._set_status('Node.js missing')
+                    return False
+                self._log_line('Node.js ready: ' + bin_dir, GREEN)
+                return shutil.which('npm') is not None
+            finally:
+                self._installing_node = False
 
     # ── Ollama dependency ──────────────────────────────────────────────────
     def _check_ollama_on_start(self):
