@@ -1,6 +1,6 @@
 /* ============================================================
    Ollama Studio — front-end logic
-   Three views: Chat, Code, Models
+   Three views: Chat, Code (claw-dev via Ollama), Models
    ============================================================ */
 
 (() => {
@@ -10,39 +10,23 @@
      Constants & defaults
      ---------------------------------------------------------- */
   const STORAGE = {
-    settings:           "ollama-chat:settings",
-    chatConvs:          "ollama-chat:conversations",
-    chatActive:         "ollama-chat:activeConversation",
-    codeConvs:          "ollama-chat:codeConversations",
-    codeActive:         "ollama-chat:codeActiveConversation",
-    lastModelChat:      "ollama-chat:lastModel",
-    lastModelCode:      "ollama-chat:lastCodeModel",
-    activeView:         "ollama-chat:activeView",
-    projects:           "ollama-chat:projects",
-    activeProject:      "ollama-chat:activeProject",
-    inProjectsView:     "ollama-chat:codeShowingProjects",
+    settings:       "ollama-chat:settings",
+    chatConvs:      "ollama-chat:conversations",
+    chatActive:     "ollama-chat:activeConversation",
+    codeConvs:      "ollama-chat:codeConversations",
+    codeActive:     "ollama-chat:codeActiveConversation",
+    lastModelChat:  "ollama-chat:lastModel",
+    lastModelCode:  "ollama-chat:lastCodeModel",
+    activeView:     "ollama-chat:activeView",
+    projects:       "ollama-chat:projects",
+    activeProject:  "ollama-chat:activeProject",
+    inProjectsView: "ollama-chat:codeShowingProjects",
   };
-
-  const DEFAULT_CODE_PROMPT =
-    "You are an expert pair programmer. Be concise. When you write code, " +
-    "use fenced code blocks with the correct language tag. Explain non-obvious " +
-    "decisions in 1-2 sentences. If the user's request is ambiguous, ask one " +
-    "clarifying question before writing code.";
 
   const DEFAULTS = {
     host: "",
     systemPrompt: "",
-    codeSystemPrompt: DEFAULT_CODE_PROMPT,
     codeCwd: "",
-    codeAllowedDirs: [],
-    codeUnrestrictedFs: false,
-    // Code section backend: "builtin" = the bundled Ollama tool-call agent
-    // (default — faster + works with smaller models), "aider" = spawn the
-    // aider CLI per turn (slower + needs a coder-tuned model but supports
-    // SEARCH/REPLACE diffs natively).
-    codeBackend: "builtin",
-    aiderModel: "",            // legacy; aider always uses ollama_chat/<topbar>
-    aiderExtraFlags: "",
     temperature: 0.7,
     topP: 0.9,
     topK: 40,
@@ -50,10 +34,11 @@
     repeatPenalty: 1.1,
   };
 
-  // Models that tend to be the best coding picks if installed.
+  // Coder-tuned Ollama models tend to drive claw-dev's tool loop better;
+  // we surface them as the default selection when entering Code mode.
   const CODE_MODEL_HINTS = [
-    "qwen2.5-coder", "deepseek-coder", "codellama", "codestral",
-    "starcoder", "wizardcoder", "code",
+    "qwen2.5-coder", "qwen3-coder", "deepseek-coder", "codellama",
+    "codestral", "starcoder", "wizardcoder", "code",
   ];
 
   /* ----------------------------------------------------------
@@ -64,38 +49,31 @@
   let codeConvs = loadJSON(STORAGE.codeConvs, []);
   let chatActiveId = localStorage.getItem(STORAGE.chatActive) || null;
   let codeActiveId = localStorage.getItem(STORAGE.codeActive) || null;
-  let activeView = localStorage.getItem(STORAGE.activeView) || "chat"; // chat | code | models
+  let activeView = localStorage.getItem(STORAGE.activeView) || "chat";
   let currentAbortController = null;
+  let currentCodeJobId = null;
   let isStreaming = false;
   let allModels = [];
   let pullAbort = null;
 
-  // Projects (Code section): { id, name, cwd, allowedDirs, unrestrictedFs, createdAt, updatedAt }
   let projects = loadJSON(STORAGE.projects, []);
   let activeProjectId = localStorage.getItem(STORAGE.activeProject) || null;
-  // When true (and we're in Code view), the main pane shows the projects grid
-  // instead of the chat. Toggled by the "Projects" sidebar button.
   let inCodeProjectsView = localStorage.getItem(STORAGE.inProjectsView) === "1";
 
-  // Local Code agent state
-  let codeCheckInfo = null;          // { available, cwd, models, toolCapableModels }
-  let aiderCheckInfo = null;         // { available, bin, version, error }
-  let currentCodeJobId = null;
-  let currentCodeBackend = null;     // "builtin" | "aider" while a job is in flight
-  const codeToolUseEls = new Map();  // tool-call id -> DOM block
-
-  // Files staged for the next outgoing Code message. Each entry:
-  //   { id, name, sizeBytes, status: "uploading"|"done"|"error",
-  //     relPath?, absPath?, error?, el }
-  // Cleared after the message is sent so the agent only sees them once in-band.
-  const stagedAttachments = [];
-  let attachmentIdSeq = 0;
-  let dragDepth = 0;
+  // claw-dev status: { available, version, bin, cwd, error? }
+  let codeCheckInfo = null;
+  const codeToolUseEls = new Map();
 
   // Directory picker modal state.
   let dirPickerCurrentPath = "";
-  let dirPickerOnSelect = null;     // (absolutePath) => void
+  let dirPickerOnSelect = null;
   let dirPickerSelectLabel = "Select this folder";
+
+  // Projects modal state.
+  let editingProjectId = null;
+  let projectsSearchOpen = false;
+  let projectsSearchQuery = "";
+  let projectsSortByName = false;
 
   /* ----------------------------------------------------------
      Element refs
@@ -111,6 +89,8 @@
     toggleSidebar: $("toggleSidebar"),
     sidebarBackdrop: $("sidebarBackdrop"),
     settingsBtn: $("settingsBtn"),
+    projectsLinkBtn: $("projectsLinkBtn"),
+    projectsLinkCount: $("projectsLinkCount"),
 
     // topbar
     viewTitle: $("viewTitle"),
@@ -131,6 +111,53 @@
     input: $("input"),
     sendBtn: $("sendBtn"),
     stopBtn: $("stopBtn"),
+    composerHint: $("composerHint"),
+
+    // code banner
+    codeBanner: $("codeBanner"),
+    codeBackendName: $("codeBackendName"),
+    codeProjectChip: $("codeProjectChip"),
+    codeProjectName: $("codeProjectName"),
+    codeCwd: $("codeCwd"),
+    codePickCwdBtn: $("codePickCwdBtn"),
+    codeDirsBadge: $("codeDirsBadge"),
+    codeAddDirBtn: $("codeAddDirBtn"),
+    codeStatus: $("codeStatus"),
+
+    // code projects view
+    codeProjectsView: $("codeProjectsView"),
+    projectsGrid: $("projectsGrid"),
+    projectsEmpty: $("projectsEmpty"),
+    newProjectBtn: $("newProjectBtn"),
+    projectsSortBtn: $("projectsSortBtn"),
+    projectsSearchBtn: $("projectsSearchBtn"),
+    projectsSearchInput: $("projectsSearchInput"),
+
+    // project modal
+    projectModal: $("projectModal"),
+    projectModalTitle: $("projectModalTitle"),
+    projectModalClose: $("projectModalClose"),
+    projectNameInput: $("projectNameInput"),
+    projectCwdInput: $("projectCwdInput"),
+    projectCwdBrowseBtn: $("projectCwdBrowseBtn"),
+    projectAllowedDirsInput: $("projectAllowedDirsInput"),
+    projectAllowedDirsCount: $("projectAllowedDirsCount"),
+    projectAddDirBtn: $("projectAddDirBtn"),
+    projectDeleteBtn: $("projectDeleteBtn"),
+    projectCancelBtn: $("projectCancelBtn"),
+    projectSaveBtn: $("projectSaveBtn"),
+
+    // dir picker modal
+    dirPickerModal: $("dirPickerModal"),
+    dirPickerClose: $("dirPickerClose"),
+    dirPickerCancel: $("dirPickerCancel"),
+    dirPickerSelect: $("dirPickerSelect"),
+    dirPickerUp: $("dirPickerUp"),
+    dirPickerHome: $("dirPickerHome"),
+    dirPickerPath: $("dirPickerPath"),
+    dirPickerGo: $("dirPickerGo"),
+    dirPickerList: $("dirPickerList"),
+    dirPickerCurrent: $("dirPickerCurrent"),
 
     // models view
     modelsView: $("modelsView"),
@@ -149,66 +176,6 @@
     modelsTotalMem: $("modelsTotalMem"),
     refreshRunningBtn: $("refreshRunningBtn"),
 
-    // Local Code agent UI
-    codeBanner: $("codeBanner"),
-    codeCwd: $("codeCwd"),
-    codeDirsBadge: $("codeDirsBadge"),
-    codeStatus: $("codeStatus"),
-    codeToolCap: $("codeToolCap"),
-    codePickCwdBtn: $("codePickCwdBtn"),
-    codeAddDirBtn: $("codeAddDirBtn"),
-
-    // Composer: file upload + drop zone (Code view only)
-    composer: document.querySelector(".composer"),
-    attachBtn: $("attachBtn"),
-    attachInput: $("attachInput"),
-    attachments: $("attachments"),
-    composerHint: $("composerHint"),
-    dropOverlay: $("dropOverlay"),
-    dropSub: $("dropSub"),
-
-    // Directory picker modal
-    dirPickerModal: $("dirPickerModal"),
-    dirPickerClose: $("dirPickerClose"),
-    dirPickerCancel: $("dirPickerCancel"),
-    dirPickerSelect: $("dirPickerSelect"),
-    dirPickerUp: $("dirPickerUp"),
-    dirPickerHome: $("dirPickerHome"),
-    dirPickerPath: $("dirPickerPath"),
-    dirPickerGo: $("dirPickerGo"),
-    dirPickerList: $("dirPickerList"),
-    dirPickerCurrent: $("dirPickerCurrent"),
-    codePickCwdSettingsBtn: $("codePickCwdSettingsBtn"),
-    codeAddDirSettingsBtn: $("codeAddDirSettingsBtn"),
-
-    // Projects
-    codeProjectsView: $("codeProjectsView"),
-    projectsGrid: $("projectsGrid"),
-    projectsEmpty: $("projectsEmpty"),
-    newProjectBtn: $("newProjectBtn"),
-    projectsSortBtn: $("projectsSortBtn"),
-    projectsSearchBtn: $("projectsSearchBtn"),
-    projectsSearchInput: $("projectsSearchInput"),
-    projectsLinkBtn: $("projectsLinkBtn"),
-    projectsLinkCount: $("projectsLinkCount"),
-    codeProjectChip: $("codeProjectChip"),
-    codeProjectName: $("codeProjectName"),
-
-    // Project modal
-    projectModal: $("projectModal"),
-    projectModalTitle: $("projectModalTitle"),
-    projectModalClose: $("projectModalClose"),
-    projectNameInput: $("projectNameInput"),
-    projectCwdInput: $("projectCwdInput"),
-    projectCwdBrowseBtn: $("projectCwdBrowseBtn"),
-    projectAllowedDirsInput: $("projectAllowedDirsInput"),
-    projectAllowedDirsCount: $("projectAllowedDirsCount"),
-    projectAddDirBtn: $("projectAddDirBtn"),
-    projectUnrestrictedInput: $("projectUnrestrictedInput"),
-    projectDeleteBtn: $("projectDeleteBtn"),
-    projectCancelBtn: $("projectCancelBtn"),
-    projectSaveBtn: $("projectSaveBtn"),
-
     // settings modal
     modal: $("settingsModal"),
     closeSettings: $("closeSettings"),
@@ -216,22 +183,8 @@
     resetSettings: $("resetSettings"),
     hostInput: $("hostInput"),
     systemPrompt: $("systemPrompt"),
-    codeSystemPrompt: $("codeSystemPrompt"),
     codeCwdInput: $("codeCwdInput"),
-    codeAllowedDirsInput: $("codeAllowedDirsInput"),
-    codeAllowedDirsCount: $("codeAllowedDirsCount"),
-    codeVerifyDirsBtn: $("codeVerifyDirsBtn"),
-    codeVerifyDirsStatus: $("codeVerifyDirsStatus"),
-    codeUnrestrictedInput: $("codeUnrestrictedInput"),
-    codeUnrestrictedBadge: $("codeUnrestrictedBadge"),
-    codeBackendSelect: $("codeBackendSelect"),
-    codeBackendTag: $("codeBackendTag"),
-    aiderModelField: $("aiderModelField"),
-    aiderModelInput: $("aiderModelInput"),
-    aiderFlagsField: $("aiderFlagsField"),
-    aiderFlagsInput: $("aiderFlagsInput"),
-    codeBackendChip: $("codeBackendChip"),
-    codeBackendName: $("codeBackendName"),
+    codePickCwdSettingsBtn: $("codePickCwdSettingsBtn"),
     temperature: $("temperature"),
     tempValue: $("tempValue"),
     topP: $("topP"),
@@ -272,6 +225,37 @@
     if (codeActiveId) localStorage.setItem(STORAGE.codeActive, codeActiveId);
     else localStorage.removeItem(STORAGE.codeActive);
   }
+  function saveProjects() {
+    saveJSON(STORAGE.projects, projects);
+    if (activeProjectId) localStorage.setItem(STORAGE.activeProject, activeProjectId);
+    else localStorage.removeItem(STORAGE.activeProject);
+  }
+
+  function uuidv4() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    const b = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, "0"));
+    return `${h.slice(0, 4).join("")}-${h.slice(4, 6).join("")}-${h.slice(6, 8).join("")}-${h.slice(8, 10).join("")}-${h.slice(10, 16).join("")}`;
+  }
+
+  function parseAllowedDirsText(text) {
+    if (!text) return [];
+    return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  }
+  function allowedDirsAsText(arr) {
+    return Array.isArray(arr) ? arr.join("\n") : "";
+  }
+  function derivedProjectName(p) {
+    if (!p) return "";
+    const trimmed = String(p).replace(/[\\/]+$/, "");
+    const lastSlash = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+    return lastSlash === -1 ? trimmed : trimmed.slice(lastSlash + 1);
+  }
 
   /* ----------------------------------------------------------
      View context — chat vs code share the same DOM
@@ -284,7 +268,7 @@
         get activeId() { return codeActiveId; },
         set activeId(v) { codeActiveId = v; },
         save: saveCodeConvs,
-        systemPrompt: settings.codeSystemPrompt,
+        systemPrompt: "",
         lastModelKey: STORAGE.lastModelCode,
       };
     }
@@ -314,16 +298,13 @@
       createdAt: Date.now(),
       view: c.view,
     };
-    // Tag Code-mode conversations with the active project so the sidebar can
-    // filter, and the project's chat count stays in sync.
     if (c.view === "code") {
+      conv.clawSessionId = uuidv4();
       conv.projectId = activeProjectId || null;
     }
     c.convs.unshift(conv);
     c.activeId = conv.id;
     c.save();
-    // Same as setActiveConversation: pop out of the projects grid so the
-    // newly-created chat is actually visible.
     if (activeView === "code" && inCodeProjectsView) {
       inCodeProjectsView = false;
       localStorage.setItem(STORAGE.inProjectsView, "0");
@@ -333,7 +314,6 @@
     }
     renderConversations();
     renderMessages();
-    // Mobile: drawer closes on new-chat so the user sees the empty thread.
     closeMobileSidebar();
     return conv;
   }
@@ -353,8 +333,6 @@
     const c = ctx();
     c.activeId = id;
     c.save();
-    // If we were viewing the projects grid in Code mode, jump back to the
-    // chat so the clicked conversation is actually visible.
     if (activeView === "code" && inCodeProjectsView) {
       inCodeProjectsView = false;
       localStorage.setItem(STORAGE.inProjectsView, "0");
@@ -364,7 +342,6 @@
     }
     renderConversations();
     renderMessages();
-    // Mobile: opening a chat from the drawer should close the drawer.
     closeMobileSidebar();
   }
 
@@ -388,22 +365,14 @@
     el.sidebar.classList.add("collapsed");
     document.body.classList.remove("sidebar-open");
   }
-  // Keep the sidebar's open/closed state sensible across viewport changes.
-  // Mobile defaults to closed; desktop defaults to open. Called on init
-  // and whenever the window resizes past the breakpoint.
   function syncSidebarForViewport() {
     if (isMobileViewport()) {
-      // Don't yank an open drawer closed mid-resize if the user just opened
-      // it; only set the default on the very first call (when there's no
-      // explicit state yet).
       if (!el.sidebar.dataset.mobileSynced) {
         el.sidebar.classList.add("collapsed");
         document.body.classList.remove("sidebar-open");
         el.sidebar.dataset.mobileSynced = "1";
       }
     } else {
-      // Desktop: drawer concept doesn't apply; remove the body flag and
-      // un-collapse unless the user previously collapsed it on desktop.
       document.body.classList.remove("sidebar-open");
       delete el.sidebar.dataset.mobileSynced;
     }
@@ -424,28 +393,26 @@
     });
 
     const inCode = name === "code";
+    const inModels = name === "models";
+
     // First-time Code entry with projects but no active one → show grid.
     if (inCode && !activeProjectId && projects.length > 0 && !inCodeProjectsView) {
       inCodeProjectsView = true;
       localStorage.setItem(STORAGE.inProjectsView, "1");
     }
-    // Leaving Code resets the projects-view sub-state.
-    if (!inCode) {
-      inCodeProjectsView = false;
-    }
+    if (!inCode) inCodeProjectsView = false;
+
     refreshViewPanes();
 
-    // Local Code mode keeps the Ollama model picker (the agent calls Ollama)
-    // and shows an extra banner above the messages.
-    el.modelPickerWrap.style.display = (name === "models") ? "none" : "";
+    // Model picker stays visible in both Chat AND Code (claw-dev needs it).
+    el.modelPickerWrap.style.display = inModels ? "none" : "";
     if (el.codeBanner) el.codeBanner.hidden = !inCode || inCodeProjectsView;
-    el.clearChatBtn.style.display = (name === "models" || inCodeProjectsView) ? "none" : "";
+    el.clearChatBtn.style.display = (inModels || inCodeProjectsView) ? "none" : "";
     refreshProjectsLinkBtn();
     if (inCode && inCodeProjectsView) renderProjects();
-    // Mobile: dismiss the drawer when the user picks a top-level view.
+
     closeMobileSidebar();
 
-    // Update labels
     if (name === "chat") {
       el.viewTitle.textContent = "Chat";
       el.newChatLabel.textContent = "New chat";
@@ -454,57 +421,61 @@
         "Chat with your local Ollama models. Pick a model above and send a message to begin.";
       el.welcomeTips.hidden = true;
       el.input.placeholder = "Message Ollama…";
-    } else if (name === "code") {
-      el.viewTitle.textContent = "Local Code";
+    } else if (inCode) {
+      el.viewTitle.textContent = "Code";
       el.newChatLabel.textContent = "New task";
-      el.welcomeTitle.textContent = "Local Code · Aider";
-      el.welcomeSubtitle.textContent =
-        "Pair-programming with the aider CLI, routed through your local Ollama models. " +
-        "Pick an Ollama model in the topbar — it'll be passed to aider as ollama_chat/<model>. " +
-        "Aider reads, edits, and applies SEARCH/REPLACE diffs inside the project working directory.";
+      el.welcomeTitle.textContent = "Code · claw-dev (Ollama)";
+      el.welcomeSubtitle.innerHTML =
+        "Agentic coding via the bundled <strong>claw-dev</strong> CLI, routed through a local " +
+        "Anthropic↔Ollama proxy. Pick an Ollama model in the topbar — it drives claw-dev's " +
+        "tool loop. <em>Tip: coder-tuned models (qwen2.5-coder, deepseek-coder) work best.</em>";
       el.welcomeTips.hidden = false;
-      el.input.placeholder = "Tell aider what to do — e.g. 'add a /healthz endpoint to server.ts'";
-      // Check Ollama availability + only ping aider if the user selected it.
+      el.input.placeholder = "Tell claw-dev what to do — e.g. 'add a /healthz endpoint to server.js'";
       codeCheck();
-      if (settings.codeBackend === "aider") aiderCheck();
     } else {
       el.viewTitle.textContent = "Models";
     }
 
-    if (name !== "models") {
-      // Use the picker's per-view model memory (separate buckets for chat & code).
+    if (!inModels) {
       const c = ctx();
-      const last = localStorage.getItem(c.lastModelKey);
-      const installed = Array.from(el.modelSelect.options).map((o) => o.value);
-      if (last && installed.includes(last)) {
-        el.modelSelect.value = last;
-      } else if (inCode) {
-        // Prefer a tool-capable / coder model when entering Code mode for the first time.
-        const preferred = installed.find((n) => /^(qwen2\.5-coder|llama3\.[12]|mistral-nemo|qwen3|llama3\.3)/i.test(n))
-          || installed.find((n) => CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h)));
-        if (preferred) el.modelSelect.value = preferred;
+      if (c.lastModelKey) {
+        const last = localStorage.getItem(c.lastModelKey);
+        const installed = Array.from(el.modelSelect.options).map((o) => o.value);
+        if (last && installed.includes(last)) {
+          el.modelSelect.value = last;
+        } else if (inCode) {
+          const preferred = installed.find((n) =>
+            CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h)));
+          if (preferred) el.modelSelect.value = preferred;
+        }
       }
       renderConversations();
       renderMessages();
       if (inCode) refreshCodeBanner();
-      // Sidebar shows the "new" button and the conversations list for
-      // chat/code views.
       el.newChatBtn.parentElement.style.display = "";
       if (el.conversations) el.conversations.style.display = "";
     } else {
-      // Models view: hide conversation-related sidebar chrome — the model
-      // list lives in the main pane, not in the sidebar.
       el.newChatBtn.parentElement.style.display = "none";
       if (el.conversations) el.conversations.style.display = "none";
       renderInstalledModels();
-      // Keep "Running models" up to date every ~3s while the tab is open.
       startRunningModelsPoll();
     }
-    if (name !== "models") {
-      // Avoid polling /api/ps in the background when the user isn't looking.
-      stopRunningModelsPoll();
+    if (!inModels) stopRunningModelsPoll();
+
+    if (el.composerHint) {
+      el.composerHint.textContent = inCode
+        ? "Enter to send · Shift+Enter for newline · claw-dev resumes the session per chat"
+        : "Press Enter to send · Shift+Enter for newline";
     }
-    refreshComposerForView();
+  }
+
+  function refreshViewPanes() {
+    const inCode = activeView === "code";
+    const inModels = activeView === "models";
+    const inProjects = inCode && inCodeProjectsView;
+    el.chatView.hidden = inModels || inProjects;
+    el.modelsView.hidden = !inModels;
+    if (el.codeProjectsView) el.codeProjectsView.hidden = !inProjects;
   }
 
   /* ----------------------------------------------------------
@@ -513,8 +484,7 @@
   function renderConversations() {
     const c = ctx();
     el.conversations.innerHTML = "";
-    // In Code mode with an active project, only show that project's chats.
-    // Otherwise (no active project, or in Chat mode) show all.
+    // In Code mode with active project, only show that project's chats.
     const visible = (c.view === "code" && activeProjectId)
       ? c.convs.filter((x) => x.projectId === activeProjectId)
       : c.convs;
@@ -591,9 +561,6 @@
     content.innerHTML = renderMarkdown(msg.content || "");
     body.appendChild(content);
 
-    // Replay stats + actions for assistant turns when re-rendering history.
-    // Skipped for the live streaming placeholder (empty content) — the
-    // sendMessage finally-block adds them after the stream completes.
     if (msg.role === "assistant" && msg.content && msg.content.trim()) {
       const statsBar = buildStatsBar(msg.stats);
       if (statsBar) body.appendChild(statsBar);
@@ -674,7 +641,6 @@
     return text;
   }
 
-  // Delegate Copy-to-clipboard for code blocks
   el.messages.addEventListener("click", (e) => {
     const btn = e.target.closest('[data-action="copy-code"]');
     if (!btn) return;
@@ -688,7 +654,7 @@
   });
 
   /* ----------------------------------------------------------
-     Ollama: list / pull / delete models
+     Ollama: list / pull / delete / run
      ---------------------------------------------------------- */
   async function fetchModels() {
     try {
@@ -730,16 +696,13 @@
       opt.textContent = name;
       el.modelSelect.appendChild(opt);
     }
-    const c = activeView !== "models" ? ctx() : null;
-    const lastKey = c ? c.lastModelKey :
-      (activeView === "code" ? STORAGE.lastModelCode : STORAGE.lastModelChat);
+    const lastKey = (activeView === "code") ? STORAGE.lastModelCode : STORAGE.lastModelChat;
     const last = localStorage.getItem(lastKey);
     if (last && models.includes(last)) {
       el.modelSelect.value = last;
     } else if (activeView === "code") {
       const coder = models.find((n) =>
-        CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h))
-      );
+        CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h)));
       if (coder) el.modelSelect.value = coder;
     }
   }
@@ -811,7 +774,7 @@
   }
 
   /* ----------------------------------------------------------
-     Running models — /api/ps polling + Unload buttons
+     Running models polling
      ---------------------------------------------------------- */
   let runningModelsPollTimer = null;
 
@@ -829,7 +792,6 @@
     }
   }
 
-  // "in 4m 12s" / "expired" — Ollama's expires_at is when it'll auto-unload.
   function formatExpiry(date) {
     const secs = Math.floor((date.getTime() - Date.now()) / 1000);
     if (secs <= 0) return "any moment";
@@ -897,15 +859,12 @@
   async function unloadModel(name) {
     if (!name) return;
     try {
-      // Ollama's documented way to evict a model: POST /api/generate with
-      // keep_alive: 0 and an empty prompt. Returns immediately.
       const r = await fetch(`${settings.host}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: name, keep_alive: 0, prompt: "" }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      // Give Ollama a beat to release the weights, then refresh.
       setTimeout(fetchRunningModels, 400);
     } catch (err) {
       alert(`Failed to unload ${name}: ${err.message}`);
@@ -923,7 +882,6 @@
     runningModelsPollTimer = null;
   }
 
-  // Wire the Unload buttons (delegated). Also handle the manual Refresh.
   if (el.runningModelsList) {
     el.runningModelsList.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-act='unload']");
@@ -1037,20 +995,38 @@
   }
 
   /* ----------------------------------------------------------
-     Local Code: Ollama tool-call agent client
+     Code section: claw-dev (Ollama) client
      ---------------------------------------------------------- */
-  function parseAllowedDirsText(text) {
-    if (!text) return [];
-    return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  function getActiveProject() {
+    if (!activeProjectId) return null;
+    return projects.find((p) => p.id === activeProjectId) || null;
   }
 
-  function allowedDirsAsText(arr) {
-    return Array.isArray(arr) ? arr.join("\n") : "";
+  // The cwd / allowedDirs that should actually be used right now.
+  // Project values override global Settings when a project is active.
+  function effectiveCodeContext() {
+    const proj = getActiveProject();
+    if (proj) {
+      return {
+        cwd: proj.cwd || "",
+        allowedDirs: Array.isArray(proj.allowedDirs) ? proj.allowedDirs : [],
+        source: "project",
+        projectId: proj.id,
+        projectName: proj.name,
+      };
+    }
+    return {
+      cwd: settings.codeCwd || "",
+      allowedDirs: [],
+      source: "settings",
+      projectId: null,
+      projectName: null,
+    };
   }
 
   async function codeCheck() {
     try {
-      const r = await fetch("/local-code/check");
+      const r = await fetch("/code/check");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       codeCheckInfo = await r.json();
     } catch (err) {
@@ -1060,92 +1036,21 @@
     return codeCheckInfo;
   }
 
-  // Ping the server to see whether aider is installed. The Code section
-  // is aider-only, so this runs whenever the user enters Code so the
-  // banner + welcome state are accurate.
-  async function aiderCheck() {
-    try {
-      const r = await fetch("/local-code/aider/check");
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      aiderCheckInfo = await r.json();
-    } catch (err) {
-      aiderCheckInfo = { available: false, error: err.message };
-    }
-    refreshCodeBanner();
-    refreshCodeWelcome();
-    return aiderCheckInfo;
-  }
-
-  // Welcome card content depends on whether aider is installed. If not,
-  // we replace the generic intro with a big install-instructions block so
-  // a fresh user knows exactly what to do.
-  function refreshCodeWelcome() {
-    if (activeView !== "code") return;
-    if (!el.welcomeTitle || !el.welcomeSubtitle) return;
-    const usingAider = settings.codeBackend === "aider";
-    if (usingAider && aiderCheckInfo && !aiderCheckInfo.available) {
-      el.welcomeTitle.textContent = "Install aider — or switch to the built-in agent";
-      el.welcomeSubtitle.innerHTML =
-        "You picked the aider backend in Settings, but the <code>aider</code> CLI isn't on PATH. " +
-        "Install it once with the launcher's <strong>INSTALL AIDER</strong> button, " +
-        "or flip <em>Settings → Code agent backend</em> back to <strong>Built-in</strong> " +
-        "to use the bundled Ollama tool-call agent instead.";
-      el.welcomeTips.hidden = true;
-      return;
-    }
-    if (usingAider) {
-      el.welcomeTitle.textContent = "Local Code · Aider";
-      el.welcomeSubtitle.innerHTML =
-        "Pair-programming via the <code>aider</code> CLI, routed through your local Ollama models. " +
-        "Pick an Ollama model in the topbar — it's passed to aider as " +
-        "<code>ollama_chat/&lt;model&gt;</code>.<br><br>" +
-        "<em>Tip: aider works much better with a coder-tuned model. Try " +
-        "<code>qwen2.5-coder:7b</code>, <code>deepseek-coder-v2</code>, or <code>codestral</code>.</em>";
-    } else {
-      el.welcomeTitle.textContent = "Local Code";
-      el.welcomeSubtitle.innerHTML =
-        "Agentic coding with your local Ollama model — full read &amp; write access to the project. " +
-        "The agent loops through tool calls (<code>read_file</code>, <code>edit_file</code>, " +
-        "<code>bash</code>, <code>glob</code>, <code>grep</code>, <code>list_dir</code>) until done. " +
-        "Pick a tool-capable model: <code>llama3.1</code>, <code>qwen2.5-coder</code>, " +
-        "<code>mistral-nemo</code>, …<br><br>" +
-        "<em>Want SEARCH/REPLACE diffs instead? Flip Settings → Code agent backend to Aider.</em>";
-    }
-    el.welcomeTips.hidden = false;
-  }
-
   function refreshCodeBanner() {
     if (!el.codeBanner) return;
     const info = codeCheckInfo || {};
     const eff = effectiveCodeContext();
-    // Effective cwd: project value (if any) → Settings → server default.
     const cwd = eff.cwd || info.cwd || "(unknown cwd)";
     if (el.codeCwd) {
       el.codeCwd.textContent = cwd;
       el.codeCwd.title = cwd + (eff.source === "project" ? `  (from project "${eff.projectName}")` : "");
     }
-
-    // Additional-dirs chip: counts whatever effectiveCodeContext gives us
-    // (project's allowedDirs override Settings if a project is active).
-    const dirs = eff.allowedDirs;
     if (el.codeDirsBadge) {
-      el.codeDirsBadge.textContent = dirs.length === 0
+      const n = eff.allowedDirs.length;
+      el.codeDirsBadge.textContent = n === 0
         ? "no extra dirs"
-        : `+${dirs.length} dir${dirs.length === 1 ? "" : "s"}`;
+        : `+${n} dir${n === 1 ? "" : "s"}`;
     }
-    const codeDirsChip = document.getElementById("codeDirsChip");
-    if (codeDirsChip) {
-      codeDirsChip.title = dirs.length
-        ? "Aider will see these as positional args (read & edit):\n" + dirs.join("\n")
-        : "Add directories to extend aider's read/edit scope beyond the working dir.";
-    }
-
-    // FULL DISK badge — shown when the user has lifted aider's --subtree-only.
-    if (el.codeUnrestrictedBadge) {
-      el.codeUnrestrictedBadge.hidden = eff.unrestrictedFs !== true;
-    }
-
-    // Active project chip — visible only when a project is active.
     if (el.codeProjectChip && el.codeProjectName) {
       const proj = getActiveProject();
       if (proj) {
@@ -1156,71 +1061,32 @@
         el.codeProjectChip.hidden = true;
       }
     }
-
-    // Ollama status — important because aider proxies its requests through
-    // your local Ollama server (OLLAMA_API_BASE on the server side).
-    if (el.codeStatus) {
+    if (el.codeBackendName) {
       if (info.available) {
-        el.codeStatus.textContent = `Ollama: ${(info.models || []).length} models`;
-        el.codeStatus.title = info.ollamaHost || "";
-        el.codeStatus.classList.remove("error");
-      } else if (info.error) {
-        el.codeStatus.textContent = "Ollama unreachable";
-        el.codeStatus.title = info.error;
-        el.codeStatus.classList.add("error");
+        const m = el.modelSelect?.value || "";
+        const v = info.version || "claw-dev";
+        el.codeBackendName.textContent = m ? `${v} · ${m}` : `${v} · pick a model`;
+        el.codeBackendName.classList.remove("error");
       } else {
-        el.codeStatus.textContent = "checking…";
-        el.codeStatus.classList.remove("error");
+        el.codeBackendName.textContent = "claw-dev unavailable";
+        el.codeBackendName.classList.add("error");
       }
     }
-
-    // Backend chip — shows whichever agent is wired up right now.
-    if (el.codeBackendChip && el.codeBackendName) {
-      const topModel = el.modelSelect?.value || "";
-      const backend = settings.codeBackend === "aider" ? "aider" : "builtin";
-      if (backend === "builtin") {
-        // Built-in agent uses Ollama tool calling. Surface whether the
-        // picked model is in the known-tool-capable list so the user has
-        // a heads-up before sending.
-        const toolModels = (info.toolCapableModels || []);
-        let label = "agent: built-in";
-        let title = "Bundled Ollama tool-call agent. Switch backend in Settings.";
-        if (!topModel) {
-          label += " · pick a model";
-        } else if (toolModels.includes(topModel)) {
-          label += ` · ${topModel} (tools ✓)`;
-          title += "\nModel is in the known-tool-capable list.";
-        } else {
-          label += ` · ${topModel} (tools?)`;
-          title += "\nModel is not in the known-tool-capable list — the agent will try anyway.";
-        }
-        el.codeBackendName.textContent = label;
-        el.codeBackendChip.title = title;
-        el.codeBackendName.classList.remove("error");
-      } else if (aiderCheckInfo && aiderCheckInfo.available) {
-        const v = (aiderCheckInfo.version || "").replace(/^aider\s+/i, "");
-        const label = topModel
-          ? `aider${v ? " " + v : ""} · ${topModel}`
-          : `aider${v ? " " + v : ""} · pick a model`;
-        el.codeBackendName.textContent = label;
-        el.codeBackendChip.title =
-          `aider CLI at ${aiderCheckInfo.bin || "?"}\n` +
-          `Routing through ollama_chat/<model> via your local Ollama.\n` +
-          (topModel ? `Model: ${topModel}` : "Pick a model in the topbar to enable sending.");
-        el.codeBackendName.classList.remove("error");
+    if (el.codeStatus) {
+      if (info.available) {
+        el.codeStatus.textContent = "ready · Ollama";
+        el.codeStatus.classList.remove("error");
+        el.codeStatus.title = `claw-dev: ${info.bin || ""}\nOllama: ${info.ollamaHost || ""}\nproxy: 127.0.0.1:${info.proxyPort || "?"}`;
       } else {
-        el.codeBackendName.textContent = "aider not installed";
-        el.codeBackendChip.title =
-          (aiderCheckInfo && aiderCheckInfo.error) ||
-          "Aider is not installed. Switch to built-in in Settings, or run pip install aider-chat.";
-        el.codeBackendName.classList.add("error");
+        el.codeStatus.textContent = info.error || "unavailable";
+        el.codeStatus.classList.add("error");
+        el.codeStatus.title = info.error || "";
       }
     }
   }
 
+  /* ---- Tool-use block rendering (claw-dev tools) ---------------------- */
   function buildToolUseBlock(toolName, input) {
-    // Claude Code TUI style: one bullet-prefixed call line, one indented
-    // result line, and a click-to-expand block for full I/O.
     const block = document.createElement("div");
     block.className = "tool-use status-running";
     block.dataset.tool = toolName || "tool";
@@ -1270,53 +1136,20 @@
     return block;
   }
 
-  // Render a tool call as `tool_name(key-arg)` for the one-line headline.
   function formatToolCall(name, input) {
-    const n = (name || "").toLowerCase();
     const arg = (s) => {
       if (typeof s !== "string") return "";
       return s.length > 70 ? s.slice(0, 70) + "…" : s;
     };
-    if (n === "read_file" || n === "write_file" || n === "edit_file" || n === "list_dir") {
-      return `${name}(${arg(input?.path || "")})`;
-    }
-    if (n === "bash") return `${name}(${arg(input?.command || "")})`;
-    if (n === "grep") {
-      const p = input?.pattern || "";
-      const where = input?.path ? `, ${arg(input.path)}` : "";
-      return `${name}(${arg(p)}${where})`;
-    }
-    if (n === "glob") return `${name}(${arg(input?.pattern || "")})`;
-    return `${name}(${arg(safeJsonStringify(input || {}))})`;
-  }
-
-  function toolIcon(name) {
     const n = (name || "").toLowerCase();
-    if (n === "read_file") return "📖";
-    if (n === "edit_file") return "✏️";
-    if (n === "write_file") return "📝";
-    if (n === "bash") return "▶";
-    if (n === "grep") return "🔎";
-    if (n === "glob") return "📁";
-    if (n === "list_dir") return "📂";
-    return "⚙";
-  }
-
-  function summarizeToolInput(name, input) {
-    if (!input || typeof input !== "object") return "";
-    const n = (name || "").toLowerCase();
-    if (n === "read_file" || n === "write_file" || n === "edit_file") {
-      return input.path || "";
-    }
-    if (n === "bash") {
-      const cmd = (input.command || "").toString();
-      return cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd;
-    }
-    if (n === "grep" || n === "glob") {
-      return input.pattern || "";
-    }
-    if (n === "list_dir") return input.path || ".";
-    return "";
+    if (n === "read" || n === "fileread" || n === "filereadtool") return `Read(${arg(input?.file_path || input?.path || "")})`;
+    if (n === "write" || n === "filewrite" || n === "filewritetool") return `Write(${arg(input?.file_path || input?.path || "")})`;
+    if (n === "edit" || n === "fileedit" || n === "fileedittool") return `Edit(${arg(input?.file_path || input?.path || "")})`;
+    if (n === "bash" || n === "bashtool") return `Bash(${arg(input?.command || "")})`;
+    if (n === "grep" || n === "greptool") return `Grep(${arg(input?.pattern || "")})`;
+    if (n === "glob" || n === "globtool") return `Glob(${arg(input?.pattern || "")})`;
+    if (n === "ls" || n === "lstool" || n === "listdir") return `LS(${arg(input?.path || ".")})`;
+    return `${name || "tool"}(${arg(safeJsonStringify(input || {}))})`;
   }
 
   function safeJsonStringify(v) {
@@ -1329,75 +1162,23 @@
     block.classList.remove("status-running");
     block.classList.add(isError ? "status-error" : "status-ok");
 
-    // One-line snippet under the call line — the part you can read at a glance.
     if (block._snippet) {
-      block._snippet.textContent = summarizeToolResult(block.dataset.tool, content, isError);
+      let text = typeof content === "string" ? content : safeJsonStringify(content);
+      const head = text.split(/\r?\n/, 1)[0] || "";
+      block._snippet.textContent = isError
+        ? `Error: ${head.slice(0, 200)}`
+        : head.slice(0, 200) || "done";
     }
-
-    // Full I/O, hidden behind the "expand" disclosure.
     const pre = block._resultPre;
     if (pre) {
       pre.classList.remove("hidden");
-      let text;
-      if (typeof content === "string") text = content;
-      else if (Array.isArray(content)) {
-        text = content.map((c) => (typeof c === "string" ? c : c.text || safeJsonStringify(c))).join("\n");
-      } else text = safeJsonStringify(content);
+      let text = typeof content === "string" ? content : safeJsonStringify(content);
       if (text.length > 8000) text = text.slice(0, 8000) + `\n…\n[truncated, ${text.length} chars total]`;
       pre.textContent = text;
     }
   }
 
-  // Produce the dim one-liner that goes under the call (e.g. "Read 245 lines, 8 KB").
-  function summarizeToolResult(toolName, content, isError) {
-    if (isError) {
-      const msg = content && content.error ? content.error : (typeof content === "string" ? content : safeJsonStringify(content));
-      return `Error: ${msg.length > 200 ? msg.slice(0, 200) + "…" : msg}`;
-    }
-    const n = (toolName || "").toLowerCase();
-    const obj = content || {};
-    const fmtBytes = (b) => {
-      if (!Number.isFinite(b)) return "";
-      if (b < 1024) return `${b}B`;
-      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-      return `${(b / (1024 * 1024)).toFixed(2)} MB`;
-    };
-
-    if (n === "read_file") {
-      const lines = (obj.content || "").split(/\r?\n/).length;
-      const size = fmtBytes(obj.bytes);
-      return `Read ${lines} line${lines === 1 ? "" : "s"}${size ? `, ${size}` : ""}`;
-    }
-    if (n === "write_file") return `Wrote ${fmtBytes(obj.bytes) || "OK"}`;
-    if (n === "edit_file") return `Replaced 1 occurrence at offset ${obj.replacedAt ?? "?"}`;
-    if (n === "list_dir") return `${(obj.entries || []).length} entries`;
-    if (n === "glob") return `${obj.count ?? (obj.paths || []).length} matches`;
-    if (n === "grep") return `${obj.count ?? (obj.hits || []).length} hits`;
-    if (n === "bash") {
-      const ec = obj.exitCode;
-      const out = (obj.stdout || "").length;
-      const err = (obj.stderr || "").length;
-      const head = (obj.stdout || obj.stderr || "").split(/\r?\n/, 1)[0].slice(0, 80);
-      return `exit ${ec ?? "?"}, ${out}B out / ${err}B err${head ? ` · ${head}` : ""}`;
-    }
-    // Generic fallback.
-    if (typeof content === "string") return content.split(/\r?\n/, 1)[0].slice(0, 120);
-    return "done";
-  }
-
-  // Two-letter avatar derived from the model name, e.g.
-  //   "qwen2.5-coder:7b" → "QW"   "llama3.2" → "LL"   "deepseek-coder" → "DE"
-  // Falls back to "AG" if no model is known.
-  function modelAvatar(modelName) {
-    if (!modelName) return "AG";
-    const alpha = modelName.replace(/[^a-zA-Z]/g, "");
-    const seed = alpha.length >= 2 ? alpha : modelName;
-    return seed.slice(0, 2).toUpperCase() || "AG";
-  }
-
-  /* ----------------------------------------------------------
-     Per-message stats bar + action buttons (LM-Studio style)
-     ---------------------------------------------------------- */
+  /* ---- Stats bar + action bar (same for chat + code) ------------------ */
   function getModelDetails(modelName) {
     if (!modelName) return { paramSize: "", quantization: "" };
     const m = allModels.find((x) => x.name === modelName);
@@ -1428,8 +1209,6 @@
     return mm ? `${h}h ${mm}m` : `${h}h`;
   }
 
-  // Plain message text, regardless of whether content is a flat string
-  // (chat mode) or a list of typed blocks (code mode).
   function messagePlainText(msg) {
     if (!msg) return "";
     if (typeof msg.content === "string" && msg.content) return msg.content;
@@ -1439,7 +1218,6 @@
       .join("\n\n");
   }
 
-  // Inline SVG factory — keeps the inline icons consistent.
   function svgEl(width, height, paths) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
@@ -1456,8 +1234,6 @@
     return svg;
   }
 
-  // Build the chip strip you see right under a completed assistant turn:
-  //   ◇ model 9B Q8_0    ≣ 382 tokens    ⏱ 14s    ◔ 26.83 t/s
   function buildStatsBar(stats) {
     if (!stats) return null;
     const bar = document.createElement("div");
@@ -1487,23 +1263,26 @@
     }
     bar.appendChild(modelChip);
 
-    const items = [
-      {
+    const items = [];
+    if (stats.tokens) {
+      items.push({
         title: "Tokens generated",
         svg: '<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><line x1="4" y1="6" x2="5" y2="6"/><line x1="4" y1="12" x2="5" y2="12"/><line x1="4" y1="18" x2="5" y2="18"/>',
         text: `${formatNumberCompact(stats.tokens || 0)} tokens`,
-      },
-      {
-        title: "Total time",
-        svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-        text: formatDurationShort(stats.durationSec || 0),
-      },
-      {
+      });
+    }
+    items.push({
+      title: "Total time",
+      svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+      text: formatDurationShort(stats.durationSec || 0),
+    });
+    if (stats.tps) {
+      items.push({
         title: "Generation speed",
         svg: '<path d="M12 14a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M21.17 8H12V2.83A9 9 0 1 0 21.17 8z"/>',
         text: `${(stats.tps || 0).toFixed(2)} t/s`,
-      },
-    ];
+      });
+    }
     for (const it of items) {
       const span = document.createElement("span");
       span.className = "stats-info";
@@ -1517,7 +1296,6 @@
     return bar;
   }
 
-  // The four action buttons (copy / edit / regenerate / delete).
   function buildActionBar(conv, msg) {
     const bar = document.createElement("div");
     bar.className = "msg-actions";
@@ -1544,7 +1322,6 @@
     if (action === "copy") {
       const text = messagePlainText(msg);
       navigator.clipboard.writeText(text).then(() => {
-        // Brief checkmark flash on the copy button.
         const orig = btn.innerHTML;
         btn.innerHTML = "";
         btn.appendChild(svgEl(14, 14, '<polyline points="20 6 9 17 4 12"/>'));
@@ -1573,7 +1350,6 @@
   }
 
   function startEditMessage(conv, msg) {
-    // Re-render so we can find and replace just this bubble's content.
     const text = messagePlainText(msg);
     const ta = document.createElement("textarea");
     ta.className = "msg-edit-textarea";
@@ -1596,8 +1372,6 @@
     row.appendChild(save);
     wrap.appendChild(row);
 
-    // Find the bubble's body and swap its first .message-content / .message-blocks
-    // for the editor; on save/cancel re-render the whole list.
     const all = el.messages.querySelectorAll(".message");
     const idx = conv.messages.indexOf(msg);
     if (idx === -1 || idx >= all.length) return;
@@ -1613,14 +1387,9 @@
       const newText = ta.value;
       msg.content = newText;
       if (Array.isArray(msg.blocks)) {
-        // Replace the first text block (or prepend) — keep tool blocks intact.
         let replaced = false;
         for (const b of msg.blocks) {
-          if (b && b.type === "text") {
-            b.text = newText;
-            replaced = true;
-            break;
-          }
+          if (b && b.type === "text") { b.text = newText; replaced = true; break; }
         }
         if (!replaced) msg.blocks.unshift({ type: "text", text: newText });
       }
@@ -1629,10 +1398,6 @@
     });
   }
 
-  // Live, in-flight stats element used in place of the typing dots while the
-  // model generates. Returns the element + an update() function the caller
-  // can call whenever tokens are accumulated. Caller is responsible for
-  // remove()'ing it when generation finishes.
   function buildLiveStats() {
     const wrap = document.createElement("div");
     wrap.className = "live-stats";
@@ -1651,8 +1416,6 @@
         label.textContent = `thinking… ${elapsed.toFixed(1)}s`;
         return;
       }
-      // Keep the "thinking…" prefix visible the whole time so the user
-      // knows the model is still working — append the running counts.
       const tps = elapsed > 0 ? tokens / elapsed : 0;
       label.textContent =
         `thinking… ${tokens.toLocaleString()} tokens · ${elapsed.toFixed(1)}s · ${tps.toFixed(2)} t/s`;
@@ -1670,35 +1433,27 @@
     if (msg.role !== "assistant") return;
     const idx = conv.messages.indexOf(msg);
     if (idx <= 0) return;
-    // Walk back to the most-recent user turn before this assistant turn.
     let userIdx = idx - 1;
     while (userIdx >= 0 && conv.messages[userIdx].role !== "user") userIdx--;
     if (userIdx < 0) return;
     const userText = messagePlainText(conv.messages[userIdx]);
     if (!userText.trim()) return;
-    // Drop everything from the user turn forward (the regenerate replaces the
-    // whole back-and-forth that followed it, just like LM Studio does).
     conv.messages.splice(userIdx);
     ctx().save();
     renderMessages();
-    // Fire the request again with the same text.
     if (activeView === "code") sendCodeMessage(userText);
     else                       sendMessage(userText);
   }
 
+  /* ---- Code message DOM (with block list for tool calls) -------------- */
   function buildCodeMessageEl(msg, conv) {
     const wrapper = document.createElement("div");
     wrapper.className = "message " + msg.role + " code-msg";
 
-    // Use the model stored on the message (or the conversation, or the
-    // currently-picked model as a last resort) so the assistant turn is
-    // labelled with whatever produced it.
-    const modelName = msg.model || (conv && conv.model) || el.modelSelect.value || "";
-
     const avatar = document.createElement("div");
     avatar.className = "avatar";
-    avatar.textContent = msg.role === "user" ? "U" : modelAvatar(modelName);
-    if (msg.role !== "user" && modelName) avatar.title = modelName;
+    avatar.textContent = msg.role === "user" ? "U" : "CD";
+    if (msg.role !== "user") avatar.title = "claw-dev";
     wrapper.appendChild(avatar);
 
     const body = document.createElement("div");
@@ -1706,7 +1461,7 @@
 
     const role = document.createElement("div");
     role.className = "message-role";
-    role.textContent = msg.role === "user" ? "You" : (modelName || "Agent");
+    role.textContent = msg.role === "user" ? "You" : "claw-dev";
     body.appendChild(role);
 
     const blocksEl = document.createElement("div");
@@ -1716,16 +1471,9 @@
     wrapper.appendChild(body);
     wrapper._blocksEl = blocksEl;
 
-    // Replay any pre-existing blocks (when re-rendering history).
     const blocks = msg.blocks || (msg.content ? [{ type: "text", text: msg.content }] : []);
-    for (const b of blocks) {
-      appendBlockEl(blocksEl, b);
-    }
+    for (const b of blocks) appendBlockEl(blocksEl, b);
 
-    // Stats bar + action buttons under completed assistant turns. Same shape
-    // as chat-mode: chips of model/tokens/time/t/s plus 4 action buttons.
-    // Skipped for the live streaming placeholder (no blocks yet) — the
-    // sendCodeMessage finally-block adds them after the agent loop ends.
     const hasContent = (msg.content && msg.content.trim()) ||
                        (Array.isArray(msg.blocks) && msg.blocks.length > 0);
     if (msg.role === "assistant" && hasContent) {
@@ -1751,457 +1499,387 @@
       blocksEl.appendChild(block);
       return block;
     }
-    if (b.type === "attachments") {
-      const wrap = document.createElement("div");
-      wrap.className = "message-attachments";
-      for (const it of (b.items || [])) {
-        const chip = document.createElement("div");
-        chip.className = "attachment-chip status-done in-message";
-        const icon = document.createElement("span");
-        icon.className = "attachment-icon"; icon.textContent = "📄";
-        chip.appendChild(icon);
-        const name = document.createElement("span");
-        name.className = "attachment-name";
-        name.textContent = it.relPath || it.name || "(file)";
-        name.title = it.relPath || it.name || "";
-        chip.appendChild(name);
-        if (Number.isFinite(it.sizeBytes) && it.sizeBytes > 0) {
-          const size = document.createElement("span");
-          size.className = "attachment-size";
-          size.textContent = formatChipSize(it.sizeBytes);
-          chip.appendChild(size);
-        }
-        wrap.appendChild(chip);
-      }
-      blocksEl.appendChild(wrap);
-      return wrap;
-    }
     return null;
   }
 
-  function updateAllowedDirsCount() {
-    if (!el.codeAllowedDirsCount || !el.codeAllowedDirsInput) return;
-    const n = parseAllowedDirsText(el.codeAllowedDirsInput.value).length;
-    el.codeAllowedDirsCount.textContent = String(n);
-  }
-
-  async function verifyAllowedDirs() {
-    if (!el.codeAllowedDirsInput || !el.codeVerifyDirsStatus) return;
-    const dirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
-    if (dirs.length === 0) {
-      el.codeVerifyDirsStatus.textContent = "Nothing to verify — add at least one path.";
-      el.codeVerifyDirsStatus.classList.remove("error", "ok");
+  /* ---- Sending a code message: stream claw-dev output ----------------- */
+  async function sendCodeMessage(text) {
+    const ollamaModel = el.modelSelect.value || "";
+    if (!ollamaModel) {
+      alert("Pick an Ollama model in the topbar first — claw-dev runs on it via the local proxy.");
       return;
     }
-    el.codeVerifyDirsBtn.disabled = true;
-    el.codeVerifyDirsStatus.textContent = "Verifying…";
-    el.codeVerifyDirsStatus.classList.remove("error", "ok");
+
+    const c = ctx();
+    let conv = getActiveConversation();
+    if (!conv) conv = createConversation();
+    if (!conv.clawSessionId) conv.clawSessionId = uuidv4();
+    // Tag this conversation with the active project at send-time so the
+    // sidebar filter and project recency stay accurate.
+    if (activeProjectId && conv.projectId !== activeProjectId) {
+      conv.projectId = activeProjectId;
+    }
+    const isFirstTurn = conv.messages.length === 0;
+
+    const userMsg = { role: "user", content: text, blocks: [{ type: "text", text }] };
+    conv.messages.push(userMsg);
+    setConversationTitle(conv, text);
+    conv.model = ollamaModel;
+    const activeProj = getActiveProject();
+    if (activeProj) {
+      activeProj.updatedAt = Date.now();
+      saveProjects();
+    }
+    c.save();
+    el.welcome.classList.add("hidden");
+    el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
+
+    const assistantMsg = { role: "assistant", content: "", blocks: [], model: ollamaModel };
+    conv.messages.push(assistantMsg);
+    const assistantEl = buildCodeMessageEl(assistantMsg, conv);
+    const blocksEl = assistantEl._blocksEl;
+    const live = buildLiveStats();
+    assistantEl.querySelector(".message-body").appendChild(live.el);
+    el.messages.appendChild(assistantEl);
+    scrollToBottom();
+
+    codeToolUseEls.clear();
+    isStreaming = true;
+    el.sendBtn.classList.add("hidden");
+    el.stopBtn.classList.remove("hidden");
+    currentAbortController = new AbortController();
+
+    let activeTextBlock = null;
+    const ensureTextBlock = () => {
+      if (activeTextBlock) return activeTextBlock;
+      const blk = { type: "text", text: "" };
+      assistantMsg.blocks.push(blk);
+      blk._el = appendBlockEl(blocksEl, blk);
+      activeTextBlock = blk;
+      return blk;
+    };
+    const closeTextBlock = () => { activeTextBlock = null; };
+
+    const eff = effectiveCodeContext();
+    const wallStart = performance.now();
     try {
-      const r = await fetch("/local-code/verify-dirs", {
+      const res = await fetch("/code/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dirs }),
+        body: JSON.stringify({
+          prompt: text,
+          sessionId: conv.clawSessionId,
+          resume: !isFirstTurn,
+          cwd: eff.cwd || undefined,
+          allowedDirs: eff.allowedDirs,
+          ollamaModel,
+        }),
+        signal: currentAbortController.signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      const results = Array.isArray(data.results) ? data.results : [];
-      const bad = results.filter((x) => !x.ok);
-      if (bad.length === 0) {
-        el.codeVerifyDirsStatus.textContent = `All ${results.length} paths look good ✓`;
-        el.codeVerifyDirsStatus.classList.add("ok");
-        el.codeVerifyDirsStatus.classList.remove("error");
-      } else {
-        const detail = bad.map((b) => `${b.input || "(empty)"} — ${b.reason}`).join("; ");
-        el.codeVerifyDirsStatus.textContent = `${bad.length} of ${results.length} failed: ${detail}`;
-        el.codeVerifyDirsStatus.classList.add("error");
-        el.codeVerifyDirsStatus.classList.remove("ok");
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} — ${t || res.statusText}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          let env;
+          try { env = JSON.parse(line); } catch { continue; }
+
+          if (env.kind === "meta") {
+            currentCodeJobId = env.jobId;
+          } else if (env.kind === "system_init") {
+            // claw-dev's own model string (claude-sonnet-4-6) — keep ours.
+          } else if (env.kind === "text_delta") {
+            const blk = ensureTextBlock();
+            blk.text += env.text || "";
+            if (blk._el) blk._el.innerHTML = renderMarkdown(blk.text);
+            if (env.text) live.addTokens(1);
+          } else if (env.kind === "assistant_text") {
+            const blk = ensureTextBlock();
+            if (!blk.text) {
+              blk.text = env.text || "";
+              if (blk._el) blk._el.innerHTML = renderMarkdown(blk.text);
+            }
+          } else if (env.kind === "thinking") {
+            const t = { type: "text", text: `_${env.text || ""}_` };
+            assistantMsg.blocks.push(t);
+            appendBlockEl(blocksEl, t);
+            closeTextBlock();
+          } else if (env.kind === "tool_use") {
+            closeTextBlock();
+            const blk = { type: "tool_use", id: env.id, name: env.name, input: env.input || {} };
+            assistantMsg.blocks.push(blk);
+            const dom = buildToolUseBlock(blk.name, blk.input);
+            blocksEl.appendChild(dom);
+            codeToolUseEls.set(env.id, { dom, block: blk });
+          } else if (env.kind === "tool_result") {
+            const entry = codeToolUseEls.get(env.id);
+            if (entry) {
+              attachToolResult(entry.dom, env.output, env.isError);
+              entry.block.result = env.output;
+              entry.block.isError = !!env.isError;
+            }
+          } else if (env.kind === "result") {
+            assistantMsg.stats = {
+              model: ollamaModel,
+              tokens: env.usage?.output_tokens || 0,
+              durationSec: env.durationMs > 0 ? env.durationMs / 1000 : (performance.now() - wallStart) / 1000,
+              tps: 0,
+            };
+            if (env.usage?.output_tokens && env.durationMs > 0) {
+              assistantMsg.stats.tps = env.usage.output_tokens / (env.durationMs / 1000);
+            }
+            if (env.isError && env.result) {
+              const e = { type: "text", text: `**Error:** ${env.result}` };
+              assistantMsg.blocks.push(e);
+              appendBlockEl(blocksEl, e);
+            }
+          } else if (env.kind === "warning") {
+            const w = { type: "text", text: `_${env.message}_` };
+            assistantMsg.blocks.push(w);
+            appendBlockEl(blocksEl, w);
+            closeTextBlock();
+          } else if (env.kind === "error") {
+            const e = { type: "text", text: `**Error:** ${env.message}` };
+            assistantMsg.blocks.push(e);
+            appendBlockEl(blocksEl, e);
+            closeTextBlock();
+          }
+          c.save();
+          scrollToBottom();
+        }
       }
     } catch (err) {
-      el.codeVerifyDirsStatus.textContent = `Verify failed: ${err.message}`;
-      el.codeVerifyDirsStatus.classList.add("error");
-      el.codeVerifyDirsStatus.classList.remove("ok");
+      if (err.name === "AbortError") {
+        const stop = { type: "text", text: "_(stopped)_" };
+        assistantMsg.blocks.push(stop);
+        appendBlockEl(blocksEl, stop);
+      } else {
+        console.error(err);
+        const e = { type: "text", text: `**Error:** ${err.message}` };
+        assistantMsg.blocks.push(e);
+        appendBlockEl(blocksEl, e);
+      }
     } finally {
-      el.codeVerifyDirsBtn.disabled = false;
+      live.stop();
+      if (live.el.parentElement) live.el.remove();
+      isStreaming = false;
+      currentAbortController = null;
+      currentCodeJobId = null;
+      el.sendBtn.classList.remove("hidden");
+      el.stopBtn.classList.add("hidden");
+      assistantMsg.content = assistantMsg.blocks
+        .filter((b) => b.type === "text")
+        .map((b) => b.text).join("\n\n");
+      c.save();
+      localStorage.setItem(STORAGE.lastModelCode, ollamaModel);
+
+      const body = assistantEl.querySelector(".message-body");
+      if (body) {
+        const statsBar = buildStatsBar(assistantMsg.stats);
+        if (statsBar) body.appendChild(statsBar);
+        body.appendChild(buildActionBar(conv, assistantMsg));
+      }
+      refreshCodeBanner();
+    }
+  }
+
+  async function stopCodeJob() {
+    if (currentAbortController) currentAbortController.abort();
+    if (currentCodeJobId) {
+      try {
+        await fetch("/code/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId: currentCodeJobId }),
+        });
+      } catch { /* best effort */ }
     }
   }
 
   /* ----------------------------------------------------------
-     File uploads — drop / pick → POST /local-code/upload
+     Chat send / stream
      ---------------------------------------------------------- */
-  function formatChipSize(n) {
-    if (!Number.isFinite(n) || n <= 0) return "";
-    if (n < 1024) return `${n}B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-  }
+  async function sendMessage(text) {
+    text = text.trim();
+    if (!text || isStreaming) return;
 
-  // Build the X-Code-Context header value (base64 JSON) so the server can
-  // validate the upload target against the same cwd + allowedDirs the chat
-  // endpoint sees.
-  function buildCodeContextHeader() {
-    const eff = effectiveCodeContext();
-    const cwd = eff.cwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
-    const json = JSON.stringify({
-      cwd,
-      allowedDirs: eff.allowedDirs,
-      unrestrictedFs: eff.unrestrictedFs,
-    });
-    return btoa(unescape(encodeURIComponent(json)));
-  }
+    if (activeView === "code") {
+      return sendCodeMessage(text);
+    }
 
-  function renderAttachments() {
-    if (!el.attachments) return;
-    if (stagedAttachments.length === 0) {
-      el.attachments.hidden = true;
-      el.attachments.innerHTML = "";
+    const model = el.modelSelect.value;
+    if (!model) {
+      alert("Pick a model first (or pull one from the Models tab).");
       return;
     }
-    el.attachments.hidden = false;
-    el.attachments.innerHTML = "";
-    for (const att of stagedAttachments) {
-      const chip = document.createElement("div");
-      chip.className = `attachment-chip status-${att.status}`;
-      chip.dataset.id = att.id;
 
-      const icon = document.createElement("span");
-      icon.className = "attachment-icon";
-      icon.textContent =
-        att.status === "uploading" ? "⏳" :
-        att.status === "error" ? "✕" : "📄";
-      chip.appendChild(icon);
+    const c = ctx();
+    let conv = getActiveConversation();
+    if (!conv) conv = createConversation();
+    conv.model = model;
 
-      const name = document.createElement("span");
-      name.className = "attachment-name";
-      name.title = att.error || att.relPath || att.name;
-      name.textContent = att.name;
-      chip.appendChild(name);
+    conv.messages.push({ role: "user", content: text });
+    setConversationTitle(conv, text);
+    c.save();
+    el.welcome.classList.add("hidden");
+    el.messages.appendChild(buildMessageEl(conv.messages[conv.messages.length - 1], conv));
 
-      const size = document.createElement("span");
-      size.className = "attachment-size";
-      size.textContent =
-        att.status === "uploading" ? "uploading…" :
-        att.status === "error" ? (att.error || "failed") :
-        formatChipSize(att.sizeBytes);
-      chip.appendChild(size);
+    const assistantMsg = { role: "assistant", content: "" };
+    conv.messages.push(assistantMsg);
+    const assistantEl = buildMessageEl(assistantMsg, conv);
+    const contentEl = assistantEl.querySelector(".message-content");
+    const live = buildLiveStats();
+    assistantEl.querySelector(".message-body").appendChild(live.el);
+    el.messages.appendChild(assistantEl);
+    scrollToBottom();
 
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "attachment-remove";
-      del.title = "Remove";
-      del.textContent = "×";
-      del.addEventListener("click", () => {
-        const idx = stagedAttachments.findIndex((x) => x.id === att.id);
-        if (idx !== -1) stagedAttachments.splice(idx, 1);
-        renderAttachments();
-      });
-      chip.appendChild(del);
-
-      el.attachments.appendChild(chip);
+    const apiMessages = [];
+    const sys = (c.systemPrompt || "").trim();
+    if (sys) apiMessages.push({ role: "system", content: sys });
+    for (const m of conv.messages.slice(0, -1)) {
+      apiMessages.push({ role: m.role, content: m.content });
     }
-  }
 
-  async function uploadOneFile(file) {
-    const id = "att_" + (++attachmentIdSeq);
-    const entry = {
-      id,
-      name: file.name || "upload",
-      sizeBytes: file.size || 0,
-      status: "uploading",
+    const options = {
+      temperature: settings.temperature,
+      top_p: settings.topP,
+      top_k: settings.topK,
+      repeat_penalty: settings.repeatPenalty,
     };
-    stagedAttachments.push(entry);
-    renderAttachments();
+    if (settings.numPredict !== -1) options.num_predict = settings.numPredict;
+
+    const body = { model, messages: apiMessages, stream: true, options };
+
+    isStreaming = true;
+    el.sendBtn.classList.add("hidden");
+    el.stopBtn.classList.remove("hidden");
+    currentAbortController = new AbortController();
+
     try {
-      const ab = await file.arrayBuffer();
-      const qs = new URLSearchParams({
-        filename: file.name || "upload.bin",
-        target: "primary",
-      });
-      const res = await fetch(`/local-code/upload?${qs}`, {
+      const res = await fetch(`${settings.host}/api/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          "X-Code-Context": buildCodeContextHeader(),
-        },
-        body: ab,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: currentAbortController.signal,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} — ${errText || res.statusText}`);
       }
-      entry.status = "done";
-      entry.relPath = data.relPath;
-      entry.absPath = data.path;
-      entry.sizeBytes = data.bytes ?? entry.sizeBytes;
-      entry.name = data.name || entry.name;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const wallStart = performance.now();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const chunk = JSON.parse(line);
+            const piece = chunk.message?.content || "";
+            if (piece) {
+              live.addTokens(1);
+              assistantMsg.content += piece;
+              contentEl.innerHTML = renderMarkdown(assistantMsg.content);
+              scrollToBottom();
+            }
+            if (chunk.done) {
+              const evalCount = chunk.eval_count || 0;
+              const evalDurNs = chunk.eval_duration || 0;
+              const totalDurNs = chunk.total_duration || 0;
+              assistantMsg.stats = {
+                model,
+                tokens: evalCount,
+                durationSec: totalDurNs > 0 ? totalDurNs / 1e9 : (performance.now() - wallStart) / 1000,
+                tps: evalDurNs > 0 ? evalCount / (evalDurNs / 1e9) : 0,
+              };
+              c.save();
+            }
+          } catch (e) { /* ignore */ }
+        }
+      }
     } catch (err) {
-      entry.status = "error";
-      entry.error = err.message;
-    }
-    renderAttachments();
-  }
-
-  async function handlePickedFiles(files) {
-    if (!files || files.length === 0) return;
-    for (const f of Array.from(files)) {
-      // Run uploads in parallel — they're independent POSTs.
-      uploadOneFile(f).catch((err) => console.error("upload failed:", err));
-    }
-  }
-
-  function setDropOverlayShown(show) {
-    if (!el.dropOverlay) return;
-    el.dropOverlay.classList.toggle("hidden", !show);
-  }
-
-  // Install drag-and-drop on the chat area. Active only in Code view.
-  function installDropHandlers() {
-    const target = el.chatView;
-    if (!target) return;
-    const isInCodeView = () => activeView === "code";
-
-    target.addEventListener("dragenter", (e) => {
-      if (!isInCodeView()) return;
-      if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
-      e.preventDefault();
-      dragDepth++;
-      setDropOverlayShown(true);
-    });
-    target.addEventListener("dragover", (e) => {
-      if (!isInCodeView()) return;
-      if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes("Files")) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-    });
-    target.addEventListener("dragleave", (e) => {
-      if (!isInCodeView()) return;
-      dragDepth = Math.max(0, dragDepth - 1);
-      if (dragDepth === 0) setDropOverlayShown(false);
-    });
-    target.addEventListener("drop", (e) => {
-      if (!isInCodeView()) return;
-      e.preventDefault();
-      dragDepth = 0;
-      setDropOverlayShown(false);
-      const files = e.dataTransfer?.files;
-      if (files && files.length) handlePickedFiles(files);
-    });
-  }
-
-  // Show / hide composer chrome when entering/leaving Code view.
-  function refreshComposerForView() {
-    const inCode = activeView === "code";
-    if (el.attachBtn) el.attachBtn.classList.toggle("hidden", !inCode);
-    if (!inCode) {
-      stagedAttachments.length = 0;
-      renderAttachments();
-      setDropOverlayShown(false);
-    } else {
-      renderAttachments();
-    }
-    if (el.composerHint) {
-      el.composerHint.textContent = inCode
-        ? "Enter to send · Shift+Enter for newline · drop files to attach"
-        : "Press Enter to send · Shift+Enter for newline";
-    }
-  }
-
-  /* ----------------------------------------------------------
-     Directory picker modal — browses the real server-side filesystem
-     ---------------------------------------------------------- */
-  function openDirPicker({ title, selectLabel, initialPath, onSelect }) {
-    dirPickerOnSelect = typeof onSelect === "function" ? onSelect : null;
-    dirPickerSelectLabel = selectLabel || "Select this folder";
-    const titleEl = document.getElementById("dirPickerTitle");
-    if (titleEl) titleEl.textContent = title || "Pick a directory";
-    if (el.dirPickerSelect) el.dirPickerSelect.textContent = dirPickerSelectLabel;
-    el.dirPickerModal.classList.remove("hidden");
-    el.dirPickerModal.setAttribute("aria-hidden", "false");
-    loadDirPicker(initialPath || "");
-  }
-
-  function closeDirPicker() {
-    el.dirPickerModal.classList.add("hidden");
-    el.dirPickerModal.setAttribute("aria-hidden", "true");
-    dirPickerOnSelect = null;
-  }
-
-  async function loadDirPicker(absPath) {
-    dirPickerCurrentPath = absPath || "";
-    if (el.dirPickerPath) el.dirPickerPath.value = absPath || "";
-    if (el.dirPickerCurrent) {
-      el.dirPickerCurrent.textContent = absPath || "(drives)";
-      el.dirPickerCurrent.title = absPath || "";
-    }
-    if (el.dirPickerList) {
-      el.dirPickerList.innerHTML = '<div class="dir-picker-empty">Loading…</div>';
-    }
-    let data;
-    try {
-      const qs = new URLSearchParams({ path: absPath || "" });
-      const res = await fetch(`/local-code/fs/list?${qs}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      data = await res.json();
-    } catch (err) {
-      el.dirPickerList.innerHTML =
-        `<div class="dir-picker-empty error">Couldn't list: ${escapeHtml(err.message)}</div>`;
-      return;
-    }
-    renderDirPickerEntries(data);
-  }
-
-  function renderDirPickerEntries(data) {
-    if (!el.dirPickerList) return;
-    el.dirPickerList.innerHTML = "";
-
-    if (data.error) {
-      const empty = document.createElement("div");
-      empty.className = "dir-picker-empty error";
-      empty.textContent = data.error;
-      el.dirPickerList.appendChild(empty);
-    }
-
-    if (!data.isRoot && data.parent !== null) {
-      const up = document.createElement("button");
-      up.type = "button";
-      up.className = "dir-picker-row dir-picker-up";
-      up.innerHTML =
-        '<span class="dir-picker-icon">⬆</span>' +
-        '<span class="dir-picker-name">.. (up one level)</span>';
-      up.addEventListener("click", () => loadDirPicker(data.parent || ""));
-      el.dirPickerList.appendChild(up);
-    }
-
-    const entries = Array.isArray(data.entries) ? data.entries : [];
-    if (entries.length === 0 && !data.error) {
-      const empty = document.createElement("div");
-      empty.className = "dir-picker-empty";
-      empty.textContent = data.isRoot ? "No drives detected." : "(empty)";
-      el.dirPickerList.appendChild(empty);
-      return;
-    }
-
-    for (const entry of entries) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "dir-picker-row";
-      const icon = entry.type === "drive" ? "💽" :
-                   entry.type === "dir" ? "📁" :
-                   entry.type === "symlink" ? "🔗" : "📄";
-      row.innerHTML =
-        `<span class="dir-picker-icon">${icon}</span>` +
-        `<span class="dir-picker-name">${escapeHtml(entry.name)}</span>`;
-      // Only dirs/drives are navigable; we don't list files in the picker by default.
-      if (entry.type === "dir" || entry.type === "drive") {
-        row.addEventListener("click", () => loadDirPicker(entry.path));
+      if (err.name === "AbortError") {
+        assistantMsg.content += "\n\n_(stopped)_";
       } else {
-        row.disabled = true;
+        console.error(err);
+        assistantMsg.content =
+          `**Error:** ${err.message}\n\nMake sure Ollama is running.`;
       }
-      el.dirPickerList.appendChild(row);
+      contentEl.innerHTML = renderMarkdown(assistantMsg.content);
+    } finally {
+      isStreaming = false;
+      currentAbortController = null;
+      el.sendBtn.classList.remove("hidden");
+      el.stopBtn.classList.add("hidden");
+      c.save();
+      localStorage.setItem(STORAGE.lastModelChat, model);
+      live.stop();
+      if (live.el.parentElement) live.el.remove();
+      const statsBar = buildStatsBar(assistantMsg.stats);
+      if (statsBar) assistantEl.querySelector(".message-body").appendChild(statsBar);
+      const actionBar = buildActionBar(getActiveConversation(), assistantMsg);
+      assistantEl.querySelector(".message-body").appendChild(actionBar);
     }
   }
 
-  function confirmDirPicker() {
-    const chosen = dirPickerCurrentPath || (el.dirPickerPath ? el.dirPickerPath.value.trim() : "");
-    if (!chosen) {
-      alert("Pick a folder first (or paste an absolute path).");
+  function stopGeneration() {
+    if (activeView === "code") {
+      stopCodeJob();
       return;
     }
-    const cb = dirPickerOnSelect;
-    closeDirPicker();
-    if (cb) cb(chosen);
-  }
-
-  // Use the picker to set the primary cwd: writes back to settings and to
-  // both the banner and the open-Settings input if visible.
-  function pickPrimaryCwd() {
-    openDirPicker({
-      title: "Pick primary working directory",
-      selectLabel: "Use as primary directory",
-      initialPath: settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "",
-      onSelect: (absPath) => {
-        settings.codeCwd = absPath;
-        saveSettings();
-        if (el.codeCwdInput) el.codeCwdInput.value = absPath;
-        refreshCodeBanner();
-        // Re-check Ollama / cwd; this also picks up the new primary in the banner.
-        codeCheck();
-      },
-    });
-  }
-
-  // Use the picker to add an entry to the allowed-dirs list.
-  function pickAdditionalDir() {
-    openDirPicker({
-      title: "Add a directory the agent can read & edit",
-      selectLabel: "Add this directory",
-      initialPath: "",
-      onSelect: (absPath) => {
-        const list = Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs.slice() : [];
-        const primary = settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "";
-        if (primary && absPath === primary) {
-          alert("That's already the primary directory.");
-          return;
-        }
-        if (list.includes(absPath)) {
-          alert("That directory is already in the list.");
-          return;
-        }
-        list.push(absPath);
-        settings.codeAllowedDirs = list;
-        saveSettings();
-        if (el.codeAllowedDirsInput) {
-          el.codeAllowedDirsInput.value = allowedDirsAsText(list);
-          updateAllowedDirsCount();
-        }
-        refreshCodeBanner();
-      },
-    });
+    if (currentAbortController) currentAbortController.abort();
   }
 
   /* ----------------------------------------------------------
-     Projects — bundles of (name, cwd, allowedDirs, unrestrictedFs)
-     that scope a set of Code conversations.
+     Projects: CRUD + grid + modal
      ---------------------------------------------------------- */
-  function saveProjects() {
-    saveJSON(STORAGE.projects, projects);
-    if (activeProjectId) localStorage.setItem(STORAGE.activeProject, activeProjectId);
-    else localStorage.removeItem(STORAGE.activeProject);
+  function refreshProjectsLinkBtn() {
+    if (!el.projectsLinkBtn) return;
+    el.projectsLinkBtn.hidden = activeView !== "code";
+    if (el.projectsLinkCount) el.projectsLinkCount.textContent = String(projects.length);
+    el.projectsLinkBtn.classList.toggle("active", activeView === "code" && inCodeProjectsView);
   }
 
-  function getActiveProject() {
-    if (!activeProjectId) return null;
-    return projects.find((p) => p.id === activeProjectId) || null;
+  function showCodeProjectsView() {
+    if (activeView !== "code") return;
+    inCodeProjectsView = true;
+    localStorage.setItem(STORAGE.inProjectsView, "1");
+    renderProjects();
+    refreshViewPanes();
+    refreshProjectsLinkBtn();
+    if (el.codeBanner) el.codeBanner.hidden = true;
+    if (el.clearChatBtn) el.clearChatBtn.style.display = "none";
   }
 
-  // The cwd / allowedDirs / unrestrictedFs that should ACTUALLY be used right
-  // now: project values override the global Settings values when a project
-  // is active. Used by sendCodeMessage, file uploads, and the banner.
-  function effectiveCodeContext() {
-    const proj = getActiveProject();
-    if (proj) {
-      return {
-        cwd: proj.cwd || "",
-        allowedDirs: Array.isArray(proj.allowedDirs) ? proj.allowedDirs : [],
-        unrestrictedFs: proj.unrestrictedFs === true,
-        source: "project",
-        projectId: proj.id,
-        projectName: proj.name,
-      };
-    }
-    return {
-      cwd: settings.codeCwd || "",
-      allowedDirs: Array.isArray(settings.codeAllowedDirs) ? settings.codeAllowedDirs : [],
-      unrestrictedFs: settings.codeUnrestrictedFs === true,
-      source: "settings",
-      projectId: null,
-      projectName: null,
-    };
+  function hideCodeProjectsView() {
+    inCodeProjectsView = false;
+    localStorage.setItem(STORAGE.inProjectsView, "0");
+    refreshViewPanes();
+    refreshProjectsLinkBtn();
+    if (el.codeBanner) el.codeBanner.hidden = false;
+    if (el.clearChatBtn) el.clearChatBtn.style.display = "";
   }
 
   function setActiveProject(id, opts = {}) {
     activeProjectId = id || null;
     saveProjects();
-    // Make sure we're not stuck on a conversation from a different project.
     const conv = getActiveConversation();
     if (conv && conv.projectId && conv.projectId !== activeProjectId) {
       codeActiveId = null;
@@ -2215,11 +1893,13 @@
       refreshCodeBanner();
       refreshProjectsLinkBtn();
       refreshViewPanes();
+      if (el.codeBanner) el.codeBanner.hidden = false;
+      if (el.clearChatBtn) el.clearChatBtn.style.display = "";
       codeCheck();
     }
   }
 
-  function createProjectObject(name, cwd, allowedDirs, unrestrictedFs) {
+  function createProjectObject(name, cwd, allowedDirs) {
     const id = "p_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const now = Date.now();
     return {
@@ -2227,19 +1907,9 @@
       name: (name || "").trim() || derivedProjectName(cwd) || "Untitled project",
       cwd: (cwd || "").trim(),
       allowedDirs: Array.isArray(allowedDirs) ? allowedDirs.slice() : [],
-      unrestrictedFs: !!unrestrictedFs,
       createdAt: now,
       updatedAt: now,
     };
-  }
-
-  // "C:\\path\\to\\Ollama web ui" → "Ollama web ui"
-  // "/home/me/projects/foo"       → "foo"
-  function derivedProjectName(p) {
-    if (!p) return "";
-    const trimmed = String(p).replace(/[\\/]+$/, "");
-    const lastSlash = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
-    return lastSlash === -1 ? trimmed : trimmed.slice(lastSlash + 1);
   }
 
   function deleteProject(id) {
@@ -2254,7 +1924,6 @@
         : "No conversations belong to this project.")
     );
     if (!ok) return;
-    // Unlink conversations rather than delete them — preserves the user's history.
     for (const c of codeConvs) {
       if (c.projectId === id) c.projectId = null;
     }
@@ -2268,34 +1937,21 @@
     refreshProjectsLinkBtn();
   }
 
-  /* ---- Projects grid rendering ---------------------------------------- */
-  let projectsSearchOpen = false;
-  let projectsSearchQuery = "";
-
-  function refreshProjectsLinkBtn() {
-    if (!el.projectsLinkBtn) return;
-    el.projectsLinkBtn.hidden = activeView !== "code";
-    if (el.projectsLinkCount) el.projectsLinkCount.textContent = String(projects.length);
-    el.projectsLinkBtn.classList.toggle("active", activeView === "code" && inCodeProjectsView);
-  }
-
   function renderProjects() {
     if (!el.projectsGrid) return;
-    // Sort: most-recently-updated first (matches the picture's "X ago" feel).
     const q = (projectsSearchQuery || "").trim().toLowerCase();
     const list = projects
       .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.cwd || "").toLowerCase().includes(q))
       .slice()
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      .sort(projectsSortByName
+        ? (a, b) => a.name.localeCompare(b.name)
+        : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-    // Clear everything except the empty-state node (kept so we can toggle it).
     Array.from(el.projectsGrid.children).forEach((c) => {
       if (c !== el.projectsEmpty) c.remove();
     });
 
-    if (el.projectsEmpty) {
-      el.projectsEmpty.hidden = list.length !== 0;
-    }
+    if (el.projectsEmpty) el.projectsEmpty.hidden = list.length !== 0;
     if (list.length === 0) return;
 
     for (const proj of list) {
@@ -2341,9 +1997,6 @@
     }
   }
 
-  /* ---- Project modal (new / edit) ------------------------------------- */
-  let editingProjectId = null;
-
   function openProjectModal(id) {
     editingProjectId = id || null;
     const proj = id ? projects.find((p) => p.id === id) : null;
@@ -2351,7 +2004,6 @@
     el.projectNameInput.value = proj ? proj.name : "";
     el.projectCwdInput.value = proj ? proj.cwd : "";
     el.projectAllowedDirsInput.value = proj ? allowedDirsAsText(proj.allowedDirs) : "";
-    el.projectUnrestrictedInput.checked = proj ? !!proj.unrestrictedFs : false;
     el.projectDeleteBtn.hidden = !proj;
     el.projectAllowedDirsCount.textContent =
       String(parseAllowedDirsText(el.projectAllowedDirsInput.value).length);
@@ -2375,7 +2027,6 @@
       return;
     }
     const allowedDirs = parseAllowedDirsText(el.projectAllowedDirsInput.value);
-    const unrestrictedFs = !!el.projectUnrestrictedInput.checked;
 
     if (editingProjectId) {
       const proj = projects.find((p) => p.id === editingProjectId);
@@ -2383,7 +2034,6 @@
       proj.name = name || derivedProjectName(cwd) || proj.name || "Untitled";
       proj.cwd = cwd;
       proj.allowedDirs = allowedDirs;
-      proj.unrestrictedFs = unrestrictedFs;
       proj.updatedAt = Date.now();
       saveProjects();
       if (activeProjectId === proj.id) {
@@ -2391,12 +2041,11 @@
         codeCheck();
       }
     } else {
-      const proj = createProjectObject(name, cwd, allowedDirs, unrestrictedFs);
+      const proj = createProjectObject(name, cwd, allowedDirs);
       projects.unshift(proj);
       saveProjects();
-      // Auto-activate the newly created project.
       setActiveProject(proj.id, { silent: true });
-      // Open the chat view for it; rendering happens below.
+      // Open the chat view for the new project.
       inCodeProjectsView = false;
       localStorage.setItem(STORAGE.inProjectsView, "0");
     }
@@ -2408,707 +2057,181 @@
     refreshViewPanes();
   }
 
-  /* ---- View toggling: chat ↔ projects-grid (within Code) -------------- */
-  function showCodeProjectsView() {
-    if (activeView !== "code") return;
-    inCodeProjectsView = true;
-    localStorage.setItem(STORAGE.inProjectsView, "1");
-    renderProjects();
-    refreshViewPanes();
-    refreshProjectsLinkBtn();
+  /* ----------------------------------------------------------
+     Directory picker modal
+     ---------------------------------------------------------- */
+  function openDirPicker({ title, selectLabel, initialPath, onSelect }) {
+    dirPickerOnSelect = typeof onSelect === "function" ? onSelect : null;
+    dirPickerSelectLabel = selectLabel || "Select this folder";
+    const titleEl = document.getElementById("dirPickerTitle");
+    if (titleEl) titleEl.textContent = title || "Pick a directory";
+    if (el.dirPickerSelect) el.dirPickerSelect.textContent = dirPickerSelectLabel;
+    el.dirPickerModal.classList.remove("hidden");
+    el.dirPickerModal.setAttribute("aria-hidden", "false");
+    loadDirPicker(initialPath || "");
   }
 
-  function hideCodeProjectsView() {
-    inCodeProjectsView = false;
-    localStorage.setItem(STORAGE.inProjectsView, "0");
-    refreshViewPanes();
-    refreshProjectsLinkBtn();
+  function closeDirPicker() {
+    el.dirPickerModal.classList.add("hidden");
+    el.dirPickerModal.setAttribute("aria-hidden", "true");
+    dirPickerOnSelect = null;
   }
 
-  // Single source of truth for which main pane is visible. Called after any
-  // state change that should affect it (entering Code, toggling projects, …).
-  function refreshViewPanes() {
-    const inCode = activeView === "code";
-    const inModels = activeView === "models";
-    const inProjects = inCode && inCodeProjectsView;
-    el.chatView.hidden = inModels || inProjects;
-    el.modelsView.hidden = !inModels;
-    if (el.codeProjectsView) el.codeProjectsView.hidden = !inProjects;
-  }
-
-  // Convert this conversation's prior messages into the wire format the
-  // server expects under `history`. We strip our display-only fields and
-  // pass plain Ollama-shaped messages.
-  function buildAgentHistory(conv) {
-    const out = [];
-    // Messages on the conversation are pairs of { role, content, blocks? }.
-    // For the agent's purposes we only need user/assistant text turns from
-    // history — tool calls and their results are reconstructed by the server
-    // each turn from the prompt.
-    for (const m of conv.messages || []) {
-      if (m.role !== "user" && m.role !== "assistant") continue;
-      const text = (m.content || (m.blocks || [])
-        .filter((b) => b.type === "text").map((b) => b.text).join("\n\n")).trim();
-      if (!text) continue;
-      out.push({ role: m.role, content: text });
+  async function loadDirPicker(absPath) {
+    dirPickerCurrentPath = absPath || "";
+    if (el.dirPickerPath) el.dirPickerPath.value = absPath || "";
+    if (el.dirPickerCurrent) {
+      el.dirPickerCurrent.textContent = absPath || "(drives)";
+      el.dirPickerCurrent.title = absPath || "";
     }
-    return out;
-  }
-
-  async function sendCodeMessage(text) {
-    // Route to the configured backend. Default = built-in (the bundled
-    // Ollama tool-call agent). Aider is an opt-in alternative that the
-    // user can flip on in Settings → Code agent backend.
-    if (settings.codeBackend === "aider") {
-      return sendAiderMessage(text);
+    if (el.dirPickerList) {
+      el.dirPickerList.innerHTML = '<div class="dir-picker-empty">Loading…</div>';
     }
-    return sendBuiltinCodeMessage(text);
+    let data;
+    try {
+      const qs = new URLSearchParams({ path: absPath || "" });
+      const res = await fetch(`/code/fs/list?${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+    } catch (err) {
+      el.dirPickerList.innerHTML =
+        `<div class="dir-picker-empty error">Couldn't list: ${escapeHtml(err.message)}</div>`;
+      return;
+    }
+    renderDirPickerEntries(data);
   }
 
-  // The bundled Ollama tool-call agent loop — talks to /local-code/chat
-  // on the server, executes read_file / write_file / edit_file / bash /
-  // glob / grep / list_dir, and emits live token counts as it goes.
-  async function sendBuiltinCodeMessage(text) {
-    const model = el.modelSelect.value;
-    if (!model) {
-      alert("Pick a model in the top bar first (the agent uses Ollama tool calling).");
+  function renderDirPickerEntries(data) {
+    if (!el.dirPickerList) return;
+    el.dirPickerList.innerHTML = "";
+
+    if (data.error) {
+      const empty = document.createElement("div");
+      empty.className = "dir-picker-empty error";
+      empty.textContent = data.error;
+      el.dirPickerList.appendChild(empty);
+    }
+
+    if (!data.isRoot && data.parent !== null) {
+      const up = document.createElement("button");
+      up.type = "button";
+      up.className = "dir-picker-row dir-picker-up";
+      up.innerHTML =
+        '<span class="dir-picker-icon">⬆</span>' +
+        '<span class="dir-picker-name">.. (up one level)</span>';
+      up.addEventListener("click", () => loadDirPicker(data.parent || ""));
+      el.dirPickerList.appendChild(up);
+    }
+
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    if (entries.length === 0 && !data.error) {
+      const empty = document.createElement("div");
+      empty.className = "dir-picker-empty";
+      empty.textContent = data.isRoot ? "No drives detected." : "(empty)";
+      el.dirPickerList.appendChild(empty);
       return;
     }
 
-    // If any uploads are still in flight, ask the user to wait.
-    const pendingUpload = stagedAttachments.find((a) => a.status === "uploading");
-    if (pendingUpload) {
-      alert("An upload is still in progress — please wait a moment.");
+    for (const entry of entries) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "dir-picker-row";
+      const icon = entry.type === "drive" ? "💽"
+                 : entry.type === "dir"   ? "📁"
+                 : entry.type === "symlink" ? "🔗" : "📄";
+      row.innerHTML =
+        `<span class="dir-picker-icon">${icon}</span>` +
+        `<span class="dir-picker-name">${escapeHtml(entry.name)}</span>`;
+      if (entry.type === "dir" || entry.type === "drive") {
+        row.addEventListener("click", () => loadDirPicker(entry.path));
+      } else {
+        row.disabled = true;
+      }
+      el.dirPickerList.appendChild(row);
+    }
+  }
+
+  function confirmDirPicker() {
+    const chosen = dirPickerCurrentPath || (el.dirPickerPath ? el.dirPickerPath.value.trim() : "");
+    if (!chosen) {
+      alert("Pick a folder first (or paste an absolute path).");
       return;
     }
+    const cb = dirPickerOnSelect;
+    closeDirPicker();
+    if (cb) cb(chosen);
+  }
 
-    const c = ctx();
-    let conv = getActiveConversation();
-    if (!conv) conv = createConversation();
-
-    // History includes everything BEFORE the new user turn.
-    const history = buildAgentHistory(conv);
-
-    // If the user attached files, prepend a small "attached" preamble so the
-    // agent sees the saved paths in-band. Only successful uploads are listed;
-    // failed ones are shown to the user as chips but not sent.
-    const okAttachments = stagedAttachments.filter((a) => a.status === "done");
-    let promptToSend = text;
-    if (okAttachments.length > 0) {
-      const lines = okAttachments.map((a) => {
-        const size = formatChipSize(a.sizeBytes);
-        return `  • ${a.relPath || a.name}${size ? ` (${size})` : ""}`;
+  function pickPrimaryCwd() {
+    const proj = getActiveProject();
+    if (proj) {
+      // Active project — picker edits the project's cwd, not the global setting.
+      openDirPicker({
+        title: `Pick working directory for "${proj.name}"`,
+        selectLabel: "Use as project directory",
+        initialPath: proj.cwd || "",
+        onSelect: (absPath) => {
+          proj.cwd = absPath;
+          proj.updatedAt = Date.now();
+          saveProjects();
+          refreshCodeBanner();
+        },
       });
-      promptToSend =
-        `[The user attached ${okAttachments.length} file${okAttachments.length === 1 ? "" : "s"}, ` +
-        `saved into the primary working directory:\n${lines.join("\n")}\n` +
-        `You can read or edit them with the file tools.]\n\n${text}`;
+      return;
     }
-
-    // Append user message visibly. We render the attachments inline in the
-    // bubble so the conversation history makes sense on re-open.
-    const userBlocks = [];
-    if (okAttachments.length > 0) {
-      userBlocks.push({
-        type: "attachments",
-        items: okAttachments.map((a) => ({
-          name: a.name, relPath: a.relPath, sizeBytes: a.sizeBytes,
-        })),
-      });
-    }
-    userBlocks.push({ type: "text", text });
-    const userMsg = { role: "user", content: text, blocks: userBlocks };
-    conv.messages.push(userMsg);
-    setConversationTitle(conv, text);
-    conv.model = model;
-    // Tag (or re-tag) the conv with the active project; bump project recency.
-    if (activeProjectId && conv.projectId !== activeProjectId) {
-      conv.projectId = activeProjectId;
-    }
-    const activeProj = getActiveProject();
-    if (activeProj) {
-      activeProj.updatedAt = Date.now();
-      saveProjects();
-    }
-    c.save();
-    el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
-
-    // Clear the staged attachments — they've been "sent".
-    stagedAttachments.length = 0;
-    renderAttachments();
-
-    // Streaming assistant placeholder. Stamp the model on this turn so the
-    // bubble keeps showing the right name even if the user later picks a
-    // different model in the dropdown.
-    const assistantMsg = { role: "assistant", content: "", blocks: [], model };
-    conv.messages.push(assistantMsg);
-    const assistantEl = buildCodeMessageEl(assistantMsg, conv);
-    const blocksEl = assistantEl._blocksEl;
-    // Live stats line — replaces the old bouncing-dots typing indicator.
-    // Token count is fed from server-emitted "turn_stats" events as the
-    // agent loops; the timer starts immediately so the user sees activity.
-    const live = buildLiveStats();
-    assistantEl.querySelector(".message-body").appendChild(live.el);
-    el.messages.appendChild(assistantEl);
-    scrollToBottom();
-
-    codeToolUseEls.clear();
-    isStreaming = true;
-    el.sendBtn.classList.add("hidden");
-    el.stopBtn.classList.remove("hidden");
-    currentAbortController = new AbortController();
-
-    const eff = effectiveCodeContext();
-    const body = {
-      prompt: promptToSend,
-      model,
-      history,
-      cwd: eff.cwd || undefined,
-      allowedDirs: eff.allowedDirs,
-      unrestrictedFs: eff.unrestrictedFs,
-      systemPrompt: (settings.codeSystemPrompt || "").trim() || undefined,
-      options: {
-        temperature: settings.temperature,
-        top_p: settings.topP,
-        top_k: settings.topK,
-        repeat_penalty: settings.repeatPenalty,
+    openDirPicker({
+      title: "Pick default working directory",
+      selectLabel: "Use as default directory",
+      initialPath: settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "",
+      onSelect: (absPath) => {
+        settings.codeCwd = absPath;
+        saveSettings();
+        if (el.codeCwdInput) el.codeCwdInput.value = absPath;
+        refreshCodeBanner();
+        codeCheck();
       },
-    };
+    });
+  }
 
-    try {
-      const res = await fetch("/local-code/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: currentAbortController.signal,
-      });
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} — ${t || res.statusText}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          let env;
-          try { env = JSON.parse(line); } catch { continue; }
-
-          if (env.kind === "meta") {
-            currentCodeJobId = env.jobId;
-            if (!env.toolCapable) {
-              const warn = {
-                type: "text",
-                text: `_Heads up: \`${env.model}\` isn't in the known tool-capable list — the agent will try anyway, but may just chat back._`,
-              };
-              assistantMsg.blocks.push(warn);
-              appendBlockEl(blocksEl, warn);
-            }
-          } else if (env.kind === "assistant_text") {
-            const block = { type: "text", text: env.text || "" };
-            assistantMsg.blocks.push(block);
-            appendBlockEl(blocksEl, block);
-          } else if (env.kind === "tool_use") {
-            const block = { type: "tool_use", id: env.id, name: env.name, input: env.input };
-            assistantMsg.blocks.push(block);
-            const domBlock = buildToolUseBlock(env.name, env.input);
-            blocksEl.appendChild(domBlock);
-            codeToolUseEls.set(env.id, { domBlock, block });
-          } else if (env.kind === "tool_result") {
-            const entry = codeToolUseEls.get(env.id);
-            if (entry) {
-              attachToolResult(entry.domBlock, env.output, env.isError);
-              entry.block.result = env.output;
-              entry.block.isError = !!env.isError;
-            }
-          } else if (env.kind === "live_token") {
-            // Server forwards each Ollama text chunk while the agent's
-            // turn is still in progress — bump the live counter so the
-            // user sees tokens ticking instead of just a clock.
-            live.addTokens(1);
-          } else if (env.kind === "turn_stats") {
-            // Tally per-turn perf counters from each /api/chat round-trip
-            // the server made on our behalf, and push the running total
-            // into the live indicator so the user sees it climb.
-            if (!assistantMsg.stats) {
-              assistantMsg.stats = { model, tokens: 0, evalDurNs: 0, totalDurNs: 0 };
-            }
-            assistantMsg.stats.tokens += env.evalCount || 0;
-            assistantMsg.stats.evalDurNs += env.evalDuration || 0;
-            assistantMsg.stats.totalDurNs += env.totalDuration || 0;
-            live.setTokens(assistantMsg.stats.tokens);
-          } else if (env.kind === "warning") {
-            const w = { type: "text", text: `_${env.message}_` };
-            assistantMsg.blocks.push(w);
-            appendBlockEl(blocksEl, w);
-          } else if (env.kind === "error") {
-            const e = { type: "text", text: `**Error:** ${env.message}` };
-            assistantMsg.blocks.push(e);
-            appendBlockEl(blocksEl, e);
-          } else if (env.kind === "done") {
-            // Agent finished cleanly; no extra rendering needed.
+  function pickAdditionalDir() {
+    const proj = getActiveProject();
+    if (proj) {
+      openDirPicker({
+        title: `Add a directory to "${proj.name}"`,
+        selectLabel: "Add this directory",
+        initialPath: "",
+        onSelect: (absPath) => {
+          if (absPath === proj.cwd) {
+            alert("That's already the working directory.");
+            return;
           }
-          c.save();
-          scrollToBottom();
-        }
-      }
-    } catch (err) {
-      if (err.name === "AbortError") {
-        const stop = { type: "text", text: "_(stopped)_" };
-        assistantMsg.blocks.push(stop);
-        appendBlockEl(blocksEl, stop);
-      } else {
-        console.error(err);
-        const e = { type: "text", text: `**Error:** ${err.message}` };
-        assistantMsg.blocks.push(e);
-        appendBlockEl(blocksEl, e);
-      }
-    } finally {
-      // Tear down the live counter; the final stats bar takes its place.
-      live.stop();
-      if (live.el.parentElement) live.el.remove();
-      isStreaming = false;
-      currentAbortController = null;
-      currentCodeJobId = null;
-      el.sendBtn.classList.remove("hidden");
-      el.stopBtn.classList.add("hidden");
-      assistantMsg.content = assistantMsg.blocks
-        .filter((b) => b.type === "text")
-        .map((b) => b.text).join("\n\n");
-
-      // Finalize the stats object: convert nanoseconds → seconds and derive
-      // the t/s figure from Ollama's eval timing (which excludes prompt
-      // processing, so it reflects actual generation speed).
-      if (assistantMsg.stats) {
-        const s = assistantMsg.stats;
-        s.durationSec = s.totalDurNs > 0 ? s.totalDurNs / 1e9 : 0;
-        s.tps = s.evalDurNs > 0 ? s.tokens / (s.evalDurNs / 1e9) : 0;
-      }
-
-      c.save();
-      localStorage.setItem(c.lastModelKey, model);
-
-      // Append stats + action buttons under the just-finished bubble.
-      const body = assistantEl.querySelector(".message-body");
-      if (body) {
-        const statsBar = buildStatsBar(assistantMsg.stats);
-        if (statsBar) body.appendChild(statsBar);
-        body.appendChild(buildActionBar(conv, assistantMsg));
-      }
-      refreshCodeBanner();
-    }
-  }
-
-  async function stopCodeJob() {
-    if (currentAbortController) currentAbortController.abort();
-    if (currentCodeJobId) {
-      const endpoint = currentCodeBackend === "aider"
-        ? "/local-code/aider/stop"
-        : "/local-code/stop";
-      try {
-        await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: currentCodeJobId }),
-        });
-      } catch { /* best effort */ }
-    }
-  }
-
-  /* ----------------------------------------------------------
-     Aider backend — spawns the aider CLI via the server, streams
-     its stdout/stderr into the same chat bubble + live-stats UI.
-     ---------------------------------------------------------- */
-  async function sendAiderMessage(text) {
-    // Code section is locked to Ollama. Pick whichever Ollama model the
-    // user selected in the topbar and hand it to aider as
-    // ollama_chat/<name>. (Aider talks to Ollama via OLLAMA_API_BASE
-    // which the server already exports from process.env / proxy host.)
-    const topModel = el.modelSelect.value || "";
-    if (!topModel) {
-      alert(
-        "Pick an Ollama model in the topbar — aider will use it via ollama_chat/<model>.\n\n" +
-        "If the picker is empty, install one first:  ollama pull qwen2.5-coder:7b"
-      );
-      return;
-    }
-    const aiderModel = `ollama_chat/${topModel}`;
-
-    // Make sure aider is installed before we promise a working chat.
-    if (!aiderCheckInfo) await aiderCheck();
-    if (!aiderCheckInfo || !aiderCheckInfo.available) {
-      alert(
-        "Aider is not installed.\n\n" +
-        "Install it with:\n  pip install aider-chat\n\n" +
-        (aiderCheckInfo && aiderCheckInfo.error ? `Detail: ${aiderCheckInfo.error}` : "")
-      );
-      return;
-    }
-
-    const pendingUpload = stagedAttachments.find((a) => a.status === "uploading");
-    if (pendingUpload) {
-      alert("An upload is still in progress — please wait a moment.");
-      return;
-    }
-
-    const c = ctx();
-    let conv = getActiveConversation();
-    if (!conv) conv = createConversation();
-
-    // Attachments: pass their relative paths to aider via --files so it
-    // adds them to the chat scope automatically.
-    const okAttachments = stagedAttachments.filter((a) => a.status === "done");
-    const files = okAttachments.map((a) => a.relPath || a.name).filter(Boolean);
-
-    // User message UI (matches sendCodeMessage layout exactly).
-    let promptToSend = text;
-    if (okAttachments.length > 0) {
-      const lines = okAttachments.map((a) => {
-        const size = formatChipSize(a.sizeBytes);
-        return `  • ${a.relPath || a.name}${size ? ` (${size})` : ""}`;
-      });
-      promptToSend =
-        `[The user attached ${okAttachments.length} file${okAttachments.length === 1 ? "" : "s"}:\n` +
-        `${lines.join("\n")}]\n\n${text}`;
-    }
-    const userBlocks = [];
-    if (okAttachments.length > 0) {
-      userBlocks.push({
-        type: "attachments",
-        items: okAttachments.map((a) => ({
-          name: a.name, relPath: a.relPath, sizeBytes: a.sizeBytes,
-        })),
-      });
-    }
-    userBlocks.push({ type: "text", text });
-    const userMsg = { role: "user", content: text, blocks: userBlocks };
-    conv.messages.push(userMsg);
-    setConversationTitle(conv, text);
-    conv.model = aiderModel;
-    if (activeProjectId && conv.projectId !== activeProjectId) {
-      conv.projectId = activeProjectId;
-    }
-    const activeProj = getActiveProject();
-    if (activeProj) {
-      activeProj.updatedAt = Date.now();
-      saveProjects();
-    }
-    c.save();
-    el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildCodeMessageEl(userMsg, conv));
-
-    stagedAttachments.length = 0;
-    renderAttachments();
-
-    // Assistant placeholder + live counter, identical to the built-in flow.
-    const assistantMsg = {
-      role: "assistant", content: "", blocks: [], model: aiderModel, backend: "aider",
-    };
-    conv.messages.push(assistantMsg);
-    const assistantEl = buildCodeMessageEl(assistantMsg, conv);
-    const blocksEl = assistantEl._blocksEl;
-    const live = buildLiveStats();
-    assistantEl.querySelector(".message-body").appendChild(live.el);
-    el.messages.appendChild(assistantEl);
-    scrollToBottom();
-
-    codeToolUseEls.clear();
-    isStreaming = true;
-    currentCodeBackend = "aider";
-    el.sendBtn.classList.add("hidden");
-    el.stopBtn.classList.remove("hidden");
-    currentAbortController = new AbortController();
-
-    const eff = effectiveCodeContext();
-    const body = {
-      prompt: promptToSend,
-      cwd: eff.cwd || undefined,
-      model: aiderModel,
-      files,
-      // Aider read/write scope: each allowedDir becomes a positional arg
-      // so aider can read & edit files inside it. unrestrictedFs=false
-      // adds --subtree-only on the server so aider can't roam beyond cwd.
-      allowedDirs: eff.allowedDirs,
-      unrestrictedFs: eff.unrestrictedFs,
-      extraFlags: settings.aiderExtraFlags || "",
-    };
-
-    // Append text chunks into one growing text block so the user sees
-    // aider's narrative + diff blocks as Markdown.
-    let textBlock = { type: "text", text: "" };
-    assistantMsg.blocks.push(textBlock);
-    let textEl = appendBlockEl(blocksEl, textBlock);
-
-    try {
-      const res = await fetch("/local-code/aider/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: currentAbortController.signal,
-      });
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} — ${t || res.statusText}`);
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          let env;
-          try { env = JSON.parse(line); } catch { continue; }
-
-          if (env.kind === "meta") {
-            currentCodeJobId = env.jobId;
-          } else if (env.kind === "assistant_text") {
-            const piece = env.text || "";
-            textBlock.text += piece;
-            if (textEl) textEl.innerHTML = renderMarkdown(textBlock.text);
-            if (piece.length) live.addTokens(1);
-          } else if (env.kind === "warning") {
-            const w = { type: "text", text: `_${env.message}_` };
-            assistantMsg.blocks.push(w);
-            appendBlockEl(blocksEl, w);
-            // Continue collecting subsequent text into a fresh block.
-            textBlock = { type: "text", text: "" };
-            assistantMsg.blocks.push(textBlock);
-            textEl = appendBlockEl(blocksEl, textBlock);
-          } else if (env.kind === "error") {
-            const e = { type: "text", text: `**Error:** ${env.message}` };
-            assistantMsg.blocks.push(e);
-            appendBlockEl(blocksEl, e);
+          const list = Array.isArray(proj.allowedDirs) ? proj.allowedDirs.slice() : [];
+          if (list.includes(absPath)) {
+            alert("That directory is already in the list.");
+            return;
           }
-          c.save();
-          scrollToBottom();
-        }
-      }
-    } catch (err) {
-      if (err.name === "AbortError") {
-        const stop = { type: "text", text: "_(stopped)_" };
-        assistantMsg.blocks.push(stop);
-        appendBlockEl(blocksEl, stop);
-      } else {
-        console.error(err);
-        const e = { type: "text", text: `**Error:** ${err.message}` };
-        assistantMsg.blocks.push(e);
-        appendBlockEl(blocksEl, e);
-      }
-    } finally {
-      live.stop();
-      if (live.el.parentElement) live.el.remove();
-      isStreaming = false;
-      currentAbortController = null;
-      currentCodeJobId = null;
-      currentCodeBackend = null;
-      el.sendBtn.classList.remove("hidden");
-      el.stopBtn.classList.add("hidden");
-      assistantMsg.content = assistantMsg.blocks
-        .filter((b) => b.type === "text")
-        .map((b) => b.text).join("\n\n");
-      c.save();
-      refreshCodeBanner();
-    }
-  }
-
-  /* ----------------------------------------------------------
-     Send / stream a chat or code message
-     ---------------------------------------------------------- */
-  async function sendMessage(text) {
-    text = text.trim();
-    if (!text || isStreaming) return;
-
-    // Code view goes through the local-code agent loop (Ollama + tool calls).
-    if (activeView === "code") {
-      return sendCodeMessage(text);
-    }
-
-    const model = el.modelSelect.value;
-    if (!model) {
-      alert("Pick a model first (or pull one from the Models tab).");
-      return;
-    }
-
-    const c = ctx();
-    let conv = getActiveConversation();
-    if (!conv) conv = createConversation();
-    conv.model = model;
-
-    conv.messages.push({ role: "user", content: text });
-    setConversationTitle(conv, text);
-    c.save();
-    el.welcome.classList.add("hidden");
-    el.messages.appendChild(buildMessageEl(conv.messages[conv.messages.length - 1], conv));
-
-    const assistantMsg = { role: "assistant", content: "" };
-    conv.messages.push(assistantMsg);
-    const assistantEl = buildMessageEl(assistantMsg, conv);
-    const contentEl = assistantEl.querySelector(".message-content");
-    // Live stats line — replaces the old bouncing-dots typing indicator
-    // and updates every 150ms while the model streams.
-    const live = buildLiveStats();
-    assistantEl.querySelector(".message-body").appendChild(live.el);
-    el.messages.appendChild(assistantEl);
-    scrollToBottom();
-
-    const apiMessages = [];
-    const sys = (c.systemPrompt || "").trim();
-    if (sys) apiMessages.push({ role: "system", content: sys });
-    for (const m of conv.messages.slice(0, -1)) {
-      apiMessages.push({ role: m.role, content: m.content });
-    }
-
-    const options = {
-      temperature: settings.temperature,
-      top_p: settings.topP,
-      top_k: settings.topK,
-      repeat_penalty: settings.repeatPenalty,
-    };
-    if (settings.numPredict !== -1) options.num_predict = settings.numPredict;
-
-    const body = { model, messages: apiMessages, stream: true, options };
-
-    isStreaming = true;
-    el.sendBtn.classList.add("hidden");
-    el.stopBtn.classList.remove("hidden");
-    currentAbortController = new AbortController();
-    let firstTokenSeen = false;
-
-    try {
-      const res = await fetch(`${settings.host}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: currentAbortController.signal,
+          list.push(absPath);
+          proj.allowedDirs = list;
+          proj.updatedAt = Date.now();
+          saveProjects();
+          refreshCodeBanner();
+        },
       });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} — ${errText || res.statusText}`);
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const wallStart = performance.now();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const chunk = JSON.parse(line);
-            const piece = chunk.message?.content || "";
-            if (piece) {
-              firstTokenSeen = true;
-              // Each /api/chat chunk is approximately one token for the
-              // running counter; the final stats bar uses Ollama's
-              // authoritative eval_count.
-              live.addTokens(1);
-              assistantMsg.content += piece;
-              contentEl.innerHTML = renderMarkdown(assistantMsg.content);
-              scrollToBottom();
-            }
-            if (chunk.done) {
-              // Pull Ollama's perf counters off the final chunk. Fall back
-              // to wall-clock + 0 tokens if a backend doesn't send them.
-              const evalCount = chunk.eval_count || 0;
-              const evalDurNs = chunk.eval_duration || 0;
-              const totalDurNs = chunk.total_duration || 0;
-              assistantMsg.stats = {
-                model,
-                tokens: evalCount,
-                durationSec: totalDurNs > 0 ? totalDurNs / 1e9 : (performance.now() - wallStart) / 1000,
-                tps: evalDurNs > 0 ? evalCount / (evalDurNs / 1e9) : 0,
-              };
-              c.save();
-            }
-          } catch (e) { /* ignore */ }
-        }
-      }
-    } catch (err) {
-      if (err.name === "AbortError") {
-        assistantMsg.content += "\n\n_(stopped)_";
-      } else {
-        console.error(err);
-        assistantMsg.content =
-          `**Error:** ${err.message}\n\nMake sure Ollama is running.`;
-      }
-      contentEl.innerHTML = renderMarkdown(assistantMsg.content);
-    } finally {
-      isStreaming = false;
-      currentAbortController = null;
-      el.sendBtn.classList.remove("hidden");
-      el.stopBtn.classList.add("hidden");
-      c.save();
-      localStorage.setItem(c.lastModelKey, model);
-      // Tear down the live-stats line; the final stats bar takes its place.
-      live.stop();
-      if (live.el.parentElement) live.el.remove();
-      const statsBar = buildStatsBar(assistantMsg.stats);
-      if (statsBar) assistantEl.querySelector(".message-body").appendChild(statsBar);
-      const actionBar = buildActionBar(getActiveConversation(), assistantMsg);
-      assistantEl.querySelector(".message-body").appendChild(actionBar);
-    }
-  }
-
-  function stopGeneration() {
-    if (activeView === "code") {
-      stopCodeJob();
       return;
     }
-    if (currentAbortController) currentAbortController.abort();
+    alert(
+      "Pick or create a project first — additional directories belong to a project.\n\n" +
+      "Settings → Default working directory is for the case when no project is active."
+    );
   }
 
   /* ----------------------------------------------------------
      Settings UI
      ---------------------------------------------------------- */
-  // Show or hide the aider-specific Settings fields based on the current
-  // selection of codeBackend.
-  function syncAiderFieldsVisibility() {
-    const aider = (el.codeBackendSelect && el.codeBackendSelect.value === "aider");
-    if (el.aiderModelField) el.aiderModelField.hidden = !aider;
-    if (el.aiderFlagsField) el.aiderFlagsField.hidden = !aider;
-    if (el.codeBackendTag) {
-      el.codeBackendTag.textContent = aider ? "aider" : "built-in";
-    }
-  }
-
   function openSettings() {
     el.hostInput.value = settings.host;
     el.systemPrompt.value = settings.systemPrompt;
-    if (el.codeSystemPrompt) el.codeSystemPrompt.value = settings.codeSystemPrompt;
-    if (el.codeBackendSelect) {
-      el.codeBackendSelect.value = settings.codeBackend === "aider" ? "aider" : "builtin";
-      syncAiderFieldsVisibility();
-    }
     if (el.codeCwdInput) el.codeCwdInput.value = settings.codeCwd || "";
-    if (el.codeAllowedDirsInput) {
-      el.codeAllowedDirsInput.value = allowedDirsAsText(settings.codeAllowedDirs);
-      updateAllowedDirsCount();
-    }
-    if (el.codeUnrestrictedInput) {
-      el.codeUnrestrictedInput.checked = !!settings.codeUnrestrictedFs;
-    }
-    if (el.aiderFlagsInput) el.aiderFlagsInput.value = settings.aiderExtraFlags || "";
     el.temperature.value = settings.temperature;
     el.tempValue.textContent = settings.temperature;
     el.topP.value = settings.topP;
@@ -3126,42 +2249,7 @@
   function applySettingsFromForm() {
     settings.host = el.hostInput.value.trim().replace(/\/+$/, "") || DEFAULTS.host;
     settings.systemPrompt = el.systemPrompt.value;
-    if (el.codeSystemPrompt) settings.codeSystemPrompt = el.codeSystemPrompt.value;
     if (el.codeCwdInput) settings.codeCwd = el.codeCwdInput.value.trim();
-    if (el.codeAllowedDirsInput) {
-      settings.codeAllowedDirs = parseAllowedDirsText(el.codeAllowedDirsInput.value);
-    }
-    if (el.codeUnrestrictedInput) {
-      const wasOn = settings.codeUnrestrictedFs === true;
-      const nowOn = !!el.codeUnrestrictedInput.checked;
-      if (nowOn && !wasOn) {
-        const ok = confirm(
-          "Enable Full Disk Access?\n\n" +
-          "Aider will be able to read & edit ANY file on this computer that you mention in chat — " +
-          "including files outside your project folder.\n\n" +
-          "Only enable this if you trust both the model and the prompts you send."
-        );
-        if (!ok) {
-          el.codeUnrestrictedInput.checked = false;
-        } else {
-          settings.codeUnrestrictedFs = true;
-        }
-      } else {
-        settings.codeUnrestrictedFs = nowOn;
-      }
-    }
-    if (el.aiderFlagsInput) settings.aiderExtraFlags = el.aiderFlagsInput.value.trim();
-    if (el.codeBackendSelect) {
-      const newBackend = el.codeBackendSelect.value === "aider" ? "aider" : "builtin";
-      const switching = settings.codeBackend !== newBackend;
-      settings.codeBackend = newBackend;
-      if (switching && newBackend === "aider") {
-        // Probe aider availability now so the banner chip is honest.
-        aiderCheck();
-      }
-    } else {
-      settings.codeBackend = settings.codeBackend || "builtin";
-    }
     settings.temperature = parseFloat(el.temperature.value);
     settings.topP = parseFloat(el.topP.value);
     settings.topK = parseInt(el.topK.value, 10);
@@ -3169,7 +2257,10 @@
     settings.repeatPenalty = parseFloat(el.repeatPenalty.value);
     saveSettings();
     fetchModels();
-    if (activeView === "code") codeCheck();
+    if (activeView === "code") {
+      codeCheck();
+      refreshCodeBanner();
+    }
   }
   function resetSettingsForm() {
     settings = { ...DEFAULTS };
@@ -3187,19 +2278,14 @@
   }
 
   function init() {
-    // Nav tabs
     el.navTabs.forEach((t) =>
       t.addEventListener("click", () => setView(t.dataset.view))
     );
 
-    // Sidebar
     el.newChatBtn.addEventListener("click", () => createConversation());
     el.toggleSidebar.addEventListener("click", () => {
       const willOpen = el.sidebar.classList.contains("collapsed");
       el.sidebar.classList.toggle("collapsed");
-      // On mobile, mirror the open/closed state on <body> so the backdrop
-      // becomes interactive (and the page can lock scroll if we want to
-      // later).
       if (isMobileViewport()) {
         document.body.classList.toggle("sidebar-open", willOpen);
       }
@@ -3207,18 +2293,13 @@
     if (el.sidebarBackdrop) {
       el.sidebarBackdrop.addEventListener("click", closeMobileSidebar);
     }
-    // Keyboard escape closes the drawer too.
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && isMobileViewport() &&
           !el.sidebar.classList.contains("collapsed")) {
         closeMobileSidebar();
       }
     });
-    // When the window crosses the mobile/desktop boundary, reset state so
-    // we don't get a desktop with a collapsed-by-default sidebar (or a
-    // mobile with the drawer open underneath everything).
     window.addEventListener("resize", syncSidebarForViewport);
-    // Initial mobile state: drawer starts CLOSED.
     syncSidebarForViewport();
 
     // Settings
@@ -3251,13 +2332,13 @@
       el.repeatPenaltyValue.textContent = el.repeatPenalty.value;
     });
 
-    // Clear current chat
     el.clearChatBtn.addEventListener("click", () => {
       const conv = getActiveConversation();
       if (!conv) return;
       if (confirm("Clear all messages in this chat?")) {
         conv.messages = [];
         conv.title = activeView === "code" ? "New task" : "New chat";
+        if (activeView === "code") conv.clawSessionId = uuidv4();
         ctx().save();
         renderConversations();
         renderMessages();
@@ -3265,7 +2346,6 @@
       }
     });
 
-    // Composer
     el.input.addEventListener("input", autoSizeTextarea);
     el.input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
@@ -3283,55 +2363,37 @@
     });
     el.stopBtn.addEventListener("click", stopGeneration);
 
-    // Tip cards in welcome (code view) — populate composer
-    el.welcomeTips.addEventListener("click", (e) => {
-      const card = e.target.closest(".tip-card");
-      if (!card) return;
-      el.input.value = card.textContent.replace(/^[^\s]+\s/, "");
-      autoSizeTextarea();
-      el.input.focus();
-    });
+    if (el.welcomeTips) {
+      el.welcomeTips.addEventListener("click", (e) => {
+        const card = e.target.closest(".tip-card");
+        if (!card) return;
+        el.input.value = card.textContent.replace(/^[^\s]+\s/, "");
+        autoSizeTextarea();
+        el.input.focus();
+      });
+    }
 
-    // Model selection persistence
     el.modelSelect.addEventListener("change", () => {
-      const c = ctx();
-      localStorage.setItem(c.lastModelKey, el.modelSelect.value);
+      const lastKey = (activeView === "code") ? STORAGE.lastModelCode : STORAGE.lastModelChat;
+      localStorage.setItem(lastKey, el.modelSelect.value);
       const conv = getActiveConversation();
       if (conv) {
         conv.model = el.modelSelect.value;
-        c.save();
+        ctx().save();
       }
-    });
-
-    // Local Code: refresh banner when the user picks a different model so
-    // the "tools: yes/maybe" hint stays in sync.
-    el.modelSelect.addEventListener("change", () => {
       if (activeView === "code") refreshCodeBanner();
     });
 
-    // Local Code: allowed-dirs UI in Settings.
-    if (el.codeAllowedDirsInput) {
-      el.codeAllowedDirsInput.addEventListener("input", updateAllowedDirsCount);
-    }
-    if (el.codeVerifyDirsBtn) {
-      el.codeVerifyDirsBtn.addEventListener("click", verifyAllowedDirs);
-    }
-
-    // Toggle aider Settings fields when the user flips the backend dropdown.
-    if (el.codeBackendSelect) {
-      el.codeBackendSelect.addEventListener("change", syncAiderFieldsVisibility);
-    }
-
-    // Local Code: directory picker buttons in the banner.
+    // Code banner buttons
     if (el.codePickCwdBtn) el.codePickCwdBtn.addEventListener("click", pickPrimaryCwd);
     if (el.codeAddDirBtn) el.codeAddDirBtn.addEventListener("click", pickAdditionalDir);
 
-    // Local Code: directory picker buttons in Settings.
+    // Settings: Browse for default cwd
     if (el.codePickCwdSettingsBtn) {
       el.codePickCwdSettingsBtn.addEventListener("click", () => {
         openDirPicker({
-          title: "Pick primary working directory",
-          selectLabel: "Use as primary directory",
+          title: "Pick default working directory",
+          selectLabel: "Use as default directory",
           initialPath: (el.codeCwdInput && el.codeCwdInput.value.trim()) ||
                        settings.codeCwd || (codeCheckInfo && codeCheckInfo.cwd) || "",
           onSelect: (abs) => {
@@ -3340,38 +2402,16 @@
         });
       });
     }
-    if (el.codeAddDirSettingsBtn) {
-      el.codeAddDirSettingsBtn.addEventListener("click", () => {
-        openDirPicker({
-          title: "Add a directory the agent can read & edit",
-          selectLabel: "Add this directory",
-          initialPath: "",
-          onSelect: (abs) => {
-            if (!el.codeAllowedDirsInput) return;
-            const current = parseAllowedDirsText(el.codeAllowedDirsInput.value);
-            if (current.includes(abs)) {
-              alert("That directory is already in the list.");
-              return;
-            }
-            current.push(abs);
-            el.codeAllowedDirsInput.value = allowedDirsAsText(current);
-            updateAllowedDirsCount();
-          },
-        });
-      });
-    }
 
-    // Directory picker modal — wiring.
+    // Dir picker modal wiring
     if (el.dirPickerClose) el.dirPickerClose.addEventListener("click", closeDirPicker);
     if (el.dirPickerCancel) el.dirPickerCancel.addEventListener("click", closeDirPicker);
     if (el.dirPickerSelect) el.dirPickerSelect.addEventListener("click", confirmDirPicker);
     if (el.dirPickerUp) {
       el.dirPickerUp.addEventListener("click", async () => {
-        // Re-fetch parent of current path. The list endpoint also returns parent,
-        // but we can re-derive client-side by asking the server again.
         const qs = new URLSearchParams({ path: dirPickerCurrentPath || "" });
         try {
-          const res = await fetch(`/local-code/fs/list?${qs}`);
+          const res = await fetch(`/code/fs/list?${qs}`);
           const data = await res.json();
           if (data.parent !== null && data.parent !== undefined) {
             loadDirPicker(data.parent);
@@ -3402,61 +2442,43 @@
       });
     }
 
-    // File upload: button + hidden input + drop overlay.
-    if (el.attachBtn && el.attachInput) {
-      el.attachBtn.addEventListener("click", () => el.attachInput.click());
-      el.attachInput.addEventListener("change", () => {
-        handlePickedFiles(el.attachInput.files);
-        el.attachInput.value = ""; // allow re-picking the same file
-      });
-    }
-    installDropHandlers();
-
-    /* ---- Projects wiring ---- */
-    // Sidebar "Projects" link toggles the projects grid in the main pane.
+    // Projects wiring
     if (el.projectsLinkBtn) {
       el.projectsLinkBtn.addEventListener("click", () => {
         if (inCodeProjectsView) hideCodeProjectsView();
         else showCodeProjectsView();
-        // Mobile: close the drawer so the user sees the grid (or chat).
         closeMobileSidebar();
       });
     }
-    // Banner "project" chip → re-open the projects grid.
     if (el.codeProjectChip) {
       el.codeProjectChip.addEventListener("click", showCodeProjectsView);
     }
-    // New project button (in the grid).
     if (el.newProjectBtn) {
       el.newProjectBtn.addEventListener("click", () => openProjectModal(null));
     }
-    // Search toggle in projects header.
     if (el.projectsSearchBtn && el.projectsSearchInput) {
       el.projectsSearchBtn.addEventListener("click", () => {
         projectsSearchOpen = !projectsSearchOpen;
         el.projectsSearchInput.hidden = !projectsSearchOpen;
-        if (projectsSearchOpen) setTimeout(() => el.projectsSearchInput.focus(), 0);
-        else { projectsSearchQuery = ""; el.projectsSearchInput.value = ""; renderProjects(); }
+        if (projectsSearchOpen) {
+          setTimeout(() => el.projectsSearchInput.focus(), 0);
+        } else {
+          projectsSearchQuery = "";
+          el.projectsSearchInput.value = "";
+          renderProjects();
+        }
       });
       el.projectsSearchInput.addEventListener("input", () => {
         projectsSearchQuery = el.projectsSearchInput.value;
         renderProjects();
       });
     }
-    // Sort button — for now just toggles between recency and name.
-    let projectsSortByName = false;
     if (el.projectsSortBtn) {
       el.projectsSortBtn.addEventListener("click", () => {
         projectsSortByName = !projectsSortByName;
-        // Cheap implementation: re-sort the array in place before rendering.
-        projects.sort(projectsSortByName
-          ? (a, b) => a.name.localeCompare(b.name)
-          : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
         renderProjects();
       });
     }
-
-    // Project modal buttons.
     if (el.projectModalClose) el.projectModalClose.addEventListener("click", closeProjectModal);
     if (el.projectCancelBtn) el.projectCancelBtn.addEventListener("click", closeProjectModal);
     if (el.projectSaveBtn) el.projectSaveBtn.addEventListener("click", saveProjectFromModal);
@@ -3515,7 +2537,6 @@
       });
     }
 
-    // Models view: pull form
     el.pullForm.addEventListener("submit", (e) => {
       e.preventDefault();
       pullModel(el.pullInput.value);
@@ -3531,13 +2552,12 @@
     });
     el.refreshModelsBtn.addEventListener("click", () => fetchModels());
 
-    // First render
     setView(activeView);
     renderConversations();
     renderMessages();
     fetchModels();
+    refreshProjectsLinkBtn();
 
-    // Periodic connection check
     setInterval(() => {
       fetch(`${settings.host}/api/tags`, { method: "GET" })
         .then((r) => setStatus(r.ok))

@@ -842,7 +842,7 @@ input, textarea, select {
     gap: 6px;
   }
   .composer-input { font-size: 16px; /* avoids iOS zoom on focus */ }
-  .send-btn, .stop-btn, .attach-btn {
+  .send-btn, .stop-btn {
     width: 38px; height: 38px;
   }
 
@@ -867,14 +867,6 @@ input, textarea, select {
   }
   #codeCwdChip { max-width: 80vw; }
   .banner-chip svg { width: 12px; height: 12px; }
-  .banner-creature { width: 32px; height: 24px; margin-left: 0; }
-
-  /* ── Attachments + drop overlay ── */
-  .attachments { padding: 0 2px; }
-  .attachment-chip { max-width: 86vw; }
-  /* Mobile browsers don't drag-and-drop files into the page reliably,
-     and the overlay can swallow taps on touchstart. Always hide here. */
-  .drop-overlay { display: none !important; }
 
   /* ── Modals: near-fullscreen on phones, no max-width gap ── */
   .modal {
@@ -885,7 +877,6 @@ input, textarea, select {
     border-radius: 0;
     border: none;
   }
-  .modal.modal-wide { width: 100vw; max-width: 100vw; }
   .modal-body { padding: 16px; gap: 14px; }
   .modal-header { padding: 12px 14px; }
   .modal-footer { padding: 12px 14px; flex-wrap: wrap; }
@@ -893,28 +884,6 @@ input, textarea, select {
   .field-row {
     grid-template-columns: 1fr;
   }
-  .field-row-inline { flex-direction: column; }
-  .field-row-inline > input { width: 100%; }
-  .field-row-inline > button { width: 100%; }
-
-  /* Directory picker: list takes more vertical room. */
-  .dir-picker-toolbar { padding: 10px 12px; gap: 6px; }
-  .dir-picker-path { min-width: 0; width: 100%; }
-  .dir-picker-toolbar > * { flex: 0 0 auto; }
-  .dir-picker-toolbar > .dir-picker-path { flex: 1 1 100%; order: 99; }
-  .dir-picker-list { max-height: 56vh; min-height: 240px; }
-
-  /* ── Projects grid: single column, tighter header ── */
-  .projects-wrap { padding: 22px 14px 40px; }
-  .projects-header { margin-bottom: 18px; gap: 8px; }
-  .projects-header h1 { font-size: 22px; }
-  .projects-header-actions .btn-primary { padding: 6px 12px; font-size: 13px; }
-  .projects-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .project-card { padding: 14px 16px; min-height: 90px; }
-  .project-card-edit { opacity: 1; } /* hover doesn't exist on touch */
 
   /* ── Models view ── */
   .models-wrap { padding: 18px 14px 40px; }
@@ -1327,55 +1296,15 @@ input, textarea, select {
 .banner-chip.chip-brand .chip-label { color: #fff; }
 .banner-chip.chip-brand svg { opacity: 1; }
 
-/* Danger chip — red fill (FULL DISK). */
-.banner-chip.chip-danger {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  border-color: transparent;
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-.banner-chip.chip-danger .chip-label { color: #fff; }
-.banner-chip.chip-danger svg { opacity: 1; }
-
-/* Modern :has() to colour a chip red when its label has .error
-   (e.g. Ollama unreachable, tool-capable: error). */
+/* Colour a chip red when its label has .error (claw-dev unavailable). */
 .banner-chip:has(.chip-label.error) {
   border-color: var(--danger, #ef4444);
   color: var(--danger, #ef4444);
 }
 .banner-chip:has(.chip-label.error) .chip-label { color: var(--danger, #ef4444); }
 
-/* Spacer pushes the pixel mascot to the right edge. */
+/* Spacer fills remaining banner width. */
 .banner-spacer { flex: 1 1 auto; min-width: 8px; }
-
-/* Pixel-art mascot — keep the rect edges crisp. */
-.banner-creature {
-  image-rendering: pixelated;
-  image-rendering: -moz-crisp-edges;
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.claude-perm {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 4px;
-}
-.claude-perm[hidden] { display: none; }
-.claude-perm-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.claude-perm select {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 5px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-}
 
 /* ─── Tool-use blocks: Claude-Code style compact TUI lines ─────────────────
    Each tool call renders as two lines:
@@ -1519,149 +1448,214 @@ input, textarea, select {
 #codeVerifyDirsStatus.error { color: var(--danger, #ef4444); }
 
 /* ============================================================
-   Composer: attach button + staged attachment chips
+   Running models (Models tab): RAM/VRAM rows + Unload
    ============================================================ */
-.composer { position: relative; }
-
-.attach-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: transparent;
-  color: var(--text-muted);
-  transition: background 0.12s, color 0.12s;
-}
-.attach-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.attachments {
-  max-width: 768px;
-  margin: 0 auto 8px;
+.models-list-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 4px;
+  align-items: center;
+  gap: 10px;
 }
+.models-total-mem {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-row.running-row {
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
+  border: 1px solid var(--border);
+}
+.run-loc-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  vertical-align: middle;
+  font-weight: 500;
+}
+.models-empty.error { color: var(--danger, #ef4444); }
 
-.attachment-chip {
+/* ============================================================
+   Live in-flight stats line (replaces the old typing dots)
+   ============================================================ */
+.live-stats {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px 4px 8px;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 4px 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  font-size: 12px;
   font-family: var(--mono);
-  color: var(--text);
-  max-width: 360px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.attachment-chip.status-uploading {
-  border-color: var(--warning, #f59e0b);
-  opacity: 0.85;
+.live-stats-label {
+  letter-spacing: 0.005em;
 }
-.attachment-chip.status-error {
-  border-color: var(--danger, #ef4444);
-  color: #fecaca;
-}
-.attachment-chip.status-done {
-  border-color: #2c5d3e;
-}
-.attachment-chip.in-message {
-  background: transparent;
-  border-color: var(--border);
-}
-.attachment-icon { font-size: 13px; flex-shrink: 0; }
-.attachment-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.attachment-size {
-  color: var(--text-dim);
-  font-size: 11px;
-  flex-shrink: 0;
-}
-.attachment-remove {
-  width: 18px;
-  height: 18px;
+.live-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 14px;
-  line-height: 1;
-  margin-left: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: live-pulse 1.1s ease-in-out infinite;
   flex-shrink: 0;
 }
-.attachment-remove:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.message-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 4px 0;
+@keyframes live-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1);   box-shadow: 0 0 0 0   rgba(124, 111, 247, 0.45); }
+  50%      { opacity: 0.55; transform: scale(0.7); box-shadow: 0 0 0 5px rgba(124, 111, 247, 0); }
 }
 
 /* ============================================================
-   Drop overlay (Code view, full chat-area)
+   Per-message stats bar + action buttons (LM-Studio style)
    ============================================================ */
-.drop-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(33, 33, 33, 0.85);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  z-index: 50;
+.msg-stats {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.msg-stats .stats-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+}
+.msg-stats .stats-chip svg { opacity: 0.75; flex-shrink: 0; }
+.msg-stats .stats-model { padding: 3px 4px 3px 10px; }
+.msg-stats .stats-model-name {
+  font-weight: 500;
+}
+.msg-stats .stats-sub {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.msg-stats .stats-sub-quant { letter-spacing: 0.02em; }
+
+.msg-stats .stats-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.msg-stats .stats-info svg { opacity: 0.7; }
+
+/* Action row: copy / edit / regenerate / delete */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+.msg-action-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none; /* let drag events fall through to chatView listeners */
-  border: 2px dashed var(--accent);
-  border-radius: 8px;
-  animation: dropOverlayIn 0.12s ease-out;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-@keyframes dropOverlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.msg-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-subtle);
 }
-.drop-overlay-inner {
+.msg-action-btn.status-ok { color: #10b981; }
+.msg-action-btn svg { display: block; }
+
+/* Code-mode messages use monospace globally; keep stats labels tighter. */
+.message.code-msg .msg-stats { margin-top: 12px; }
+
+/* Inline edit mode (when you click the pencil) */
+.msg-edit {
+  margin: 10px 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+.msg-edit-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
   color: var(--text);
-  text-align: center;
-  padding: 24px 32px;
-}
-.drop-overlay svg { color: var(--accent); }
-.drop-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-.drop-sub {
-  font-size: 13px;
-  color: var(--text-muted);
-  max-width: 380px;
-}
-.drop-sub code {
-  background: var(--bg-elevated);
-  padding: 1px 5px;
-  border-radius: 3px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 80px;
 }
+.msg-edit-textarea:focus { outline: none; border-color: var(--accent); }
+.msg-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-link.danger {
+  color: var(--danger, #ef4444);
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+.btn-link.danger:hover { background: rgba(239, 68, 68, 0.1); }
+
+/* ============================================================
+   Field layouts (Settings + Project modal)
+   ============================================================ */
+.field-row-inline {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.field-row-inline > input { flex: 1; min-width: 0; }
+
+.field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.field-actions .field-hint { margin: 0; }
+
+.modal-footer-spacer { flex: 1; }
 
 /* ============================================================
    Directory picker modal
@@ -1767,69 +1761,6 @@ input, textarea, select {
   white-space: nowrap;
 }
 .dir-picker-current { color: var(--text); }
-
-/* Inline row pairing a text input with a small button (Settings cwd field). */
-.field-row-inline {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-.field-row-inline > input { flex: 1; min-width: 0; }
-
-/* Checkbox field (Settings: full disk access toggle). */
-.field-checkbox .field-checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.field-checkbox input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-.field-checkbox .field-label { margin: 0; }
-.field-tag.danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--danger, #ef4444);
-}
-
-/* ============================================================
-   Running models (Models tab): RAM/VRAM rows + Unload
-   ============================================================ */
-.models-list-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.models-total-mem {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  flex: 1;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.model-row.running-row {
-  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
-  border: 1px solid var(--border);
-}
-.run-loc-pill {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  vertical-align: middle;
-  font-weight: 500;
-}
-.models-empty.error { color: var(--danger, #ef4444); }
 
 /* ============================================================
    Projects (Code section): grid + cards + sidebar link
@@ -2015,155 +1946,25 @@ input, textarea, select {
 }
 
 /* ============================================================
-   Live in-flight stats line (replaces the old typing dots)
+   Mobile tweaks (≤ 768px) for restored sections
    ============================================================ */
-.live-stats {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0 4px;
-  padding: 4px 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.live-stats-label {
-  letter-spacing: 0.005em;
-}
-.live-pulse {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 var(--accent);
-  animation: live-pulse 1.1s ease-in-out infinite;
-  flex-shrink: 0;
-}
-@keyframes live-pulse {
-  0%, 100% { opacity: 1;   transform: scale(1);   box-shadow: 0 0 0 0   rgba(124, 111, 247, 0.45); }
-  50%      { opacity: 0.55; transform: scale(0.7); box-shadow: 0 0 0 5px rgba(124, 111, 247, 0); }
-}
+@media (max-width: 768px) {
+  .modal.modal-wide { width: 100vw; max-width: 100vw; }
+  .field-row-inline { flex-direction: column; }
+  .field-row-inline > input { width: 100%; }
+  .field-row-inline > button { width: 100%; }
 
-/* ============================================================
-   Per-message stats bar + action buttons (LM-Studio style)
-   ============================================================ */
-.msg-stats {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin: 10px 0 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-family: var(--mono);
-}
+  .dir-picker-toolbar { padding: 10px 12px; gap: 6px; }
+  .dir-picker-path { min-width: 0; width: 100%; }
+  .dir-picker-toolbar > * { flex: 0 0 auto; }
+  .dir-picker-toolbar > .dir-picker-path { flex: 1 1 100%; order: 99; }
+  .dir-picker-list { max-height: 56vh; min-height: 240px; }
 
-.msg-stats .stats-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
+  .projects-wrap { padding: 22px 14px 40px; }
+  .projects-header { margin-bottom: 18px; gap: 8px; }
+  .projects-header h1 { font-size: 22px; }
+  .projects-header-actions .btn-primary { padding: 6px 12px; font-size: 13px; }
+  .projects-grid { grid-template-columns: 1fr; gap: 10px; }
+  .project-card { padding: 14px 16px; min-height: 90px; }
+  .project-card-edit { opacity: 1; }
 }
-.msg-stats .stats-chip svg { opacity: 0.75; flex-shrink: 0; }
-.msg-stats .stats-model { padding: 3px 4px 3px 10px; }
-.msg-stats .stats-model-name {
-  font-weight: 500;
-}
-.msg-stats .stats-sub {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 7px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 10.5px;
-  color: var(--text-muted);
-  margin-left: 2px;
-}
-.msg-stats .stats-sub-quant { letter-spacing: 0.02em; }
-
-.msg-stats .stats-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.msg-stats .stats-info svg { opacity: 0.7; }
-
-/* Action row: copy / edit / regenerate / delete */
-.msg-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 6px 0 4px;
-}
-.msg-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.msg-action-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: var(--border-subtle);
-}
-.msg-action-btn.status-ok { color: #10b981; }
-.msg-action-btn svg { display: block; }
-
-/* Code-mode messages use monospace globally; keep stats labels tighter. */
-.message.code-msg .msg-stats { margin-top: 12px; }
-
-/* Inline edit mode (when you click the pencil) */
-.msg-edit {
-  margin: 10px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.msg-edit-textarea {
-  width: 100%;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 13px;
-  resize: vertical;
-  min-height: 80px;
-}
-.msg-edit-textarea:focus { outline: none; border-color: var(--accent); }
-.msg-edit-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-/* Project modal footer: spacer pushes Cancel/Save right; Delete sits left. */
-.modal-footer-spacer { flex: 1; }
-.btn-link.danger {
-  color: var(--danger, #ef4444);
-  background: transparent;
-  border: none;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 13px;
-  border-radius: 6px;
-  font-family: inherit;
-}
-.btn-link.danger:hover { background: rgba(239, 68, 68, 0.1); }

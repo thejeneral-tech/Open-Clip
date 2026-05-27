@@ -1,0 +1,9 @@
+{
+  "name": "claude-code-local-runner",
+  "private": true,
+  "scripts": {
+    "claude": "node package/cli.js",
+    "claude:help": "node package/cli.js --help",
+    "claude:version": "node package/cli.js --version"
+  }
+}

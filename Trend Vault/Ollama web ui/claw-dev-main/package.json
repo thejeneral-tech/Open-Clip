@@ -1,0 +1,35 @@
+{
+  "name": "claw-dev-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claw Dev workspace with a multi-provider launcher and Anthropic-compatible proxy.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "claw-dev": "node Leonxlnx-claude-code/claw-dev-launcher.js",
+    "proxy:compat": "tsx src/anthropicCompatProxy.ts",
+    "proxy:gemini": "tsx src/anthropicCompatProxy.ts",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.58.0",
+    "@google/genai": "^1.29.0",
+    "dotenv": "^17.2.3",
+    "ink": "^6.8.0",
+    "ink-text-input": "^6.0.0",
+    "picocolors": "^1.1.1",
+    "react": "^19.2.4",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.2.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

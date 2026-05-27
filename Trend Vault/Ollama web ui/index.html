@@ -22,7 +22,7 @@
           </svg>
           <span>Chat</span>
         </button>
-        <button class="nav-tab" data-view="code" role="tab" aria-selected="false" title="Local Code agent">
+        <button class="nav-tab" data-view="code" role="tab" aria-selected="false" title="claw-dev coding agent (Ollama only)">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 18 22 12 16 6"></polyline>
             <polyline points="8 6 2 12 8 18"></polyline>
@@ -91,7 +91,6 @@
           <span class="status-dot" id="statusDot" title="Connection status"></span>
         </div>
 
-
         <div class="topbar-spacer"></div>
 
         <button class="icon-only" id="clearChatBtn" title="Clear current chat">
@@ -104,7 +103,7 @@
         </button>
       </header>
 
-      <!-- Chat view (also used by Code view, with different state) -->
+      <!-- Chat / Code view -->
       <div class="view view-chat" id="chatView">
         <section class="chat" id="chat">
           <div class="welcome" id="welcome">
@@ -120,40 +119,18 @@
           <div class="messages" id="messages"></div>
         </section>
 
-        <!-- Local Code banner — chip strip, sits right above the composer in Code mode -->
+        <!-- Code banner — claw-dev (Ollama-only) -->
         <div class="claude-banner" id="codeBanner" hidden>
-          <div class="banner-chip chip-brand" title="Local code agent">
+          <div class="banner-chip chip-brand" title="claw-dev CLI routed through Ollama">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="3" width="20" height="14" rx="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
             </svg>
-            <span class="chip-label">LOCAL CODE</span>
+            <span class="chip-label">CLAW-DEV · OLLAMA</span>
           </div>
 
-          <div class="banner-chip" id="codeBackendChip" title="Active code agent backend (change in Settings)">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-            <span class="chip-label" id="codeBackendName">agent: built-in</span>
-          </div>
-
-          <div class="banner-chip chip-danger" id="codeUnrestrictedBadge" hidden title="The agent can read &amp; edit any path on this computer. Turn off in Settings → Full disk access to re-enable the path-containment check.">
-            <!-- Trend Vault mark: simplified vault door + combination dial (white
-                 strokes via currentColor so it reads on the red chip background) -->
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-              <line x1="3" y1="10" x2="6" y2="10"></line>
-              <line x1="3" y1="14" x2="6" y2="14"></line>
-              <circle cx="13.5" cy="12" r="4.5"></circle>
-              <line x1="13.5" y1="9" x2="13.5" y2="10"></line>
-              <line x1="13.5" y1="14" x2="13.5" y2="15"></line>
-              <line x1="10.5" y1="12" x2="11.5" y2="12"></line>
-              <line x1="15.5" y1="12" x2="16.5" y2="12"></line>
-              <circle cx="13.5" cy="12" r="1.2" fill="currentColor"></circle>
-            </svg>
-            <span class="chip-label">Full disk access</span>
+          <div class="banner-chip" id="codeBackendChip" title="claw-dev CLI version">
+            <span class="chip-label" id="codeBackendName">checking…</span>
           </div>
 
           <button type="button" class="banner-chip banner-chip-btn" id="codeProjectChip" title="Active project — click to switch projects" hidden>
@@ -163,14 +140,14 @@
             <span class="chip-label" id="codeProjectName">—</span>
           </button>
 
-          <div class="banner-chip" id="codeCwdChip" title="Primary working directory">
+          <div class="banner-chip" id="codeCwdChip" title="Working directory">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
             </svg>
             <span class="chip-label chip-mono" id="codeCwd">…</span>
           </div>
 
-          <button type="button" class="banner-chip banner-chip-btn" id="codePickCwdBtn" title="Pick the project / working directory aider runs in">
+          <button type="button" class="banner-chip banner-chip-btn" id="codePickCwdBtn" title="Pick the working directory claw-dev runs in">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 14 12 11 15 14"></polyline>
@@ -179,7 +156,7 @@
             <span class="chip-label">Browse</span>
           </button>
 
-          <div class="banner-chip" id="codeDirsChip" title="Additional directories aider can read &amp; edit (passed as positional args)">
+          <div class="banner-chip" id="codeDirsChip" title="Additional directories claw-dev can read &amp; edit (--add-dir)">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
               <polyline points="2 17 12 22 22 17"></polyline>
@@ -188,7 +165,7 @@
             <span class="chip-label" id="codeDirsBadge">no extra dirs</span>
           </div>
 
-          <button type="button" class="banner-chip banner-chip-btn" id="codeAddDirBtn" title="Add a directory aider can read &amp; edit">
+          <button type="button" class="banner-chip banner-chip-btn" id="codeAddDirBtn" title="Add a directory claw-dev can read &amp; edit">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -196,51 +173,19 @@
             <span class="chip-label">Add dir</span>
           </button>
 
-          <div class="banner-chip" id="codeStatusChip" title="Ollama">
+          <div class="banner-chip" id="codeStatusChip" title="claw-dev status">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="2" width="20" height="8" rx="2"></rect>
-              <rect x="2" y="14" width="20" height="8" rx="2"></rect>
-              <line x1="6" y1="6" x2="6.01" y2="6"></line>
-              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+              <circle cx="12" cy="12" r="9"></circle>
+              <polyline points="9 12 11 14 15 10"></polyline>
             </svg>
-            <span class="chip-label" id="codeStatus">checking Ollama…</span>
+            <span class="chip-label" id="codeStatus">…</span>
           </div>
 
           <div class="banner-spacer"></div>
-
-          <!-- Pixel-art mascot (Space-Invaders-style) -->
-          <svg class="banner-creature" viewBox="0 0 11 8" width="44" height="32" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#e76b56">
-              <rect x="3" y="0" width="1" height="1"></rect>
-              <rect x="7" y="0" width="1" height="1"></rect>
-              <rect x="4" y="1" width="1" height="1"></rect>
-              <rect x="6" y="1" width="1" height="1"></rect>
-              <rect x="2" y="2" width="7" height="1"></rect>
-              <rect x="1" y="3" width="2" height="1"></rect>
-              <rect x="4" y="3" width="3" height="1"></rect>
-              <rect x="8" y="3" width="2" height="1"></rect>
-              <rect x="0" y="4" width="11" height="1"></rect>
-              <rect x="0" y="5" width="1" height="1"></rect>
-              <rect x="2" y="5" width="7" height="1"></rect>
-              <rect x="10" y="5" width="1" height="1"></rect>
-              <rect x="2" y="6" width="1" height="1"></rect>
-              <rect x="8" y="6" width="1" height="1"></rect>
-              <rect x="1" y="7" width="1" height="1"></rect>
-              <rect x="9" y="7" width="1" height="1"></rect>
-            </g>
-          </svg>
         </div>
 
         <footer class="composer">
-          <!-- Staged attachments (Code view only): shown above the input -->
-          <div class="attachments" id="attachments" hidden></div>
           <form id="composerForm" class="composer-form" autocomplete="off">
-            <button type="button" id="attachBtn" class="attach-btn hidden" title="Attach files (uploads into the working directory)">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-              </svg>
-            </button>
-            <input type="file" id="attachInput" multiple hidden />
             <textarea
               id="input"
               class="composer-input"
@@ -261,22 +206,9 @@
           </form>
           <p class="hint" id="composerHint">Press Enter to send · Shift+Enter for newline</p>
         </footer>
-
-        <!-- Full-area drop overlay (Code view only) — covers messages + composer -->
-        <div class="drop-overlay hidden" id="dropOverlay">
-          <div class="drop-overlay-inner">
-            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <div class="drop-title">Drop files to upload</div>
-            <div class="drop-sub" id="dropSub">Files will be saved into <code>uploads/</code> inside the working directory.</div>
-          </div>
-        </div>
       </div>
 
-      <!-- Code Projects view: grid of project cards (shown only in Code mode) -->
+      <!-- Code Projects view: grid of project cards -->
       <div class="view view-projects" id="codeProjectsView" hidden>
         <div class="projects-wrap">
           <header class="projects-header">
@@ -306,7 +238,7 @@
           <div class="projects-grid" id="projectsGrid">
             <div class="projects-empty" id="projectsEmpty" hidden>
               <p>No projects yet — click <strong>New project</strong> to create one.</p>
-              <p class="projects-empty-hint">A project bundles a working directory and additional read/write folders for the agent.</p>
+              <p class="projects-empty-hint">A project bundles a working directory and extra read/write folders for claw-dev.</p>
             </div>
           </div>
         </div>
@@ -400,77 +332,17 @@
           <span class="field-hint">Prepended to chat conversations.</span>
         </label>
 
-        <label class="field" id="codeBackendField">
-          <span class="field-label">
-            Code agent backend
-            <span class="field-tag" id="codeBackendTag">built-in</span>
-          </span>
-          <select id="codeBackendSelect">
-            <option value="builtin">Built-in tool-call agent (default — fast, works with most models)</option>
-            <option value="aider">Aider CLI (SEARCH/REPLACE diffs, needs a coder model)</option>
-          </select>
-          <span class="field-hint">
-            <strong>Built-in</strong> talks to Ollama directly and runs tools (read_file, edit_file, bash, …)
-            in a loop until your task is done. Streams tokens in real time.<br>
-            <strong>Aider</strong> spawns the standalone <code>aider</code> CLI per turn; richer SEARCH/REPLACE
-            output on coder-tuned models but slower (subprocess startup + bigger prompt).
-          </span>
-        </label>
-
-        <div class="field" id="codeCwdField">
-          <span class="field-label">Working directory</span>
+        <div class="field">
+          <span class="field-label">Default code working directory <span class="field-tag">claw-dev</span></span>
           <div class="field-row-inline">
             <input type="text" id="codeCwdInput" placeholder="(auto: parent of Ollama web ui/)" />
             <button type="button" class="btn-secondary" id="codePickCwdSettingsBtn">Browse…</button>
           </div>
           <span class="field-hint">
-            Where the agent reads/edits files and where <code>bash</code> runs (built-in) /
-            where aider is spawned (aider). Per-project value (from Projects) wins.
-            Leave empty for the server default.
+            Default cwd when no project is active. The active project's cwd
+            always wins over this.
           </span>
         </div>
-
-        <div class="field" id="codeAllowedDirsField">
-          <span class="field-label">Additional directories the agent can read &amp; edit
-            <span class="field-tag" id="codeAllowedDirsCount">0</span>
-          </span>
-          <textarea id="codeAllowedDirsInput" rows="3" placeholder="One absolute path per line, e.g.&#10;C:\Users\kevin\Documents\notes&#10;D:\projects\side-project"></textarea>
-          <div class="field-actions">
-            <button type="button" class="btn-secondary" id="codeAddDirSettingsBtn">Add directory…</button>
-            <button type="button" class="btn-secondary" id="codeVerifyDirsBtn">Verify paths</button>
-            <span class="field-hint" id="codeVerifyDirsStatus">
-              Built-in: extra roots whose contents are inside the path-containment check.
-              Aider: appended as positional args so it can read/write them too.
-            </span>
-          </div>
-        </div>
-
-        <label class="field field-checkbox" id="codeUnrestrictedField">
-          <span class="field-checkbox-row">
-            <input type="checkbox" id="codeUnrestrictedInput" />
-            <span class="field-label">
-              Full disk access
-              <span class="field-tag danger" id="codeUnrestrictedTag" hidden>DANGER</span>
-            </span>
-          </span>
-          <span class="field-hint">
-            <strong>Built-in:</strong> lifts the path-containment check so the agent can read
-            &amp; edit any absolute path on this computer. <strong>Aider:</strong> aider has no
-            sandbox of its own, so this is a soft acknowledgement. Either way: only enable if
-            you trust both the model and the prompts you'll send.
-          </span>
-        </label>
-
-        <label class="field" id="aiderFlagsField">
-          <span class="field-label">Aider extra flags <span class="field-tag">advanced</span></span>
-          <input type="text" id="aiderFlagsInput" placeholder="e.g. --architect --edit-format diff --cache-prompts" />
-          <span class="field-hint">
-            Appended to every <code>aider</code> invocation. Whitespace-separated.
-            We already pass <code>--yes-always --no-auto-commits --stream --no-pretty --no-fancy-input --map-tokens 2048</code>
-            and route through your local Ollama via <code>ollama_chat/&lt;model&gt;</code>.
-            Override any of these here (later flags win).
-          </span>
-        </label>
 
         <div class="field-row">
           <label class="field">
@@ -530,7 +402,7 @@
             <input type="text" id="projectCwdInput" placeholder="C:\path\to\project" />
             <button type="button" class="btn-secondary" id="projectCwdBrowseBtn">Browse…</button>
           </div>
-          <span class="field-hint">Relative paths the agent uses resolve here, and <code>bash</code> runs here.</span>
+          <span class="field-hint">Where claw-dev runs. Relative paths it asks about resolve here.</span>
         </div>
         <div class="field">
           <span class="field-label">Additional directories
@@ -539,16 +411,9 @@
           <textarea id="projectAllowedDirsInput" rows="3" placeholder="One absolute path per line (optional)"></textarea>
           <div class="field-actions">
             <button type="button" class="btn-secondary" id="projectAddDirBtn">Add directory…</button>
-            <span class="field-hint">The agent can also read &amp; edit files in any of these directories.</span>
+            <span class="field-hint">Passed to claw-dev as <code>--add-dir</code> so it can read &amp; edit there too.</span>
           </div>
         </div>
-        <label class="field field-checkbox">
-          <span class="field-checkbox-row">
-            <input type="checkbox" id="projectUnrestrictedInput" />
-            <span class="field-label">Full disk access for this project</span>
-          </span>
-          <span class="field-hint">If on, the agent can read &amp; edit any path on this computer while this project is active.</span>
-        </label>
       </div>
       <div class="modal-footer">
         <button class="btn-link danger" id="projectDeleteBtn" hidden>Delete project</button>
