@@ -333,21 +333,30 @@ function runClawTurn(req, res, body) {
     proxyUrl: `http://127.0.0.1:${PROXY_PORT}`,
   });
 
-  // Build child env: route Anthropic traffic to our compat proxy, strip any
-  // real Anthropic credentials so claw-dev can't accidentally bill them, and
-  // hand the picked Ollama model + host through so the proxy can use them.
+  // Build child env: route Anthropic traffic to our compat proxy, override
+  // any real Anthropic credentials with a stub key so claw-dev (a) treats
+  // itself as "logged in" and (b) can't accidentally bill the user's real
+  // account, and hand the picked Ollama model + host through so the proxy
+  // can use them.
+  //
+  // IMPORTANT: claw-dev's auth check (apiKeySource) looks for
+  // ANTHROPIC_API_KEY first. If absent, it exits with "Not logged in" and
+  // never even hits ANTHROPIC_BASE_URL. We MUST set the env var to
+  // something non-empty even though our compat proxy ignores it.
   const childEnv = {
     ...process.env,
     FORCE_COLOR: "0",
     NO_COLOR: "1",
     TERM: "dumb",
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${PROXY_PORT}`,
+    ANTHROPIC_API_KEY: "sk-ollama-proxy-stub",   // dummy, never sent upstream
     ANTHROPIC_AUTH_TOKEN: "ollama-proxy",
     OLLAMA_BASE_URL: OLLAMA_HOST,
     OLLAMA_MODEL: ollamaModel,
     CLAUDE_CODE_DISABLE_TELEMETRY: "1",
   };
-  delete childEnv.ANTHROPIC_API_KEY;
+  // Strip any OAuth token from the parent env so we don't pick up the
+  // user's logged-in identity by accident.
   delete childEnv.CLAUDE_CODE_OAUTH_TOKEN;
 
   const child = spawn(process.execPath, args, {
