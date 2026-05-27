@@ -385,18 +385,27 @@ function runClawTurn(req, res, body) {
     }
   });
 
-  let stderrBuf = "";
+  // Buffer ALL of claw-dev's stderr so we can dump it as one block on
+  // non-zero exit. Emitting line-by-line as warnings made it look like
+  // chat and the actual failure was easy to miss.
+  let stderrAccum = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
-    stderrBuf += chunk;
-    let nl;
-    while ((nl = stderrBuf.indexOf("\n")) !== -1) {
-      const line = stderrBuf.slice(0, nl);
-      stderrBuf = stderrBuf.slice(nl + 1);
-      const t = line.trim();
-      if (t) emit({ kind: "warning", message: t });
-    }
+    stderrAccum += chunk;
   });
+
+  // Models with weak tool-call support tend to make claw-dev exit non-zero
+  // because the compat proxy returns content blocks without the
+  // tool_use shape claw-dev's agent loop requires. Surfacing this as a
+  // hint saves a debugging round-trip.
+  const WEAK_MODEL_PATTERNS = [
+    /^llama3(\.2)?(:1b)?(?::|$)/i,    // llama3.2, llama3.2:1b
+    /^phi[123]/i,                      // phi-1/2/3 chat models
+    /^gemma[12]?(:2b)?$/i,             // gemma:2b etc.
+    /^tinyllama/i,
+    /^smollm(?!2)/i,                   // smollm (non-2)
+  ];
+  const looksWeak = WEAK_MODEL_PATTERNS.some((re) => re.test(ollamaModel || ""));
 
   child.on("close", (code, sig) => {
     clawJobs.delete(jobId);
@@ -407,16 +416,33 @@ function runClawTurn(req, res, body) {
       } catch { /* ignore tail */ }
       stdoutBuf = "";
     }
-    if (stderrBuf.trim()) {
-      emit({ kind: "warning", message: stderrBuf.trim() });
-      stderrBuf = "";
+    if (code === 0) {
+      // On clean exit there's rarely anything interesting on stderr;
+      // emit it as a low-key warning only if non-empty.
+      const trimmed = stderrAccum.trim();
+      if (trimmed) emit({ kind: "warning", message: "[claw-dev stderr]\n" + trimmed });
+      emit({ kind: "done", message: "claw-dev finished (exit 0)" });
+    } else {
+      // Non-zero exit: dump the whole stderr as a clearly-labelled error
+      // block so the user actually sees what claw-dev complained about.
+      const trimmed = stderrAccum.trim();
+      const exitInfo = `claw-dev exited with code ${code}${sig ? ` (signal ${sig})` : ""}`;
+      emit({
+        kind: "error",
+        message: trimmed
+          ? `${exitInfo}\n\n--- claw-dev stderr ---\n${trimmed}\n--- end stderr ---`
+          : `${exitInfo} (no stderr output)`,
+      });
+      if (looksWeak) {
+        emit({
+          kind: "warning",
+          message:
+            `Model hint: "${ollamaModel}" is light on tool-call support. ` +
+            `claw-dev needs a model that reliably emits tool_use blocks. Try ` +
+            `qwen2.5-coder:7b, llama3.1:8b, or mistral-nemo from the Models tab.`,
+        });
+      }
     }
-    emit({
-      kind: code === 0 ? "done" : "warning",
-      message: code === 0
-        ? "claw-dev finished (exit 0)"
-        : `claw-dev exited with code ${code}${sig ? ` (signal ${sig})` : ""}`,
-    });
     if (!res.writableEnded) {
       emit({ kind: "exit" });
       res.end();
