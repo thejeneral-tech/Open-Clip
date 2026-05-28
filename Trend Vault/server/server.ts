@@ -23,6 +23,38 @@ import {
   forceWorkingVoiceRender,
 } from '../scripts/tts/ttsService';
 import { probeLocalTts, probeKokoroAlive, waitForKokoroReady } from '../scripts/tts/localTtsAdapter';
+// ── Fish Speech / S2 Pro engine ─────────────────────────────────────────────
+// Second selectable TTS engine alongside Kokoro. The four helpers here are
+// the only public surface — UI endpoints below are thin wrappers around them.
+// Model files live OUTSIDE the project folder (see getFishModelDir()).
+import {
+  checkFishEngine,
+  installFishModel,
+  getFishInstallProgress,
+  previewFishVoice,
+  renderFishVoice,
+  FISH_VOICE_PRESETS,
+  findFishPreset,
+  isFishEngine,
+  sanitizeFishProsodyTags,
+  getFishModelDir,
+  getFishServerUrl,
+  // ── Runtime manager surface ────────────────────────────────────────────
+  prepareFishEngine,
+  startFishServer,
+  stopFishServer,
+  repairFishEngine,
+  detectFishEndpoint,
+  testFishGeneration,
+  setFishModelPath,
+  getFishLogs,
+  clearFishLogs,
+  resolveFishConfig,
+  checkFishModel,
+  checkFishRuntime,
+  checkFishVenv,
+  checkFishServerStatus,
+} from '../scripts/tts/fishSpeechS2Pro';
 import { aiComplete, parseAIJson } from '../scripts/ai-completion';
 import { AssemblyAI } from 'assemblyai';
 import {
@@ -1656,13 +1688,289 @@ Rules:
 
 app.get('/api/trend-vault/tts-status', async (_req, res) => {
   const localTts = await probeLocalTts();
+  // ── Fish Speech S2 Pro state is reported alongside Kokoro so the Voice
+  //     Preset panel can render BOTH dots ("● Kokoro: on" / "● Fish Speech
+  //     S2 Pro: on/off/installing/missing") from a single status call.
+  const fish = await checkFishEngine();
   res.json({
-    // Flat fields the mainframe dashboard reads
+    // ── Kokoro fields (existing — do not rename) ────────────────────────
     local:  localTts.ok,
     engine: localTts.engine,
     url:    localTts.url,
     kokoro: localTts.engine === 'kokoro' && localTts.ok,
+    // ── Fish Speech S2 Pro ──────────────────────────────────────────────
+    // Field names mirror the runtime manager's FishModelStatus interface:
+    // `modelPath` (was `modelDir`) and there is no `installing` flag on
+    // the model — installation state lives on the lifecycle `state` enum.
+    fish: {
+      state:        fish.state,           // 'ready' | 'missing' | 'server_only' | 'model_only' | 'preparing' | 'partial'
+      message:      fish.message,
+      installed:    fish.model.installed,
+      installing:   fish.state === 'preparing',
+      modelDir:     fish.modelDir,
+      sizeBytes:    fish.model.sizeBytes,
+      serverUrl:    fish.server.url,
+      serverOk:     fish.server.reachable,
+    },
   });
+});
+
+// ── Fish Speech S2 Pro: detailed status (model + runtime + server) ───────
+// Returns the full lifecycle checklist so the Voice Preset panel can render
+// the seven-step progress UI directly off this payload.
+app.get('/api/fish-s2pro/status', async (_req, res) => {
+  const fish = await checkFishEngine();
+  res.json({
+    ok: true,
+    state:       fish.state,
+    message:     fish.message,
+    model:       fish.model,
+    runtime:     fish.runtime,
+    venv:        fish.venv,
+    server:      fish.server,
+    steps:       fish.steps,
+    workingEndpoint: fish.workingEndpoint,
+    modelDir:    fish.modelDir,
+    runtimePath: fish.runtimePath,
+    venvPath:    fish.venvPath,
+    serverUrl:   fish.serverUrl,
+    voicePresets: FISH_VOICE_PRESETS.map(p => ({ id: p.id, name: p.name, icon: p.icon })),
+  });
+});
+
+// ── Fish Speech S2 Pro: full startup pipeline (runtime manager) ─────────
+// This is the endpoint the "Start Fish Speech" button calls. It runs the
+// entire checklist (model → runtime → venv → deps → server → endpoint →
+// test) and returns the step-by-step result. Replaces the old "just check
+// if URL is reachable" path that produced the unhelpful generic error.
+app.post('/api/fish-s2pro/start', async (_req, res) => {
+  const prep = await prepareFishEngine();
+  res.json({ ok: prep.ready, ...prep });
+});
+
+// ── Fish Speech S2 Pro: rebuild venv + deps (model untouched) ───────────
+app.post('/api/fish-s2pro/repair', async (_req, res) => {
+  const r = await repairFishEngine();
+  res.json(r);
+});
+
+// ── Fish Speech S2 Pro: just-spawn-the-server (lower-level, for debugging) ─
+app.post('/api/fish-s2pro/server/start', async (_req, res) => {
+  const info = await startFishServer();
+  res.json({ ok: info.running || info.reachable, info });
+});
+app.post('/api/fish-s2pro/server/stop', (_req, res) => {
+  res.json({ ok: true, ...stopFishServer() });
+});
+
+// ── Fish Speech S2 Pro: endpoint discovery + test generation ────────────
+app.post('/api/fish-s2pro/detect-endpoint', async (_req, res) => {
+  const r = await detectFishEndpoint();
+  res.json({ ok: !!r.endpoint, ...r });
+});
+app.post('/api/fish-s2pro/test', async (_req, res) => {
+  const r = await testFishGeneration();
+  res.json(r);
+});
+
+// ── Fish Speech S2 Pro: model path override ("Choose Existing Model Folder") ─
+app.post('/api/fish-s2pro/set-model-path', express.json(), (req, res) => {
+  const { path: newPath } = req.body as { path?: string };
+  if (!newPath) { res.status(400).json({ ok: false, error: 'path required' }); return; }
+  try {
+    const cfg = setFishModelPath(newPath);
+    res.json({ ok: true, modelDir: cfg.modelPath });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// ── Fish Speech S2 Pro: live logs for the "View Fish Logs" UI panel ─────
+app.get('/api/fish-s2pro/logs', (req, res) => {
+  const limit = Math.max(1, Math.min(1000, parseInt((req.query.limit as string) || '200', 10) || 200));
+  res.json({ ok: true, logs: getFishLogs(limit) });
+});
+app.post('/api/fish-s2pro/logs/clear', (_req, res) => {
+  clearFishLogs();
+  res.json({ ok: true });
+});
+
+// ── Fish Speech S2 Pro: low-level checks (used by the debug panel) ───────
+app.get('/api/fish-s2pro/check/model',   (_req, res) => { res.json(checkFishModel()); });
+app.get('/api/fish-s2pro/check/runtime', (_req, res) => { res.json(checkFishRuntime()); });
+app.get('/api/fish-s2pro/check/venv',    (_req, res) => { res.json(checkFishVenv()); });
+app.get('/api/fish-s2pro/check/server',  async (_req, res) => { res.json(await checkFishServerStatus()); });
+app.get('/api/fish-s2pro/config',        (_req, res) => { res.json(resolveFishConfig()); });
+
+// ── Fish Speech S2 Pro: kick off model install (download HF weights) ─────
+// Only runs when the user actively clicks the legacy "Install" button. If
+// the model is already present we no-op so we don't re-download 4GB.
+app.post('/api/fish-s2pro/install', (_req, res) => {
+  const r = installFishModel();
+  res.json({ ok: r.started, reason: r.reason, progress: getFishInstallProgress() });
+});
+
+// ── Fish Speech S2 Pro: poll install progress ────────────────────────────
+app.get('/api/fish-s2pro/install-status', (_req, res) => {
+  res.json({ ok: true, progress: getFishInstallProgress() });
+});
+
+// ── Fish Speech S2 Pro: short voice preview (used by 🔊 Preview Voice Only
+//     when the active engine is Fish, and by the per-card 🧪 TEST button) ─
+app.post('/api/fish-s2pro/preview', express.json(), async (req, res) => {
+  const { text, voiceId, speed, temperature, pitch } = req.body as {
+    text?: string; voiceId?: string; speed?: number; temperature?: number; pitch?: number;
+  };
+  if (!text || !text.trim())      { res.status(400).json({ ok: false, error: 'text required' }); return; }
+  if (!voiceId)                   { res.status(400).json({ ok: false, error: 'voiceId required' }); return; }
+  const preset = findFishPreset(voiceId);
+  // Sanitize Fish prosody tags so unrecognised ones don't get spoken aloud.
+  const cleanText = sanitizeFishProsodyTags(text);
+  const r = await previewFishVoice({
+    text: cleanText,
+    voiceId: preset ? preset.voiceId : voiceId,
+    speed:       speed       ?? preset?.fishDefaults.speed       ?? 1.0,
+    temperature: temperature ?? preset?.fishDefaults.temperature ?? 0.7,
+    pitch:       pitch       ?? preset?.fishDefaults.pitchSemitones ?? 0,
+  });
+  if (!r.ok || !r.buffer) {
+    res.status(503).json({ ok: false, error: r.error || 'Fish preview failed', engine: 'fish-speech-s2-pro' });
+    return;
+  }
+  res.setHeader('Content-Type', r.mimeType);
+  res.setHeader('X-TTS-Engine', 'fish-speech-s2-pro');
+  res.send(r.buffer);
+});
+
+// ── Fish Speech: async job queue ─────────────────────────────────────────────
+//
+// The frontend (trend-vault.html) uses a queue+poll pattern:
+//   POST /api/fish-speech/jobs          → { jobId }   (returns immediately)
+//   GET  /api/fish-speech/jobs/:jobId   → { status, audio_url, ... }
+//   POST /api/fish-speech/check-settings → { warnings }
+//
+// These three routes were the source of the "Bridge enqueue failed (HTTP 404)"
+// error — they did not previously exist. The fix adds an in-memory job store
+// so generation runs on a background task while the HTTP response is instant,
+// exactly matching the frontend's poll-until-complete flow.
+
+interface FishJobRecord {
+  id:              string;
+  status:          'queued' | 'generating' | 'complete' | 'failed';
+  audio_url?:      string;   // served by existing /custom-audio static route
+  audio_path?:     string;   // absolute path on disk
+  duration_sec?:   number;   // rough estimate from buffer length
+  history_id?:     string;
+  generation_time?: number;  // wall-clock seconds
+  error?:          string;
+  message?:        string;
+  created_at:      number;   // Date.now()
+}
+
+// In-memory store — survives for the server's lifetime (30-min GC).
+const _fishJobStore = new Map<string, FishJobRecord>();
+
+// Garbage-collect jobs older than 30 minutes so the Map never grows unbounded.
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, job] of _fishJobStore) {
+    if (job.created_at < cutoff) _fishJobStore.delete(id);
+  }
+}, 5 * 60 * 1000).unref();
+
+// POST /api/fish-speech/jobs — enqueue a TTS generation job.
+// Acknowledges immediately with a jobId; generation runs in the background.
+app.post('/api/fish-speech/jobs', express.json(), (req, res) => {
+  const {
+    text, voice, speed, temperature, pitch, normalize, is_preview,
+  } = req.body as {
+    text?: string; voice?: string; speed?: number; temperature?: number;
+    pitch?: number; normalize?: boolean; is_preview?: boolean;
+  };
+
+  if (!text || !text.trim()) {
+    res.status(400).json({ ok: false, error: 'text is required' }); return;
+  }
+  if (!voice) {
+    res.status(400).json({ ok: false, error: 'voice is required' }); return;
+  }
+
+  const jobId = `fish_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job: FishJobRecord = { id: jobId, status: 'queued', created_at: Date.now() };
+  _fishJobStore.set(jobId, job);
+
+  // Respond immediately — client starts polling.
+  res.json({ ok: true, jobId });
+
+  // Run generation asynchronously (intentionally not awaited here).
+  (async () => {
+    const t0 = Date.now();
+    job.status  = 'generating';
+    job.message = 'Generating audio…';
+    try {
+      console.log(`[Fish job ${jobId}] Starting — voice=${voice} preview=${!!is_preview}`);
+      const preset    = findFishPreset(voice);
+      const cleanText = sanitizeFishProsodyTags(text.trim());
+
+      const r = await previewFishVoice({
+        text:        cleanText,
+        voiceId:     preset ? preset.voiceId : voice,
+        speed:       speed       ?? preset?.fishDefaults.speed            ?? 1.0,
+        temperature: temperature ?? preset?.fishDefaults.temperature      ?? 0.7,
+        pitch:       pitch       ?? preset?.fishDefaults.pitchSemitones   ?? 0,
+      });
+
+      if (!r.ok || !r.buffer) {
+        job.status = 'failed';
+        job.error  = r.error || 'Fish generation returned no audio';
+        console.error(`[Fish job ${jobId}] Failed: ${job.error}`);
+        return;
+      }
+
+      // Persist audio so the frontend can fetch it via /custom-audio/<file>.
+      const audioFile      = `fish_${jobId}.mp3`;
+      const publicAudioDir = path.join(ROOT, 'public', 'custom-audio');
+      fs.mkdirSync(publicAudioDir, { recursive: true });
+      const audioPath = path.join(publicAudioDir, audioFile);
+      fs.writeFileSync(audioPath, r.buffer);
+
+      // Rough duration estimate: 128 kbps MP3 ≈ 16 KB/s.
+      const estimatedDurationSec = +(r.buffer.length / (128 * 1024 / 8)).toFixed(2);
+
+      job.status          = 'complete';
+      job.audio_url       = `/custom-audio/${audioFile}`;
+      job.audio_path      = audioPath;
+      job.duration_sec    = estimatedDurationSec;
+      job.history_id      = jobId;
+      job.generation_time = +((Date.now() - t0) / 1000).toFixed(1);
+      console.log(
+        `[Fish job ${jobId}] Complete — ${r.buffer.length} bytes, ~${estimatedDurationSec}s, ` +
+        `${job.generation_time}s wall-clock`
+      );
+    } catch (err: unknown) {
+      job.status = 'failed';
+      job.error  = err instanceof Error ? err.message : String(err);
+      console.error(`[Fish job ${jobId}] Unexpected error: ${job.error}`);
+    }
+  })();
+});
+
+// GET /api/fish-speech/jobs/:jobId — poll a job's status.
+app.get('/api/fish-speech/jobs/:jobId', (req, res) => {
+  const job = _fishJobStore.get(req.params.jobId);
+  if (!job) {
+    // 404 is intentional here — the frontend treats it as a retryable error.
+    res.status(404).json({ ok: false, error: 'Job not found — it may have expired (30-min TTL)' });
+    return;
+  }
+  res.json({ ok: true, ...job });
+});
+
+// POST /api/fish-speech/check-settings — advisory pre-flight check.
+// Returns `warnings` so the UI can show a caution banner before a long GPU
+// job. Currently returns no warnings; future iterations can track bad combos.
+app.post('/api/fish-speech/check-settings', express.json(), (_req, res) => {
+  res.json({ ok: true, warnings: [] });
 });
 
 // ── Serve Voice Lab page ──────────────────────────────────────────────────────
@@ -1726,10 +2034,60 @@ app.delete('/api/custom-presets/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Voice presets list (built-in + custom merged) ────────────────────────────
+// ── Voice presets list (built-in + custom + Fish S2 Pro merged) ─────────────
+// The frontend receives one flat array and discriminates voices by the
+// `engine` field on each card:
+//   engine: 'kokoro'             → existing local Kokoro TTS
+//   engine: 'fish-speech-s2-pro' → Fish S2 Pro voices defined in
+//                                  FISH_VOICE_PRESETS
+//   engine: 'elevenlabs'         → reserved for the cloud ElevenLabs path
+//                                  (only added here if an API key is set)
+// Existing Kokoro/custom presets that lack the `engine` field are tagged
+// 'kokoro' on the fly so the UI never has to guess.
 app.get('/api/trend-vault/voice-presets', (_req, res) => {
-  const custom = readCustomPresets();
-  res.json({ presets: [...custom, ...VOICE_PRESETS] });
+  const custom = readCustomPresets() as Array<Record<string, unknown>>;
+  const tagKokoro = (p: Record<string, unknown>) => ({ engine: 'kokoro', ...p });
+
+  // Fish S2 Pro presets — shape mirrors Kokoro presets plus a fishDefaults
+  // block the UI uses to seed the Fish sliders when a Fish card is picked.
+  const fishCards = FISH_VOICE_PRESETS.map(p => ({
+    id:          p.id,
+    name:        p.name,
+    icon:        p.icon,
+    description: p.description,
+    engine:      p.engine,           // 'fish-speech-s2-pro'
+    fishVoice:   p.voiceId,          // server-side reference id
+    defaults:    p.defaults,
+    fishDefaults: p.fishDefaults,
+    eq:          'clear',
+    reverb:      false,
+    robot:       false,
+    category:    p.category,
+    tags:        p.tags,
+    exampleLine: p.exampleLine,
+  }));
+
+  // ElevenLabs placeholder — only surfaced when an API key is configured,
+  // so the engine picker can show it without breaking the existing flow.
+  const elevenLabsCards = process.env.ELEVENLABS_API_KEY ? [{
+    id:          'elevenlabs_default',
+    name:        'ElevenLabs Default',
+    icon:        '☁️',
+    description: 'Cloud • Multilingual • ElevenLabs API',
+    engine:      'elevenlabs',
+    defaults:    { pitch: 0, rate: 0, speed: 1.0, volume: 0, intensity: 20 },
+    eq: 'clear', reverb: false, robot: false,
+    category: 'cloud', tags: ['cloud', 'elevenlabs'],
+  }] : [];
+
+  res.json({
+    presets: [
+      ...custom.map(tagKokoro),
+      ...VOICE_PRESETS.map(p => tagKokoro(p as unknown as Record<string, unknown>)),
+      ...fishCards,
+      ...elevenLabsCards,
+    ],
+  });
 });
 
 // ── Voice cloning: sample upload + storage ────────────────────────────────────
@@ -2001,20 +2359,48 @@ app.post('/api/trend-vault/generate-voice', async (req, res) => {
   const {
     text, presetId, pitch, rate, speed, volume, intensity, preview, engine,
     throatDepth, ancientRasp, royalPace, chamberSpace,
+    // Fish-specific knobs (only consumed when the preset is a Fish preset)
+    fishVoice, fishSpeed, fishTemp, fishPitch,
   } = req.body as {
     text: string; presetId: string; pitch?: number; rate?: number;
     speed?: number; volume?: number; intensity?: number; preview?: boolean;
-    engine?: 'auto' | 'local' | 'edge';
+    engine?: 'auto' | 'local' | 'edge' | 'kokoro' | 'fish-speech-s2-pro' | 'elevenlabs';
     throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
+    fishVoice?: string; fishSpeed?: number; fishTemp?: number; fishPitch?: number;
   };
   if (!text || !presetId) { res.status(400).json({ error: 'text and presetId required' }); return; }
 
   try {
+    // ── Engine routing ────────────────────────────────────────────────────
+    // If the preset id starts with 'fish_' OR the caller explicitly asks
+    // for the Fish engine, route through the Fish Speech S2 Pro helpers.
+    // Anything else falls through to the existing Kokoro generateVoice.
+    if (isFishEngine(presetId, engine)) {
+      const fp = findFishPreset(presetId);
+      const r = await previewFishVoice({
+        text: sanitizeFishProsodyTags(text),
+        voiceId:     fishVoice ?? fp?.voiceId ?? presetId,
+        speed:       fishSpeed ?? fp?.fishDefaults.speed       ?? 1.0,
+        temperature: fishTemp  ?? fp?.fishDefaults.temperature ?? 0.7,
+        pitch:       fishPitch ?? fp?.fishDefaults.pitchSemitones ?? 0,
+      });
+      if (!r.ok || !r.buffer) { res.status(503).json({ error: r.error || 'Fish generation failed' }); return; }
+      res.setHeader('Content-Type', r.mimeType);
+      res.setHeader('X-TTS-Engine', 'fish-speech-s2-pro');
+      res.send(r.buffer);
+      return;
+    }
+
+    // GenerateVoiceOptions doesn't accept an `engine` field — engine routing
+    // is decided above by isFishEngine(). The engine param sent by clients
+    // is informational only on the Kokoro path; we just ignore it here.
+    void engine;
     const { buffer, mimeType } = await generateVoice({
-      text, presetId, pitch, rate, speed, volume, intensity, preview, engine,
+      text, presetId, pitch, rate, speed, volume, intensity, preview,
       throatDepth, ancientRasp, royalPace, chamberSpace,
     });
     res.setHeader('Content-Type', mimeType);
+    res.setHeader('X-TTS-Engine', 'kokoro');
     res.send(buffer);
   } catch (e) {
     const msg = e instanceof Error ? e.message
@@ -2038,6 +2424,10 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
       presetId?: string; pitch?: number; rate?: number; speed?: number;
       volume?: number; intensity?: number;
       throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
+      // Engine selector + Fish-specific knobs.
+      engine?: string;
+      fishVoice?: string; fishSpeed?: number; fishTemp?: number; fishPitch?: number;
+      fishNormalize?: boolean;
     };
   };
   if (!Array.isArray(scriptLines) || scriptLines.length === 0) {
@@ -2047,6 +2437,9 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
   const fullText = scriptLines.map(l => l.text).filter(Boolean).join('\n\n');
   if (!fullText.trim()) { res.status(400).json({ error: 'scriptLines all empty' }); return; }
 
+  // Decide engine from preset id OR explicit engine field.
+  const useFish = isFishEngine(presetId, voice.engine);
+
   const previewId = `pv_${Date.now()}`;
   const audioFile = `trend_vault_preview_${previewId}.mp3`;
   const audioPath = path.join(AUDIO_DIR, audioFile);
@@ -2055,22 +2448,37 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
   const publicAudioPath = path.join(publicAudioDir, audioFile);
 
   try {
-    // ── 1. Generate the voice (Kokoro only) ────────────────────────────────
-    const resolvedEngine = 'kokoro';
+    // ── 1. Generate the voice (Kokoro OR Fish S2 Pro) ──────────────────────
+    const resolvedEngine: 'kokoro' | 'fish-speech-s2-pro' = useFish ? 'fish-speech-s2-pro' : 'kokoro';
     const timingSource: TimedCaptionsBundle['source'] = 'word-proportional';
     const perLineWords: Array<Array<{ word: string; startMs: number; endMs: number }>> | undefined = undefined;
 
-    const result = await generateVoice({
-      text: fullText, presetId,
-      pitch: voice.pitch, rate: voice.rate, speed: voice.speed,
-      volume: voice.volume, intensity: voice.intensity,
-      throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
-      royalPace:   voice.royalPace,   chamberSpace: voice.chamberSpace,
-      // Mirror chunk-level logs to the server console so a preview that fails
-      // gives you exactly the same diagnostics a render would.
-      logger:      (line: string) => console.log('[VOICE-PREVIEW]', line),
-    });
-    const buffer = result.buffer;
+    let buffer: Buffer;
+    if (useFish) {
+      const fp = findFishPreset(presetId);
+      console.log('[VOICE-PREVIEW] routing to Fish Speech S2 Pro for preset', presetId);
+      const r = await previewFishVoice({
+        text:        sanitizeFishProsodyTags(fullText),
+        voiceId:     voice.fishVoice ?? fp?.voiceId ?? presetId,
+        speed:       voice.fishSpeed ?? fp?.fishDefaults.speed       ?? 1.0,
+        temperature: voice.fishTemp  ?? fp?.fishDefaults.temperature ?? 0.7,
+        pitch:       voice.fishPitch ?? fp?.fishDefaults.pitchSemitones ?? 0,
+      });
+      if (!r.ok || !r.buffer) throw new Error(r.error || 'Fish Speech preview failed');
+      buffer = r.buffer;
+    } else {
+      const result = await generateVoice({
+        text: fullText, presetId,
+        pitch: voice.pitch, rate: voice.rate, speed: voice.speed,
+        volume: voice.volume, intensity: voice.intensity,
+        throatDepth: voice.throatDepth, ancientRasp: voice.ancientRasp,
+        royalPace:   voice.royalPace,   chamberSpace: voice.chamberSpace,
+        // Mirror chunk-level logs to the server console so a preview that fails
+        // gives you exactly the same diagnostics a render would.
+        logger:      (line: string) => console.log('[VOICE-PREVIEW]', line),
+      });
+      buffer = result.buffer;
+    }
 
     if (!buffer || buffer.length < 1024) {
       throw new Error(`TTS returned suspiciously small audio (${buffer?.length || 0} bytes).`);
@@ -2121,12 +2529,14 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
     // Any voice-affecting field that changes the generated audio must appear here,
     // otherwise the render-time hash check will let a stale preview through.
     const voiceKey   = [
-      'kokoro',
+      resolvedEngine,                                          // 'kokoro' | 'fish-speech-s2-pro'
       voice.presetId || '',
       voice.speed ?? '', voice.pitch ?? '', voice.rate ?? '',
       voice.volume ?? '', voice.intensity ?? '',
       voice.throatDepth ?? '', voice.ancientRasp ?? '',
       voice.royalPace ?? '', voice.chamberSpace ?? '',
+      // Fish-specific knobs included so changing them invalidates the preview hash
+      voice.fishVoice ?? '', voice.fishSpeed ?? '', voice.fishTemp ?? '', voice.fishPitch ?? '',
     ].join('|');
     const _v = voice as Record<string, unknown>;
     const timing = {
@@ -2261,13 +2671,19 @@ app.post('/api/trend-vault/render', async (req, res) => {
       // KEEP IN SYNC with the voiceKey computation inside /api/trend-vault/voice-preview.
       // Adding any new voice-affecting param requires updating both sites.
       const v = (settings.voice || {}) as Record<string, unknown>;
+      // Engine string MUST match the resolvedEngine value the preview
+      // endpoint used, otherwise the hash check will reject a perfectly
+      // valid Fish-Speech-generated preview.
+      const submittedEngine = isFishEngine(v.presetId as string | undefined, v.engine as string | undefined)
+        ? 'fish-speech-s2-pro' : 'kokoro';
       const submittedVoiceKey   = [
-        'kokoro',
+        submittedEngine,
         v.presetId || '',
         v.speed ?? '', v.pitch ?? '', v.rate ?? '',
         v.volume ?? '', v.intensity ?? '',
         v.throatDepth ?? '', v.ancientRasp ?? '',
         v.royalPace ?? '', v.chamberSpace ?? '',
+        v.fishVoice ?? '', v.fishSpeed ?? '', v.fishTemp ?? '', v.fishPitch ?? '',
       ].join('|');
       const submittedVoiceHash = stableHash(submittedVoiceKey);
       if (t.scriptHash && t.scriptHash !== submittedScriptHash) {
@@ -2279,11 +2695,12 @@ app.post('/api/trend-vault/render', async (req, res) => {
       if (t.audioPath && !fs.existsSync(t.audioPath)) {
         preflightErrors.push(`preview audio file missing on disk: ${t.audioPath}`);
       }
-      // Phase 8: provider mismatch — Kokoro is the only engine now, so this
-      // only triggers if a stale pre-cleanup preview is around.
+      // Engine compatibility — Kokoro and Fish Speech S2 Pro are both
+      // accepted now. Anything else means the preview was made with an
+      // engine we no longer support and the user must regenerate.
       const tProv = (settings.previewTiming as { provider?: string }).provider;
-      if (tProv && tProv !== 'kokoro' && tProv.indexOf('kokoro') === -1) {
-        preflightErrors.push(`timeline audio was generated by ${tProv} but only kokoro is supported now — regenerate the voice preview`);
+      if (tProv && tProv !== 'kokoro' && tProv !== 'fish-speech-s2-pro' && !/kokoro|fish/i.test(tProv)) {
+        preflightErrors.push(`timeline audio was generated by ${tProv} which is no longer supported — regenerate the voice preview`);
       }
     }
   }
@@ -2350,59 +2767,113 @@ app.post('/api/trend-vault/render', async (req, res) => {
       const selectedPreset = voiceParams.presetId || 'tiktok_female';
       const safeMode       = !!settings.safeMode;
 
-      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=kokoro${safeMode ? ' (safe mode)' : ''}`);
+      // ── Engine routing: Fish Speech S2 Pro vs Kokoro ────────────────────
+      // The same isFishEngine() helper used by the preview path decides
+      // which TTS engine the render uses, so the timeline + final video
+      // ALWAYS match what the user heard in the preview panel.
+      const useFishForRender = isFishEngine(selectedPreset, voiceParams.engine);
+      const resolvedRenderEngine: 'kokoro' | 'fish-speech-s2-pro' =
+        useFishForRender ? 'fish-speech-s2-pro' : 'kokoro';
+
+      pushLog(`[TTS] selected voice: preset=${selectedPreset} engine=${resolvedRenderEngine}${safeMode ? ' (safe mode)' : ''}`);
       pushLog(`[TTS] text length: ${fullText.length} chars across ${scriptLines.length} lines`);
 
-      // ── Pre-flight: confirm Kokoro is actually alive (synth test, not just
-      //    a port check). The launcher's green dot only checks the port;
-      //    a frozen Kokoro process passes that check but produces silent
-      //    audio. waitForKokoroReady() retries every 2s for up to 60s.
-      pushLog('🔎 Checking Kokoro server...');
-      const fastProbe = await probeKokoroAlive();
-      if (!fastProbe.ok) {
-        pushLog(`⚠ Kokoro not ready on first try: ${fastProbe.reason || 'unknown'} — retrying for up to 60s`);
-        const waited = await waitForKokoroReady({ maxMs: 60_000, intervalMs: 2_000, logger: pushLog });
-        if (!waited.ready) {
-          throw new Error(
-            'Kokoro TTS server is not responding after 60s of retries. ' +
-            'Last reason: ' + (waited.lastReason || 'unknown') + '. ' +
-            'Make sure Kokoro is running (bats/start-kokoro.bat or the launcher card), ' +
-            'and that nothing else is bound to port 5070.'
-          );
+      if (!useFishForRender) {
+        // ── Pre-flight: confirm Kokoro is actually alive (synth test, not just
+        //    a port check). The launcher's green dot only checks the port;
+        //    a frozen Kokoro process passes that check but produces silent
+        //    audio. waitForKokoroReady() retries every 2s for up to 60s.
+        pushLog('🔎 Checking Kokoro server...');
+        const fastProbe = await probeKokoroAlive();
+        if (!fastProbe.ok) {
+          pushLog(`⚠ Kokoro not ready on first try: ${fastProbe.reason || 'unknown'} — retrying for up to 60s`);
+          const waited = await waitForKokoroReady({ maxMs: 60_000, intervalMs: 2_000, logger: pushLog });
+          if (!waited.ready) {
+            throw new Error(
+              'Kokoro TTS server is not responding after 60s of retries. ' +
+              'Last reason: ' + (waited.lastReason || 'unknown') + '. ' +
+              'Make sure Kokoro is running (bats/start-kokoro.bat or the launcher card), ' +
+              'and that nothing else is bound to port 5070.'
+            );
+          }
+        } else {
+          pushLog(`✓ Kokoro server ready (test audio ${fastProbe.bytes || 0} bytes)`);
         }
       } else {
-        pushLog(`✓ Kokoro server ready (test audio ${fastProbe.bytes || 0} bytes)`);
+        // ── Pre-flight: Fish Speech runtime manager ─────────────────────
+        // Don't fail instantly when the server isn't reachable. Kick the
+        // full lifecycle (model → runtime → venv → deps → server →
+        // endpoint → test). If a step fails, surface THAT step's error
+        // instead of the generic "server not reachable".
+        pushLog('🔎 Checking Fish Speech S2 Pro runtime...');
+        const initial = await checkFishEngine();
+        pushLog(`[Fish] initial state=${initial.state} — ${initial.message}`);
+        if (initial.state !== 'ready') {
+          pushLog('[Fish] runtime not ready — auto-starting the full pipeline (this can take a few minutes)');
+          const prep = await prepareFishEngine();
+          for (const step of Object.values(prep.steps)) {
+            pushLog(`[Fish] ${step.label}: ${step.status}${step.detail ? ' — ' + step.detail : ''}`);
+          }
+          if (!prep.ready) {
+            const failed = Object.values(prep.steps).find(s => s.status === 'failed');
+            const reason = failed
+              ? `${failed.label} failed${failed.detail ? ': ' + failed.detail : ''}`
+              : prep.message;
+            throw new Error(
+              `Fish Speech runtime did not become ready. ${reason}. ` +
+              `See server logs / Voice Preset → 📜 View Fish Logs for the full diagnostic.`
+            );
+          }
+        }
       }
 
       let voiceBuffer: Buffer;
       let ttsEngineUsed = 'unknown';
       try {
-        const result = await generateVoice({
-          text:      fullText,
-          presetId:  selectedPreset,
-          pitch:     voiceParams.pitch,
-          rate:      voiceParams.rate,
-          speed:     voiceParams.speed,
-          volume:    voiceParams.volume,
-          intensity: voiceParams.intensity,
-          // Cinematic narrator sliders — preview & render use the SAME values
-          throatDepth:  voiceParams.throatDepth,
-          ancientRasp:  voiceParams.ancientRasp,
-          royalPace:    voiceParams.royalPace,
-          chamberSpace: voiceParams.chamberSpace,
-          // Per-chunk progress goes straight to the render SSE log
-          logger:    pushLog,
-          // "Force Working Voice Render" — skip the FX chain, just loudnorm
-          safeMode,
-        });
-        voiceBuffer = result.buffer;
-        ttsEngineUsed = result.engineUsed || 'unknown';
-        if (result.finalDurationSec !== undefined) {
-          pushLog(`[TTS] engine used: ${ttsEngineUsed} | final voice: ${result.finalDurationSec.toFixed(2)}s`);
+        if (useFishForRender) {
+          // ── Fish Speech S2 Pro render path ─────────────────────────────
+          const fp = findFishPreset(selectedPreset);
+          pushLog(`[Fish] generating with voice=${fp?.voiceId || selectedPreset}`);
+          const r = await renderFishVoice({
+            text:        sanitizeFishProsodyTags(fullText),
+            voiceId:     voiceParams.fishVoice ?? fp?.voiceId ?? selectedPreset,
+            speed:       voiceParams.fishSpeed ?? fp?.fishDefaults.speed       ?? 1.0,
+            temperature: voiceParams.fishTemp  ?? fp?.fishDefaults.temperature ?? 0.7,
+            pitch:       voiceParams.fishPitch ?? fp?.fishDefaults.pitchSemitones ?? 0,
+          });
+          if (!r.ok || !r.buffer) throw new Error(r.error || 'Fish Speech render failed');
+          voiceBuffer = r.buffer;
+          ttsEngineUsed = 'fish-speech-s2-pro';
+          pushLog(`[Fish] generated ${(voiceBuffer.length / 1024).toFixed(0)}KB`);
+        } else {
+          // ── Kokoro render path (unchanged) ─────────────────────────────
+          const result = await generateVoice({
+            text:      fullText,
+            presetId:  selectedPreset,
+            pitch:     voiceParams.pitch,
+            rate:      voiceParams.rate,
+            speed:     voiceParams.speed,
+            volume:    voiceParams.volume,
+            intensity: voiceParams.intensity,
+            // Cinematic narrator sliders — preview & render use the SAME values
+            throatDepth:  voiceParams.throatDepth,
+            ancientRasp:  voiceParams.ancientRasp,
+            royalPace:    voiceParams.royalPace,
+            chamberSpace: voiceParams.chamberSpace,
+            // Per-chunk progress goes straight to the render SSE log
+            logger:    pushLog,
+            // "Force Working Voice Render" — skip the FX chain, just loudnorm
+            safeMode,
+          });
+          voiceBuffer = result.buffer;
+          ttsEngineUsed = result.engineUsed || 'unknown';
+          if (result.finalDurationSec !== undefined) {
+            pushLog(`[TTS] engine used: ${ttsEngineUsed} | final voice: ${result.finalDurationSec.toFixed(2)}s`);
+          }
         }
       } catch (ttsErr) {
         const msg = (ttsErr as Error).message || String(ttsErr);
-        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed. Make sure the Kokoro server is running (bats/start-kokoro.bat).`);
+        throw new Error(`TTS generation failed: ${msg}. Render aborted — silent videos are no longer allowed.`);
       }
 
       // Hard guard: TTS must produce a non-trivial audio file
@@ -3739,552 +4210,152 @@ app.post('/api/trend-vault/import-url', async (req, res) => {
           let stdout = '';
           let stderr = '';
           const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
-          proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
-          proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
-          proc.on('close', code => resolve({ code: code ?? 1, stdout, stderr }));
-          proc.on('error', err => resolve({ code: 1, stdout: '', stderr: (err as Error).message }));
+          proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+          proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+          proc.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+          proc.on('error', (err) => resolve({ code: 1, stdout: '', stderr: (err as Error).message }));
         });
 
         if (result.code === 0) {
-          const lines = result.stdout.trim().split('\n').filter(Boolean);
-          const lastPath = lines.pop()?.trim();
-          if (lastPath) {
-            job.filename = path.basename(lastPath);
-            job.savePath = type === 'video'
-              ? `Project > Backgrounds > ${job.filename}`
-              : `Project > Music > ${job.filename}`;
-            console.log('[import-url] SUCCESS — file:', lastPath);
-          } else {
-            console.log('[import-url] yt-dlp exit 0 but no filepath printed');
-          }
+          const finalPath = (result.stdout || '').trim().split(/\r?\n/).pop() || '';
+          // Match the DownloadJob interface (savePath/filename/completedAt).
+          job.status = 'complete';
+          job.savePath    = finalPath || undefined;
+          job.filename    = finalPath ? path.basename(finalPath) : undefined;
+          job.completedAt = Date.now();
+          console.log('[import-url] downloaded:', finalPath);
           succeeded = true;
           break;
         }
-
-        const out = (result.stderr || result.stdout || '').trim();
-        console.warn(`[import-url] attempt ${i + 1} failed (exit ${result.code}). Tail:`, out.slice(-500));
-
-        // Permanent errors — don't retry with another format
-        if (/Private video|This video is private/i.test(out)) { lastErr = 'This video is private'; break; }
-        if (/HTTP Error 404/i.test(out))                       { lastErr = 'Video not found (deleted or invalid URL)'; break; }
-        if (/Sign in to confirm|age-restricted/i.test(out))    { lastErr = 'Age-restricted or login required'; break; }
-        if (/Unable to extract|Unsupported URL/i.test(out))    { lastErr = 'URL format not supported by yt-dlp'; break; }
-        if (/HTTP Error 403/i.test(out))                       { lastErr = 'Access blocked (try again or check URL)'; break; }
-
-        // Otherwise keep trying the next fallback format
-        lastErr = out.slice(-300) || `yt-dlp exit ${result.code}`;
+        lastErr = result.stderr || (`yt-dlp exited ${result.code}`);
+        console.warn('[import-url] format attempt failed:', fmt, lastErr.slice(-400));
       }
 
-      if (!succeeded) throw new Error(lastErr || 'Download failed');
-
-      job.status = 'complete';
-      job.completedAt = Date.now();
+      if (!succeeded) {
+        job.status = 'failed';
+        job.error = lastErr || 'yt-dlp failed with no error message';
+        job.completedAt = Date.now();
+      }
     } catch (e) {
+      const msg = (e as Error).message || String(e);
       job.status = 'failed';
-      job.error = (e as Error).message;
+      job.error = msg;
       job.completedAt = Date.now();
-      console.error('[import-url] FAILED:', job.error);
+      console.error('[import-url] background error:', msg);
     }
   })();
 });
 
-// ── yt-dlp resolver (bin → root → python module → PATH) ─────────────────────
-// Returns BOTH a "cmd + args prefix" pair AND a string description so
-// callers can spawn(cmd, [...prefixArgs, ...userArgs]) and we never have to
-// build unsafe command strings.
-type YtDlpResolved = {
-  found: boolean;
-  cmd: string;
-  prefixArgs: string[];
-  // 'binary' = direct exe (./bin/, ./, PATH); 'python' = python -m yt_dlp
-  kind: 'binary' | 'python' | 'missing';
-  source: string;       // human readable: 'bin/yt-dlp.exe' | 'python -m yt_dlp' | …
-  version?: string;     // populated by probe
-  checked: string[];    // every candidate we tried, in order
-};
+// ── GET /api/health ──────────────────────────────────────────────────────
+// Called by: npm run healthcheck  (scripts/healthcheck.js)
+// Returns a structured health report so the dashboard and external monitors
+// can confirm every sub-system is operational before a render starts.
+app.get('/api/health', async (_req, res) => {
+  const check = (name: string, ok: boolean, message: string) =>
+    ({ name, status: ok ? 'ok' : 'failed', message });
 
-let _ytDlpCache: YtDlpResolved | null = null;
+  const components: Record<string, { status: string; message: string }> = {};
 
-function _projectDirs(): string[] {
-  return [...new Set([
-    __dirname,
-    process.cwd(),
-    typeof ROOT === 'string' ? ROOT : '',
-    path.resolve('.'),
-    process.argv[1] ? path.dirname(path.resolve(process.argv[1])) : '',
-    process.argv[2] ? path.dirname(path.resolve(process.argv[2])) : '',
-  ].filter(Boolean))];
-}
-
-async function _probeVersion(cmd: string, args: string[]): Promise<string | null> {
-  return new Promise(resolve => {
-    let resolved = false;
-    let out = '';
-    let err = '';
-    try {
-      // shell:false + windowsHide:true → no extra console pop-ups, no command-string parsing.
-      const p = spawn(cmd, [...args, '--version'], { shell: false, windowsHide: true });
-      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-      p.stderr.on('data', (d: Buffer) => { err += d.toString(); });
-      p.on('close', code => {
-        if (resolved) return;
-        resolved = true;
-        if (code === 0) {
-          const v = out.trim().split(/\r?\n/)[0] || '';
-          resolve(v || '(installed)');
-        } else {
-          resolve(null);
-        }
-      });
-      p.on('error', () => { if (!resolved) { resolved = true; resolve(null); } });
-      // Hard timeout — should never take more than 3s for --version
-      setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve(null); } }, 3000);
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-async function resolveYtDlp(force = false): Promise<YtDlpResolved> {
-  if (!force && _ytDlpCache && _ytDlpCache.found) return _ytDlpCache;
-
-  const exe = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-  const dirs = _projectDirs();
-  const checked: string[] = [];
-
-  const candidates: Array<{ cmd: string; prefixArgs: string[]; kind: 'binary'|'python'; source: string }> = [];
-
-  // A. Project local: <dir>/bin/yt-dlp[.exe]
-  for (const d of dirs) {
-    const p = path.join(d, 'bin', exe);
-    candidates.push({ cmd: p, prefixArgs: [], kind: 'binary', source: `bin/${exe} (${d})` });
-  }
-  // B. Project root: <dir>/yt-dlp[.exe]
-  for (const d of dirs) {
-    const p = path.join(d, exe);
-    candidates.push({ cmd: p, prefixArgs: [], kind: 'binary', source: `${exe} (${d})` });
-  }
-  // C. Python modules
-  const pyCmds = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
-  for (const py of pyCmds) {
-    candidates.push({ cmd: py, prefixArgs: ['-m', 'yt_dlp'], kind: 'python', source: `${py} -m yt_dlp` });
-  }
-  // D. Global PATH
-  candidates.push({ cmd: exe, prefixArgs: [], kind: 'binary', source: `${exe} (PATH)` });
-  if (process.platform !== 'win32') {
-    candidates.push({ cmd: 'yt-dlp', prefixArgs: [], kind: 'binary', source: 'yt-dlp (PATH)' });
-  }
-
-  for (const c of candidates) {
-    checked.push(c.source);
-    // For binary candidates with an absolute-ish path, skip if file doesn't exist
-    if (c.kind === 'binary' && (c.cmd.includes('/') || c.cmd.includes('\\'))) {
-      try { if (!fs.existsSync(c.cmd)) continue; } catch { continue; }
-    }
-    const v = await _probeVersion(c.cmd, c.prefixArgs);
-    if (v) {
-      _ytDlpCache = { found: true, cmd: c.cmd, prefixArgs: c.prefixArgs, kind: c.kind, source: c.source, version: v, checked };
-      console.log('[yt-dlp] resolved via:', c.source, '— version:', v);
-      return _ytDlpCache;
-    }
-  }
-
-  _ytDlpCache = { found: false, cmd: '', prefixArgs: [], kind: 'missing', source: '', checked };
-  console.warn('[yt-dlp] not found. Checked:', checked);
-  return _ytDlpCache;
-}
-
-// Legacy synchronous helper — kept for the streaming endpoint that runs
-// before we get a chance to await. Falls back to the resolver cache.
-function getYtDlpBin(): string {
-  if (_ytDlpCache && _ytDlpCache.found && _ytDlpCache.kind === 'binary') return _ytDlpCache.cmd;
-  const exe = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-  for (const d of _projectDirs()) {
-    const p = path.join(d, 'bin', exe);
-    try { if (fs.existsSync(p)) return p; } catch { /* skip */ }
-  }
-  for (const d of _projectDirs()) {
-    const p = path.join(d, exe);
-    try { if (fs.existsSync(p)) return p; } catch { /* skip */ }
-  }
-  return exe;
-}
-
-// Ensure ./bin and ./downloads exist at startup
-function ensureDownloaderDirs(): { binDir: string; downloadsDir: string } {
-  const binDir = path.join(ROOT, 'bin');
-  const downloadsDir = path.join(ROOT, 'downloads');
-  try { if (!fs.existsSync(binDir))       fs.mkdirSync(binDir, { recursive: true }); } catch {}
-  try { if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true }); } catch {}
-  return { binDir, downloadsDir };
-}
-ensureDownloaderDirs();
-// Probe yt-dlp asynchronously at startup so the first request is fast
-resolveYtDlp(true).catch(() => {});
-
-// ── Downloader / yt-dlp availability (also reports ffmpeg + folders) ────────
-async function _probeFfmpeg(): Promise<string | null> {
-  return new Promise(resolve => {
-    let resolved = false;
-    try {
-      const p = spawn('ffmpeg', ['-version'], { shell: false, windowsHide: true });
-      let out = '';
-      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-      p.on('close', code => { if (!resolved) { resolved = true; resolve(code === 0 ? (out.split(/\r?\n/)[0] || '(ffmpeg)') : null); } });
-      p.on('error', () => { if (!resolved) { resolved = true; resolve(null); } });
-      setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve(null); } }, 3000);
-    } catch { resolve(null); }
-  });
-}
-
-async function _downloaderStatusPayload() {
-  const r = await resolveYtDlp(true);
-  const ff = await _probeFfmpeg();
-  const { binDir, downloadsDir } = ensureDownloaderDirs();
-  return {
-    ytdlp: {
-      available: r.found,
-      version: r.version || null,
-      source: r.source || null,
-      kind: r.kind,                   // 'binary' | 'python' | 'missing'
-      cmd: r.cmd || null,
-      prefixArgs: r.prefixArgs,
-      checked: r.checked,
-    },
-    ffmpeg: {
-      available: !!ff,
-      version: ff || null,
-    },
-    folders: {
-      bin: { path: binDir, exists: fs.existsSync(binDir) },
-      downloads: { path: downloadsDir, exists: fs.existsSync(downloadsDir) },
-    },
-  };
-}
-
-// Legacy alias — kept so old front-end code keeps working
-app.get('/api/ytdlp/status', async (_req, res) => {
-  try {
-    const s = await _downloaderStatusPayload();
-    res.json({
-      available: s.ytdlp.available,
-      version:   s.ytdlp.version,
-      bin:       s.ytdlp.cmd,
-      binExists: s.ytdlp.available && s.ytdlp.kind === 'binary',
-      source:    s.ytdlp.source,
-      kind:      s.ytdlp.kind,
-      checked:   s.ytdlp.checked,
-      ffmpeg:    s.ffmpeg,
-      folders:   s.folders,
-    });
-  } catch (e) {
-    res.status(500).json({ available: false, error: (e as Error).message });
-  }
-});
-
-// New canonical status endpoint
-app.get('/api/downloader/status', async (_req, res) => {
-  try { res.json(await _downloaderStatusPayload()); }
-  catch (e) { res.status(500).json({ error: (e as Error).message }); }
-});
-
-// One-click "Fix Downloader" — runs `python -m pip install -U yt-dlp` and
-// re-probes. Always returns JSON, never crashes the request.
-app.post('/api/downloader/fix', async (_req, res) => {
-  const log: string[] = [];
-  const ensureDirs = ensureDownloaderDirs();
-  log.push(`[fix] bin: ${ensureDirs.binDir} (${fs.existsSync(ensureDirs.binDir) ? 'exists' : 'missing'})`);
-  log.push(`[fix] downloads: ${ensureDirs.downloadsDir} (${fs.existsSync(ensureDirs.downloadsDir) ? 'exists' : 'missing'})`);
-
-  const tryPipInstall = async (pyCmd: string): Promise<{ ok: boolean; out: string }> => {
-    return new Promise(resolve => {
-      let resolved = false;
-      let out = '';
-      try {
-        const p = spawn(pyCmd, ['-m', 'pip', 'install', '-U', 'yt-dlp', '--quiet'], { shell: false, windowsHide: true });
-        p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-        p.stderr.on('data', (d: Buffer) => { out += d.toString(); });
-        p.on('close', code => { if (!resolved) { resolved = true; resolve({ ok: code === 0, out: out.trim() }); } });
-        p.on('error', err => { if (!resolved) { resolved = true; resolve({ ok: false, out: `spawn error: ${(err as Error).message}` }); } });
-        // Long timeout — pip can take a while
-        setTimeout(() => { if (!resolved) { resolved = true; try { p.kill(); } catch {} resolve({ ok: false, out: 'pip install timed out' }); } }, 120_000);
-      } catch (e) {
-        resolve({ ok: false, out: `spawn threw: ${(e as Error).message}` });
-      }
-    });
-  };
-
-  const pyCandidates = process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python'];
-  let pipOk = false;
-  for (const py of pyCandidates) {
-    log.push(`[fix] trying: ${py} -m pip install -U yt-dlp`);
-    const r = await tryPipInstall(py);
-    log.push(r.out ? r.out.slice(-400) : '(no output)');
-    if (r.ok) { pipOk = true; log.push(`[fix] ${py} -m pip install — OK`); break; }
-  }
-  if (!pipOk) log.push('[fix] all pip attempts failed');
-
-  // Re-probe
-  const status = await _downloaderStatusPayload();
-  res.json({
-    ok: status.ytdlp.available,
-    pipInstall: pipOk,
-    status,
-    log,
-    note: status.ytdlp.available
-      ? `yt-dlp resolved via: ${status.ytdlp.source}`
-      : 'yt-dlp still not found. Either install Python with pip, or drop yt-dlp.exe into the bin/ folder manually.',
-  });
-});
-
-// In-memory map of active yt-dlp download jobs for the Clip Tool
-type ClipDlJob = {
-  id: string; url: string;
-  status: 'queued' | 'downloading' | 'done' | 'error';
-  pct: number; eta: string; speed: string;
-  filename?: string; error?: string;
-};
-const clipDlJobs = new Map<string, ClipDlJob>();
-
-// POST /api/clip/ytdlp — start a yt-dlp download to the uploads folder
-app.post('/api/clip/ytdlp', express.json(), async (req, res) => {
-  const { url } = req.body as { url: string };
-  if (!url) { res.status(400).json({ ok: false, error: 'url required' }); return; }
-
-  console.log('[clip/ytdlp] URL submitted:', url, '| cwd:', process.cwd());
-  const ytd = await resolveYtDlp().catch(() => null);
-  if (!ytd || !ytd.found) {
-    res.status(503).json({
-      ok: false,
-      error: 'yt-dlp not found. Click Fix Downloader or place yt-dlp.exe in the bin/ folder.',
-      hint: 'yt-dlp not installed',
-    });
-    return;
-  }
-  console.log('[clip/ytdlp] resolver source:', ytd.source);
-
-  const jobId = `cydl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const job: ClipDlJob = { id: jobId, url, status: 'queued', pct: 0, eta: '—', speed: '' };
-  clipDlJobs.set(jobId, job);
-  res.json({ ok: true, jobId, downloader: { source: ytd.source, version: ytd.version } });
-
-  // Background download
-  (async () => {
-    try {
-      job.status = 'downloading';
-      if (!fs.existsSync(UPLOADS)) fs.mkdirSync(UPLOADS, { recursive: true });
-      const outTmpl = path.join(UPLOADS, '%(title).60s.%(ext)s');
-
-      // Fallback format chain
-      const fmts = [
-        'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
-        'bestvideo+bestaudio/best',
-        'best',
-        'mp4',
-      ];
-
-      let lastErr = '';
-      let succeeded = false;
-      let lastPath = '';
-
-      for (let i = 0; i < fmts.length; i++) {
-        lastPath = '';
-        const args = [
-          ...ytd.prefixArgs,
-          '--no-playlist', '--retries', '3',
-          '-f', fmts[i],
-          '--merge-output-format', 'mp4',
-          '--output', outTmpl,
-          '--progress', '--newline',
-          '--print', 'after_move:filepath',
-          url,
-        ];
-        console.log(`[clip/ytdlp] attempt ${i + 1}/${fmts.length} fmt=${fmts[i]}`);
-
-        const result = await new Promise<{ code: number; stderr: string }>((resolve) => {
-          let stderr = '';
-          const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
-          proc.stdout.on('data', (d: Buffer) => {
-            const text = d.toString();
-            const m = text.match(/\[download\]\s+([\d.]+)%.*?at\s+([\d.]+\S+)\s+ETA\s+(\S+)/);
-            if (m) { job.pct = parseFloat(m[1]); job.speed = m[2]; job.eta = m[3]; }
-            for (const line of text.split('\n')) {
-              const l = line.trim();
-              if (l && !l.startsWith('[') && /\.(mp4|mkv|webm|mov)$/i.test(l)) lastPath = l;
-            }
-          });
-          proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
-          proc.on('close', code => resolve({ code: code ?? 1, stderr }));
-          proc.on('error', err => resolve({ code: 1, stderr: (err as Error).message }));
-        });
-
-        if (result.code === 0 && lastPath) {
-          job.filename = path.basename(lastPath);
-          succeeded = true;
-          console.log('[clip/ytdlp] SUCCESS — file:', lastPath);
-          break;
-        } else if (result.code === 0) {
-          // exit 0 but no path captured — fall through to "pick newest" branch below
-          try {
-            const newest = fs.readdirSync(UPLOADS)
-              .filter(f => /\.(mp4|mkv|webm|mov)$/i.test(f))
-              .map(f => ({ f, mt: fs.statSync(path.join(UPLOADS, f)).mtimeMs }))
-              .sort((a, b) => b.mt - a.mt)[0];
-            if (newest) { job.filename = newest.f; succeeded = true; break; }
-          } catch {}
-        }
-
-        const out = result.stderr.slice(-500);
-        console.warn(`[clip/ytdlp] attempt ${i + 1} failed (exit ${result.code}). Tail:`, out);
-        if (/Private video|This video is private/i.test(out)) { lastErr = 'This video is private'; break; }
-        if (/HTTP Error 404/i.test(out))                       { lastErr = 'Video not found'; break; }
-        if (/Sign in to confirm|age-restricted/i.test(out))    { lastErr = 'Age-restricted or login required'; break; }
-        if (/Unable to extract|Unsupported URL/i.test(out))    { lastErr = 'URL format not supported'; break; }
-        if (/HTTP Error 403/i.test(out))                       { lastErr = 'Access blocked'; break; }
-        lastErr = out || `yt-dlp exit ${result.code}`;
-      }
-
-      if (!succeeded) throw new Error(lastErr || 'Download failed');
-
-      job.status = 'done';
-      job.pct = 100;
-      return;
-    } catch (e) {
-      job.status = 'error';
-      job.error  = (e as Error).message;
-      console.error('[clip/ytdlp] FAILED:', job.error);
-      return;
-    }
-  })();
-
-});
-
-// GET /api/clip/ytdlp/:jobId — poll download status
-app.get('/api/clip/ytdlp/:jobId', (req, res) => {
-  const job = clipDlJobs.get(req.params.jobId);
-  if (!job) { res.status(404).json({ error: 'job not found' }); return; }
-  res.json(job);
-});
-
-// POST /api/clip/process-local — run clip pipeline on a file already in uploads/
-app.post('/api/clip/process-local', express.json(), (req, res) => {
-  const { filename } = req.body as { filename: string };
-  if (!filename) { res.status(400).json({ error: 'filename required' }); return; }
-
-  const videoPath = path.join(UPLOADS, path.basename(filename));
-  if (!fs.existsSync(videoPath)) { res.status(404).json({ error: 'file not found in uploads/' }); return; }
-  if (activeJob?.status === 'running') { res.status(409).json({ error: 'A job is already running.' }); return; }
-
-  const folder = toFolderName(filename);
-  const jobId  = Date.now().toString();
-  activeJob = {
-    id: jobId, status: 'running', logs: [], folder,
-    filename, startTime: Date.now(),
-    stage: 0, currentClip: 0, totalClips: 10,
-    clipPct: 0, clipsFinished: [], overallPct: 0,
-  };
-
-  res.json({ ok: true, jobId, filename, folder });
-  saveJobState(videoPath, activeJob);
-  clearIntermediateFiles();
-  broadcast(jobId, { status: 'starting', filename, folder });
-  broadcastProgress(activeJob);
-});
-
-// GET /api/clip/download-direct?url=...
-// Pipes yt-dlp stdout straight to the browser — nothing is saved on the server.
-// Pre-checks yt-dlp availability so we never blank-page the user with a 503
-// text body. If yt-dlp is missing, we redirect the user back to /api/clip
-// with a friendly error payload instead.
-app.get('/api/clip/download-direct', async (req, res) => {
-  const url = ((req.query.url as string) || '').trim();
-  if (!url) { res.status(400).json({ ok: false, error: 'url required' }); return; }
-
-  const ytd = await resolveYtDlp().catch(() => null);
-  if (!ytd || !ytd.found) {
-    // JSON response so an accidental navigation prints structured text in the browser
-    // instead of looking like a "white page" of plain server text.
-    res.status(503).json({
-      ok: false,
-      error: 'yt-dlp not found. Click Fix Downloader or place yt-dlp.exe in the bin/ folder.',
-      hint: 'yt-dlp not installed',
-    });
-    return;
-  }
-
-  console.log('[download-direct] URL submitted:', url, '| via:', ytd.source);
-
-  const fmt = 'best[ext=mp4]/best[ext=webm]/best';
-  const prefixArgs: string[] = (ytd as any).prefixArgs ?? [];
-
-  // ── Quick pre-flight: ask yt-dlp for the file size so the browser gets a
-  //    real Content-Length and can show a percentage progress bar.
-  //    Timeout after 10 s so we never stall the download on a slow lookup.
-  let filesize = 0;
-  try {
-    const sizeStr = await new Promise<string>((resolve) => {
-      const timer = setTimeout(() => { try { p.kill(); } catch {} resolve(''); }, 10_000);
-      const p = spawn(ytd.cmd, [
-        ...prefixArgs,
-        '--no-playlist', '--no-warnings',
-        '-f', fmt,
-        '--print', '%(filesize,filesize_approx)s',
-        url,
-      ], { shell: false, windowsHide: true });
-      let out = '';
-      p.stdout.on('data', (d: Buffer) => { out += d.toString(); });
-      p.on('close', () => { clearTimeout(timer); resolve(out.trim()); });
-      p.on('error', () => { clearTimeout(timer); resolve(''); });
-    });
-    const n = parseInt(sizeStr);
-    if (!isNaN(n) && n > 0) filesize = n;
-  } catch { /* proceed without size — progress bar will show MB received */ }
-
-  // ── Stream yt-dlp stdout straight to the browser — nothing saved on server
-  const args = [
-    ...prefixArgs,
-    '--no-playlist',
-    '--retries', '3',
-    '-f', fmt,
-    '-o', '-',
-    url,
+  // 1. Storage folders
+  const storageDirs = [
+    TREND_VAULT_OUT,
+    UPLOADS,
+    FINAL_DIR,
+    BACKGROUNDS,
+    MUSIC_DIR,
+    AUDIO_DIR,
+    DRAFTS_DIR,
   ];
+  const missingDirs = storageDirs.filter(d => !fs.existsSync(d));
+  components['storage_folders'] = missingDirs.length === 0
+    ? { status: 'ok',      message: 'All storage folders exist' }
+    : { status: 'warning', message: `Missing: ${missingDirs.map(d => path.basename(d)).join(', ')}` };
 
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
-  if (filesize > 0) res.setHeader('Content-Length', String(filesize));
-
-  const proc = spawn(ytd.cmd, args, { shell: false, windowsHide: true });
-
-  proc.stdout.pipe(res);
-  proc.stderr.resume(); // drain stderr so it doesn't block the process
-
-  proc.on('error', err => {
-    console.error('[download-direct] spawn error:', err);
-    if (!res.headersSent) {
-      res.status(503).json({ ok: false, error: 'Spawn error: ' + (err as Error).message });
-    } else {
-      try { res.end(); } catch {}
-    }
-  });
-
-  proc.on('close', () => { if (!res.writableEnded) res.end(); });
-
-  req.on('close', () => { try { proc.kill(); } catch { /* ignore */ } });
-});
-
-// ─── Start server
-
-// Start server
-const server = app.listen(PORT, () => {
-  console.log('  Trend Vault Studio  -  http://localhost:' + PORT + '/trend-vault');
-});
-
-server.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error('ERROR: Port ' + PORT + ' is already in use.');
-    process.exit(1);
-  } else {
-    throw err;
+  // 2. FFmpeg — try the bundled installer path first, then system PATH
+  let ffmpegOk = false;
+  try {
+    // fluent-ffmpeg / @ffmpeg-installer sets the path at import time
+    const { execSync } = await import('child_process');
+    execSync('ffmpeg -version', { stdio: 'ignore', timeout: 3000 });
+    ffmpegOk = true;
+  } catch {
+    ffmpegOk = false;
   }
+  components['ffmpeg'] = check('ffmpeg', ffmpegOk,
+    ffmpegOk ? 'ffmpeg reachable' : 'ffmpeg not found — install or add to PATH');
+
+  // 3. tsx (needed to run render scripts)
+  const tsxBin = path.join(ROOT, 'node_modules', '.bin', 'tsx');
+  const tsxOk  = fs.existsSync(tsxBin);
+  components['tsx'] = check('tsx', tsxOk,
+    tsxOk ? 'tsx found in node_modules/.bin' : 'tsx missing — run npm install');
+
+  // 4. Remotion renderer script
+  const renderScript = path.join(ROOT, 'scripts', 'trend-vault-render.ts');
+  const remotionOk   = fs.existsSync(renderScript);
+  components['remotion_render_script'] = check('remotion', remotionOk,
+    remotionOk ? 'trend-vault-render.ts found' : 'render script missing');
+
+  // 5. TTS / Kokoro
+  let ttsStatus = 'unknown';
+  let ttsMsg    = 'not checked';
+  try {
+    const ttsAlive = await probeKokoroAlive();
+    ttsStatus = ttsAlive ? 'ok'      : 'warning';
+    ttsMsg    = ttsAlive ? 'Kokoro reachable' : 'Kokoro not running (voice preview will fail)';
+  } catch {
+    ttsStatus = 'warning';
+    ttsMsg    = 'Kokoro probe failed';
+  }
+  components['tts_kokoro'] = { status: ttsStatus, message: ttsMsg };
+
+  // 6. Render worker (optional — only checked when USE_RENDER_WORKER is true)
+  if (RENDER_WORKER_URL) {
+    try {
+      const wRes = await fetch(`${RENDER_WORKER_URL}/api/render/health`,
+        { signal: AbortSignal.timeout(2000) });
+      const wData = wRes.ok ? await wRes.json() : null;
+      components['render_worker'] = {
+        status:  wRes.ok ? 'ok' : 'warning',
+        message: wRes.ok
+          ? `Worker ready at ${RENDER_WORKER_URL} (active: ${(wData as { activeRenders?: number })?.activeRenders ?? '?'})`
+          : `Worker responded ${wRes.status}`,
+      };
+    } catch {
+      components['render_worker'] = {
+        status:  'warning',
+        message: `Render worker unreachable at ${RENDER_WORKER_URL}`,
+      };
+    }
+  } else {
+    components['render_worker'] = {
+      status:  'ok',
+      message: 'Local in-process render mode (USE_RENDER_WORKER not set)',
+    };
+  }
+
+  // 7. Environment
+  const apiKeyOk = !!(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
+  components['env_api_key'] = check('env_api_key', apiKeyOk,
+    apiKeyOk ? 'API key configured' : 'ANTHROPIC_API_KEY not set — script generation will fail');
+
+  // Derive overall status
+  const statuses = Object.values(components).map(c => c.status);
+  const overall  = statuses.includes('failed')  ? 'failed'
+                 : statuses.includes('warning') ? 'warning'
+                 : 'ok';
+
+  res.json({
+    status:     overall,
+    timestamp:  new Date().toISOString(),
+    port:       PORT,
+    node:       process.version,
+    platform:   process.platform,
+    components,
+  });
+});
+
+// ── HTTP server startup ──────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`Trend Vault server listening on http://localhost:${PORT}`);
 });

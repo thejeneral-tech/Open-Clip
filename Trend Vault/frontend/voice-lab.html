@@ -359,6 +359,7 @@ input:focus,textarea:focus,select:focus{
   <button class="tab-btn" onclick="switchTab('presets')">💾 My Presets</button>
   <button class="tab-btn" onclick="switchTab('advanced')">🎛️ Advanced Controls</button>
   <button class="tab-btn" onclick="switchTab('clone')">🧬 Voice Cloning</button>
+  <button class="tab-btn" id="fishTabBtn" onclick="switchTab('fish')" style="border-left:1px solid var(--border);margin-left:6px;padding-left:18px">🐟 Fish Speech</button>
 </div>
 
 <div class="main-layout">
@@ -570,6 +571,144 @@ input:focus,textarea:focus,select:focus{
       </div>
     </div>
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       FISH SPEECH TAB
+       Full runtime manager — mirrors the panel in trend-vault.html
+       but lives as a top-level Voice Lab tab so it's always accessible.
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-fish">
+
+    <!-- Header row -->
+    <div class="content-header" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:2rem;filter:drop-shadow(0 0 10px rgba(0,180,120,.5))">🐟</span>
+        <div>
+          <div class="content-title">Fish Speech S2 Pro</div>
+          <div style="font-size:.68rem;color:var(--muted);margin-top:2px">Local neural TTS engine — high quality, fully offline</div>
+        </div>
+      </div>
+      <div id="fishLabOverallStatus" style="margin-left:auto;padding:6px 14px;border-radius:20px;font-size:.72rem;font-weight:700;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.3);color:#94a3b8">
+        ⏳ Checking…
+      </div>
+    </div>
+
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+
+      <!-- LEFT: Status checklist + controls ────────────────────────── -->
+      <div style="flex:0 0 340px;min-width:280px;display:flex;flex-direction:column;gap:14px">
+
+        <!-- Checklist card -->
+        <div class="card" style="padding:18px">
+          <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;font-weight:700">🔍 Setup Checklist</div>
+          <div id="fishLabChecklist" style="display:flex;flex-direction:column;gap:6px;font-size:.72rem;font-family:'Courier New',monospace">
+            <div data-fstep="model">    ⚪ Fish model: …</div>
+            <div data-fstep="runtime">  ⚪ Fish runtime: …</div>
+            <div data-fstep="venv">     ⚪ Python venv: …</div>
+            <div data-fstep="deps">     ⚪ Dependencies: …</div>
+            <div data-fstep="server">   ⚪ Fish server: …</div>
+            <div data-fstep="endpoint"> ⚪ API endpoint: …</div>
+            <div data-fstep="test">     ⚪ Test generation: …</div>
+          </div>
+          <div id="fishLabProgressLabel" style="font-size:.6rem;color:var(--muted);margin-top:10px;min-height:16px"></div>
+          <div id="fishLabProgressBar" style="display:none;height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-top:4px">
+            <div id="fishLabProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#6ee7b7);transition:width .4s"></div>
+          </div>
+        </div>
+
+        <!-- Control buttons -->
+        <div class="card" style="padding:16px">
+          <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;font-weight:700">⚙️ Controls</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button id="fishLabStartBtn" onclick="fishLabStart()"
+              style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.45);color:#86efac;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              ▶ Start Fish Speech Server
+            </button>
+            <button id="fishLabRepairBtn" onclick="fishLabRepair()"
+              style="background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.35);color:#fbbf24;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s"
+              title="Rebuild venv + reinstall dependencies (model files kept)">
+              🛠 Repair Fish Speech
+            </button>
+            <button onclick="fishLabChooseModel()"
+              style="background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.35);color:#c4b5fd;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              📂 Choose Existing Model Folder
+            </button>
+            <button onclick="fishLabToggleLogs()"
+              style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              📜 View Fish Logs
+            </button>
+          </div>
+        </div>
+
+        <!-- Config summary -->
+        <div class="card" style="padding:16px">
+          <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:700">📋 Active Config</div>
+          <div id="fishLabConfig" style="font-size:.62rem;color:var(--muted);line-height:1.8;font-family:'Courier New',monospace">loading…</div>
+        </div>
+
+      </div><!-- /left -->
+
+      <!-- RIGHT: Voice presets + preview ──────────────────────────── -->
+      <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- Live logs panel (hidden by default) -->
+        <div id="fishLabLogPanel" style="display:none">
+          <div class="card" style="padding:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <span style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700">📜 Fish Speech Logs</span>
+              <button onclick="fishLabClearLogs()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.6rem;cursor:pointer;padding:3px 8px;font-family:inherit">Clear</button>
+            </div>
+            <div id="fishLabLogEntries" style="background:#060610;border:1px solid var(--border);border-radius:6px;padding:10px;max-height:260px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.6rem;color:#cbd5e1;line-height:1.5">
+              <span style="color:var(--muted)">no logs yet — click ▶ Start Fish Speech</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fish Voice Presets grid -->
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <span style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700">🐟 Fish S2 Pro Voice Presets</span>
+            <span id="fishLabServerBadge" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(100,116,139,.15);color:#94a3b8;border:1px solid rgba(100,116,139,.3)">server offline</span>
+          </div>
+          <div id="fishLabPresetsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Preview panel (shown when a Fish voice is selected) -->
+        <div id="fishLabPreviewCard" style="display:none">
+          <div class="card" style="padding:18px">
+            <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;font-weight:700">🎧 Preview</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <span id="fishLabSelIcon" style="font-size:1.8rem">🐟</span>
+              <div>
+                <div id="fishLabSelName" style="font-size:.9rem;font-weight:700;color:var(--text)">No voice selected</div>
+                <div id="fishLabSelDesc" style="font-size:.65rem;color:var(--muted)">Select a preset above</div>
+              </div>
+            </div>
+            <textarea id="fishLabPreviewText" rows="2"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:10px;resize:vertical;outline:none;margin-bottom:10px"
+              placeholder="Type preview text…">You won't believe what happened next.</textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button id="fishLabGenBtn" onclick="fishLabGenerate()"
+                style="background:linear-gradient(135deg,rgba(0,180,120,.3),rgba(0,180,120,.5));border:1px solid rgba(0,180,120,.5);color:#6ee7b7;border-radius:8px;padding:9px 18px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+                ▶ Preview Voice
+              </button>
+              <button onclick="fishLabUseInStudio()"
+                style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold2);border-radius:8px;padding:9px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">
+                USE IN STUDIO
+              </button>
+              <div id="fishLabGenStatus" style="font-size:.65rem;color:var(--muted);flex:1;min-width:120px"></div>
+            </div>
+            <div id="fishLabAudioWrap" style="margin-top:10px;display:none">
+              <audio id="fishLabAudio" controls style="width:100%;height:34px;border-radius:8px"></audio>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /right -->
+    </div><!-- /flex row -->
+  </div><!-- /tab-fish -->
 
 </div><!-- /content -->
 </div><!-- /main-layout -->
@@ -1117,9 +1256,10 @@ function toggleFav(id){
 // ═══════════════════════════════════════════════════════
 function switchTab(tab){
   currentTab = tab;
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
-    const tabs=['browse','favorites','presets','advanced','clone'];
-    b.classList.toggle('active', tabs[i]===tab);
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  // Mark the clicked button active by matching onclick attribute
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if(b.getAttribute('onclick') === `switchTab('${tab}')`) b.classList.add('active');
   });
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab)?.classList.add('active');
@@ -1128,6 +1268,7 @@ function switchTab(tab){
   if(tab==='favorites') renderFavoritesGrid();
   if(tab==='presets')   renderCustomPresetsGrid();
   if(tab==='advanced')  populateAdvancedFromPreset();
+  if(tab==='fish')      fishLabInit();
 }
 
 // When switching to Advanced tab, populate sliders from the active preset's defaults
@@ -1645,6 +1786,392 @@ function showToast(msg, type = 'info'){
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => { init().catch(console.error); });
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 🐟 FISH SPEECH TAB — Runtime Manager + Voice Presets
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Built-in Fish Voice Presets (mirrors FISH_VOICE_PRESETS in fishSpeechS2Pro.ts)
+const FISH_PRESETS = [
+  { id:'fish_tiktok_male_natural',     name:'TikTok Male Natural',     icon:'🎙️', voiceId:'tiktok_male_natural',     speed:1.00, temperature:0.70, pitch:0,  desc:'Natural • Conversational',   cat:'tiktok',       example:"You won't believe what happened next." },
+  { id:'fish_tiktok_male_cinematic',   name:'TikTok Male Cinematic',   icon:'🎬', voiceId:'tiktok_male_cinematic',   speed:0.92, temperature:0.65, pitch:-2, desc:'Deep • Cinematic • Dark',     cat:'tiktok',       example:'In the silence — the truth always finds a way out.' },
+  { id:'fish_tiktok_male_raspy',       name:'TikTok Male Raspy',       icon:'🪨', voiceId:'tiktok_male_raspy',       speed:0.94, temperature:0.80, pitch:-1, desc:'Raspy • Gritty • Edge',       cat:'tiktok',       example:"Some stories aren't meant to be told softly." },
+  { id:'fish_tiktok_female_natural',   name:'TikTok Female Natural',   icon:'👩', voiceId:'tiktok_female_natural',   speed:1.00, temperature:0.70, pitch:0,  desc:'Natural • Warm • Approachable', cat:'tiktok',     example:'And this is the part nobody tells you about.' },
+  { id:'fish_tiktok_female_cinematic', name:'TikTok Female Cinematic', icon:'✨', voiceId:'tiktok_female_cinematic', speed:0.92, temperature:0.65, pitch:-1, desc:'Soft • Mysterious',            cat:'tiktok',       example:'You can feel the moment things change.' },
+  { id:'fish_documentary_narrator',    name:'Documentary Narrator',    icon:'🎞️', voiceId:'documentary_narrator',    speed:0.95, temperature:0.55, pitch:-1, desc:'Measured • Authoritative',    cat:'documentary',  example:'In the years that followed — everything changed.' },
+  { id:'fish_horror_whisper',          name:'Horror Whisper',          icon:'👻', voiceId:'horror_whisper',          speed:0.86, temperature:0.85, pitch:-3, desc:'Whisper • Haunting',           cat:'horror',       example:"Don't turn around. Not yet." },
+  { id:'fish_reddit_storyteller',      name:'Reddit Storyteller',      icon:'🗣️', voiceId:'reddit_storyteller',      speed:0.98, temperature:0.75, pitch:0,  desc:'Reddit • Engaging',           cat:'storytelling', example:"So this happened last week — I still can't believe it." },
+];
+
+let _fishLabSelectedPreset = null;
+let _fishLabPollInterval   = null;
+let _fishLabLogsVisible    = false;
+let _fishLabInitialized    = false;
+
+// ── Init (called when Fish Speech tab is opened) ──────────────────────────────
+async function fishLabInit() {
+  if (!_fishLabInitialized) {
+    _fishLabInitialized = true;
+    renderFishLabPresets();
+  }
+  await fishLabRefreshStatus();
+}
+
+// ── Render preset cards ───────────────────────────────────────────────────────
+function renderFishLabPresets() {
+  const grid = document.getElementById('fishLabPresetsGrid');
+  if (!grid) return;
+  grid.innerHTML = FISH_PRESETS.map(p => `
+    <div class="voice-card" id="fcard_${p.id}" onclick="fishLabSelectPreset('${p.id}')" style="cursor:pointer">
+      <div class="vc-top">
+        <span class="vc-icon">${p.icon}</span>
+        <div class="vc-badges">
+          <span class="badge badge-cat">${p.cat}</span>
+        </div>
+      </div>
+      <div class="vc-name" style="font-size:.82rem">${p.name}</div>
+      <div class="vc-desc">${p.desc}</div>
+      <div class="vc-example">"${p.example}"</div>
+      <div class="vc-actions" style="margin-top:8px">
+        <button class="btn-test" onclick="event.stopPropagation();fishLabQuickTest('${p.id}')">🧪 TEST</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Select preset ─────────────────────────────────────────────────────────────
+function fishLabSelectPreset(id) {
+  _fishLabSelectedPreset = FISH_PRESETS.find(p => p.id === id);
+  if (!_fishLabSelectedPreset) return;
+  const p = _fishLabSelectedPreset;
+  // Highlight selected card
+  document.querySelectorAll('.voice-card[id^="fcard_"]').forEach(el => el.classList.remove('active'));
+  document.getElementById('fcard_' + id)?.classList.add('active');
+  // Show preview card
+  const previewCard = document.getElementById('fishLabPreviewCard');
+  if (previewCard) previewCard.style.display = 'block';
+  _fishSetEl('fishLabSelIcon', p.icon);
+  _fishSetEl('fishLabSelName', 'Fish S2 Pro — ' + p.name);
+  _fishSetEl('fishLabSelDesc', p.desc);
+  _fishSetEl('fishLabPreviewText', p.example, 'value');
+}
+
+// ── Quick test (TEST button on card) ─────────────────────────────────────────
+async function fishLabQuickTest(id) {
+  const p = FISH_PRESETS.find(x => x.id === id);
+  if (!p) return;
+  fishLabSelectPreset(id);
+  await fishLabGenerate();
+}
+
+// ── Generate preview audio ────────────────────────────────────────────────────
+async function fishLabGenerate() {
+  if (!_fishLabSelectedPreset) { showToast('Select a Fish voice first', 'info'); return; }
+  const p      = _fishLabSelectedPreset;
+  const text   = document.getElementById('fishLabPreviewText')?.value?.trim();
+  if (!text) { showToast('Enter some text to preview', 'info'); return; }
+  const btn    = document.getElementById('fishLabGenBtn');
+  const status = document.getElementById('fishLabGenStatus');
+  const audio  = document.getElementById('fishLabAudio');
+  const wrap   = document.getElementById('fishLabAudioWrap');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
+  if (status) status.textContent = 'Contacting Fish Speech server…';
+  if (wrap)   wrap.style.display = 'none';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text, voiceId: p.voiceId,
+        speed: p.speed, temperature: p.temperature, pitch: p.pitch,
+      }),
+    });
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({}));
+      const errMsg  = errData.error || `HTTP ${r.status}`;
+      if (status) status.textContent = '✗ ' + errMsg;
+      showToast('Fish preview failed: ' + errMsg, 'error');
+      // If server not reachable, prompt to start
+      if (r.status === 503 || r.status === 404) {
+        if (status) status.textContent = '✗ Server not ready — click ▶ Start Fish Speech Server';
+        await fishLabRefreshStatus();
+      }
+      return;
+    }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    if (audio) { audio.src = url; audio.play().catch(()=>{}); }
+    if (wrap)  wrap.style.display = 'block';
+    if (status) status.textContent = '✓ Playing';
+    const card = document.getElementById('fcard_' + p.id);
+    if (card) {
+      const testBtn = card.querySelector('.btn-test');
+      if (testBtn) { testBtn.textContent = '▶ Playing'; testBtn.classList.add('playing'); }
+      if (audio) audio.addEventListener('ended', () => {
+        if (testBtn) { testBtn.textContent = '🧪 TEST'; testBtn.classList.remove('playing'); }
+        if (status) status.textContent = '';
+      }, { once: true });
+    }
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (status) status.textContent = '✗ ' + msg;
+    showToast('Fish preview error: ' + msg, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Preview Voice'; }
+  }
+}
+
+// ── Use in Studio ─────────────────────────────────────────────────────────────
+function fishLabUseInStudio() {
+  if (!_fishLabSelectedPreset) return;
+  const p = _fishLabSelectedPreset;
+  // Store in localStorage for the studio to pick up
+  localStorage.setItem('vl_selected_preset', p.id);
+  localStorage.setItem('vl_selected_engine', 'fish-speech-s2-pro');
+  showToast(`${p.icon} ${p.name} set as active voice — open Trend Vault Studio`, 'success');
+}
+
+// ── Refresh status from server ────────────────────────────────────────────────
+async function fishLabRefreshStatus() {
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    renderFishLabChecklist(d.steps || {});
+    renderFishLabConfig(d);
+    updateFishLabOverallStatus(d);
+    // Update server badge
+    const badge = document.getElementById('fishLabServerBadge');
+    if (badge) {
+      const up = d.server?.reachable;
+      badge.textContent     = up ? 'server online' : 'server offline';
+      badge.style.background = up ? 'rgba(34,197,94,.15)' : 'rgba(100,116,139,.15)';
+      badge.style.color      = up ? '#86efac' : '#94a3b8';
+      badge.style.borderColor= up ? 'rgba(34,197,94,.4)' : 'rgba(100,116,139,.3)';
+    }
+    if (_fishLabLogsVisible) fishLabRefreshLogs();
+  } catch {}
+}
+
+// ── Render checklist ──────────────────────────────────────────────────────────
+function renderFishLabChecklist(steps) {
+  const container = document.getElementById('fishLabChecklist');
+  if (!container) return;
+  const LABELS = {
+    model:    'Fish model',
+    runtime:  'Fish runtime',
+    venv:     'Python venv',
+    deps:     'Dependencies',
+    server:   'Fish server',
+    endpoint: 'API endpoint',
+    test:     'Test generation',
+  };
+  const ICONS = { pending:'⚪', running:'🔄', ok:'✅', failed:'❌', skipped:'⏭️' };
+  Object.entries(LABELS).forEach(([key, label]) => {
+    const el = container.querySelector(`[data-fstep="${key}"]`);
+    if (!el) return;
+    const step = steps[key] || { status: 'pending' };
+    const icon = ICONS[step.status] || '⚪';
+    const color = step.status === 'ok' ? '#86efac'
+                : step.status === 'failed' ? '#fca5a5'
+                : step.status === 'running' ? '#fcd34d'
+                : '#94a3b8';
+    const detail = step.detail ? ` <span style="color:#64748b;font-size:.58rem"> — ${escapeHtml(step.detail.slice(0,60))}</span>` : '';
+    el.innerHTML = `<span style="color:${color}">${icon} ${label}: ${step.status}</span>${detail}`;
+  });
+}
+
+// ── Update overall status badge ───────────────────────────────────────────────
+function updateFishLabOverallStatus(d) {
+  const el = document.getElementById('fishLabOverallStatus');
+  if (!el) return;
+  const state = d.state || 'unknown';
+  const configs = {
+    ready:       { text:'✅ Fish Speech S2 Pro Ready', bg:'rgba(34,197,94,.2)',  border:'rgba(34,197,94,.5)',  color:'#86efac' },
+    preparing:   { text:'🔄 Preparing…',               bg:'rgba(251,191,36,.15)',border:'rgba(251,191,36,.4)', color:'#fbbf24' },
+    model_only:  { text:'⚠️ Model found, server offline',bg:'rgba(251,191,36,.12)',border:'rgba(251,191,36,.35)',color:'#fbbf24'},
+    server_only: { text:'⚠️ Server up, model missing',  bg:'rgba(248,113,113,.12)',border:'rgba(248,113,113,.3)', color:'#fca5a5'},
+    missing:     { text:'❌ Not installed',              bg:'rgba(248,113,113,.12)',border:'rgba(248,113,113,.3)', color:'#fca5a5'},
+    unknown:     { text:'⏳ Checking…',                  bg:'rgba(100,116,139,.12)',border:'rgba(100,116,139,.3)', color:'#94a3b8'},
+  };
+  const c = configs[state] || configs.unknown;
+  el.textContent     = c.text;
+  el.style.background   = c.bg;
+  el.style.borderColor  = c.border;
+  el.style.color        = c.color;
+}
+
+// ── Render config summary ─────────────────────────────────────────────────────
+function renderFishLabConfig(d) {
+  const el = document.getElementById('fishLabConfig');
+  if (!el) return;
+  el.innerHTML = [
+    `<div>🐟 Model:   <span style="color:var(--text2)">${escapeHtml(d.modelDir || '—')}</span></div>`,
+    `<div>📦 Runtime: <span style="color:var(--text2)">${escapeHtml(d.runtimePath || '—')}</span></div>`,
+    `<div>🐍 Venv:    <span style="color:var(--text2)">${escapeHtml(d.venvPath || '—')}</span></div>`,
+    `<div>🌐 Server:  <span style="color:var(--text2)">${escapeHtml(d.serverUrl || '—')}</span></div>`,
+    d.workingEndpoint ? `<div>🔗 Endpoint: <span style="color:#86efac">${escapeHtml(d.workingEndpoint)}</span></div>` : '',
+  ].join('');
+}
+
+// ── Start Fish Speech ─────────────────────────────────────────────────────────
+async function fishLabStart() {
+  const btn   = document.getElementById('fishLabStartBtn');
+  const lbl   = document.getElementById('fishLabProgressLabel');
+  const bar   = document.getElementById('fishLabProgressBar');
+  const fill  = document.getElementById('fishLabProgressFill');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Starting…'; }
+  if (lbl) lbl.textContent = 'Starting Fish Speech runtime — first run may take several minutes…';
+  if (bar) bar.style.display = 'block';
+
+  let elapsed = 0;
+  const poll = setInterval(() => {
+    elapsed += 2;
+    if (lbl) lbl.textContent = `Starting Fish Speech server… ${elapsed}s`;
+    const pct = Math.min(95, Math.round(elapsed / 120 * 100));
+    if (fill) fill.style.width = pct + '%';
+    fishLabRefreshStatus();
+    if (_fishLabLogsVisible) fishLabRefreshLogs();
+  }, 2000);
+
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/start`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    clearInterval(poll);
+    if (fill) fill.style.width = '100%';
+    if (d.ok || d.ready) {
+      if (lbl) lbl.textContent = '✅ Fish Speech S2 Pro ready!';
+      showToast('Fish Speech S2 Pro ready', 'success');
+    } else {
+      const failedStep = Object.values(d.steps || {}).find(s => s.status === 'failed');
+      const msg = failedStep
+        ? `${failedStep.label} failed: ${failedStep.detail || 'unknown reason'}`
+        : (d.message || 'Startup failed — see logs for details');
+      if (lbl) lbl.textContent = '❌ ' + msg;
+      showToast(msg, 'error');
+      fishLabShowLogs();
+    }
+  } catch (e) {
+    clearInterval(poll);
+    const msg = e?.message || String(e);
+    if (lbl) lbl.textContent = '❌ ' + msg;
+    showToast('Fish start error: ' + msg, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Start Fish Speech Server'; }
+    await fishLabRefreshStatus();
+  }
+}
+
+// ── Repair Fish Speech ────────────────────────────────────────────────────────
+async function fishLabRepair() {
+  if (!confirm('This will wipe the Fish Speech venv and reinstall all dependencies.\nYour model files will NOT be touched. Continue?')) return;
+  const btn = document.getElementById('fishLabRepairBtn');
+  const lbl = document.getElementById('fishLabProgressLabel');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Repairing…'; }
+  if (lbl) lbl.textContent = 'Rebuilding venv + reinstalling dependencies…';
+
+  let elapsed = 0;
+  const poll = setInterval(() => {
+    elapsed += 2;
+    if (lbl) lbl.textContent = `Repairing… ${elapsed}s`;
+    fishLabRefreshStatus();
+    if (_fishLabLogsVisible) fishLabRefreshLogs();
+  }, 2000);
+
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/repair`, { method: 'POST' });
+    clearInterval(poll);
+    const d = await r.json().catch(() => ({}));
+    if (d.ok) { showToast('Fish Speech repaired!', 'success'); if (lbl) lbl.textContent = '✅ ' + (d.message || 'Repair complete'); }
+    else       { showToast('Repair failed: ' + (d.message || '?'), 'error'); if (lbl) lbl.textContent = '❌ ' + (d.message || 'Repair failed'); fishLabShowLogs(); }
+  } catch (e) {
+    clearInterval(poll);
+    showToast('Repair error: ' + (e?.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🛠 Repair Fish Speech'; }
+    await fishLabRefreshStatus();
+  }
+}
+
+// ── Choose model folder ───────────────────────────────────────────────────────
+async function fishLabChooseModel() {
+  const r = await fetch(`${API_BASE}/api/fish-s2pro/config`).catch(()=>null);
+  const cfg = r?.ok ? await r.json().catch(()=>({})) : {};
+  const current = cfg.modelPath || 'C:\\Users\\Anton\\s2-pro';
+  const next = prompt(
+    'Enter the FULL path to your s2-pro model folder:\n\n' +
+    'Example: C:\\Users\\Anton\\s2-pro\n\n' +
+    'The files in this folder will NOT be moved.',
+    current
+  );
+  if (!next || next.trim() === current) return;
+  try {
+    const resp = await fetch(`${API_BASE}/api/fish-s2pro/set-model-path`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: next.trim() }),
+    });
+    const d = await resp.json();
+    if (d.ok) { showToast('Model path set to ' + d.modelDir, 'success'); await fishLabRefreshStatus(); }
+    else       showToast('Could not set path: ' + (d.error || '?'), 'error');
+  } catch (e) { showToast('Error: ' + (e?.message || e), 'error'); }
+}
+
+// ── Logs panel ────────────────────────────────────────────────────────────────
+function fishLabToggleLogs() {
+  _fishLabLogsVisible = !_fishLabLogsVisible;
+  const panel = document.getElementById('fishLabLogPanel');
+  if (panel) panel.style.display = _fishLabLogsVisible ? 'block' : 'none';
+  if (_fishLabLogsVisible) fishLabRefreshLogs();
+}
+
+function fishLabShowLogs() {
+  _fishLabLogsVisible = true;
+  const panel = document.getElementById('fishLabLogPanel');
+  if (panel) panel.style.display = 'block';
+  fishLabRefreshLogs();
+}
+
+async function fishLabRefreshLogs() {
+  const entries = document.getElementById('fishLabLogEntries');
+  if (!entries) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/logs?limit=200`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.logs?.length) {
+      entries.innerHTML = '<span style="color:var(--muted)">No logs yet — click ▶ Start Fish Speech</span>';
+      return;
+    }
+    entries.innerHTML = d.logs.map(e => {
+      const color = e.level === 'error'   ? '#fca5a5'
+                  : e.level === 'warn'    ? '#fcd34d'
+                  : e.level === 'success' ? '#86efac'
+                  :                         '#cbd5e1';
+      const time  = (e.ts || '').slice(11, 19);
+      const step  = e.step ? `<span style="color:#64748b">[${escapeHtml(e.step)}]</span> ` : '';
+      return `<div style="white-space:pre-wrap"><span style="color:#475569">${time}</span> ${step}<span style="color:${color}">${escapeHtml(e.msg)}</span></div>`;
+    }).join('');
+    entries.scrollTop = entries.scrollHeight;
+  } catch {}
+}
+
+async function fishLabClearLogs() {
+  await fetch(`${API_BASE}/api/fish-s2pro/logs/clear`, { method: 'POST' }).catch(()=>{});
+  const entries = document.getElementById('fishLabLogEntries');
+  if (entries) entries.innerHTML = '<span style="color:var(--muted)">Logs cleared.</span>';
+}
+
+// ── Helpers (safe to call even if escapeHtml already defined above) ───────────
+if (typeof escapeHtml !== 'function') {
+  window.escapeHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _fishSetEl(id, val, prop = 'textContent') {
+  const el = document.getElementById(id);
+  if (el) el[prop] = val;
+}
 </script>
 </body>
 </html>

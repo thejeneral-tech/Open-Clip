@@ -26,6 +26,120 @@ if sys.platform == 'win32':
 # ── Project root (works as .py or frozen binary) ────────────────────────────
 ROOT = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
 
+# ── Fish Speech S2 Pro — model location ──────────────────────────────────────
+# The model is stored OUTSIDE the Git repo so it is never accidentally committed.
+#
+# Required files — ALL must be present (and non-stub) for the model to be ready.
+FISH_S2_PRO_REQUIRED_FILES = [
+    'config.json',
+    'codec.pth',
+    'model-00001-of-00002.safetensors',
+    'model-00002-of-00002.safetensors',
+    'tokenizer.json',
+]
+
+FISH_S2_PRO_REPO_URL = 'https://huggingface.co/fishaudio/s2-pro'
+
+# Resolve $HOME once so all path helpers below share the same value.
+_HOME = os.environ.get('HOME') or os.path.expanduser('~')
+
+# Default download destination: ~/.cache/trendvault/models/s2-pro
+# (respects XDG_CACHE_HOME if the user has set it).
+_FISH_S2_PRO_DEFAULT_CACHE = os.path.join(
+    os.environ.get('XDG_CACHE_HOME', os.path.join(_HOME, '.cache')),
+    'trendvault', 'models', 's2-pro',
+)
+
+# Persisted settings file — remembers the model path across restarts.
+# Linux standard: ~/.config/trendvault/fish_s2_config.json
+_FISH_S2_PRO_CONFIG_FILE = os.path.join(
+    os.environ.get('XDG_CONFIG_HOME', os.path.join(_HOME, '.config')),
+    'trendvault', 'fish_s2_config.json',
+)
+
+
+def _fish_s2_pro_config_load() -> str | None:
+    """Read the saved model path from the config file. Returns None on any error."""
+    try:
+        import json
+        with open(_FISH_S2_PRO_CONFIG_FILE, 'r') as _f:
+            _data = json.load(_f)
+        _p = _data.get('model_path', '')
+        return _p if _p else None
+    except Exception:
+        return None
+
+
+def _fish_s2_pro_config_save(path: str) -> bool:
+    """Write `path` to the config file so the app remembers it on restart."""
+    try:
+        import json
+        os.makedirs(os.path.dirname(_FISH_S2_PRO_CONFIG_FILE), exist_ok=True)
+        with open(_FISH_S2_PRO_CONFIG_FILE, 'w') as _f:
+            json.dump({'model_path': path}, _f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def _fish_s2_pro_candidate_paths() -> list[str]:
+    """Return an ordered, deduplicated list of directories to search for the model.
+
+    Search order:
+      1. Path saved in the config file (from a previous "Choose" or auto-detect).
+      2. ~/s2-pro — common user-level location.
+      3. Default XDG cache: ~/.cache/trendvault/models/s2-pro.
+      4. FISH_S2_PRO_MODEL_PATH env var (in case the user exported it manually).
+    """
+    _seen: set[str] = set()
+    _cands: list[str] = []
+    for _p in [
+        _fish_s2_pro_config_load(),
+        os.path.join(_HOME, 's2-pro'),
+        _FISH_S2_PRO_DEFAULT_CACHE,
+        os.environ.get('FISH_S2_PRO_MODEL_PATH', ''),
+    ]:
+        if _p and _p not in _seen:
+            _seen.add(_p)
+            _cands.append(_p)
+    return _cands
+
+
+def _fish_s2_pro_missing_files(path: str) -> list[str]:
+    """Return the list of required files that are absent or are git-lfs pointer stubs at `path`.
+
+    git-lfs pointer files are only ~134 bytes. Real .safetensors weights
+    are several GB — we use 4 KB as a safe minimum to detect stubs.
+    """
+    missing: list[str] = []
+    for fname in FISH_S2_PRO_REQUIRED_FILES:
+        full = os.path.join(path, fname)
+        if not os.path.isfile(full):
+            missing.append(fname)
+            continue
+        if fname.endswith('.safetensors'):
+            try:
+                if os.path.getsize(full) <= 4096:
+                    missing.append(fname + '  (git-lfs pointer — not fetched yet)')
+            except OSError:
+                missing.append(fname + '  (unreadable)')
+    return missing
+
+
+def resolve_fish_s2_pro_path() -> str | None:
+    """Search all candidate locations and return the first complete model path, or None."""
+    for _p in _fish_s2_pro_candidate_paths():
+        if os.path.isdir(_p) and not _fish_s2_pro_missing_files(_p):
+            return _p
+    return None
+
+
+# Resolve the active model path once at import time.
+# FISH_S2_PRO_MODEL_PATH is the canonical variable used throughout the file.
+# It is updated at runtime whenever the user picks a different folder.
+FISH_S2_PRO_MODEL_PATH = resolve_fish_s2_pro_path() or _FISH_S2_PRO_DEFAULT_CACHE
+os.environ['FISH_S2_PRO_MODEL_PATH'] = FISH_S2_PRO_MODEL_PATH
+
 # ── Service definitions ─────────────────────────────────────────────────────
 # Kokoro uses the venv Python written by the Linux setup script. If the venv
 # isn't present we fall back to scripts/start-kokoro.sh (which should print
@@ -41,6 +155,45 @@ else:
     # Last-resort: a system python that has kokoro installed.
     _KOKORO_CMD = ['python3', _KOKORO_SCRIPT]
 
+# ── Fish Speech S2 Pro ───────────────────────────────────────────────────────
+# Second local TTS engine alongside Kokoro. Mirrors Kokoro's shape exactly.
+# Model weights live OUTSIDE the project at ~/.cache/trendvault/models/s2-pro
+# (override with FISH_S2_PRO_MODEL_PATH). Server URL: FISH_TTS_URL (default
+# http://127.0.0.1:8080).
+_FISH_VENV_PY = os.path.join(ROOT, 'fish-speech', '.venv', 'bin', 'python')
+_FISH_FALLBACK_SH = os.path.join(ROOT, 'scripts', 'start-fish-speech.sh')
+_FISH_MODEL_DIR_DEFAULT = resolve_fish_s2_pro_path() or _FISH_S2_PRO_DEFAULT_CACHE
+if os.path.isfile(_FISH_VENV_PY):
+    _FISH_CMD = [_FISH_VENV_PY, '-m', 'tools.api_server',
+                 '--listen', '127.0.0.1:8080',
+                 '--llama-checkpoint-path', _FISH_MODEL_DIR_DEFAULT]
+elif os.path.isfile(_FISH_FALLBACK_SH):
+    _FISH_CMD = ['bash', _FISH_FALLBACK_SH]
+else:
+    # Last resort: hope the system python has fish-speech installed. This
+    # will fail loudly rather than silently, which is what we want when
+    # the user clicks Start before running setup.
+    _FISH_CMD = ['python3', '-m', 'tools.api_server',
+                 '--listen', '127.0.0.1:8080',
+                 '--llama-checkpoint-path', _FISH_MODEL_DIR_DEFAULT]
+
+def fish_speech_http_ok(timeout: float = 2.0) -> tuple[bool, str]:
+    """Probe the Fish Speech HTTP server defined by FISH_TTS_URL (default 8080).
+
+    Returns (ok, base_url). Used by both the per-card dot indicator and the
+    HEALTH button so the user knows whether port 8080 is *really* Fish Speech.
+    """
+    import urllib.request
+    base = (os.environ.get('FISH_TTS_URL') or 'http://127.0.0.1:8080').rstrip('/')
+    for path in ('/v1/health', '/health', '/'):
+        try:
+            with urllib.request.urlopen(base + path, timeout=timeout) as r:
+                if 200 <= r.status < 500:
+                    return True, base
+        except Exception:
+            continue
+    return False, base
+
 _OLLAMA_UI_SERVER = os.path.join(ROOT, 'Ollama web ui', 'server.js')
 
 # Ollama on Linux ships an install.sh that needs sudo. We don't try to run it
@@ -52,6 +205,108 @@ _OLLAMA_INSTALL_ONELINE = 'curl -fsSL https://ollama.com/install.sh | sh'
 def resolve_ollama() -> str | None:
     """Return the path to the ollama binary, or None if it isn't on PATH."""
     return shutil.which('ollama')
+
+
+# ── Fish Audio S2 Pro helpers ─────────────────────────────────────────────────
+
+def _check_git_lfs() -> bool:
+    """Return True if git-lfs is installed and functional on this system."""
+    if not shutil.which('git'):
+        return False
+    try:
+        r = subprocess.run(
+            ['git', 'lfs', 'version'],
+            capture_output=True, timeout=6,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+def _fish_s2_pro_is_installed() -> bool:
+    """Return True if any candidate location contains a complete Fish S2 Pro model."""
+    return resolve_fish_s2_pro_path() is not None
+
+
+def _fish_s2_pro_clone_exists() -> bool:
+    """Return True if the default cache directory contains an interrupted git clone.
+
+    We check the default cache dir (not the resolved active path) because a
+    partial clone is only ever started there — it won't be 'complete' yet,
+    so resolve_fish_s2_pro_path() would return None for it.
+    """
+    return os.path.isdir(os.path.join(_FISH_S2_PRO_DEFAULT_CACHE, '.git'))
+
+
+def _missing_fish_s2_pro_deps() -> list[tuple[str, str]]:
+    """Return a list of (dep_name, install_hint) tuples for any missing deps.
+
+    The launcher needs four binaries to install / use Fish Audio S2 Pro:
+      • git       — to clone the Hugging Face repo
+      • git-lfs   — to fetch the real .safetensors weights (not LFS pointers)
+      • python3   — required by the rest of the Trend Vault toolchain that
+                    consumes the model
+      • pip       — for any post-install Python package the model needs
+    Returning a list rather than printing lets the caller decide how to
+    surface the message (UI log, terminal, dialog).
+    """
+    missing: list[tuple[str, str]] = []
+    if not shutil.which('git'):
+        missing.append((
+            'git',
+            'Ubuntu/Debian: sudo apt install git   |   '
+            'Fedora: sudo dnf install git   |   '
+            'Arch: sudo pacman -S git',
+        ))
+    if not _check_git_lfs():
+        missing.append((
+            'git-lfs',
+            'Ubuntu/Debian: sudo apt install git-lfs   |   '
+            'Fedora: sudo dnf install git-lfs   |   '
+            'Arch: sudo pacman -S git-lfs',
+        ))
+    if not (shutil.which('python3') or shutil.which('python')):
+        missing.append((
+            'python3',
+            'Ubuntu/Debian: sudo apt install python3   |   '
+            'Fedora: sudo dnf install python3   |   '
+            'Arch: sudo pacman -S python',
+        ))
+    # We accept either a `pip` binary on PATH or `python3 -m pip` working.
+    if not (shutil.which('pip3') or shutil.which('pip')):
+        try:
+            r = subprocess.run(
+                [shutil.which('python3') or shutil.which('python') or 'python3',
+                 '-m', 'pip', '--version'],
+                capture_output=True, timeout=5,
+            )
+            pip_ok = (r.returncode == 0)
+        except Exception:
+            pip_ok = False
+        if not pip_ok:
+            missing.append((
+                'pip',
+                'Ubuntu/Debian: sudo apt install python3-pip   |   '
+                'Fedora: sudo dnf install python3-pip   |   '
+                'Arch: sudo pacman -S python-pip',
+            ))
+    return missing
+
+
+def _git_lfs_install_user() -> bool:
+    """Run `git lfs install --skip-repo` to enable LFS filters for this user.
+
+    Safe to call repeatedly — git-lfs treats this as idempotent. Returns
+    True on success. Failure is non-fatal; the clone may still succeed if
+    LFS was installed globally on a previous run.
+    """
+    try:
+        r = subprocess.run(
+            ['git', 'lfs', 'install', '--skip-repo'],
+            capture_output=True, timeout=15,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 # Aider: required for the Ollama Chat UI's Code section. We default to a
@@ -319,6 +574,20 @@ SERVICES = [
         'needs_npm': False,
     },
     {
+        # Fish Speech S2 Pro — second local TTS engine. The dot lights green
+        # only when port 8080 is occupied AND the http_health probe confirms
+        # it's really a Fish Speech server (8080 is a common dev port and a
+        # generic listener shouldn't be reported as healthy).
+        'key':  'fish_speech',
+        'name': 'Fish Speech S2 Pro',
+        'desc': 'Local TTS engine  •  port 8080',
+        'port': 8080,
+        'cmd':  _FISH_CMD,
+        'url':  None,
+        'needs_npm': False,
+        'http_health': fish_speech_http_ok,
+    },
+    {
         'key':  'ollama',
         'name': 'Ollama',
         'desc': 'Local LLM server  •  port 11434',
@@ -461,6 +730,7 @@ class TrendVaultLauncher(tk.Tk):
         self._installing_ollama = False
         self._installing_aider = False
         self._installing_node = False
+        self._installing_fish_s2 = False   # guards the Fish S2 Pro download thread
         self._node_install_lock = threading.Lock()
         # CLI runner state
         self._cli_proc: subprocess.Popen | None = None
@@ -474,6 +744,7 @@ class TrendVaultLauncher(tk.Tk):
         self.after(400,  self._check_node_on_start)
         self.after(800,  self._check_ollama_on_start)
         self.after(1200, self._check_aider_on_start)
+        self.after(1600, self._check_fish_s2_on_start)  # Fish Audio S2 Pro model
 
     # ── UI construction ─────────────────────────────────────────────────────
     def _build_ui(self):
@@ -529,6 +800,8 @@ class TrendVaultLauncher(tk.Tk):
         self._btn(row2, '\U0001f310 OPEN STUDIO', self._open_browser, BTN, ACCENT).pack(side='left', padx=3)
         self._btn(row2, '\U0001f916 OPEN CHAT UI', self._open_chat,   BTN, ACCENT).pack(side='left', padx=3)
         self._btn(row2, '\U0001f9f0 INSTALL AIDER', self._run_install_aider, BTN, AMBER).pack(side='left', padx=3)
+        # Fish Speech S2 Pro: lets the user point the app at an existing model folder.
+        self._btn(row2, '\U0001f4c1 S2 PRO FOLDER', self._choose_fish_s2_folder, BTN, ACCENT).pack(side='left', padx=3)
 
         # ── RIGHT: console header ──
         rhdr = tk.Frame(right, bg=BG2)
@@ -648,6 +921,16 @@ class TrendVaultLauncher(tk.Tk):
         for svc in SERVICES:
             key  = svc['key']
             up   = port_in_use(svc['port'])
+            # Services that opt in (via http_health) only show as healthy
+            # when the HTTP probe confirms they're alive — guards against
+            # an unrelated process sitting on Fish Speech's port 8080.
+            probe = svc.get('http_health')
+            if up and callable(probe):
+                try:
+                    ok, _ = probe()
+                    up = bool(ok)
+                except Exception:
+                    up = False
             card = self._cards[key]
             if up != card['running']:
                 card['running'] = up
@@ -1057,7 +1340,9 @@ class TrendVaultLauncher(tk.Tk):
         def _do():
             if not self._ensure_deps():
                 return
-            order = {'ollama': 0, 'kokoro': 0, 'ollama_ui': 1}
+            # Fish Speech is a peer of Kokoro — both are local TTS engines
+            # the Voice Preset panel can pick between, so they boot together.
+            order = {'ollama': 0, 'kokoro': 0, 'fish_speech': 0, 'ollama_ui': 1}
             ordered = sorted(SERVICES, key=lambda s: order.get(s['key'], 2))
             for svc in ordered:
                 if svc['key'] == 'ollama' and not resolve_ollama():
@@ -1130,13 +1415,359 @@ class TrendVaultLauncher(tk.Tk):
         kill_port(svc['port'])
         self._log_line(svc['name'] + ' stopped', MUTED)
 
-    # ── Health check ────────────────────────────────────────────────────────
+    # ── Fish Speech S2 Pro model ────────────────────────────────────────────
+    #
+    # Startup flow (called ~1.6 s after the window appears):
+    #   _check_fish_s2_on_start
+    #     ├── found in any candidate path? → log ready, update global, exit
+    #     ├── partial git clone in cache?  → resume non-destructively
+    #     └── nothing found?              → prompt: download or choose folder
+    #
+    # _choose_fish_s2_folder  ← "📁 S2 PRO FOLDER" button in Actions bar.
+    #   Opens a folder-picker; validates required files; saves path to config.
+    #
+    # _ensure_fish_s2_pro     ← actual git clone / resume logic (daemon thread).
+    def _check_fish_s2_on_start(self):
+        """Search all candidate paths for the model; update global if found."""
+        global FISH_S2_PRO_MODEL_PATH
+        self._log_line('Checking Fish Speech S2 Pro model paths...', ACCENT)
+
+        # Walk every candidate and report what we find.
+        found_path: str | None = None
+        for path in _fish_s2_pro_candidate_paths():
+            if not os.path.isdir(path):
+                continue  # doesn't exist — skip silently
+            missing = _fish_s2_pro_missing_files(path)
+            if not missing:
+                found_path = path
+                self._log_line('Found model at ' + path, GREEN)
+                break
+            else:
+                self._log_line('Folder exists but incomplete at: ' + path, AMBER)
+                self._log_line('Missing files: ' + ', '.join(missing), AMBER)
+
+        if found_path:
+            # Update the global so _ensure_fish_s2_pro and child services see it.
+            FISH_S2_PRO_MODEL_PATH = found_path
+            os.environ['FISH_S2_PRO_MODEL_PATH'] = found_path
+            # Persist the discovered path so next launch finds it immediately.
+            if _fish_s2_pro_config_load() != found_path:
+                _fish_s2_pro_config_save(found_path)
+            self._log_line('Fish Speech S2 Pro ready.', GREEN)
+            self._log_line('Using existing model at ' + found_path, GREEN)
+            return
+
+        # Path 2 — interrupted git clone sitting in the default cache dir.
+        if _fish_s2_pro_clone_exists():
+            self._log_line(
+                'Partial Fish Speech S2 Pro download detected at: '
+                + _FISH_S2_PRO_DEFAULT_CACHE, AMBER,
+            )
+            self._log_line('Resuming download (only missing assets will be fetched)…', ACCENT)
+            threading.Thread(
+                target=self._ensure_fish_s2_pro, kwargs={'resume': True}, daemon=True,
+            ).start()
+            return
+
+        # Path 3 — nothing found anywhere.
+        candidate_list = '\n'.join('  • ' + p for p in _fish_s2_pro_candidate_paths())
+        self._log_line('Fish Speech S2 Pro model not found in any of these locations:', AMBER)
+        for p in _fish_s2_pro_candidate_paths():
+            self._log_line('  • ' + p, MUTED)
+        self._log_line(
+            'Tip: use the "📁 S2 PRO FOLDER" button to point to an existing download.', MUTED
+        )
+
+        answer = messagebox.askyesno(
+            'Fish Speech S2 Pro Model',
+            'The Fish Speech S2 Pro model was not found.\n\n'
+            'Locations checked:\n' + candidate_list + '\n\n'
+            'Options:\n'
+            '  • YES  — download automatically (~several GB)\n'
+            '  • NO   — use the "📁 S2 PRO FOLDER" button to select an existing folder\n\n'
+            'Download now?',
+        )
+        if not answer:
+            self._log_line(
+                'Download skipped.  '
+                'Use the "📁 S2 PRO FOLDER" button to point to an existing model folder.', MUTED,
+            )
+            return
+        threading.Thread(target=self._ensure_fish_s2_pro, daemon=True).start()
+
+    def _choose_fish_s2_folder(self):
+        """Open a folder-picker so the user can select an existing S2 Pro model folder.
+
+        Validates required files in the chosen folder, saves the path to the
+        config file so the app remembers it after a restart, and updates the
+        global FISH_S2_PRO_MODEL_PATH immediately so any service started in
+        this session uses the correct weights.
+        """
+        global FISH_S2_PRO_MODEL_PATH
+        from tkinter import filedialog
+
+        # Start the picker in a sensible initial directory.
+        _init = (
+            os.path.join(_HOME, 's2-pro') if os.path.isdir(os.path.join(_HOME, 's2-pro'))
+            else _HOME
+        )
+        folder = filedialog.askdirectory(
+            title='Select Fish Speech S2 Pro model folder',
+            initialdir=_init,
+        )
+        if not folder:
+            return  # user cancelled
+
+        self._log_line('Checking Fish Speech S2 Pro model paths...', ACCENT)
+        missing = _fish_s2_pro_missing_files(folder)
+
+        if missing:
+            self._log_line('Selected folder is missing required files:', AMBER)
+            for fname in missing:
+                self._log_line('  Missing: ' + fname, RED)
+            answer = messagebox.askyesno(
+                'Incomplete Model Folder',
+                'The selected folder is missing required files:\n\n'
+                + '\n'.join('  • ' + f for f in missing)
+                + '\n\nUse this folder anyway?  (you can run git lfs pull inside it later)',
+            )
+            if not answer:
+                self._log_line('Folder selection cancelled.', MUTED)
+                return
+
+        # All checks passed (or user accepted an incomplete folder).
+        FISH_S2_PRO_MODEL_PATH = folder
+        os.environ['FISH_S2_PRO_MODEL_PATH'] = folder
+
+        if _fish_s2_pro_config_save(folder):
+            self._log_line('Model path saved to config — will be used on next restart too.', MUTED)
+        else:
+            self._log_line(
+                'Warning: could not write config file ' + _FISH_S2_PRO_CONFIG_FILE
+                + ' — path is active for this session but will not persist.', AMBER,
+            )
+
+        if not missing:
+            self._log_line('Fish Speech S2 Pro ready.', GREEN)
+            self._log_line('Using existing model at ' + folder, GREEN)
+        else:
+            self._log_line('Model path set (incomplete) — ' + folder, AMBER)
+
+    def _ensure_fish_s2_pro(self, resume: bool = False):
+        """Install or resume the Fish Audio S2 Pro model download.
+
+        Steps (each logged with a clear "[step N/5]" prefix so failures are
+        easy to attribute):
+          1. Installing dependencies — verify git, git-lfs, python3, pip.
+          2. Enable git-lfs filters for this user (idempotent).
+          3. Create the parent cache directory (outside the Git repo).
+          4. Either `git clone` (fresh) or `git fetch + git lfs pull`
+             (resume) — resumable, idempotent, avoids re-downloading
+             assets that are already on disk.
+          5. Verify .safetensors weights are real (not LFS pointers).
+
+        `resume=True` skips the destructive clone path and goes straight to
+        the in-place fetch + lfs pull. Safe to retry — partial files are
+        completed rather than re-downloaded.
+        """
+        # Guard against the user double-clicking the install button while a
+        # previous attempt is still streaming.
+        if self._installing_fish_s2:
+            self._log_line('Fish Audio S2 Pro download already in progress…', AMBER)
+            return
+        self._installing_fish_s2 = True
+        self._set_status('Downloading Fish Audio S2 Pro…')
+
+        try:
+            # ── Step 1/5: dependency check ────────────────────────────────────
+            # Bundles git / git-lfs / python3 / pip into one report so the user
+            # sees everything that's missing in a single message.
+            self._log_line('[step 1/5] Installing dependencies…', ACCENT)
+            missing = _missing_fish_s2_pro_deps()
+            if missing:
+                lines = ['Cannot install Fish Audio S2 Pro — missing dependencies:']
+                for name, hint in missing:
+                    lines.append('  • ' + name + '   →   ' + hint)
+                lines.append('After installing the missing tool(s), relaunch and try again.')
+                self._log_line('\n'.join(lines), RED)
+                # Surface a dialog too so the user notices even if the log
+                # has scrolled past.
+                messagebox.showerror(
+                    'Fish Audio S2 Pro — missing dependencies',
+                    '\n'.join(['Cannot install Fish Audio S2 Pro.', ''] + [
+                        '• ' + n for n, _ in missing
+                    ] + ['', 'See the launcher log for install commands.']),
+                )
+                return
+            self._log_line('Dependencies OK: git, git-lfs, python3, pip.', GREEN)
+
+            # ── Step 2/5: enable git-lfs filters for this user ────────────────
+            # `git lfs install` sets up filter.lfs.* config so the upcoming
+            # clone actually fetches the real weights, not 134-byte pointers.
+            self._log_line('[step 2/5] Enabling git-lfs filters…', ACCENT)
+            if not _git_lfs_install_user():
+                self._log_line(
+                    'Warning: `git lfs install` did not return success. '
+                    'Continuing anyway — LFS may already be enabled globally.',
+                    AMBER,
+                )
+
+            # ── Step 3/5: create the cache directory OUTSIDE the Git repo ─────
+            # FISH_S2_PRO_MODEL_PATH lives under ~/.cache/trendvault/models/
+            # which is never inside the project folder, so no .safetensors
+            # ever land in the Git working tree.
+            self._log_line('[step 3/5] Preparing model directory…', ACCENT)
+            parent_dir = os.path.dirname(FISH_S2_PRO_MODEL_PATH)
+            try:
+                os.makedirs(parent_dir, exist_ok=True)
+            except OSError as exc:
+                self._log_line(
+                    '[step 3/5 FAILED] Could not create ' + parent_dir
+                    + ': ' + str(exc), RED,
+                )
+                return
+            self._log_line('Model directory: ' + FISH_S2_PRO_MODEL_PATH, MUTED)
+
+            # ── Step 4/5: download (fresh clone OR resumable fetch) ───────────
+            self._log_line('[step 4/5] Downloading model…', ACCENT)
+
+            # Decide which path to take. We prefer resume whenever a .git
+            # directory exists, even if `resume` wasn't explicitly requested —
+            # it's always cheaper than re-cloning.
+            do_resume = resume or _fish_s2_pro_clone_exists()
+            if do_resume:
+                # In-place: refresh refs, then ask LFS to fetch any missing
+                # large objects. Both commands are no-ops if the working
+                # tree is already up to date, so this is safe to retry.
+                self._log_line(
+                    'Resuming previous download — no files will be deleted.', ACCENT,
+                )
+                resume_steps = [
+                    ['git', '-C', FISH_S2_PRO_MODEL_PATH, 'fetch', '--all'],
+                    ['git', '-C', FISH_S2_PRO_MODEL_PATH, 'lfs', 'pull'],
+                ]
+                for step_cmd in resume_steps:
+                    self._log_line('Running: ' + ' '.join(step_cmd), MUTED)
+                    ok = self._stream_git_cmd(step_cmd, tag='s2-pro resume')
+                    if not ok:
+                        self._log_line(
+                            '[step 4/5 FAILED] ' + ' '.join(step_cmd[:3])
+                            + ' returned a non-zero exit code. '
+                            'Check your internet connection and rerun the install.',
+                            RED,
+                        )
+                        return
+            else:
+                # Fresh clone. We only reach this branch when the target dir
+                # does NOT contain a .git folder, so it's safe to point git
+                # at the path without rm -rf'ing user data.
+                self._log_line(
+                    'Cloning from ' + FISH_S2_PRO_REPO_URL + ' — this may take '
+                    'several minutes (the .safetensors weights are several GB).',
+                    ACCENT,
+                )
+                cmd = ['git', 'clone', FISH_S2_PRO_REPO_URL, FISH_S2_PRO_MODEL_PATH]
+                self._log_line('Running: ' + ' '.join(cmd), MUTED)
+                ok = self._stream_git_cmd(cmd, tag='s2-pro clone')
+                if not ok:
+                    self._log_line(
+                        '[step 4/5 FAILED] git clone failed. '
+                        'Check your internet connection and that git-lfs is working. '
+                        'You can also clone manually:\n'
+                        '    git clone ' + FISH_S2_PRO_REPO_URL + ' '
+                        + FISH_S2_PRO_MODEL_PATH,
+                        RED,
+                    )
+                    return
+
+            # ── Step 5/5: verify ──────────────────────────────────────────────
+            # Confirm at least one .safetensors > 4 KB exists — i.e. the LFS
+            # pointer was resolved into real weights.
+            self._log_line('[step 5/5] Verifying model assets…', ACCENT)
+            if _fish_s2_pro_is_installed():
+                # Re-export the env var so any service started after this
+                # point sees the now-valid path.
+                os.environ['FISH_S2_PRO_MODEL_PATH'] = FISH_S2_PRO_MODEL_PATH
+                self._log_line('Fish Audio S2 Pro ready.', GREEN)
+                self._log_line('Model path: ' + FISH_S2_PRO_MODEL_PATH, GREEN)
+                self._log_line(
+                    'FISH_S2_PRO_MODEL_PATH exported for child services.', MUTED,
+                )
+            else:
+                # The clone finished but LFS didn't fetch the big files —
+                # most likely the user's git-lfs hooks weren't wired up.
+                # Tell them exactly which command to run by hand.
+                self._log_line(
+                    '[step 5/5 FAILED] Clone finished but no .safetensors weights '
+                    'were found. git-lfs may not have fetched the large files. '
+                    'Run this inside the model directory and try again:\n'
+                    '    cd ' + FISH_S2_PRO_MODEL_PATH + ' && git lfs pull',
+                    AMBER,
+                )
+
+        finally:
+            self._installing_fish_s2 = False
+            self._set_status('Ready')
+
+    def _stream_git_cmd(self, cmd: list[str], tag: str = 's2-pro') -> bool:
+        """Run a git/git-lfs command, stream stdout into the UI log, return True on success.
+
+        Factored out so the fresh-clone and resume-pull paths both share the
+        same colorized progress output. Returns False on any non-zero exit.
+        """
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,   # git sends progress to stderr
+                encoding='utf-8',
+                errors='replace',
+                bufsize=1,
+                start_new_session=True,
+            )
+            for raw in proc.stdout:
+                line = raw.rstrip()
+                if not line:
+                    continue
+                lo = line.lower()
+                if 'error' in lo or 'fatal' in lo:
+                    color = RED
+                elif any(w in lo for w in ('done', 'complete', 'resolving', 'receiving')):
+                    color = GREEN
+                else:
+                    color = '#a0a0c0'
+                self._log_line('[' + tag + '] ' + line, color)
+            proc.wait()
+            return proc.returncode == 0
+        except FileNotFoundError:
+            self._log_line('git not found on PATH while running: ' + ' '.join(cmd), RED)
+            return False
+        except Exception as exc:
+            self._log_line('git command raised an unexpected error: ' + str(exc), RED)
+            return False
+
+    # ── Health check ───────────────────────────────────────────────────────────────────────
     def _health(self):
         def _check():
             self._log_line('--- Health Check ---', ACCENT)
             for svc in SERVICES:
-                up = port_in_use(svc['port'])
-                status = 'RUNNING' if up else 'STOPPED'
+                port_up = port_in_use(svc['port'])
+                # If the service has a custom HTTP probe (Fish Speech does),
+                # confirm it's actually that service responding before we
+                # call it healthy. Port 8080 in particular is a common dev
+                # port that another process can squat on.
+                http_probe = svc.get('http_health')
+                if port_up and callable(http_probe):
+                    ok, info = http_probe()
+                    if ok:
+                        up = True
+                        status = 'RUNNING (HTTP OK @ ' + info + ')'
+                    else:
+                        up = False
+                        status = 'PORT BUSY but Fish Speech HTTP probe failed at ' + info
+                else:
+                    up = port_up
+                    status = 'RUNNING' if up else 'STOPPED'
                 self._log_line(
                     svc['name'].ljust(15) + '  :' + str(svc['port']) + '  ' + status,
                     GREEN if up else RED
@@ -1172,6 +1803,63 @@ class TrendVaultLauncher(tk.Tk):
                 'Aider'.ljust(15) + '  ' + (aider_path if aider_path else 'MISSING -- click INSTALL AIDER to add it'),
                 TEXT if aider_path else AMBER
             )
+            # Fish Speech S2 Pro model — multi-path check
+            self._log_line('Checking Fish Speech S2 Pro model paths...', ACCENT)
+            _fish_found = resolve_fish_s2_pro_path()
+            if _fish_found:
+                self._log_line(
+                    'Fish S2 Pro'.ljust(15) + '  OK — ' + _fish_found, TEXT
+                )
+            else:
+                # Walk candidates so the user knows exactly what is wrong.
+                _any_partial = False
+                for _cp in _fish_s2_pro_candidate_paths():
+                    if not os.path.isdir(_cp):
+                        continue
+                    _mf = _fish_s2_pro_missing_files(_cp)
+                    if _mf:
+                        _any_partial = True
+                        self._log_line(
+                            'Fish S2 Pro'.ljust(15) + '  INCOMPLETE at ' + _cp, AMBER
+                        )
+                        self._log_line(
+                            '  Missing files: ' + ', '.join(_mf), AMBER
+                        )
+                if not _any_partial:
+                    self._log_line(
+                        'Fish S2 Pro'.ljust(15)
+                        + '  MISSING — use "📁 S2 PRO FOLDER" or download',
+                        AMBER
+                    )
+            # Fish Speech runtime (the inference server's Python venv).
+            # Without this, the Fish Speech S2 Pro card's Start button has
+            # no Python to execute even when the model weights are present.
+            fish_runtime_ok = os.path.isfile(_FISH_VENV_PY)
+            self._log_line(
+                'Fish runtime'.ljust(15) + '  ' + (
+                    'OK (' + _FISH_VENV_PY + ')' if fish_runtime_ok
+                    else 'MISSING -- create fish-speech/.venv and pip install fish-speech, or set FISH_TTS_URL to an external server'
+                ),
+                TEXT if fish_runtime_ok else AMBER
+            )
+            # Fish Speech HTTP probe — confirms the running server is real.
+            fish_http_ok, fish_http_base = fish_speech_http_ok()
+            self._log_line(
+                'Fish HTTP'.ljust(15) + '  ' + (
+                    'OK at ' + fish_http_base if fish_http_ok
+                    else 'no response at ' + fish_http_base + ' (server not started — that is fine if you do not use Fish voices)'
+                ),
+                TEXT if fish_http_ok else MUTED
+            )
+            # git-lfs (needed by the Fish S2 Pro download)
+            lfs_ok = _check_git_lfs()
+            self._log_line(
+                'git-lfs'.ljust(15) + '  ' + (
+                    'OK' if lfs_ok
+                    else 'MISSING -- sudo apt install git-lfs  (needed for S2 Pro weights)'
+                ),
+                TEXT if lfs_ok else AMBER
+            )
             for tool in ('node', 'npm', 'npx', 'lsof'):
                 p = shutil.which(tool)
                 self._log_line(
@@ -1181,7 +1869,7 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line('--- End ---', ACCENT)
         threading.Thread(target=_check, daemon=True).start()
 
-    # ── Browser ─────────────────────────────────────────────────────────────
+    # ── Browser ──────────────────────────────────────────────────────────────────────────
     def _open_browser(self):
         url = 'http://localhost:3001/trend-vault'
         webbrowser.open(url)
@@ -1195,8 +1883,8 @@ class TrendVaultLauncher(tk.Tk):
         webbrowser.open(url)
         self._log_line('Opening ' + url, ACCENT)
 
-    # ── CLI runner ──────────────────────────────────────────────────────────
-    def _set_cli_busy(self, busy: bool):
+    # -- CLI runner (RUN/STOP buttons + Enter binding) ------------------------
+    def _set_cli_busy(self, busy):
         self._cli_busy = busy
         def _do():
             try:
@@ -1210,106 +1898,50 @@ class TrendVaultLauncher(tk.Tk):
         cmd = self._prompt_var.get().strip()
         if not cmd:
             return
-        if self._cli_busy:
-            self._log_line('A command is still running -- click STOP first or wait', AMBER)
+        if getattr(self, '_cli_busy', False):
+            self._log_line('A command is still running -- click STOP first', AMBER)
             return
+        if not getattr(self, '_cli_history', None):
+            self._cli_history = []
         if not self._cli_history or self._cli_history[-1] != cmd:
             self._cli_history.append(cmd)
             if len(self._cli_history) > 200:
                 self._cli_history = self._cli_history[-200:]
         self._cli_history_idx = -1
-        self._cli_draft = ''
         self._prompt_var.set('')
-        self._log_line('$ ' + cmd, ACCENT)
-        threading.Thread(target=self._spawn_cli, args=(cmd,), daemon=True).start()
-
-    def _spawn_cli(self, cmd: str):
         self._set_cli_busy(True)
-        try:
-            # Run through /bin/sh (or $SHELL if set) so pipes / redirects work.
-            shell_bin = os.environ.get('SHELL') or '/bin/sh'
-            proc = subprocess.Popen(
-                [shell_bin, '-c', cmd],
-                cwd=ROOT,
-                env={**os.environ},
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                encoding='utf-8',
-                errors='replace',
-                bufsize=1,
-                start_new_session=True,
-            )
-            self._cli_proc = proc
-            self._append_inline('', leading_ts=True)
-            for raw in proc.stdout:
-                line = raw.rstrip('\r\n')
-                self._append_inline(line + '\n')
-            proc.wait()
-            code = proc.returncode
-            self._log_line('(exit ' + str(code) + ')', GREEN if code == 0 else RED)
-        except FileNotFoundError as e:
-            self._log_line('command not found: ' + str(e), RED)
-        except Exception as e:
-            self._log_line('CLI error: ' + str(e), RED)
-        finally:
-            self._cli_proc = None
-            self._set_cli_busy(False)
+        self._log_line('$ ' + cmd, ACCENT)
+        def _run():
+            try:
+                proc = subprocess.Popen(
+                    cmd, cwd=ROOT, shell=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    encoding='utf-8', errors='replace', bufsize=1,
+                    start_new_session=True,
+                )
+                self._cli_proc = proc
+                for raw in proc.stdout:
+                    line = raw.rstrip()
+                    if line:
+                        self._log_line(line, TEXT)
+                proc.wait()
+                self._log_line('(exit ' + str(proc.returncode) + ')', MUTED)
+            except Exception as e:
+                self._log_line('cli error: ' + str(e), RED)
+            finally:
+                self._cli_proc = None
+                self._set_cli_busy(False)
+        threading.Thread(target=_run, daemon=True).start()
 
     def _stop_cli(self):
-        proc = self._cli_proc
-        if not proc:
-            return
-        self._log_line('^C -- stopping command...', AMBER)
-        _kill_proc_tree(proc)
-
-    # ── CLI history navigation ──────────────────────────────────────────────
-    def _history_prev(self):
-        if not self._cli_history:
-            return 'break'
-        if self._cli_history_idx == -1:
-            self._cli_draft = self._prompt_var.get()
-            self._cli_history_idx = len(self._cli_history) - 1
-        elif self._cli_history_idx > 0:
-            self._cli_history_idx -= 1
-        self._prompt_var.set(self._cli_history[self._cli_history_idx])
-        self.after(0, lambda: self._prompt_entry.icursor('end'))
-        return 'break'
-
-    def _history_next(self):
-        if self._cli_history_idx == -1:
-            return 'break'
-        if self._cli_history_idx < len(self._cli_history) - 1:
-            self._cli_history_idx += 1
-            self._prompt_var.set(self._cli_history[self._cli_history_idx])
+        proc = getattr(self, '_cli_proc', None)
+        if proc and proc.poll() is None:
+            try: proc.kill()
+            except Exception: pass
+            self._log_line('CLI command stopped', AMBER)
         else:
-            self._cli_history_idx = -1
-            self._prompt_var.set(self._cli_draft)
-        self.after(0, lambda: self._prompt_entry.icursor('end'))
-        return 'break'
-
-    def _append_inline(self, text: str, leading_ts: bool = False):
-        def _do():
-            self._log.configure(state='normal')
-            if leading_ts:
-                self._log.insert('end', '[' + ts() + ']  ', 'cinline')
-                self._log.tag_configure('cinline', foreground=MUTED)
-            self._log.insert('end', text, 'inline')
-            self._log.see('end')
-            self._log.configure(state='disabled')
-        self.after(0, _do)
-
-    # ── Window close ────────────────────────────────────────────────────────
-    def destroy(self):
-        for svc in SERVICES:
-            with self._lock:
-                proc = self._procs.get(svc['key'])
-            if proc:
-                _kill_proc_tree(proc)
-        if self._cli_proc:
-            _kill_proc_tree(self._cli_proc)
-        super().destroy()
+            self._log_line('No CLI command running', MUTED)
 
 
 if __name__ == '__main__':
-    app = TrendVaultLauncher()
-    app.mainloop()
+    App().mainloop()

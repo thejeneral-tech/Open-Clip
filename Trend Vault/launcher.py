@@ -27,6 +27,182 @@ if os.path.isfile(_KOKORO_VENV_PY):
 else:
     _KOKORO_CMD = [os.path.join(ROOT, 'bats', 'start-kokoro.bat')]
 
+# ── Fish Speech S2 Pro ───────────────────────────────────────────────────────
+# Second local TTS engine alongside Kokoro.
+# Runtime lives OUTSIDE the project folder at:
+#   %LOCALAPPDATA%\trendvault\runtimes\fish-speech
+# Model weights at: %USERPROFILE%\s2-pro  (overridable via FISH_S2_PRO_MODEL_PATH)
+# The self-contained fish_speech_server.py handles first-time setup automatically.
+_HOME = os.environ.get('USERPROFILE') or os.path.expanduser('~')
+_LOCAL = os.environ.get('LOCALAPPDATA', os.path.join(_HOME, 'AppData', 'Local'))
+
+# Runtime path (where the fish-speech git repo lives)
+_FISH_RUNTIME_PATH = os.environ.get('FISH_SPEECH_RUNTIME_PATH') or os.path.join(
+    _LOCAL, 'trendvault', 'runtimes', 'fish-speech'
+)
+# Venv inside the runtime
+_FISH_VENV_PATH = os.environ.get('FISH_SPEECH_VENV_PATH') or os.path.join(_FISH_RUNTIME_PATH, '.venv')
+_FISH_VENV_PY   = os.path.join(_FISH_VENV_PATH, 'Scripts', 'python.exe')
+
+# The self-contained launcher script (preferred way to start Fish Speech)
+_FISH_SERVER_PY  = os.path.join(ROOT, 'fish_speech_server.py')
+_FISH_START_BAT  = os.path.join(ROOT, 'bats', 'start-fish-speech.bat')
+
+# ── Fish Speech S2 Pro model detection ───────────────────────────────────────
+# Lenient check: any one of these + sufficient directory size counts as "installed".
+# Mirrors the logic in fishSpeechS2Pro.ts checkFishModel().
+FISH_S2_PRO_REQUIRED_FILES = [
+    'config.json',
+    'model.pth',
+    'firefly-gan-vq-fsq-8x1024-21hz-generator.pth',
+    'special_tokens.json',
+    'tokenizer.tiktoken',
+    # Also accept safetensors layout
+    'codec.pth',
+    'model-00001-of-00002.safetensors',
+    'model.safetensors',
+]
+FISH_S2_PRO_REPO_URL = 'https://huggingface.co/fishaudio/s2-pro'
+_FISH_S2_PRO_DEFAULT_CACHE = os.path.join(_HOME, 's2-pro')
+_FISH_S2_PRO_CONFIG_FILE = os.path.join(
+    os.environ.get('APPDATA', os.path.join(_HOME, 'AppData', 'Roaming')),
+    'trendvault', 'fish_s2_config.json',
+)
+
+def _fish_s2_pro_config_load():
+    """Return the saved model path from the JSON config, or None."""
+    import json
+    try:
+        if os.path.isfile(_FISH_S2_PRO_CONFIG_FILE):
+            with open(_FISH_S2_PRO_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('model_path') or None
+    except Exception:
+        pass
+    return None
+
+def _fish_s2_pro_config_save(path: str) -> bool:
+    """Persist the model path to the JSON config. Returns True on success."""
+    import json
+    try:
+        os.makedirs(os.path.dirname(_FISH_S2_PRO_CONFIG_FILE), exist_ok=True)
+        with open(_FISH_S2_PRO_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'model_path': path}, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def _fish_s2_pro_candidate_paths() -> list:
+    """Return ordered list of directories to check for the S2 Pro model.
+    Order: saved config → %USERPROFILE%\\s2-pro → default cache → env var."""
+    candidates = []
+    saved = _fish_s2_pro_config_load()
+    if saved:
+        candidates.append(saved)
+    # Common location: user dropped the folder straight under their home dir
+    home_s2 = os.path.join(_HOME, 's2-pro')
+    if home_s2 not in candidates:
+        candidates.append(home_s2)
+    if _FISH_S2_PRO_DEFAULT_CACHE not in candidates:
+        candidates.append(_FISH_S2_PRO_DEFAULT_CACHE)
+    env_path = os.environ.get('FISH_S2_PRO_MODEL_PATH', '')
+    if env_path and env_path not in candidates:
+        candidates.append(env_path)
+    return candidates
+
+def _fish_s2_pro_dir_size(path: str) -> int:
+    """Return total byte size of directory tree."""
+    total = 0
+    for root, _, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+def _fish_s2_pro_present_files(path: str) -> list:
+    """Return which of the expected model files are actually present."""
+    return [f for f in FISH_S2_PRO_REQUIRED_FILES if os.path.isfile(os.path.join(path, f))]
+
+def _fish_s2_pro_missing_files(path: str) -> list:
+    """Lenient check: return empty list if directory looks like a real model.
+    Mirrors fishSpeechS2Pro.ts checkFishModel() — accepts any large dir with
+    at least one expected file, or any dir >200 MB regardless of filenames."""
+    if not os.path.isdir(path):
+        return ['directory does not exist']
+    present = _fish_s2_pro_present_files(path)
+    total   = _fish_s2_pro_dir_size(path)
+    # ≥50 MB with at least one recognised file  OR  ≥200 MB regardless = OK
+    if (present and total > 50 * 1024 * 1024) or total > 200 * 1024 * 1024:
+        return []   # nothing "missing" — lenient pass
+    if not present:
+        return ['no recognised model files found in directory']
+    return [f'directory too small ({total // 1024 // 1024} MB) — may be partial download']
+
+def resolve_fish_s2_pro_path():
+    """Return the first candidate directory that passes the lenient model check, or None."""
+    for path in _fish_s2_pro_candidate_paths():
+        if not _fish_s2_pro_missing_files(path):
+            return path
+    return None
+
+def _fish_s2_pro_is_installed() -> bool:
+    return resolve_fish_s2_pro_path() is not None
+
+def _fish_s2_pro_clone_exists() -> bool:
+    return os.path.isdir(os.path.join(_FISH_RUNTIME_PATH, '.git'))
+
+def _check_git_lfs() -> bool:
+    try:
+        r = subprocess.run(
+            ['git', 'lfs', 'version'],
+            capture_output=True, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+# Resolve model path once at import time so _FISH_CMD picks it up.
+FISH_S2_PRO_MODEL_PATH = resolve_fish_s2_pro_path() or _FISH_S2_PRO_DEFAULT_CACHE
+os.environ['FISH_S2_PRO_MODEL_PATH'] = FISH_S2_PRO_MODEL_PATH
+os.environ.setdefault('FISH_SPEECH_RUNTIME_PATH', _FISH_RUNTIME_PATH)
+os.environ.setdefault('FISH_SPEECH_VENV_PATH',    _FISH_VENV_PATH)
+os.environ.setdefault('FISH_TTS_URL',             'http://127.0.0.1:8080')
+
+# Build the command to start Fish Speech.
+# Priority:  fish_speech_server.py  >  venv python  >  bat fallback
+if os.path.isfile(_FISH_SERVER_PY):
+    # Use the self-contained launcher (handles setup automatically)
+    _py = _FISH_VENV_PY if os.path.isfile(_FISH_VENV_PY) else 'python'
+    _FISH_CMD = [_py, _FISH_SERVER_PY,
+                 '--model-path', FISH_S2_PRO_MODEL_PATH,
+                 '--runtime-path', _FISH_RUNTIME_PATH,
+                 '--venv-path', _FISH_VENV_PATH,
+                 '--listen', '127.0.0.1:8080']
+elif os.path.isfile(_FISH_VENV_PY):
+    _FISH_CMD = [_FISH_VENV_PY, '-m', 'tools.api_server',
+                 '--listen', '127.0.0.1:8080',
+                 '--llama-checkpoint-path', FISH_S2_PRO_MODEL_PATH]
+else:
+    _FISH_CMD = [_FISH_START_BAT]
+
+# Health probe for Fish Speech — single source of truth used by the dot
+# indicator and the HEALTH button. Returns (ok, reason).
+def fish_speech_http_ok(timeout: float = 2.0) -> tuple[bool, str]:
+    """Probe the Fish Speech HTTP server defined by FISH_TTS_URL (default 8080)."""
+    import urllib.request, urllib.error
+    base = (os.environ.get('FISH_TTS_URL') or 'http://127.0.0.1:8080').rstrip('/')
+    for path in ('/v1/health', '/health', '/'):
+        try:
+            with urllib.request.urlopen(base + path, timeout=timeout) as r:
+                if 200 <= r.status < 500:
+                    return True, base
+        except Exception:
+            continue
+    return False, base
+
 _OLLAMA_UI_SERVER = os.path.join(ROOT, 'Ollama web ui', 'server.js')
 
 # Ollama: required dependency for the Chat UI. Resolved at launch time so a
@@ -244,6 +420,22 @@ SERVICES = [
         'needs_npm': False,
     },
     {
+        # Fish Speech S2 Pro — local second TTS engine alongside Kokoro.
+        # The dot lights green when port 8080 is occupied; the HEALTH button
+        # additionally verifies it's actually a Fish Speech server (HTTP probe).
+        'key':  'fish_speech',
+        'name': 'Fish Speech S2 Pro',
+        'desc': 'Local TTS engine  •  port 8080',
+        'port': 8080,
+        'cmd':  _FISH_CMD,
+        'url':  None,
+        'needs_npm': False,
+        # Custom HTTP health probe — port 8080 is a common dev port so a
+        # generic listener could light the dot green even if Fish isn't
+        # really there. This probe asks the server to confirm it's alive.
+        'http_health': fish_speech_http_ok,
+    },
+    {
         'key':  'ollama',
         'name': 'Ollama',
         'desc': 'Local LLM server  •  port 11434',
@@ -320,7 +512,8 @@ class TrendVaultLauncher(tk.Tk):
         self._procs: dict[str, subprocess.Popen] = {}
         self._lock  = threading.Lock()
         self._installing_ollama = False
-        self._installing_aider = False
+        self._installing_aider  = False
+        self._installing_fish_s2 = False
         # CLI runner state
         self._cli_proc: subprocess.Popen | None = None
         self._cli_busy = False
@@ -330,8 +523,9 @@ class TrendVaultLauncher(tk.Tk):
 
         self._build_ui()
         self._poll()                                 # start status polling loop
-        self.after(800, self._check_ollama_on_start) # prompt to install if missing
-        self.after(1200, self._check_aider_on_start) # aider for the Code section
+        self.after(800,  self._check_ollama_on_start)   # prompt to install if missing
+        self.after(1200, self._check_aider_on_start)    # aider for the Code section
+        self.after(1600, self._check_fish_s2_on_start)  # fish speech model check
 
     # ── UI construction ───────────────────────────────────────────────────────
     def _build_ui(self):
@@ -391,6 +585,7 @@ class TrendVaultLauncher(tk.Tk):
         self._btn(row2, '\U0001f310 OPEN STUDIO', self._open_browser, BTN, ACCENT).pack(side='left', padx=3)
         self._btn(row2, '\U0001f916 OPEN CHAT UI', self._open_chat,   BTN, ACCENT).pack(side='left', padx=3)
         self._btn(row2, '\U0001f9f0 INSTALL AIDER', self._run_install_aider, BTN, AMBER).pack(side='left', padx=3)
+        self._btn(row2, '\U0001f4c1 S2 PRO FOLDER', self._choose_fish_s2_folder, BTN, ACCENT).pack(side='left', padx=3)
 
         # ── RIGHT: console header ──
         rhdr = tk.Frame(right, bg=BG2)
@@ -515,6 +710,17 @@ class TrendVaultLauncher(tk.Tk):
         for svc in SERVICES:
             key  = svc['key']
             up   = port_in_use(svc['port'])
+            # Services that opt in (via http_health) only show as healthy
+            # when the HTTP probe also confirms they're alive. This stops
+            # Fish Speech from showing green when some unrelated process
+            # happens to be sitting on port 8080.
+            probe = svc.get('http_health')
+            if up and callable(probe):
+                try:
+                    ok, _ = probe()
+                    up = bool(ok)
+                except Exception:
+                    up = False
             card = self._cards[key]
             if up != card['running']:
                 card['running'] = up
@@ -938,9 +1144,11 @@ class TrendVaultLauncher(tk.Tk):
         def _do():
             if not self._ensure_deps():
                 return
-            # Boot order: Ollama and Kokoro first (so dependents' probes succeed),
-            # then the Ollama UI (which proxies to :11434), then the rest.
-            order = {'ollama': 0, 'kokoro': 0, 'ollama_ui': 1}
+            # Boot order: Ollama, Kokoro, and Fish Speech first (so dependents'
+            # probes succeed), then the Ollama UI (which proxies to :11434),
+            # then the rest. Fish Speech is treated as a peer of Kokoro since
+            # the Voice Preset panel can use either.
+            order = {'ollama': 0, 'kokoro': 0, 'fish_speech': 0, 'ollama_ui': 1}
             ordered = sorted(SERVICES, key=lambda s: order.get(s['key'], 2))
             for svc in ordered:
                 # Skip ollama silently if it's still missing — _launch would
@@ -1022,11 +1230,25 @@ class TrendVaultLauncher(tk.Tk):
         def _check():
             self._log_line('--- Health Check ---', ACCENT)
             for svc in SERVICES:
-                up = port_in_use(svc['port'])
-                status = 'RUNNING' if up else 'STOPPED'
+                port_up = port_in_use(svc['port'])
+                # If the service exposes a custom HTTP health probe (Fish Speech
+                # does, since port 8080 is a common dev port and a generic
+                # listener shouldn't be reported as healthy), run it too.
+                http_probe = svc.get('http_health')
+                if port_up and callable(http_probe):
+                    ok, info = http_probe()
+                    if ok:
+                        status = 'RUNNING (HTTP OK @ ' + info + ')'
+                        color  = GREEN
+                    else:
+                        status = 'PORT BUSY but no Fish Speech HTTP response from ' + info
+                        color  = AMBER
+                else:
+                    status = 'RUNNING' if port_up else 'STOPPED'
+                    color  = GREEN if port_up else RED
                 self._log_line(
-                    svc['name'].ljust(15) + '  :' + str(svc['port']) + '  ' + status,
-                    GREEN if up else RED
+                    svc['name'].ljust(20) + '  :' + str(svc['port']) + '  ' + status,
+                    color
                 )
             folders = [
                 'trend-vault-output', 'public/custom-audio',
@@ -1048,6 +1270,41 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line(
                 'Kokoro model'.ljust(15) + '  ' + ('OK' if kokoro_ready else 'MISSING -- run bats/setup-kokoro.bat'),
                 TEXT if kokoro_ready else AMBER
+            )
+            # ── Fish Speech S2 Pro: model + runtime ──────────────────────────
+            # Two distinct things can be missing: the cached HF weights, or
+            # the project-local venv with the fish-speech package installed.
+            # Report each separately so the user knows which fix to apply.
+            fish_model_dir = resolve_fish_s2_pro_path()
+            if fish_model_dir:
+                self._log_line(
+                    'Fish model'.ljust(15) + '  OK — ' + fish_model_dir,
+                    TEXT
+                )
+            else:
+                self._log_line('Fish model'.ljust(15) + '  checking candidate paths...', AMBER)
+                for cpath in _fish_s2_pro_candidate_paths():
+                    if not os.path.isdir(cpath):
+                        self._log_line('  ' + cpath + '  — not found', MUTED)
+                        continue
+                    missing = _fish_s2_pro_missing_files(cpath)
+                    if missing:
+                        self._log_line('  ' + cpath + '  — incomplete', AMBER)
+                        for mf in missing:
+                            self._log_line('    missing: ' + mf, AMBER)
+                    else:
+                        self._log_line('  ' + cpath + '  — complete', GREEN)
+                self._log_line(
+                    'Fish model'.ljust(15) + '  MISSING — use 📁 S2 PRO FOLDER to point to your model',
+                    RED
+                )
+            fish_venv_ok = os.path.isfile(_FISH_VENV_PY)
+            self._log_line(
+                'Fish runtime'.ljust(15) + '  ' + (
+                    'OK (' + _FISH_VENV_PY + ')' if fish_venv_ok else
+                    'MISSING -- run bats/setup-fish-speech.bat to build the venv (or set FISH_TTS_URL to an external server)'
+                ),
+                TEXT if fish_venv_ok else AMBER
             )
             ollama_path = resolve_ollama()
             self._log_line(
@@ -1076,9 +1333,8 @@ class TrendVaultLauncher(tk.Tk):
         webbrowser.open(url)
         self._log_line('Opening ' + url, ACCENT)
 
-    # ── CLI runner ───────────────────────────────────────────────────────────
-    def _set_cli_busy(self, busy: bool):
-        """Toggle RUN/STOP button enablement to reflect command state."""
+    # -- CLI runner (RUN/STOP buttons + Enter binding) ------------------------
+    def _set_cli_busy(self, busy):
         self._cli_busy = busy
         def _do():
             try:
@@ -1092,132 +1348,194 @@ class TrendVaultLauncher(tk.Tk):
         cmd = self._prompt_var.get().strip()
         if not cmd:
             return
-        if self._cli_busy:
-            self._log_line('A command is still running -- click STOP first or wait', AMBER)
+        if getattr(self, '_cli_busy', False):
+            self._log_line('A command is still running -- click STOP first', AMBER)
             return
-        # History bookkeeping (dedupe consecutive repeats).
+        if not getattr(self, '_cli_history', None):
+            self._cli_history = []
         if not self._cli_history or self._cli_history[-1] != cmd:
             self._cli_history.append(cmd)
-            # Keep the buffer bounded.
             if len(self._cli_history) > 200:
                 self._cli_history = self._cli_history[-200:]
         self._cli_history_idx = -1
-        self._cli_draft = ''
         self._prompt_var.set('')
-
-        # Render the command in the log like a real shell prompt.
-        self._log_line('$ ' + cmd, ACCENT)
-        threading.Thread(target=self._spawn_cli, args=(cmd,), daemon=True).start()
-
-    def _spawn_cli(self, cmd: str):
-        """Run `cmd` via the shell, streaming stdout+stderr to the log."""
         self._set_cli_busy(True)
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=ROOT,
-                env={**os.environ},
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                encoding='utf-8',
-                errors='replace',
-                bufsize=1,
-                shell=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
-            )
-            self._cli_proc = proc
-            self._append_inline('', leading_ts=True)
-            for raw in proc.stdout:
-                line = raw.rstrip('\r\n')
-                # Stream each line as it arrives. We use _append_inline so we
-                # don't stamp every line with [HH:MM:SS], keeping the output
-                # readable for long commands.
-                self._append_inline(line + '\n')
-            proc.wait()
-            code = proc.returncode
-            self._log_line(
-                '(exit ' + str(code) + ')',
-                GREEN if code == 0 else RED,
-            )
-        except FileNotFoundError as e:
-            self._log_line('command not found: ' + str(e), RED)
-        except Exception as e:
-            self._log_line('CLI error: ' + str(e), RED)
-        finally:
-            self._cli_proc = None
-            self._set_cli_busy(False)
-
-    def _stop_cli(self):
-        """Terminate the currently-running CLI command, if any."""
-        proc = self._cli_proc
-        if not proc:
-            return
-        self._log_line('^C -- stopping command...', AMBER)
-        try:
-            proc.terminate()
+        self._log_line('$ ' + cmd, ACCENT)
+        def _run():
             try:
-                proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        except Exception as e:
-            self._log_line('stop failed: ' + str(e), RED)
+                proc = subprocess.Popen(
+                    cmd, cwd=ROOT, shell=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    encoding='utf-8', errors='replace', bufsize=1,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
+                )
+                self._cli_proc = proc
+                for raw in proc.stdout:
+                    line = raw.rstrip()
+                    if line:
+                        self._log_line(line, TEXT)
+                proc.wait()
+                self._log_line('(exit ' + str(proc.returncode) + ')', MUTED)
+            except Exception as e:
+                self._log_line('cli error: ' + str(e), RED)
+            finally:
+                self._cli_proc = None
+                self._set_cli_busy(False)
+        threading.Thread(target=_run, daemon=True).start()
 
-    # ── CLI history navigation (Up/Down) ─────────────────────────────────────
+    # ── CLI history navigation (Up / Down arrows) ─────────────────────────────
     def _history_prev(self):
-        """Up arrow: walk one step further back in history."""
-        if not self._cli_history:
-            return 'break'
+        """Step backward through CLI history (Up arrow)."""
+        hist = getattr(self, '_cli_history', [])
+        if not hist:
+            return
         if self._cli_history_idx == -1:
-            # First Up press — remember what the user was typing.
+            # Save whatever is currently typed so we can restore it on Down
             self._cli_draft = self._prompt_var.get()
-            self._cli_history_idx = len(self._cli_history) - 1
+            self._cli_history_idx = len(hist) - 1
         elif self._cli_history_idx > 0:
             self._cli_history_idx -= 1
-        self._prompt_var.set(self._cli_history[self._cli_history_idx])
-        # Move caret to end after the variable update.
-        self.after(0, lambda: self._prompt_entry.icursor('end'))
-        return 'break'
+        self._prompt_var.set(hist[self._cli_history_idx])
+        # Move cursor to end of entry
+        self._prompt_entry.icursor('end')
 
     def _history_next(self):
-        """Down arrow: walk one step forward; past the newest restores the draft."""
+        """Step forward through CLI history (Down arrow)."""
+        hist = getattr(self, '_cli_history', [])
         if self._cli_history_idx == -1:
-            return 'break'
-        if self._cli_history_idx < len(self._cli_history) - 1:
+            return
+        if self._cli_history_idx < len(hist) - 1:
             self._cli_history_idx += 1
-            self._prompt_var.set(self._cli_history[self._cli_history_idx])
+            self._prompt_var.set(hist[self._cli_history_idx])
         else:
+            # Back past the end — restore whatever the user was typing
             self._cli_history_idx = -1
-            self._prompt_var.set(self._cli_draft)
-        self.after(0, lambda: self._prompt_entry.icursor('end'))
-        return 'break'
+            self._prompt_var.set(getattr(self, '_cli_draft', ''))
+        self._prompt_entry.icursor('end')
 
-    def _append_inline(self, text: str, leading_ts: bool = False):
-        """Stream raw text into the log without per-token timestamps."""
-        def _do():
-            self._log.configure(state='normal')
-            if leading_ts:
-                self._log.insert('end', '[' + ts() + ']  ', 'cinline')
-                self._log.tag_configure('cinline', foreground=MUTED)
-            self._log.insert('end', text, 'inline')
-            self._log.see('end')
-            self._log.configure(state='disabled')
-        self.after(0, _do)
+    # ── Fish Speech S2 Pro startup check ──────────────────────────────────────
+    def _check_fish_s2_on_start(self):
+        """Runs ~1.6 s after launch. Scans candidate paths, updates env, auto-starts server."""
+        global FISH_S2_PRO_MODEL_PATH, _FISH_CMD
+        self._log_line('─── Fish Speech S2 Pro ───────────────────────────', ACCENT)
+        self._log_line('Checking model paths...', ACCENT)
+        found_path = None
+        for cpath in _fish_s2_pro_candidate_paths():
+            if not os.path.isdir(cpath):
+                continue
+            missing = _fish_s2_pro_missing_files(cpath)
+            if not missing:
+                found_path = cpath
+                self._log_line('● Fish model: found at ' + cpath, GREEN)
+                break
+            else:
+                self._log_line('Folder exists but check failed: ' + cpath, AMBER)
+                for mf in missing:
+                    self._log_line('  ' + mf, AMBER)
 
-    # ── Window close ─────────────────────────────────────────────────────────
-    def destroy(self):
-        for svc in SERVICES:
-            with self._lock:
-                proc = self._procs.get(svc['key'])
-            if proc:
-                try: proc.terminate()
+        if found_path:
+            FISH_S2_PRO_MODEL_PATH = found_path
+            os.environ['FISH_S2_PRO_MODEL_PATH'] = found_path
+            os.environ['FISH_SPEECH_RUNTIME_PATH'] = _FISH_RUNTIME_PATH
+            os.environ['FISH_SPEECH_VENV_PATH']    = _FISH_VENV_PATH
+            if _fish_s2_pro_config_load() != found_path:
+                _fish_s2_pro_config_save(found_path)
+
+            # Rebuild the command with the confirmed model path
+            if os.path.isfile(_FISH_SERVER_PY):
+                _py = _FISH_VENV_PY if os.path.isfile(_FISH_VENV_PY) else 'python'
+                _FISH_CMD[:] = [_py, _FISH_SERVER_PY,
+                                '--model-path', found_path,
+                                '--runtime-path', _FISH_RUNTIME_PATH,
+                                '--venv-path', _FISH_VENV_PATH,
+                                '--listen', '127.0.0.1:8080']
+
+            # Update the service card command too
+            for svc in SERVICES:
+                if svc['key'] == 'fish_speech':
+                    svc['cmd'] = _FISH_CMD[:]
+
+            # Check if server is already running, if not auto-start it
+            ok, _ = fish_speech_http_ok(timeout=1.5)
+            if ok:
+                self._log_line('● Fish server: already running at http://127.0.0.1:8080', GREEN)
+            else:
+                self._log_line('● Fish server: not running — auto-starting…', ACCENT)
+                self.after(500, lambda: self._auto_start_fish())
+        else:
+            self._log_line(
+                '● Fish model: not found. Click 📁 S2 PRO FOLDER to select your model directory.',
+                AMBER
+            )
+            self._log_line(
+                '  Checked paths: ' + ', '.join(_fish_s2_pro_candidate_paths()),
+                MUTED
+            )
+
+    def _auto_start_fish(self):
+        """Auto-start Fish Speech server if model is found and server is not running."""
+        ok, _ = fish_speech_http_ok(timeout=1.0)
+        if ok:
+            self._log_line('● Fish server: already up — skipping auto-start', GREEN)
+            return
+        card = self._cards.get('fish_speech')
+        if card:
+            self._log_line('Auto-starting Fish Speech S2 Pro server…', ACCENT)
+            self._start_service('fish_speech')
+
+    def _choose_fish_s2_folder(self):
+        """Open a folder picker so the user can point to an existing S2 Pro model."""
+        from tkinter import filedialog
+        global FISH_S2_PRO_MODEL_PATH
+        start = _fish_s2_pro_config_load() or _HOME
+        chosen = filedialog.askdirectory(
+            title='Select Fish Speech S2 Pro model folder',
+            initialdir=start,
+        )
+        if not chosen:
+            return
+        chosen = os.path.normpath(chosen)
+        missing = _fish_s2_pro_missing_files(chosen)
+        if missing:
+            self._log_line('Selected folder check failed:', AMBER)
+            for mf in missing:
+                self._log_line('  ' + mf, AMBER)
+            self._log_line(
+                'The folder should contain the s2-pro model files. '
+                'If the folder is large (>200 MB) it may still work — '
+                'try clicking Start Fish Speech.',
+                AMBER
+            )
+            # Still accept it if the user insists — let the server decide
+            if not messagebox.askyesno(
+                'Model Check Failed',
+                f'The selected folder failed the model check:\n{chosen}\n\n'
+                + '\n'.join(missing[:3])
+                + '\n\nDo you want to use it anyway?'
+            ):
+                return
+        FISH_S2_PRO_MODEL_PATH = chosen
+        os.environ['FISH_S2_PRO_MODEL_PATH'] = chosen
+        _fish_s2_pro_config_save(chosen)
+        self._log_line('Fish Speech S2 Pro model path set to: ' + chosen, GREEN)
+        self._log_line('Restart the launcher (or re-start Fish Speech) to apply.', ACCENT)
+
+    def _stop_cli(self):
+        proc = getattr(self, '_cli_proc', None)
+        if proc and proc.poll() is None:
+            try:
+                if sys.platform == 'win32':
+                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                                   capture_output=True, timeout=5)
+                else:
+                    proc.kill()
+            except Exception:
+                try: proc.kill()
                 except Exception: pass
-        # Also kill any in-flight CLI command so the launcher can exit cleanly.
-        if self._cli_proc:
-            try: self._cli_proc.terminate()
-            except Exception: pass
-        super().destroy()
+            self._log_line('CLI command stopped', AMBER)
+        else:
+            self._log_line('No CLI command running', MUTED)
 
 
 if __name__ == '__main__':
-    app = TrendVaultLauncher()
-    app.mainloop()
+    TrendVaultLauncher().mainloop()

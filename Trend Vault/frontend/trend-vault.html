@@ -570,6 +570,10 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .vfx-tab-btn{flex:1;padding:7px 10px;border-radius:8px;font-size:.63rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'Orbitron',sans-serif;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--muted);transition:all .2s}
 .vfx-tab-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
 .vfx-tab-btn:hover:not(.active){border-color:rgba(124,58,237,.35);color:var(--text2)}
+/* Fish Manager tab buttons */
+.fm-tab-btn{padding:7px 10px;border-radius:7px;font-size:.66rem;font-weight:700;letter-spacing:.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer;background:transparent;border:1px solid transparent;color:var(--muted);transition:all .18s}
+.fm-tab-btn:hover:not(.fm-tab-active){background:rgba(0,180,120,.08);border-color:rgba(0,180,120,.25);color:#6ee7b7}
+.fm-tab-btn.fm-tab-active{background:rgba(0,180,120,.18);border-color:rgba(0,200,140,.5);color:#6ee7b7;font-weight:800}
 /* ── VFX Save dialog ── */
 .vfx-save-dialog{background:rgba(13,8,32,.97);border:1px solid rgba(124,58,237,.4);border-radius:11px;padding:13px;margin-bottom:14px;display:none}
 .vfx-save-dialog.open{display:block}
@@ -1111,6 +1115,72 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div id="ttsStatusSub"  style="font-size:.65rem;color:#475569;margin-top:4px"></div>
     </div>
     <div id="engineStatusLine" style="font-size:.6rem;color:var(--muted);margin-bottom:6px;letter-spacing:.3px"></div>
+
+    <!-- ── Engine Picker + Engine Status Dots (Kokoro / Fish S2 Pro / API) ──
+         The picker lets the user choose which TTS engine drives the rest of
+         the panel. The two dots underneath are a clear single-glance status
+         of each local engine — both update on every refreshTtsEngineStatus()
+         call (every page load + every CHECK click).                       -->
+    <div id="engineCard" style="margin-bottom:12px;background:rgba(99,102,241,.05);border:1px solid rgba(99,102,241,.18);border-radius:10px;padding:10px 12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:.62rem;color:var(--muted);letter-spacing:1.4px;text-transform:uppercase">Voice Engine</span>
+        <select id="ttsEngineSelect" onchange="onEngineChange(this.value)" style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:.78rem;padding:6px 10px;font-family:inherit;cursor:pointer;outline:none">
+          <option value="kokoro">🎤 Kokoro (local, offline)</option>
+          <option value="fish-speech-s2-pro">🐟 Fish Speech S2 Pro (local)</option>
+          <option value="elevenlabs">☁️ ElevenLabs (cloud)</option>
+        </select>
+        <button onclick="refreshTtsEngineStatus()" title="Re-check engine status" style="background:rgba(124,58,237,.18);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↺ CHECK</button>
+      </div>
+      <div id="engineDotsRow" style="display:flex;flex-direction:column;gap:4px;font-size:.66rem">
+        <div><span id="kokoroDot" style="color:#64748b">⚪</span> <span id="kokoroDotLabel">Kokoro: checking…</span></div>
+        <div><span id="fishDot"   style="color:#64748b">⚪</span> <span id="fishDotLabel">Fish Speech S2 Pro: checking…</span></div>
+      </div>
+      <!-- ── Fish runtime manager (replaces the simple install prompt) ──
+           Shows the full 7-step lifecycle checklist + action buttons.
+           Visible whenever Fish Speech isn't fully ready. Updated by
+           refreshTtsEngineStatus() and pollFishStartup(). -->
+      <div id="fishInstallPrompt" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;font-size:.66rem;color:#fcd34d">
+        <div id="fishInstallPromptMsg" style="margin-bottom:8px;font-weight:600">Fish Speech S2 Pro not ready</div>
+
+        <!-- 7-step checklist. Each line is updated live by renderFishChecklist(). -->
+        <div id="fishChecklist" style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;font-size:.62rem;font-family:'Courier New',monospace;color:var(--text2)">
+          <div data-step="model"    >⚪ Fish model: checking…</div>
+          <div data-step="runtime"  >⚪ Fish runtime: checking…</div>
+          <div data-step="venv"     >⚪ Python venv: checking…</div>
+          <div data-step="deps"     >⚪ Dependencies: checking…</div>
+          <div data-step="server"   >⚪ Fish server: checking…</div>
+          <div data-step="endpoint" >⚪ Fish API endpoint: not detected</div>
+          <div data-step="test"     >⚪ Fish test generation: not run</div>
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <button id="fishStartBtn"   onclick="startFishS2Pro()"        style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.45);color:#86efac;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ Start Fish Speech</button>
+          <button id="fishRepairBtn"  onclick="repairFishS2Pro()"       style="background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.45);color:#fbbf24;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit" title="Rebuild venv + dependencies (model is kept)">🛠 Repair</button>
+          <button id="fishChooseDirBtn" onclick="chooseFishModelDir()"  style="background:rgba(124,58,237,.18);border:1px solid rgba(124,58,237,.45);color:#c4b5fd;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit" title="Point Fish at an existing s2-pro model folder">📂 Choose Model Folder</button>
+          <button id="fishLogsBtn"    onclick="toggleFishLogs()"        style="background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.45);color:#93c5fd;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">📜 View Fish Logs</button>
+          <button id="fishInstallBtn" onclick="installFishS2Pro()"      style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 10px;font-size:.6rem;cursor:pointer;font-family:inherit" title="Re-download the s2-pro weights from HuggingFace (only needed if the model dir is empty)">⬇ Re-download model</button>
+        </div>
+        <span id="fishStartProgressLabel" style="display:block;font-size:.6rem;color:var(--muted);min-height:14px"></span>
+
+        <!-- Install progress bar (kept for the legacy HF download path) -->
+        <div id="fishInstallProgressBar" style="display:none;margin-top:6px;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden">
+          <div id="fishInstallProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#86efac);transition:width .3s"></div>
+        </div>
+        <span id="fishInstallProgressLabel" style="font-size:.6rem;color:var(--muted);display:block;min-height:14px"></span>
+
+        <!-- Live log panel (toggled by 📜 View Fish Logs) -->
+        <div id="fishLogPanel" style="display:none;margin-top:8px;padding:8px 10px;background:#0a0a14;border:1px solid var(--border);border-radius:6px;max-height:240px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.6rem;color:#cbd5e1;line-height:1.45">
+          <div id="fishLogEntries">loading logs…</div>
+        </div>
+
+        <!-- Active config (collapsed by default; useful for debugging paths) -->
+        <details style="margin-top:8px;font-size:.6rem;color:var(--muted)">
+          <summary style="cursor:pointer;color:var(--text2)">⚙ Active Fish Speech config</summary>
+          <div id="fishConfigSummary" style="margin-top:4px;padding-left:8px;line-height:1.6"></div>
+        </details>
+      </div>
+    </div>
     <!-- Dirty-state badges: script / voice / timing / preview / render -->
     <div id="dirtyBadgesLine" style="font-size:.6rem;color:var(--muted);margin-bottom:10px;letter-spacing:.3px"></div>
 
@@ -1142,6 +1212,28 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         </button>
       </div>
       <div id="voiceSampleStatus" style="font-size:.6rem;color:var(--muted);margin-top:4px;min-height:14px">click 🔊 Preview Voice Only to hear the selected voice</div>
+    </div>
+
+    <!-- ── Fish Style Tags helper (shown when engine = fish-speech-s2-pro) ──
+         Lets the user one-click insert prosody tags ([whisper], [laughing],
+         etc.) into the currently focused script line. Tags are stripped of
+         unknown values server-side before generation (sanitizeFishProsodyTags).
+    -->
+    <div id="fishStyleTagsCard" style="display:none;margin-bottom:10px;padding:10px 12px;background:rgba(0,180,120,.04);border:1px solid rgba(0,180,120,.18);border-radius:10px">
+      <div style="display:flex;align-items:center;gap:6px;font-size:.62rem;color:#6ee7b7;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:6px">
+        🐟 Fish Style Tags
+        <span style="margin-left:auto;color:var(--muted);text-transform:none;letter-spacing:0;font-size:.6rem">click to insert at cursor</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[whisper]')"  style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);color:#c4b5fd;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[whisper]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[laughing]')" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:#fcd34d;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[laughing]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[sad]')"      style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.35);color:#93c5fd;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[sad]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[angry]')"    style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:#fca5a5;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[angry]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[shouting]')" style="background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.35);color:#f9a8d4;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[shouting]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[pause]')"    style="background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.35);color:#cbd5e1;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[pause]</button>
+        <button class="fish-tag-btn" onclick="insertFishStyleTag('[emphasis]')" style="background:rgba(110,231,183,.12);border:1px solid rgba(110,231,183,.35);color:#6ee7b7;border-radius:6px;padding:4px 10px;font-size:.65rem;cursor:pointer;font-family:inherit">[emphasis]</button>
+      </div>
+      <div id="fishStyleTagsHint" style="margin-top:6px;font-size:.58rem;color:var(--muted)">Click a tag, then it's inserted at your cursor in the focused script line. Unknown bracketed tags are removed before Fish generation.</div>
     </div>
 
     <!-- ── Fish Speech Panel (shown only when engine = fish-speech) ───────── -->
@@ -1884,6 +1976,144 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div class="output-gallery" id="outputGallery"></div>
   </div>
 
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       🐟 Fish Speech Manager Card
+       A dedicated top-level panel for Fish Speech S2 Pro — always visible,
+       not buried inside the Voice Preset card. Tab bar: Status | Voices | Preview.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div class="card" id="fishManagerCard" style="border-top:2px solid rgba(0,200,140,.35)!important">
+    <div class="card-header" style="margin-bottom:14px">
+      <div class="card-title" style="color:#6ee7b7;gap:10px">
+        <span style="font-size:1.1rem">🐟</span>
+        Fish Speech S2 Pro
+        <span id="fmOverallBadge" style="font-size:.62rem;font-weight:800;letter-spacing:1.2px;padding:3px 9px;border-radius:20px;background:rgba(100,116,139,.15);border:1px solid rgba(100,116,139,.35);color:#94a3b8;text-transform:uppercase;margin-left:4px">checking…</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button onclick="fmRefresh()" title="Re-check Fish Speech status" style="background:rgba(0,180,120,.15);border:1px solid rgba(0,180,120,.35);color:#6ee7b7;border-radius:7px;padding:5px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↺ CHECK</button>
+      </div>
+    </div>
+
+    <!-- Internal tab bar -->
+    <div style="display:flex;gap:4px;margin-bottom:14px;background:rgba(255,255,255,.04);border-radius:9px;padding:4px">
+      <button class="fm-tab-btn fm-tab-active" id="fmTabStatusBtn"  onclick="fmSwitchTab('status')"  style="flex:1">📊 Status</button>
+      <button class="fm-tab-btn"               id="fmTabVoicesBtn" onclick="fmSwitchTab('voices')"  style="flex:1">🎤 Voices</button>
+      <button class="fm-tab-btn"               id="fmTabPreviewBtn" onclick="fmSwitchTab('preview')" style="flex:1">🔊 Preview</button>
+    </div>
+
+    <!-- ── Tab: Status ── -->
+    <div id="fmTabStatus">
+      <!-- 7-step checklist (updated by fmRenderChecklist) -->
+      <div id="fmChecklist" style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);border-radius:9px;font-family:'Courier New',monospace;font-size:.64rem;color:var(--text2);margin-bottom:12px">
+        <div data-step="model"    >⚪ Fish model: checking…</div>
+        <div data-step="runtime"  >⚪ Fish runtime: checking…</div>
+        <div data-step="venv"     >⚪ Python venv: checking…</div>
+        <div data-step="deps"     >⚪ Dependencies: checking…</div>
+        <div data-step="server"   >⚪ Fish server: checking…</div>
+        <div data-step="endpoint" >⚪ Fish API endpoint: not detected</div>
+        <div data-step="test"     >⚪ Test generation: not run</div>
+      </div>
+
+      <!-- Progress label -->
+      <div id="fmProgressLabel" style="font-size:.62rem;color:#fcd34d;min-height:16px;margin-bottom:10px;font-weight:600"></div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+        <button id="fmStartBtn" onclick="fmStart()"
+          style="background:linear-gradient(135deg,rgba(34,197,94,.25),rgba(21,128,61,.18));border:1px solid rgba(34,197,94,.5);color:#86efac;border-radius:8px;padding:8px 14px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.4px;flex:1;min-width:110px">
+          ▶ Start Fish Speech
+        </button>
+        <button id="fmRepairBtn" onclick="fmRepair()"
+          style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);color:#fbbf24;border-radius:8px;padding:8px 14px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.4px">
+          🛠 Repair
+        </button>
+        <button onclick="fmChooseModel()"
+          style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.4);color:#c4b5fd;border-radius:8px;padding:8px 14px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.4px">
+          📂 Model
+        </button>
+        <button onclick="fmToggleLogs()"
+          style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.4);color:#93c5fd;border-radius:8px;padding:8px 14px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.4px">
+          📜 Logs
+        </button>
+      </div>
+
+      <!-- Config summary (collapsed) -->
+      <details id="fmConfigDetails" style="font-size:.62rem;color:var(--muted);margin-bottom:10px">
+        <summary style="cursor:pointer;color:var(--text2);font-size:.65rem;font-weight:600;letter-spacing:.5px">⚙ Active config</summary>
+        <div id="fmConfigBody" style="margin-top:6px;padding:8px 10px;background:rgba(0,0,0,.3);border-radius:7px;line-height:1.75;color:#94a3b8"></div>
+      </details>
+
+      <!-- Live log panel (toggled by 📜 Logs) -->
+      <div id="fmLogPanel" style="display:none;margin-top:2px;padding:8px 10px;background:#06060f;border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.6rem;color:#cbd5e1;line-height:1.5">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="color:rgba(0,200,140,.7);letter-spacing:1px;text-transform:uppercase;font-size:.56rem">Server Logs</span>
+          <div style="display:flex;gap:5px">
+            <button onclick="fmRefreshLogs()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:.56rem;padding:2px 7px;cursor:pointer;font-family:inherit">↻</button>
+            <button onclick="fmClearLogs()" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:4px;color:#fca5a5;font-size:.56rem;padding:2px 7px;cursor:pointer;font-family:inherit">🗑</button>
+          </div>
+        </div>
+        <div id="fmLogEntries" style="white-space:pre-wrap">loading logs…</div>
+      </div>
+    </div>
+
+    <!-- ── Tab: Voices ── -->
+    <div id="fmTabVoices" style="display:none">
+      <div style="font-size:.62rem;color:rgba(0,200,140,.7);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Voice Presets</div>
+      <div id="fmVoiceGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px"></div>
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(0,180,120,.05);border:1px solid rgba(0,180,120,.18);border-radius:9px">
+        <div style="font-size:.62rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Selected Voice</div>
+        <div id="fmSelVoiceName" style="font-size:.78rem;font-weight:700;color:#6ee7b7;margin-bottom:3px">Dark Narrator</div>
+        <div id="fmSelVoiceDesc" style="font-size:.65rem;color:var(--muted)">deep, foreboding tone</div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button onclick="fmUseVoiceInStudio()" style="flex:1;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;border-radius:7px;padding:7px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit">✓ Use in Studio</button>
+          <button onclick="fmSwitchTab('preview')" style="background:rgba(0,180,120,.12);border:1px solid rgba(0,180,120,.35);color:#6ee7b7;border-radius:7px;padding:7px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit">🔊 Preview</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab: Preview ── -->
+    <div id="fmTabPreview" style="display:none">
+      <div style="font-size:.62rem;color:rgba(0,200,140,.7);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:10px">Quick Audio Preview</div>
+
+      <!-- Selected voice display -->
+      <div id="fmPreviewVoiceLabel" style="font-size:.7rem;color:#6ee7b7;font-weight:600;margin-bottom:8px;padding:6px 10px;background:rgba(0,180,120,.06);border:1px solid rgba(0,180,120,.2);border-radius:8px">
+        🐟 Voice: <span id="fmPreviewVoiceName">Dark Narrator</span>
+      </div>
+
+      <!-- Text input -->
+      <textarea id="fmPreviewText"
+        placeholder="Enter text to synthesize with Fish Speech S2 Pro…"
+        style="width:100%;min-height:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:.74rem;padding:10px 12px;font-family:inherit;resize:vertical;outline:none;margin-bottom:8px;line-height:1.5">In the heart of darkness, something ancient awakens.</textarea>
+
+      <!-- Style tags row -->
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+        <span style="font-size:.58rem;color:var(--muted);letter-spacing:.8px;align-self:center;margin-right:2px">Style:</span>
+        <button onclick="fmInsertTag('[whisper]')"   style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:#c4b5fd;border-radius:5px;padding:3px 8px;font-size:.62rem;cursor:pointer;font-family:inherit">[whisper]</button>
+        <button onclick="fmInsertTag('[laughing]')"  style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fcd34d;border-radius:5px;padding:3px 8px;font-size:.62rem;cursor:pointer;font-family:inherit">[laughing]</button>
+        <button onclick="fmInsertTag('[sad]')"       style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:5px;padding:3px 8px;font-size:.62rem;cursor:pointer;font-family:inherit">[sad]</button>
+        <button onclick="fmInsertTag('[angry]')"     style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#fca5a5;border-radius:5px;padding:3px 8px;font-size:.62rem;cursor:pointer;font-family:inherit">[angry]</button>
+        <button onclick="fmInsertTag('[pause]')"     style="background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.3);color:#cbd5e1;border-radius:5px;padding:3px 8px;font-size:.62rem;cursor:pointer;font-family:inherit">[pause]</button>
+      </div>
+
+      <!-- Generate button -->
+      <button id="fmGenerateBtn" onclick="fmGenerate()"
+        style="width:100%;background:linear-gradient(135deg,rgba(0,200,140,.3),rgba(0,140,90,.2));border:1px solid rgba(0,200,140,.55);color:#6ee7b7;border-radius:9px;padding:11px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;margin-bottom:10px">
+        ✦ GENERATE AUDIO
+      </button>
+
+      <!-- Status + spinner -->
+      <div id="fmGenStatus" style="font-size:.68rem;color:var(--muted);min-height:18px;text-align:center;margin-bottom:8px"></div>
+
+      <!-- Audio player -->
+      <div id="fmAudioWrap" style="display:none">
+        <audio id="fmAudio" controls style="width:100%;border-radius:8px;height:36px"></audio>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button onclick="fmUseVoiceInStudio()" style="flex:1;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;border-radius:7px;padding:7px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit">✓ Use This Voice In Studio</button>
+        </div>
+      </div>
+    </div>
+  </div><!-- /fishManagerCard -->
+
 </div><!-- /controls -->
 
 <!-- ════ Preview Column ════ -->
@@ -2230,6 +2460,14 @@ const state = {
   previewDirty:  false,
   renderDirty:   false,
   voiceVolume:       100, // 0-200 (%) — sent to render as 0..2
+  // ── Active TTS engine (Kokoro / Fish S2 Pro / ElevenLabs) ──────────────
+  // The Voice Preset card's engine picker writes this. The preset grid
+  // filters to cards whose `engine` field matches. Defaults to 'kokoro'
+  // so existing flows keep working when nothing is set.
+  ttsEngine:    'kokoro',
+  // Fish S2 Pro install + engine status (populated by refreshTtsEngineStatus)
+  fishEngine:   { state: 'unknown', installed: false, installing: false, serverOk: false, message: '', modelDir: '', serverUrl: '' },
+  fishLastFocusedScriptLine: null, // tracked by script line focus handler
   fishVoice:     'dark_narrator',
   fishSpeed:     1.0,
   fishTemp:      0.70,
@@ -2426,6 +2664,13 @@ async function init(){
   _safe('bgBrightSlider track',  () => updateSliderTrack('bgBrightSlider'));
   _safe('colorIntensity track',  () => updateSliderTrack('colorIntensitySlider'));
   _safeAsync('engineStatus probe', refreshEngineStatus);
+  // ── Fish S2 Pro + engine-dots refresh (Kokoro + Fish single-source) ───
+  _safeAsync('ttsEngineStatus refresh', refreshTtsEngineStatus);
+  // Sync the picker dropdown to the current state.ttsEngine on first paint.
+  _safe('engineSelect sync', () => {
+    const sel = document.getElementById('ttsEngineSelect');
+    if(sel) sel.value = state.ttsEngine || 'kokoro';
+  });
   _safe('renderSync initial',     () => refreshRenderSyncPanel());
   _safe('dirtyBadges initial',    () => refreshDirtyBadges());
   _safe('durationBadge initial',  () => refreshDurationBadge());
@@ -2500,17 +2745,463 @@ async function init(){
 function renderTtsStatus(d){
   const main = document.getElementById('ttsStatusMain');
   const sub  = document.getElementById('ttsStatusSub');
-  if(!main) return;
+  // ── Kokoro line ────────────────────────────────────────────────────────
   const kokoroOk     = !!(d && (d.local || d.kokoro));
   const kokoroEngine = (d && d.engine) || 'kokoro';
-  if(kokoroOk){
-    main.innerHTML = '<span style="color:#22c55e">✅ Kokoro voices active</span> — local TTS (' + kokoroEngine + ') is running';
-    if(sub) sub.textContent = 'Voices run locally with no internet required.';
-  } else {
-    main.innerHTML = '<span style="color:#fca5a5">⚠ Kokoro voices offline</span> — start your local TTS server';
-    if(sub) sub.innerHTML = 'Run the Kokoro setup so <strong style="color:#e2e8f0">LOCAL_TTS_URL</strong> is reachable.';
+  if(main){
+    if(kokoroOk){
+      main.innerHTML = '<span style="color:#22c55e">✅ Kokoro voices active</span> — local TTS (' + kokoroEngine + ') is running';
+      if(sub) sub.textContent = 'Voices run locally with no internet required.';
+    } else {
+      main.innerHTML = '<span style="color:#fca5a5">⚠ Kokoro voices offline</span> — start your local TTS server';
+      if(sub) sub.innerHTML = 'Run the Kokoro setup so <strong style="color:#e2e8f0">LOCAL_TTS_URL</strong> is reachable.';
+    }
+  }
+
+  // ── Dot row: Kokoro + Fish (clear, one-line status per engine) ─────────
+  // The detailed Fish status comes from d.fish (added to /tts-status when
+  // the Fish helper was wired in). When d.fish is missing we render a
+  // neutral "checking…" state.
+  const kokoroDot   = document.getElementById('kokoroDot');
+  const kokoroLabel = document.getElementById('kokoroDotLabel');
+  if(kokoroDot && kokoroLabel){
+    if(kokoroOk){ kokoroDot.style.color = '#22c55e'; kokoroDot.textContent='●'; kokoroLabel.textContent = 'Kokoro: on'; }
+    else        { kokoroDot.style.color = '#fca5a5'; kokoroDot.textContent='●'; kokoroLabel.textContent = 'Kokoro: off (offline)'; }
+  }
+
+  const fish = (d && d.fish) || {};
+  // Preserve any extra fields written by refreshFishStatusDeep() (e.g.
+  // steps, runtimePath, venvPath, workingEndpoint) — those come from the
+  // dedicated /api/fish-s2pro/status endpoint and are richer than what
+  // /tts-status returns.
+  state.fishEngine = Object.assign({}, state.fishEngine || {}, {
+    state:      fish.state      || 'unknown',
+    installed:  !!fish.installed,
+    installing: !!fish.installing,
+    serverOk:   !!fish.serverOk,
+    message:    fish.message    || '',
+    modelDir:   fish.modelDir   || '',
+    serverUrl:  fish.serverUrl  || '',
+  });
+  renderFishDot();
+  renderFishInstallPrompt();
+  // Kick off a deep refresh (separate, richer endpoint) — non-blocking.
+  refreshFishStatusDeep();
+}
+
+// ── Pull the full lifecycle state (steps, runtime path, working endpoint)
+//     from /api/fish-s2pro/status and merge it into state.fishEngine. The
+//     UI panels (checklist + config summary) react to this immediately. -->
+async function refreshFishStatusDeep(){
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/status`);
+    if(!r.ok) return;
+    const d = await r.json();
+    state.fishEngine = Object.assign({}, state.fishEngine || {}, {
+      state:           d.state || state.fishEngine?.state || 'unknown',
+      message:         d.message,
+      steps:           d.steps || {},
+      modelDir:        d.modelDir,
+      runtimePath:     d.runtimePath,
+      venvPath:        d.venvPath,
+      serverUrl:       d.serverUrl,
+      workingEndpoint: d.workingEndpoint,
+      serverOk:        !!(d.server && d.server.reachable),
+      installed:       !!(d.model  && d.model.installed),
+    });
+    renderFishDot();
+    renderFishInstallPrompt();
+  } catch(e){
+    console.warn('[Fish] deep status fetch failed:', e?.message || e);
   }
 }
+window.refreshFishStatusDeep = refreshFishStatusDeep;
+
+// Map Fish engine state → coloured dot + one-line label.
+function renderFishDot(){
+  const dot   = document.getElementById('fishDot');
+  const label = document.getElementById('fishDotLabel');
+  if(!dot || !label) return;
+  const s = state.fishEngine?.state || 'unknown';
+  if(s === 'ready'){
+    dot.style.color = '#22c55e'; dot.textContent = '●';
+    label.textContent = 'Fish Speech S2 Pro: on (model + server ready)';
+  } else if(s === 'installing'){
+    dot.style.color = '#fcd34d'; dot.textContent = '◐';
+    label.textContent = 'Fish Speech S2 Pro: installing';
+  } else if(s === 'server_only'){
+    dot.style.color = '#fcd34d'; dot.textContent = '●';
+    label.textContent = 'Fish Speech S2 Pro: server ready, model not cached';
+  } else if(s === 'model_only'){
+    dot.style.color = '#fcd34d'; dot.textContent = '●';
+    label.textContent = 'Fish Speech S2 Pro: model installed, server not reachable';
+  } else if(s === 'missing'){
+    dot.style.color = '#fca5a5'; dot.textContent = '●';
+    label.textContent = 'Fish Speech S2 Pro: missing';
+  } else {
+    dot.style.color = '#64748b'; dot.textContent = '○';
+    label.textContent = 'Fish Speech S2 Pro: ' + s;
+  }
+}
+
+// Show / hide the install prompt + tweak its message based on state.
+// The detailed checklist is rendered by renderFishChecklist() below.
+function renderFishInstallPrompt(){
+  const prompt = document.getElementById('fishInstallPrompt');
+  const msg    = document.getElementById('fishInstallPromptMsg');
+  if(!prompt || !msg) return;
+  const s = state.fishEngine?.state || 'unknown';
+  // Visible whenever Fish isn't fully ready (or preparing).
+  const needsAttention = s !== 'ready';
+  prompt.style.display = needsAttention ? 'block' : 'none';
+
+  const cfg = state.fishEngine || {};
+  if(s === 'missing'){
+    msg.innerHTML = '⚠ <strong>Fish Speech S2 Pro not ready</strong> — model + runtime not yet set up. Click <strong>▶ Start Fish Speech</strong> to install the runtime and bring the server up automatically.';
+  } else if(s === 'preparing'){
+    msg.innerHTML = '⏳ <strong>Preparing Fish Speech S2 Pro</strong> — this can take a few minutes the first time (clone + pip install + model load).';
+  } else if(s === 'model_only'){
+    msg.innerHTML = '✓ Model found at <code style="font-size:.6rem">' + (cfg.modelDir || '') + '</code>. Click <strong>▶ Start Fish Speech</strong> to bring up the runtime and server.';
+  } else if(s === 'server_only'){
+    msg.innerHTML = '⚠ Server reachable at <code style="font-size:.6rem">' + (cfg.serverUrl || '') + '</code> but model dir at <code style="font-size:.6rem">' + (cfg.modelDir || '') + '</code> is empty. Use <strong>📂 Choose Model Folder</strong> to point at an existing model, or <strong>⬇ Re-download model</strong> to fetch from HuggingFace.';
+  } else if(s === 'partial'){
+    msg.innerHTML = '⚠ Some Fish Speech checks failed — see the checklist below. Click <strong>▶ Start Fish Speech</strong> to retry, or <strong>📜 View Fish Logs</strong> for full diagnostics.';
+  } else {
+    msg.innerHTML = '⚙ Fish Speech S2 Pro status: <strong>' + s + '</strong>';
+  }
+  renderFishChecklist();
+  renderFishConfigSummary();
+}
+
+// ── 7-step lifecycle checklist (model → runtime → venv → deps → server →
+//     endpoint → test). Each row reflects the `steps` field returned by
+//     /api/fish-s2pro/status. The icons:
+//        ⚪ pending  ⟳ running  ✅ ok  ❌ failed  ↷ skipped                    -->
+function renderFishChecklist(){
+  const root = document.getElementById('fishChecklist');
+  if(!root) return;
+  const steps = state.fishEngine?.steps || {};
+  const labels = {
+    model:   'Fish model: ',
+    runtime: 'Fish runtime: ',
+    venv:    'Python venv: ',
+    deps:    'Dependencies: ',
+    server:  'Fish server: ',
+    endpoint:'Fish API endpoint: ',
+    test:    'Fish test generation: ',
+  };
+  for(const key of ['model','runtime','venv','deps','server','endpoint','test']){
+    const row = root.querySelector(`[data-step="${key}"]`);
+    if(!row) continue;
+    const st = steps[key];
+    const status = st?.status || 'pending';
+    const icon =
+      status === 'ok'      ? '<span style="color:#86efac">✅</span>' :
+      status === 'failed'  ? '<span style="color:#fca5a5">❌</span>' :
+      status === 'running' ? '<span style="color:#fcd34d">⟳</span>' :
+      status === 'skipped' ? '<span style="color:#94a3b8">↷</span>' :
+                              '<span style="color:#64748b">⚪</span>';
+    const detail = st?.detail ? ' — ' + escapeHtml(String(st.detail)) : '';
+    let statusWord = status;
+    if(key === 'model'    && status === 'ok') statusWord = 'found';
+    if(key === 'runtime'  && status === 'ok') statusWord = 'installed';
+    if(key === 'venv'     && status === 'ok') statusWord = 'ready';
+    if(key === 'deps'     && status === 'ok') statusWord = 'installed';
+    if(key === 'server'   && status === 'ok') statusWord = 'ready';
+    if(key === 'endpoint' && status === 'ok') statusWord = 'detected';
+    if(key === 'test'     && status === 'ok') statusWord = 'passed';
+    row.innerHTML = `${icon} ${labels[key]}${statusWord}${detail}`;
+  }
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderFishConfigSummary(){
+  const el = document.getElementById('fishConfigSummary');
+  if(!el) return;
+  const f = state.fishEngine || {};
+  el.innerHTML = `
+    <div><strong>FISH_S2_PRO_MODEL_PATH:</strong> <code>${escapeHtml(f.modelDir || '(unset)')}</code></div>
+    <div><strong>FISH_SPEECH_RUNTIME_PATH:</strong> <code>${escapeHtml(f.runtimePath || '(unset)')}</code></div>
+    <div><strong>FISH_SPEECH_VENV_PATH:</strong> <code>${escapeHtml(f.venvPath || '(unset)')}</code></div>
+    <div><strong>FISH_TTS_URL:</strong> <code>${escapeHtml(f.serverUrl || '')}</code></div>
+    <div><strong>working endpoint:</strong> <code>${escapeHtml(f.workingEndpoint || '(not yet detected)')}</code></div>
+  `;
+}
+
+// ── Engine picker handler ───────────────────────────────────────────────
+// Routes the panel between Kokoro / Fish / ElevenLabs sub-UIs without
+// removing any existing voice presets. Hides the Fish-only side-panels
+// when Kokoro is active and vice-versa.
+function onEngineChange(engine){
+  state.ttsEngine = engine || 'kokoro';
+  console.log('[Engine] switched to', state.ttsEngine);
+  const isFish = state.ttsEngine === 'fish-speech-s2-pro';
+  const fishPanel = document.getElementById('fishSpeechPanel');
+  const fishTags  = document.getElementById('fishStyleTagsCard');
+  if(fishPanel) fishPanel.style.display = isFish ? 'flex' : 'none';
+  if(fishTags)  fishTags.style.display  = isFish ? 'block' : 'none';
+  // Rebuild preset grid so it shows only voices for the active engine.
+  try { buildPresetGrid(); } catch {}
+  // Mark voice dirty so the preview/render pipelines know to regenerate.
+  try { markDirty('voice'); } catch {}
+  // Switching TO Fish — fetch the rich status payload so the checklist
+  // is populated before the user clicks anything.
+  if(isFish) try { refreshFishStatusDeep(); } catch {}
+  // If switching TO Fish but no fish preset selected, auto-pick the first
+  // Fish preset so the panel isn't empty.
+  if(isFish){
+    const firstFish = (typeof VOICE_PRESETS !== 'undefined' && VOICE_PRESETS.find(p => (p.engine||'kokoro') === 'fish-speech-s2-pro'));
+    if(firstFish && (!state.voice || !state.voice.startsWith('fish_'))) selectPreset(firstFish.id);
+  } else {
+    // Switching back to Kokoro — if a Fish preset was active, snap back to
+    // the first Kokoro card so the slider panel makes sense.
+    if(state.voice && state.voice.startsWith('fish_')){
+      const firstKokoro = (typeof VOICE_PRESETS !== 'undefined' && VOICE_PRESETS.find(p => (p.engine||'kokoro') === 'kokoro' && !p.robot));
+      if(firstKokoro) selectPreset(firstKokoro.id);
+    }
+  }
+}
+window.onEngineChange = onEngineChange;
+
+// ── Refresh the tts-status endpoint + repaint the dots ──────────────────
+async function refreshTtsEngineStatus(){
+  try {
+    const r = await fetch(`${API_BASE}/api/trend-vault/tts-status`);
+    const d = r.ok ? await r.json() : {};
+    renderTtsStatus(d);
+  } catch(e){
+    console.warn('[Engine] tts-status fetch failed:', e?.message || e);
+    renderTtsStatus({});
+  }
+}
+window.refreshTtsEngineStatus = refreshTtsEngineStatus;
+
+// ── Fish S2 Pro install ─────────────────────────────────────────────────
+// Kicks off the backend install job, then polls /install-status every 1.5s
+// until the job completes or fails. Updates the progress bar inline.
+let _fishInstallPoll = null;
+async function installFishS2Pro(){
+  const btn = document.getElementById('fishInstallBtn');
+  const lbl = document.getElementById('fishInstallProgressLabel');
+  const bar = document.getElementById('fishInstallProgressBar');
+  const fill= document.getElementById('fishInstallProgressFill');
+  try {
+    if(btn){ btn.disabled = true; btn.textContent = '⏳ Starting…'; }
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/install`, { method:'POST' });
+    const d = await r.json();
+    if(!d.ok){
+      if(btn){ btn.disabled = false; btn.textContent = '⬇ Install Fish Speech S2 Pro'; }
+      showToast('Fish install could not start: ' + (d.reason || 'unknown'), 'error');
+      return;
+    }
+    if(bar) bar.style.display = 'block';
+    if(lbl) lbl.textContent = 'starting…';
+    if(_fishInstallPoll) clearInterval(_fishInstallPoll);
+    _fishInstallPoll = setInterval(pollFishInstallProgress, 1500);
+    pollFishInstallProgress();
+  } catch(e) {
+    if(btn){ btn.disabled = false; btn.textContent = '⬇ Install Fish Speech S2 Pro'; }
+    showToast('Fish install error: ' + (e?.message || e), 'error');
+  }
+}
+window.installFishS2Pro = installFishS2Pro;
+
+// ── Start Fish Speech (full runtime manager pipeline) ──────────────────
+// Calls /api/fish-s2pro/start which runs the full checklist server-side:
+//   model → runtime → venv → deps → server → endpoint → test.
+// While the request is in flight we poll /status every 2s so the
+// checklist updates live in the UI.
+let _fishStartPoll = null;
+async function startFishS2Pro(){
+  const btn = document.getElementById('fishStartBtn');
+  const lbl = document.getElementById('fishStartProgressLabel');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Starting…'; }
+  if(lbl) lbl.textContent = 'starting — this can take a few minutes the first time';
+  // Begin live polling while the start request is outstanding.
+  let elapsed = 0;
+  if(_fishStartPoll) clearInterval(_fishStartPoll);
+  _fishStartPoll = setInterval(() => {
+    elapsed += 2;
+    if(lbl) lbl.textContent = `Starting Fish Speech runtime... ${elapsed}s`;
+    refreshFishStatusDeep();
+    refreshFishLogs();
+  }, 2000);
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/start`, { method:'POST' });
+    const d = await r.json().catch(()=>({}));
+    if(d.ok){
+      if(lbl) lbl.textContent = '✓ Fish Speech S2 Pro ready';
+      showToast('Fish Speech S2 Pro ready', 'success');
+    } else {
+      const failedStep = Object.values(d.steps || {}).find(s => s.status === 'failed');
+      const detail = failedStep ? `${failedStep.label} failed: ${failedStep.detail || 'unknown'}` : (d.message || 'startup failed');
+      if(lbl) lbl.textContent = '✗ ' + detail;
+      showToast('Fish Speech start failed — ' + detail, 'error');
+      // Auto-open the log panel on failure so the user can read the diagnostics.
+      const logPanel = document.getElementById('fishLogPanel');
+      if(logPanel && logPanel.style.display === 'none') toggleFishLogs();
+    }
+  }catch(e){
+    if(lbl) lbl.textContent = '✗ ' + (e?.message || String(e));
+    showToast('Fish Speech start errored: ' + (e?.message || e), 'error');
+  }finally{
+    if(_fishStartPoll){ clearInterval(_fishStartPoll); _fishStartPoll = null; }
+    if(btn){ btn.disabled = false; btn.textContent = '▶ Start Fish Speech'; }
+    refreshFishStatusDeep();
+    refreshFishLogs();
+  }
+}
+window.startFishS2Pro = startFishS2Pro;
+
+// ── Repair Fish Speech (rebuild venv + deps, keep model) ────────────────
+async function repairFishS2Pro(){
+  if(!confirm('This will wipe the Fish Speech venv and reinstall dependencies. The model files at ' +
+              (state.fishEngine?.modelDir || 'your model dir') + ' will NOT be touched. Continue?')) return;
+  const btn = document.getElementById('fishRepairBtn');
+  const lbl = document.getElementById('fishStartProgressLabel');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Repairing…'; }
+  if(lbl) lbl.textContent = 'rebuilding venv + reinstalling dependencies…';
+  if(_fishStartPoll) clearInterval(_fishStartPoll);
+  _fishStartPoll = setInterval(() => { refreshFishStatusDeep(); refreshFishLogs(); }, 2000);
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/repair`, { method:'POST' });
+    const d = await r.json();
+    if(d.ok){ showToast('Fish Speech repaired successfully', 'success'); if(lbl) lbl.textContent = '✓ ' + d.message; }
+    else    { showToast('Repair failed: ' + (d.message || 'unknown'), 'error'); if(lbl) lbl.textContent = '✗ ' + d.message; }
+  }catch(e){
+    showToast('Repair errored: ' + (e?.message || e), 'error');
+    if(lbl) lbl.textContent = '✗ ' + (e?.message || e);
+  }finally{
+    if(_fishStartPoll){ clearInterval(_fishStartPoll); _fishStartPoll = null; }
+    if(btn){ btn.disabled = false; btn.textContent = '🛠 Repair'; }
+    refreshFishStatusDeep();
+  }
+}
+window.repairFishS2Pro = repairFishS2Pro;
+
+// ── Choose an existing model folder ─────────────────────────────────────
+// Browsers can't show a native folder picker that returns a real path, so
+// we use a prompt. The default is whatever Fish currently has configured.
+async function chooseFishModelDir(){
+  const current = state.fishEngine?.modelDir || '';
+  const next = prompt(
+    'Enter the FULL absolute path to your existing s2-pro model folder.\n\n' +
+    'Examples:\n' +
+    '  Windows:  C:\\Users\\YourName\\s2-pro\n' +
+    '  Linux:    /home/youruser/.cache/trendvault/models/s2-pro\n\n' +
+    'The model files at this path will NOT be moved or modified.',
+    current
+  );
+  if(!next || next === current) return;
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/set-model-path`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ path: next.trim() }),
+    });
+    const d = await r.json();
+    if(d.ok){
+      showToast('Fish model path set to ' + d.modelDir, 'success');
+      refreshFishStatusDeep();
+    } else {
+      showToast('Could not set model path: ' + (d.error || 'unknown'), 'error');
+    }
+  }catch(e){
+    showToast('Set model path errored: ' + (e?.message || e), 'error');
+  }
+}
+window.chooseFishModelDir = chooseFishModelDir;
+
+// ── View Fish Logs panel ────────────────────────────────────────────────
+function toggleFishLogs(){
+  const panel = document.getElementById('fishLogPanel');
+  if(!panel) return;
+  const showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  if(!showing) refreshFishLogs();
+}
+window.toggleFishLogs = toggleFishLogs;
+
+async function refreshFishLogs(){
+  const panel = document.getElementById('fishLogPanel');
+  if(!panel || panel.style.display === 'none') return;
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/logs?limit=200`);
+    if(!r.ok) return;
+    const d = await r.json();
+    const entries = document.getElementById('fishLogEntries');
+    if(!entries) return;
+    if(!d.logs || !d.logs.length){
+      entries.innerHTML = '<span style="color:var(--muted)">no logs yet — click ▶ Start Fish Speech</span>';
+      return;
+    }
+    entries.innerHTML = d.logs.map(e => {
+      const color = e.level === 'error'   ? '#fca5a5'
+                  : e.level === 'warn'    ? '#fcd34d'
+                  : e.level === 'success' ? '#86efac'
+                  :                          '#cbd5e1';
+      const time = (e.ts || '').slice(11, 19);
+      const step = e.step ? `<span style="color:#94a3b8">[${escapeHtml(e.step)}]</span> ` : '';
+      return `<div style="white-space:pre-wrap"><span style="color:#64748b">${time}</span> ${step}<span style="color:${color}">${escapeHtml(e.msg)}</span></div>`;
+    }).join('');
+    // Auto-scroll to the bottom so new entries are visible.
+    panel.scrollTop = panel.scrollHeight;
+  } catch {}
+}
+window.refreshFishLogs = refreshFishLogs;
+
+async function pollFishInstallProgress(){
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/install-status`);
+    if(!r.ok) return;
+    const d = await r.json();
+    const p = d.progress || {};
+    const fill = document.getElementById('fishInstallProgressFill');
+    const lbl  = document.getElementById('fishInstallProgressLabel');
+    if(fill) fill.style.width = Math.max(0, Math.min(100, p.pct || 0)) + '%';
+    if(lbl)  lbl.textContent  = (p.stage || '') + (p.pct != null ? ` (${Math.round(p.pct)}%)` : '');
+    if(p.done){
+      if(_fishInstallPoll){ clearInterval(_fishInstallPoll); _fishInstallPoll = null; }
+      if(p.ok){
+        showToast('✓ Fish Speech S2 Pro installed', 'success');
+      } else {
+        showToast('Fish install failed: ' + (p.error || 'unknown'), 'error');
+      }
+      // Refresh status so the dots + prompt update.
+      refreshTtsEngineStatus();
+    }
+  } catch(e) {
+    console.warn('[Fish install poll] error', e?.message || e);
+  }
+}
+
+// ── Insert a Fish prosody tag into the currently focused script line ────
+function insertFishStyleTag(tag){
+  const idx = state.fishLastFocusedScriptLine;
+  if(idx == null || !state.script || !state.script[idx]){
+    showToast('Click into a script line first, then tap a tag', 'info');
+    return;
+  }
+  // Try to find the actual input element so we can insert at cursor; fall
+  // back to appending if we can't get the selection range.
+  const ta = document.querySelector(`#scriptLines [data-line-idx="${idx}"] textarea, #scriptLines [data-line-idx="${idx}"] input`);
+  if(ta && (typeof ta.selectionStart === 'number')){
+    const before = ta.value.slice(0, ta.selectionStart);
+    const after  = ta.value.slice(ta.selectionEnd);
+    const sep = before && !/\s$/.test(before) ? ' ' : '';
+    ta.value = before + sep + tag + ' ' + after;
+    ta.dispatchEvent(new Event('input', { bubbles:true }));
+    ta.focus();
+  } else {
+    state.script[idx].text = (state.script[idx].text || '') + ' ' + tag;
+    try { typeof updatePreview === 'function' && updatePreview(); } catch {}
+    try { markDirty('script'); } catch {}
+  }
+  showToast(`Inserted ${tag}`, 'info');
+}
+window.insertFishStyleTag = insertFishStyleTag;
 
 // Cross-tab: Voice Lab "USE IN STUDIO" writes to localStorage.
 // This listener picks it up without requiring a full page reload.
@@ -3295,9 +3986,12 @@ function buildScriptLines(){
     const row = document.createElement('div');
     row.className='script-line-row';
     row.dataset.idx = i;
+    // ── data-line-idx on the row lets insertFishStyleTag() locate the
+    //    correct textarea/input to insert prosody tags into.
+    row.dataset.lineIdx = i;
     row.innerHTML=`
       <div class="line-type-badge lt-${line.type}">${line.type}</div>
-      <textarea class="line-text-input" rows="2" onchange="updateLineText(${i},this.value)">${line.text}</textarea>
+      <textarea class="line-text-input" rows="2" onchange="updateLineText(${i},this.value)" onfocus="state.fishLastFocusedScriptLine=${i}" oninput="updateLineText(${i},this.value)">${line.text}</textarea>
       <input class="line-dur" type="number" min="1" max="30" value="${line.durationSeconds}" onchange="updateLineDur(${i},this.value)" title="Seconds"/>
       <button class="line-del" onclick="deleteLine(${i})" title="Delete">✕</button>`;
     container.appendChild(row);
@@ -3518,10 +4212,29 @@ function buildPresetGrid(){
   if(!g) return;
   // Hide robot:true presets from main grid — they sound intentionally distorted
   // and confuse users who think the voice system is broken.
-  const gridPresets = VOICE_PRESETS.filter(p => !p.robot);
+  // ── Engine filter: only show cards whose engine matches state.ttsEngine.
+  // Cards loaded from the server may not have an `engine` field — those are
+  // treated as Kokoro (the historical default).
+  const activeEngine = state.ttsEngine || 'kokoro';
+  const gridPresets = VOICE_PRESETS.filter(p => {
+    if(p.robot) return false;
+    const eng = p.engine || 'kokoro';
+    return eng === activeEngine;
+  });
   g.innerHTML = gridPresets.map(p=>{
     const isCustom = p.custom === true || p.category === 'custom';
     const safeName = (p.name||'').replace(/'/g,"\\'");
+    const eng      = p.engine || 'kokoro';
+    // Engine badge: a tiny coloured chip on each card so the user can tell
+    // at a glance which engine that voice runs on. Kokoro = purple,
+    // Fish = green, ElevenLabs = blue.
+    const engineLabel = eng === 'fish-speech-s2-pro' ? 'FISH' : eng === 'elevenlabs' ? 'API' : 'KOKORO';
+    const engineColor = eng === 'fish-speech-s2-pro'
+      ? 'background:rgba(0,180,120,.18);color:#6ee7b7'
+      : eng === 'elevenlabs'
+        ? 'background:rgba(96,165,250,.18);color:#93c5fd'
+        : 'background:rgba(167,139,250,.18);color:#c4b5fd';
+    const engineBadge = `<span style="font-size:.5rem;${engineColor};padding:2px 6px;border-radius:4px;letter-spacing:.6px;font-weight:700;white-space:nowrap;flex-shrink:0">${engineLabel}</span>`;
     const savedBadge = isCustom
       ? `<span style="font-size:.52rem;background:rgba(34,197,94,.18);color:#86efac;padding:2px 7px;border-radius:4px;letter-spacing:.5px;font-weight:700;white-space:nowrap;flex-shrink:0">SAVED</span>`
       : '';
@@ -3529,7 +4242,8 @@ function buildPresetGrid(){
       ? `<button class="preset-del-btn" style="position:static;opacity:.55;flex-shrink:0" onclick="event.stopPropagation();deleteCustomPreset('${p.id}','${safeName}')" title="Delete">×</button>`
       : '';
     return `
-    <div class="preset-card${p.id===state.voice?' active':''}" data-preset="${p.id}" onclick="selectPreset('${p.id}')">
+    <div class="preset-card${p.id===state.voice?' active':''}" data-preset="${p.id}" data-engine="${eng}" onclick="selectPreset('${p.id}')">
+      ${engineBadge}
       ${savedBadge}
       <span class="preset-icon">${p.icon}</span>
       <div style="flex:1;min-width:0">
@@ -3541,6 +4255,11 @@ function buildPresetGrid(){
       <span class="preset-selected-dot" title="Selected"></span>
     </div>`;
   }).join('');
+  // Empty-state hint when the active engine has no cards yet (e.g. Fish
+  // selected but presets list hasn't loaded yet).
+  if(!gridPresets.length){
+    g.innerHTML = `<div style="grid-column:1/-1;padding:18px;text-align:center;font-size:.7rem;color:var(--muted);background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:10px">No ${activeEngine === 'fish-speech-s2-pro' ? 'Fish Speech S2 Pro' : activeEngine} voices available yet. ${activeEngine === 'fish-speech-s2-pro' ? 'Make sure the model is installed and the Fish Speech server is reachable.' : ''}</div>`;
+  }
 }
 
 function revertVoice(){
@@ -3558,6 +4277,38 @@ function selectPreset(id){
   document.querySelectorAll('.preset-card').forEach(c=>c.classList.toggle('active',c.dataset.preset===id));
   // Reset sliders to preset defaults — check built-in and custom presets
   const p = VOICE_PRESETS.find(x=>x.id===id);
+  // ── Engine sync ─────────────────────────────────────────────────────
+  // If the chosen card belongs to a different engine than the picker is
+  // showing, flip the picker so the rest of the panel updates (Fish side-
+  // panel, style-tags helper, etc.). Defensive against legacy presets
+  // that don't carry an `engine` field — treat them as Kokoro.
+  const cardEngine = (p && p.engine) || (id && id.startsWith('fish_') ? 'fish-speech-s2-pro' : 'kokoro');
+  if(state.ttsEngine !== cardEngine){
+    state.ttsEngine = cardEngine;
+    const sel = document.getElementById('ttsEngineSelect');
+    if(sel) sel.value = cardEngine;
+    const fishPanel = document.getElementById('fishSpeechPanel');
+    const fishTags  = document.getElementById('fishStyleTagsCard');
+    const isFish = cardEngine === 'fish-speech-s2-pro';
+    if(fishPanel) fishPanel.style.display = isFish ? 'flex' : 'none';
+    if(fishTags)  fishTags.style.display  = isFish ? 'block' : 'none';
+  }
+  // Seed Fish-specific state from the preset's fishDefaults if present —
+  // this gives sensible defaults for Speed/Temperature/Pitch when the
+  // user picks a Fish card without manually adjusting the Fish sliders.
+  if(p && p.engine === 'fish-speech-s2-pro'){
+    if(p.fishVoice) state.fishVoice = p.fishVoice;
+    if(p.fishDefaults){
+      state.fishSpeed = p.fishDefaults.speed ?? state.fishSpeed;
+      state.fishTemp  = p.fishDefaults.temperature ?? state.fishTemp;
+      state.fishPitch = p.fishDefaults.pitchSemitones ?? state.fishPitch;
+      // Mirror to the sliders if they exist
+      const sp = document.getElementById('fishSpeed'); if(sp) sp.value = Math.round((p.fishDefaults.speed ?? 1.0) * 100);
+      const sv = document.getElementById('fishSpeedVal'); if(sv) sv.textContent = (p.fishDefaults.speed ?? 1.0).toFixed(2) + 'x';
+      const tp = document.getElementById('fishTemp');  if(tp) tp.value = Math.round((p.fishDefaults.temperature ?? 0.7) * 100);
+      const tv = document.getElementById('fishTempVal'); if(tv) tv.textContent = (p.fishDefaults.temperature ?? 0.7).toFixed(2);
+    }
+  }
   if(!p){ return; } // custom preset — sliders stay at current position
   voiceSliders.pitch        = null;
   voiceSliders.rate         = null;
@@ -3895,13 +4646,24 @@ async function generateAndPlayVoice(text, isPreview=false){
 
   try{
     const params = getVoiceParams();
+    // ── Resolve the engine for THIS request ─────────────────────────────
+    // Fish presets force the Fish engine even if the user hasn't flipped
+    // the engine picker yet (clicking a Fish card is intent enough).
+    const isFishPreset = (state.voice || '').startsWith('fish_');
+    const engine = isFishPreset ? 'fish-speech-s2-pro' : (state.ttsEngine || 'kokoro');
+    const fishExtras = (engine === 'fish-speech-s2-pro') ? {
+      fishVoice:     state.fishVoice,
+      fishSpeed:     state.fishSpeed,
+      fishTemp:      state.fishTemp,
+      fishPitch:     state.fishPitch,
+    } : {};
     // Cache-busting timestamp on the URL stops the browser from reusing a
     // stale audio response from a previous request with old slider values.
     const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice?_=${Date.now()}`,{
       method:'POST',
       headers:{'Content-Type':'application/json','Cache-Control':'no-cache'},
       signal: voiceGenController.signal,
-      body: JSON.stringify({ text, ...params, preview: isPreview }),
+      body: JSON.stringify({ text, ...params, ...fishExtras, engine, preview: isPreview }),
     });
 
     if(!r.ok){
@@ -4489,6 +5251,11 @@ async function exportToCapCut(){
 }
 
 async function refreshEngineStatus(){
+  // Compact one-liner that always shows BOTH Kokoro and Fish Speech S2 Pro
+  // status side by side, so the user knows at a glance which engines are
+  // available. The detailed engine card (engineCard / kokoroDot / fishDot)
+  // is rendered separately by renderTtsStatus() — this is the legacy
+  // single-line summary kept for backwards compatibility.
   const line = document.getElementById('engineStatusLine');
   if(!line) return;
   try {
@@ -4497,20 +5264,59 @@ async function refreshEngineStatus(){
     const d = await r.json();
     const localOk     = !!d.local;
     const localEngine = d.engine || 'kokoro';
-    const dot = (ok) => ok ? '<span style="color:#86efac">●</span>' : '<span style="color:#fca5a5">●</span>';
-    line.innerHTML = `${dot(localOk)} Kokoro: ${localOk ? localEngine : 'off'}`;
+    const dot = (color) => `<span style="color:${color}">●</span>`;
+    const kokoroPart = `${dot(localOk ? '#86efac' : '#fca5a5')} Kokoro: ${localOk ? localEngine : 'off'}`;
+    const fs = (d.fish && d.fish.state) || 'unknown';
+    const fishColor = fs === 'ready' ? '#86efac'
+                    : fs === 'installing' ? '#fcd34d'
+                    : fs === 'server_only' || fs === 'model_only' ? '#fcd34d'
+                    : '#fca5a5';
+    const fishLabel = fs === 'ready' ? 'on'
+                    : fs === 'installing' ? 'installing'
+                    : fs === 'server_only' ? 'server only'
+                    : fs === 'model_only' ? 'model only'
+                    : fs === 'missing' ? 'missing'
+                    : 'off';
+    const fishPart = `${dot(fishColor)} Fish Speech S2 Pro: ${fishLabel}`;
+    line.innerHTML = `${kokoroPart} &nbsp;&nbsp;|&nbsp;&nbsp; ${fishPart}`;
   } catch { /* server might be starting */ }
 }
 
-// ── Fish Speech — bridge removed, stubs prevent dead 404 calls ───────────────
+// ── Fish Speech S2 Pro — real status driven by /api/fish-s2pro/status ─────
+// (The old "bridge removed" stub is gone; this now reflects the new S2 Pro
+//  integration that talks to a local Fish Speech server + cached weights.)
 
 async function checkFishSpeechStatus(){
-  // Bridge removed — no-op so callers don't fire 404s against the server
   const dot  = document.getElementById('fishStatusDot');
   const text = document.getElementById('fishStatusText');
-  if(dot)  dot.textContent  = '⚫';
-  if(text) text.textContent = 'Fish Speech not available (bridge removed).';
-  state.fishState = 'bridge_not_running';
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/status`);
+    const d = r.ok ? await r.json() : null;
+    if(!d || !d.ok){ throw new Error('status endpoint did not return ok'); }
+    state.fishState = d.state;
+    const s = d.state;
+    if(s === 'ready'){
+      if(dot)  dot.textContent = '🟢';
+      if(text){ text.style.color='#86efac'; text.textContent = d.message; }
+    } else if(s === 'installing'){
+      if(dot)  dot.textContent = '⏳';
+      if(text){ text.style.color='#fcd34d'; text.textContent = 'Fish Speech S2 Pro installing…'; }
+    } else if(s === 'server_only'){
+      if(dot)  dot.textContent = '🟡';
+      if(text){ text.style.color='#fcd34d'; text.textContent = 'Server reachable, model not cached locally.'; }
+    } else if(s === 'model_only'){
+      if(dot)  dot.textContent = '🟡';
+      if(text){ text.style.color='#fcd34d'; text.textContent = 'Model installed, but Fish Speech server not reachable. Set FISH_TTS_URL.'; }
+    } else {
+      if(dot)  dot.textContent = '🔴';
+      if(text){ text.style.color='#fca5a5'; text.textContent = d.message || 'Fish Speech S2 Pro not installed — click install.'; }
+    }
+    // Also bubble the state up to the picker dots.
+    refreshTtsEngineStatus();
+  }catch(e){
+    if(dot)  dot.textContent = '🔴';
+    if(text){ text.style.color='#fca5a5'; text.textContent = 'Status check failed: ' + (e?.message || e); }
+  }
   return;
   try {
     // Phase 4: 10s client timeout because server probe is now 8s
@@ -6465,12 +7271,35 @@ async function previewVoiceOnlySample(){
   const myGen = ++_voiceSampleGenSeq;
   const isStale = () => myGen !== _voiceSampleGenSeq;
 
-  _setSampleStatus('⏳ generating a short sample…', 'var(--muted)');
+  // For Fish, the first call can bootstrap the entire runtime. Show a more
+  // informative message + start polling the lifecycle status so the user
+  // sees the checklist update live underneath the preview button.
+  const _isFishPresetEarly = (state.voice || '').startsWith('fish_');
+  if(_isFishPresetEarly){
+    _setSampleStatus('⏳ preparing Fish Speech runtime (this can take a few minutes the first time)…', 'var(--muted)');
+    try{ refreshFishStatusDeep(); }catch{}
+    if(!window._fishPreviewPoll){
+      window._fishPreviewPoll = setInterval(() => {
+        if(!_voiceSampleInFlight){ clearInterval(window._fishPreviewPoll); window._fishPreviewPoll = null; return; }
+        refreshFishStatusDeep();
+        refreshFishLogs();
+      }, 2000);
+    }
+  } else {
+    _setSampleStatus('⏳ generating a short sample…', 'var(--muted)');
+  }
 
   try {
+    // ── Engine flows through the preview sample so the server routes
+    //     to the right backend (Kokoro generateVoice vs Fish previewFishVoice).
+    //     Without this the preview always used Kokoro and Fish cards
+    //     silently fell back to a Kokoro voice.
+    const isFishPreset = (state.voice || '').startsWith('fish_');
+    const engine = isFishPreset ? 'fish-speech-s2-pro' : (state.ttsEngine || 'kokoro');
     const body = {
       scriptLines: [{ text: VOICE_SAMPLE_TEXT, type: 'observation' }],
       voice: Object.assign(getVoiceParams(), {
+        engine,                                              // <- routes engine
         fishVoice:     state.fishVoice     ?? 'dark_narrator',
         fishSpeed:     state.fishSpeed     ?? 1.0,
         fishTemp:      state.fishTemp      ?? 0.70,
@@ -6478,10 +7307,13 @@ async function previewVoiceOnlySample(){
         fishNormalize: state.fishNormalize !== false,
       }),
     };
+    // 300s timeout because the first Fish preview can trigger the full
+    // runtime bootstrap (clone + pip install + first model load). After
+    // that, subsequent calls are sub-30s.
     const r = await fetch(`${API_BASE}/api/trend-vault/voice-preview`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(isFishPreset ? 300_000 : 120_000),
     });
     const data = await r.json();
     if(isStale()) return;  // user clicked again — drop this result
@@ -6546,7 +7378,13 @@ function useVoiceInTimeline(){
   if(state.voiceSample && state.voiceSample.isPlayable === false){
     if(!confirm('The last sample failed to play. Promote this voice to the timeline anyway?')) return;
   }
-  state.activeTimelineProvider = 'kokoro';
+  // ── Persist BOTH the selected voice preset AND the selected engine ───
+  // The render pipeline reads activeTimelineProvider to decide whether to
+  // route Kokoro or Fish. Previously this was hard-coded to 'kokoro'; with
+  // Fish S2 Pro added we set it from state.ttsEngine (or the preset id).
+  const isFishPreset = (state.voice || '').startsWith('fish_');
+  state.activeTimelineProvider = isFishPreset ? 'fish-speech-s2-pro' : (state.ttsEngine || 'kokoro');
+  state.timelineVoicePresetId  = state.voice || null;   // saved alongside engine
   markDirty('voice');
   // Invalidate timeline audio so the next play can't reuse old-provider audio
   state.previewAudioUrl   = null;
@@ -10076,6 +10914,350 @@ async function _applyStockAudio(btn){
   showToast("Stock browser restoration pending - use Local Render directly", "info");
 }
 function _renderStockPagination(){ /* pending restoration */ }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🐟 Fish Speech Manager Card  (fmXxx namespace)
+//  Drives the dedicated "Fish Speech S2 Pro" card in the controls column.
+//  Reuses existing startFishS2Pro / repairFishS2Pro / renderFishChecklist
+//  where they exist; all card-specific UI is fm-prefixed to avoid conflicts.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FM_VOICE_PRESETS = [
+  { id:'dark_narrator',    icon:'🌑', name:'Dark Narrator',    desc:'deep, foreboding tone',      example:'In the heart of darkness, something ancient awakens.' },
+  { id:'calm_storyteller', icon:'🌿', name:'Calm Storyteller',  desc:'warm, soothing voice',       example:'Sit back and let this story carry you somewhere peaceful.' },
+  { id:'emotional_male',   icon:'🎭', name:'Emotional Male',    desc:'expressive, wide range',     example:'I never thought this moment would come. But here we are.' },
+  { id:'soft_whisper',     icon:'🌙', name:'Soft Whisper',      desc:'gentle, intimate tone',      example:'Just between us — the secret has been kept long enough.' },
+  { id:'deep_cinematic',   icon:'🎬', name:'Deep Cinematic',    desc:'booming cinematic bass',     example:'From the beginning of time, legends have been written in blood.' },
+  { id:'mysterious_voice', icon:'🔮', name:'Mysterious Voice',  desc:'enigmatic, haunting',        example:'What you seek has always been closer than you realized.' },
+  { id:'energetic_host',   icon:'⚡', name:'Energetic Host',    desc:'upbeat, punchy delivery',    example:'Welcome back! You are NOT going to believe what happened next.' },
+  { id:'authoritative',    icon:'👔', name:'Authoritative',     desc:'confident, commanding',      example:'The data is clear. The time to act is now — not tomorrow.' },
+];
+
+let _fmSelectedVoice = FM_VOICE_PRESETS[0];
+let _fmStatusPoll = null;
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function fmSwitchTab(tab) {
+  ['status','voices','preview'].forEach(t => {
+    const panel = document.getElementById('fmTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    const btn   = document.getElementById('fmTab' + t.charAt(0).toUpperCase() + t.slice(1) + 'Btn');
+    if(panel) panel.style.display = t === tab ? 'block' : 'none';
+    if(btn){
+      btn.classList.toggle('fm-tab-active', t === tab);
+    }
+  });
+  if(tab === 'voices')  fmRenderVoiceGrid();
+  if(tab === 'status')  fmRefresh();
+  if(tab === 'preview') fmSyncPreviewVoice();
+}
+window.fmSwitchTab = fmSwitchTab;
+
+// ── Status refresh ─────────────────────────────────────────────────────────
+async function fmRefresh() {
+  const badge = document.getElementById('fmOverallBadge');
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/status`);
+    const d = r.ok ? await r.json() : null;
+    if(!d) throw new Error('no response');
+
+    // Update overall badge
+    const s = d.state || 'unknown';
+    const badgeCfg = {
+      ready:       { bg:'rgba(34,197,94,.18)',    border:'rgba(34,197,94,.5)',    color:'#86efac', text:'✓ Ready'       },
+      installing:  { bg:'rgba(251,191,36,.15)',   border:'rgba(251,191,36,.4)',   color:'#fcd34d', text:'⏳ Installing'  },
+      server_only: { bg:'rgba(251,191,36,.15)',   border:'rgba(251,191,36,.4)',   color:'#fcd34d', text:'⚠ Server Only' },
+      model_only:  { bg:'rgba(251,191,36,.15)',   border:'rgba(251,191,36,.4)',   color:'#fcd34d', text:'⚠ Model Only'  },
+      missing:     { bg:'rgba(239,68,68,.12)',    border:'rgba(239,68,68,.4)',    color:'#fca5a5', text:'✗ Not Ready'   },
+    };
+    const cfg = badgeCfg[s] || { bg:'rgba(100,116,139,.12)', border:'rgba(100,116,139,.3)', color:'#94a3b8', text:s };
+    if(badge){
+      badge.style.background = cfg.bg;
+      badge.style.borderColor = cfg.border;
+      badge.style.color = cfg.color;
+      badge.textContent = cfg.text;
+    }
+
+    // Update checklist (mirrors the existing renderFishChecklist logic)
+    fmRenderChecklist(d.steps || {});
+
+    // Update config summary
+    fmRenderConfig(d.config || d);
+
+    // Sync progress label
+    const pl = document.getElementById('fmProgressLabel');
+    if(pl) pl.textContent = (s !== 'ready' && d.message) ? d.message : '';
+
+  } catch(e) {
+    if(badge){ badge.style.background='rgba(100,116,139,.12)'; badge.style.color='#94a3b8'; badge.textContent='⚠ Server offline'; }
+  }
+}
+window.fmRefresh = fmRefresh;
+
+function fmRenderChecklist(steps) {
+  const container = document.getElementById('fmChecklist');
+  if(!container) return;
+  const ICONS = { pending:'⚪', running:'🔄', ok:'✅', failed:'❌', skipped:'⏭️' };
+  const ORDER = ['model','runtime','venv','deps','server','endpoint','test'];
+  const LABELS = { model:'Fish model', runtime:'Fish runtime', venv:'Python venv', deps:'Dependencies', server:'Fish server', endpoint:'Fish API endpoint', test:'Test generation' };
+
+  ORDER.forEach(key => {
+    const el = container.querySelector(`[data-step="${key}"]`);
+    if(!el) return;
+    const step = steps[key];
+    if(!step){ el.textContent = `⚪ ${LABELS[key]}: pending`; return; }
+    const icon = ICONS[step.status] || '⚪';
+    const detail = step.detail ? ` — ${step.detail}` : '';
+    el.textContent = `${icon} ${step.label || LABELS[key]}${detail}`;
+    el.style.color = step.status === 'ok' ? '#86efac' : step.status === 'failed' ? '#fca5a5' : step.status === 'running' ? '#fcd34d' : '';
+  });
+}
+
+function fmRenderConfig(cfg) {
+  const el = document.getElementById('fmConfigBody');
+  if(!el) return;
+  const row = (label, val) => `<div style="display:flex;gap:8px;justify-content:space-between"><span style="color:#6ee7b7">${label}</span><span style="color:#cbd5e1;font-size:.6rem;word-break:break-all;text-align:right;max-width:70%">${val||'—'}</span></div>`;
+  el.innerHTML = [
+    row('Model path',   cfg.modelDir || cfg.modelPath   || cfg.model_path   || ''),
+    row('Runtime path', cfg.runtimeDir || cfg.runtimePath || cfg.runtime_path || ''),
+    row('Venv path',    cfg.venvDir   || cfg.venvPath   || cfg.venv_path   || ''),
+    row('Server URL',   cfg.serverUrl || cfg.server_url || cfg.fishTtsUrl  || 'http://127.0.0.1:8080'),
+    row('Endpoint',     cfg.endpoint  || ''),
+  ].join('');
+}
+
+// ── Start / Repair / Choose Model ─────────────────────────────────────────
+async function fmStart() {
+  const btn = document.getElementById('fmStartBtn');
+  const pl  = document.getElementById('fmProgressLabel');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Starting…'; }
+  if(pl)  pl.textContent = 'starting — this can take a few minutes the first time…';
+  let elapsed = 0;
+  const poll = setInterval(() => { elapsed += 2; if(pl) pl.textContent = `Starting… ${elapsed}s`; fmRefresh(); fmRefreshLogs(); }, 2000);
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/start`, { method:'POST' });
+    const d = await r.json().catch(()=>({}));
+    if(d.ok){
+      if(pl) pl.textContent = '✓ Fish Speech S2 Pro ready';
+      showToast('Fish Speech S2 Pro ready', 'success');
+    } else {
+      const failedStep = Object.values(d.steps || {}).find(s => s.status === 'failed');
+      const detail = failedStep ? `${failedStep.label}: ${failedStep.detail||'failed'}` : (d.message||'startup failed');
+      if(pl) pl.textContent = '✗ ' + detail;
+      showToast('Fish Speech start failed — ' + detail, 'error');
+      // Auto-open logs on failure
+      const logPanel = document.getElementById('fmLogPanel');
+      if(logPanel && logPanel.style.display === 'none') fmToggleLogs();
+    }
+  } catch(e) {
+    if(pl) pl.textContent = '✗ ' + (e?.message || String(e));
+    showToast('Fish Speech start errored: ' + (e?.message||e), 'error');
+  } finally {
+    clearInterval(poll);
+    if(btn){ btn.disabled = false; btn.textContent = '▶ Start Fish Speech'; }
+    fmRefresh(); fmRefreshLogs();
+  }
+}
+window.fmStart = fmStart;
+
+async function fmRepair() {
+  const cfg = await fetch(`${API_BASE}/api/fish-s2pro/status`).then(r=>r.json()).catch(()=>({}));
+  const modelDir = cfg?.config?.modelDir || cfg?.config?.modelPath || 'your model folder';
+  if(!confirm(`This will wipe the Fish Speech venv and reinstall all Python dependencies.\nThe model files at ${modelDir} are NOT touched.\n\nContinue?`)) return;
+  const btn = document.getElementById('fmRepairBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Repairing…'; }
+  const pl = document.getElementById('fmProgressLabel');
+  if(pl) pl.textContent = 'Repairing venv + deps (this can take 5–15 min)…';
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/repair`, { method:'POST' });
+    const d = await r.json().catch(()=>({}));
+    if(d.ok){ showToast('Fish Speech repaired successfully', 'success'); if(pl) pl.textContent = '✓ Repaired'; }
+    else { showToast('Repair failed: ' + (d.message||'see logs'), 'error'); if(pl) pl.textContent = '✗ Repair failed'; }
+  } catch(e) { showToast('Repair error: ' + (e?.message||e), 'error'); }
+  finally {
+    if(btn){ btn.disabled = false; btn.textContent = '🛠 Repair'; }
+    fmRefresh(); fmRefreshLogs();
+  }
+}
+window.fmRepair = fmRepair;
+
+async function fmChooseModel() {
+  const path = prompt('Enter the full path to your Fish Speech S2 Pro model folder (e.g. C:\\Users\\Anton\\s2-pro):');
+  if(!path || !path.trim()) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/set-model-path`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ modelPath: path.trim() })
+    });
+    const d = await r.json().catch(()=>({}));
+    if(d.ok){ showToast('Model path updated', 'success'); fmRefresh(); }
+    else showToast('Failed: ' + (d.message||'unknown error'), 'error');
+  } catch(e){ showToast('Error: ' + (e?.message||e), 'error'); }
+}
+window.fmChooseModel = fmChooseModel;
+
+// ── Logs ──────────────────────────────────────────────────────────────────
+function fmToggleLogs() {
+  const panel = document.getElementById('fmLogPanel');
+  if(!panel) return;
+  const isVisible = panel.style.display !== 'none';
+  panel.style.display = isVisible ? 'none' : 'block';
+  if(!isVisible) fmRefreshLogs();
+}
+window.fmToggleLogs = fmToggleLogs;
+
+async function fmRefreshLogs() {
+  const el = document.getElementById('fmLogEntries');
+  if(!el) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/logs`);
+    const d = r.ok ? await r.json() : null;
+    if(d && d.lines && d.lines.length) {
+      el.textContent = d.lines.join('\n');
+    } else {
+      el.textContent = 'No logs yet — click ▶ Start Fish Speech to begin.';
+    }
+  } catch { el.textContent = 'Log endpoint not reachable.'; }
+}
+window.fmRefreshLogs = fmRefreshLogs;
+
+async function fmClearLogs() {
+  try { await fetch(`${API_BASE}/api/fish-s2pro/logs/clear`, { method:'POST' }); }
+  catch{}
+  fmRefreshLogs();
+}
+window.fmClearLogs = fmClearLogs;
+
+// ── Voice preset grid ──────────────────────────────────────────────────────
+function fmRenderVoiceGrid() {
+  const grid = document.getElementById('fmVoiceGrid');
+  if(!grid) return;
+  grid.innerHTML = FM_VOICE_PRESETS.map(p => `
+    <div onclick="fmSelectVoice('${p.id}')"
+      id="fmVCard_${p.id}"
+      style="padding:10px 12px;background:rgba(0,180,120,.05);border:1px solid rgba(0,180,120,.2);border-radius:10px;cursor:pointer;transition:all .18s;${_fmSelectedVoice.id===p.id?'border-color:rgba(0,200,140,.6);background:rgba(0,200,140,.12);':''}"
+      onmouseover="this.style.borderColor='rgba(0,200,140,.45)'" onmouseout="fmCardHoverOut('${p.id}')">
+      <div style="font-size:1.3rem;margin-bottom:4px">${p.icon}</div>
+      <div style="font-size:.72rem;font-weight:700;color:#6ee7b7;margin-bottom:2px">${p.name}</div>
+      <div style="font-size:.6rem;color:var(--muted)">${p.desc}</div>
+    </div>
+  `).join('');
+}
+
+function fmCardHoverOut(id) {
+  const el = document.getElementById('fmVCard_' + id);
+  if(!el) return;
+  el.style.borderColor = _fmSelectedVoice.id === id ? 'rgba(0,200,140,.6)' : 'rgba(0,180,120,.2)';
+}
+
+function fmSelectVoice(id) {
+  _fmSelectedVoice = FM_VOICE_PRESETS.find(p => p.id === id) || FM_VOICE_PRESETS[0];
+  // Highlight selected card
+  FM_VOICE_PRESETS.forEach(p => {
+    const el = document.getElementById('fmVCard_' + p.id);
+    if(!el) return;
+    if(p.id === id){
+      el.style.borderColor = 'rgba(0,200,140,.6)';
+      el.style.background  = 'rgba(0,200,140,.12)';
+    } else {
+      el.style.borderColor = 'rgba(0,180,120,.2)';
+      el.style.background  = 'rgba(0,180,120,.05)';
+    }
+  });
+  // Update selected display
+  const nameEl = document.getElementById('fmSelVoiceName');
+  const descEl = document.getElementById('fmSelVoiceDesc');
+  if(nameEl) nameEl.textContent = _fmSelectedVoice.name;
+  if(descEl) descEl.textContent = _fmSelectedVoice.desc;
+  // Sync to preview tab
+  fmSyncPreviewVoice();
+}
+window.fmSelectVoice = fmSelectVoice;
+
+function fmSyncPreviewVoice() {
+  const el = document.getElementById('fmPreviewVoiceName');
+  if(el) el.textContent = _fmSelectedVoice.name;
+}
+
+// ── Use voice in Studio ────────────────────────────────────────────────────
+function fmUseVoiceInStudio() {
+  // Switch engine to Fish Speech and update the voice dropdown
+  const engineSel = document.getElementById('ttsEngineSelect');
+  const voiceSel  = document.getElementById('fishVoiceSelect');
+  if(engineSel){
+    engineSel.value = 'fish-speech-s2-pro';
+    if(typeof onEngineChange === 'function') onEngineChange('fish-speech-s2-pro');
+  }
+  if(voiceSel){ voiceSel.value = _fmSelectedVoice.id; if(typeof state !== 'undefined') state.fishVoice = _fmSelectedVoice.id; }
+  showToast(`🐟 Voice set: Fish Speech — ${_fmSelectedVoice.name}`, 'success');
+}
+window.fmUseVoiceInStudio = fmUseVoiceInStudio;
+
+// ── Quick preview generation ───────────────────────────────────────────────
+async function fmGenerate() {
+  const btn    = document.getElementById('fmGenerateBtn');
+  const status = document.getElementById('fmGenStatus');
+  const wrap   = document.getElementById('fmAudioWrap');
+  const audio  = document.getElementById('fmAudio');
+  const text   = (document.getElementById('fmPreviewText')?.value || '').trim();
+  if(!text){ showToast('Enter text to synthesize', 'error'); return; }
+
+  if(btn){ btn.disabled = true; btn.textContent = '⟳ Generating…'; }
+  if(status) status.textContent = '⟳ Calling Fish Speech S2 Pro…';
+  if(wrap)  wrap.style.display = 'none';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ text, voice: _fmSelectedVoice.id, speed: 1.0, temperature: 0.7 })
+    });
+    const d = await r.json().catch(()=>({}));
+    if(d.ok && d.audioUrl){
+      if(audio){ audio.src = d.audioUrl; audio.load(); audio.play().catch(()=>{}); }
+      if(wrap)  wrap.style.display = 'block';
+      if(status) status.textContent = `✓ Generated with ${_fmSelectedVoice.name}`;
+    } else {
+      const msg = d.message || d.error || 'generation failed';
+      if(status) status.textContent = '✗ ' + msg;
+      showToast('Fish preview failed: ' + msg, 'error');
+      // If server isn't running, nudge the user
+      if(msg.toLowerCase().includes('not reachable') || msg.toLowerCase().includes('server')) {
+        if(status) status.textContent += ' — try ▶ Start Fish Speech in the Status tab';
+      }
+    }
+  } catch(e) {
+    if(status) status.textContent = '✗ Error: ' + (e?.message || String(e));
+    showToast('Fish preview error: ' + (e?.message||e), 'error');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '✦ GENERATE AUDIO'; }
+  }
+}
+window.fmGenerate = fmGenerate;
+
+// ── Style tag insertion ────────────────────────────────────────────────────
+function fmInsertTag(tag) {
+  const ta = document.getElementById('fmPreviewText');
+  if(!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + tag + ta.value.slice(end);
+  ta.selectionStart = ta.selectionEnd = start + tag.length;
+  ta.focus();
+}
+window.fmInsertTag = fmInsertTag;
+
+// ── Bootstrap (run after DOM ready) ───────────────────────────────────────
+function _fmInit() {
+  fmRefresh();
+  fmRenderVoiceGrid();
+  // Poll status every 10 seconds passively
+  _fmStatusPoll = setInterval(fmRefresh, 10000);
+}
+// Attach to existing DOMContentLoaded or fire immediately if already loaded
+if(document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _fmInit);
+} else {
+  _fmInit();
+}
 </script>
 </body>
 </html>

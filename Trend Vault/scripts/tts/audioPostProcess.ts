@@ -134,7 +134,10 @@ export function buildFilterChain(opts: PostProcessOptions): string {
   return filters.join(',');
 }
 
-const CONCAT_SAMPLE_RATE = 22050;
+// Raised from 22050 → 44100 for consistent quality across all pipeline stages.
+// All TTS chunk WAVs, silence pads, and the final concat now share one sample
+// rate so no implicit resampling can distort pitch or timing.
+const CONCAT_SAMPLE_RATE = 44100;
 
 export function generateSilenceWav(durationSec: number, outputPath: string): Promise<void> {
   if (durationSec <= 0) return Promise.reject(new Error('generateSilenceWav: durationSec must be > 0'));
@@ -243,11 +246,9 @@ export function applyAudioFX(inputPath: string, outputPath: string, opts: PostPr
       .audioChannels(1)
       .audioFrequency(44100);
     if (isWav) cmd.audioCodec('pcm_s16le');
-    else cmd.audioCodec('libmp3lame').audioBitrate(128);
-    cmd
-      .output(outputPath)
-      .on('end', () => resolve())
-      .on('error', (err: Error) => reject(new Error('FFmpeg error: ' + err.message)))
-      .run();
+    else cmd.audioCodec('libmp3lame').audioBitrate('192k');
+    cmd.on('end',   () => resolve())
+       .on('error', (err: Error) => reject(err))
+       .save(outputPath);
   });
 }
