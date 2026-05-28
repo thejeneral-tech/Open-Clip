@@ -380,6 +380,18 @@ function runClawTurn(req, res, body) {
   });
 
   let stdoutBuf = "";
+  // Track whether claw-dev already streamed a structured error to stdout
+  // (e.g. {type:"result", is_error:true, result:"API Error: 400 ..."}). If
+  // so, the real error is rendered separately as a result block — skip the
+  // bare "exited with code N (no stderr output)" wrapper on close so the
+  // user doesn't see a useless second error below the real one.
+  let sawStreamError = false;
+  const trackAndForward = (evt) => {
+    if (evt && evt.type === "result" && evt.is_error === true) {
+      sawStreamError = true;
+    }
+    forwardClawEvent(emit, evt);
+  };
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk) => {
     stdoutBuf += chunk;
@@ -390,7 +402,7 @@ function runClawTurn(req, res, body) {
       if (!line) continue;
       let evt;
       try { evt = JSON.parse(line); } catch { continue; }
-      forwardClawEvent(emit, evt);
+      trackAndForward(evt);
     }
   });
 
@@ -421,7 +433,7 @@ function runClawTurn(req, res, body) {
     if (stdoutBuf.trim()) {
       try {
         const evt = JSON.parse(stdoutBuf.trim());
-        forwardClawEvent(emit, evt);
+        trackAndForward(evt);
       } catch { /* ignore tail */ }
       stdoutBuf = "";
     }
@@ -432,16 +444,22 @@ function runClawTurn(req, res, body) {
       if (trimmed) emit({ kind: "warning", message: "[claw-dev stderr]\n" + trimmed });
       emit({ kind: "done", message: "claw-dev finished (exit 0)" });
     } else {
-      // Non-zero exit: dump the whole stderr as a clearly-labelled error
-      // block so the user actually sees what claw-dev complained about.
+      // Non-zero exit. Three cases:
+      //  1. stderr has content → dump it as the error block.
+      //  2. stderr is empty but claw-dev already streamed an is_error
+      //     result to stdout (rendered separately as a result block) →
+      //     skip the wrapper; a second, vaguer error just adds noise.
+      //  3. truly no info anywhere → emit the bare wrapper as a last resort.
       const trimmed = stderrAccum.trim();
       const exitInfo = `claw-dev exited with code ${code}${sig ? ` (signal ${sig})` : ""}`;
-      emit({
-        kind: "error",
-        message: trimmed
-          ? `${exitInfo}\n\n--- claw-dev stderr ---\n${trimmed}\n--- end stderr ---`
-          : `${exitInfo} (no stderr output)`,
-      });
+      if (trimmed) {
+        emit({
+          kind: "error",
+          message: `${exitInfo}\n\n--- claw-dev stderr ---\n${trimmed}\n--- end stderr ---`,
+        });
+      } else if (!sawStreamError) {
+        emit({ kind: "error", message: `${exitInfo} (no stderr output)` });
+      }
       if (looksWeak) {
         emit({
           kind: "warning",
