@@ -9,7 +9,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "web": "tsx src/webServer.ts",
-    "trendvault-coder": "node launchers/trendvault-coder-launcher.js",
+    "trendvault-coder": "node launchers/trendvault-coder-launcher.cjs",
     "proxy:compat": "tsx src/anthropicCompatProxy.ts",
     "proxy:gemini": "tsx src/anthropicCompatProxy.ts",
     "start": "node dist/index.js",

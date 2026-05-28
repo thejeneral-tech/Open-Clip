@@ -8,7 +8,7 @@ const launcherDir = __dirname;
 const repoRoot = path.join(__dirname, "..");
 const workspaceRoot = repoRoot;
 const cliPath = path.join(repoRoot, "vendor", "claude-code-bundle", "cli.js");
-const brandingPatchPath = path.join(launcherDir, "patch-branding.js");
+const brandingPatchPath = path.join(launcherDir, "patch-branding.cjs");
 const defaultPorts = {
   gemini: "8787",
   groq: "8788",

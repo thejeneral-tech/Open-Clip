@@ -5,5 +5,5 @@ if (-not $env:GEMINI_API_KEY) {
   exit 1
 }
 
-& node (Join-Path $repoRoot "claude-gemini-launcher.js") @args
+& node (Join-Path $repoRoot "claude-gemini-launcher.cjs") @args
 exit $LASTEXITCODE

@@ -82,13 +82,21 @@ async function searchText(input: Record<string, unknown>, cwd: string): Promise<
   return { content };
 }
 
+function pickShell(): string {
+  // Use PowerShell on Windows; default to bash everywhere else. On Linux/macOS
+  // `powershell.exe` is typically absent and exec() throws ENOENT before the
+  // command is run.
+  if (process.platform === "win32") return "powershell.exe";
+  return process.env.SHELL?.trim() || "/bin/bash";
+}
+
 async function runShell(input: Record<string, unknown>, cwd: string): Promise<ToolResult> {
   if (typeof input.command !== "string" || input.command.length === 0) {
     throw new Error("command is required");
   }
   const { stdout, stderr } = await execAsync(input.command, {
     cwd,
-    shell: "powershell.exe",
+    shell: pickShell(),
     windowsHide: true,
     maxBuffer: 1024 * 1024,
   });
@@ -144,11 +152,17 @@ export const toolDefinitions: ToolDefinition[] = [
   },
   {
     name: "run_shell",
-    description: "Run a PowerShell command in the current workspace and capture stdout and stderr.",
+    description:
+      "Run a shell command in the current workspace and capture stdout and stderr. " +
+      "PowerShell on Windows, bash (or $SHELL) elsewhere.",
     input_schema: {
       type: "object",
       properties: {
-        command: { type: "string", description: "PowerShell command to execute." },
+        command: {
+          type: "string",
+          description:
+            "Shell command to execute. Use PowerShell syntax on Windows, POSIX shell syntax elsewhere.",
+        },
       },
       required: ["command"],
     },

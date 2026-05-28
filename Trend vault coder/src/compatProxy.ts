@@ -130,10 +130,11 @@ export class CompatProxyManager {
 
   private async spawn(config: CompatProxyConfig, port: number, baseUrl: string): Promise<CompatProxyHandle> {
     const env = envFromConfig(config, port);
-    const isWindows = process.platform === "win32";
-    const tsxBin = isWindows
-      ? path.resolve(REPO_ROOT, "node_modules", "tsx", "dist", "cli.mjs")
-      : path.resolve(REPO_ROOT, "node_modules", ".bin", "tsx");
+    // Always invoke tsx's JS entry directly. On Linux/macOS,
+    // `node_modules/.bin/tsx` is a `#!/bin/sh` wrapper that `node` cannot
+    // execute, so spawning it with `process.execPath` (which is `node`)
+    // failed silently and the proxy never came up.
+    const tsxBin = path.resolve(REPO_ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 
     const child = spawn(process.execPath, [tsxBin, PROXY_ENTRY], {
       cwd: REPO_ROOT,

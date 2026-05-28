@@ -455,7 +455,7 @@ class LauncherApp(ctk.CTk):
 
     def _on_open_cli(self) -> None:
         provider = self.provider_var.get()
-        command = ["node", "launchers/trendvault-coder-launcher.js", "--provider", provider]
+        command = ["node", "launchers/trendvault-coder-launcher.cjs", "--provider", provider]
         self._log_append(f"[launcher] opening CLI ({provider}) in a new terminal…")
         if not open_in_new_terminal(self.repo_root, command):
             self._log_append("[launcher] couldn't find a terminal emulator — run this manually:")
