@@ -408,20 +408,28 @@ class LauncherApp(ctk.CTk):
         env = os.environ.copy()
         env["WEB_PORT"] = str(self.port)
         env["FORCE_COLOR"] = "0"
-        creationflags = 0
+
+        # We need the child + its grandchildren in a *separate* group so
+        # Stop can signal the whole tree. `npm run web` spawns
+        # `tsx src/webServer.ts`, and signalling only npm leaves the tsx
+        # grandchild holding the port — the Stop button looked like a no-op.
+        popen_kwargs: dict = {
+            "cwd": str(self.repo_root),
+            "env": env,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+            "bufsize": 1,
+        }
         if platform.system() == "Windows":
-            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        try:
-            self.proc = subprocess.Popen(
-                [self.npm, "run", "web"],
-                cwd=str(self.repo_root),
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=creationflags,
-                text=True,
-                bufsize=1,
+            popen_kwargs["creationflags"] = getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0,
             )
+        else:
+            popen_kwargs["start_new_session"] = True
+
+        try:
+            self.proc = subprocess.Popen([self.npm, "run", "web"], **popen_kwargs)
         except OSError as exc:
             self._log_append(f"[launcher] failed to spawn npm: {exc}")
             return
@@ -430,19 +438,63 @@ class LauncherApp(ctk.CTk):
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
 
+    def _terminate_proc_tree(self) -> None:
+        """Graceful shutdown signal to the whole server process tree."""
+        proc = self.proc
+        if proc is None:
+            return
+        if platform.system() == "Windows":
+            # CTRL_BREAK_EVENT reaches every process in the
+            # CREATE_NEW_PROCESS_GROUP we spawned in _on_start().
+            try:
+                proc.send_signal(signal.CTRL_BREAK_EVENT)
+                return
+            except (OSError, ValueError):
+                proc.terminate()
+                return
+        # POSIX: SIGTERM to the new session so `tsx` (the grandchild that
+        # actually owns the port) dies too. Without this, Stop looked like a
+        # no-op on Linux because npm exited but tsx kept holding the port.
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.terminate()
+            except (ProcessLookupError, OSError):
+                pass
+
+    def _kill_proc_tree(self) -> None:
+        """Force-kill the whole server process tree (used after grace timeout)."""
+        proc = self.proc
+        if proc is None:
+            return
+        if platform.system() == "Windows":
+            # No Windows equivalent of SIGKILL; Popen.kill() calls
+            # TerminateProcess, which we apply directly to the npm child.
+            try:
+                proc.kill()
+            except (OSError, ValueError):
+                pass
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+
     def _on_stop(self) -> None:
         if self.proc is None:
             return
         self._log_append("[launcher] stopping server…")
         try:
-            if platform.system() == "Windows":
-                self.proc.send_signal(signal.CTRL_BREAK_EVENT)
-            else:
-                self.proc.terminate()
+            self._terminate_proc_tree()
             try:
                 self.proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.proc.kill()
+                self._log_append("[launcher] server didn't exit in 5s — killing…")
+                self._kill_proc_tree()
                 self.proc.wait()
         except Exception as exc:  # noqa: BLE001
             self._log_append(f"[launcher] stop error: {exc}")
