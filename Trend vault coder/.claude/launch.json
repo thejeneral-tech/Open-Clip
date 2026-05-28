@@ -5,8 +5,8 @@
       "name": "web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["tsx", "src/webServer.ts"],
-      "port": 7879,
-      "env": { "WEB_PORT": "7879" }
+      "port": 7880,
+      "env": { "WEB_PORT": "7880" }
     }
   ]
 }

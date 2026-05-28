@@ -6,7 +6,32 @@
     <title>TrendVault Coder</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="auth-pending">
+    <!-- =========== LOGIN OVERLAY =========== -->
+    <div class="login-overlay" id="login-overlay">
+      <div class="login-panel">
+        <div class="login-brand">
+          <span class="login-brand-glyph">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="#d97757"><path d="M12 2 13.5 8.5 20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2z"/></svg>
+          </span>
+          <h1>TrendVault Coder</h1>
+        </div>
+        <p class="login-tagline">Sign in to continue.</p>
+        <form class="login-form" id="login-form" autocomplete="off">
+          <label class="field">
+            <span>Username</span>
+            <input type="text" id="login-username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input type="password" id="login-password" autocomplete="current-password" required />
+          </label>
+          <p class="error" id="login-error" hidden></p>
+          <button type="submit" class="primary-btn login-submit" id="login-submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+
     <div class="app" id="app">
       <button class="sidebar-show" id="show-sidebar" type="button" title="Show sidebar" hidden>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -59,12 +84,6 @@
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>
               </span>
               <span>Projects</span>
-            </button>
-            <button class="nav-item" data-view="artifacts">
-              <span class="nav-icon">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7l8.7 5 8.7-5M12 22V12"/></svg>
-              </span>
-              <span>Artifacts</span>
             </button>
             <button class="nav-item" data-view="tools">
               <span class="nav-icon">
@@ -284,37 +303,29 @@
             </div>
           </section>
 
-          <!-- ARTIFACTS VIEW -->
-          <section class="view artifacts-view" id="view-artifacts" hidden>
-            <div class="view-inner">
-              <header class="view-header">
-                <h2>Artifacts</h2>
-                <p class="muted" id="artifacts-cwd">Files in your workspace.</p>
-              </header>
-              <div class="artifacts-breadcrumb" id="artifacts-breadcrumb"></div>
-              <div class="artifacts-list" id="artifacts-list">
-                <div class="muted">Loading…</div>
-              </div>
-            </div>
-          </section>
-
-          <!-- ARTIFACT FILE VIEWER (modal-ish overlay) -->
-          <div class="artifact-viewer" id="artifact-viewer" hidden>
-            <div class="artifact-viewer-header">
-              <span class="artifact-viewer-path" id="artifact-viewer-path"></span>
-              <button class="ghost-btn small" id="artifact-viewer-close" type="button">Close</button>
-            </div>
-            <pre class="artifact-viewer-body" id="artifact-viewer-body"></pre>
-          </div>
-
           <!-- TOOLS VIEW -->
           <section class="view tools-view" id="view-tools" hidden>
             <div class="view-inner">
               <header class="view-header">
-                <h2>Local Tools</h2>
-                <p class="muted">Built-in tools the agent can invoke in your workspace. The model decides when to call them.</p>
+                <h2>Tools</h2>
+                <p class="muted">Every tool available in this project. Active tools are wired into the agent; bundled tools ship with the workspace and can be enabled.</p>
               </header>
-              <ul class="tool-grid" id="tools-list"></ul>
+
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <h3>Active <span class="muted small" id="tools-active-count">(0)</span></h3>
+                  <p class="muted small">Wired into the agent — the model can call these directly in your workspace.</p>
+                </div>
+                <ul class="tool-grid" id="tools-list"></ul>
+              </div>
+
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <h3>Bundled <span class="muted small" id="tools-bundled-count">(0)</span></h3>
+                  <p class="muted small">Tool implementations present in <code>src/tools/</code>. Not wired into the agent yet.</p>
+                </div>
+                <ul class="tool-grid" id="tools-bundled-list"></ul>
+              </div>
             </div>
           </section>
 
@@ -465,6 +476,10 @@
                 <span class="check">✓</span>
                 <span>Accept edits</span>
               </button>
+              <button class="footer-btn chat-mode-btn" id="chat-mode-btn" type="button" title="Switch agent runtime">
+                <span class="chat-mode-dot" aria-hidden="true"></span>
+                <span class="chat-mode-label" id="chat-mode-label">CLI</span>
+              </button>
             </div>
             <div class="composer-actions-right">
               <button class="context-meter" id="context-meter" type="button" title="Context usage in this session">
@@ -484,6 +499,24 @@
           </div>
         </div>
       </main>
+    </div>
+
+    <!-- =========== USER MENU POPOVER =========== -->
+    <div class="popover user-menu" id="user-menu" hidden role="dialog" aria-label="Account">
+      <div class="user-menu-header">
+        <span class="avatar" id="user-menu-avatar">A</span>
+        <div class="user-menu-info">
+          <span class="user-menu-name" id="user-menu-display-name">User</span>
+          <span class="user-menu-username muted" id="user-menu-username">—</span>
+        </div>
+      </div>
+      <div class="popover-divider"></div>
+      <button type="button" class="popover-row" id="user-menu-customize">
+        <span class="row-name">Customize</span>
+      </button>
+      <button type="button" class="popover-row user-menu-logout" id="user-menu-logout">
+        <span class="row-name">Sign out</span>
+      </button>
     </div>
 
     <!-- =========== MODEL POPOVER =========== -->

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -6,6 +7,13 @@ import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 
 import { CodingAgent, type AgentEvent } from "./agent.js";
+import { CliAgent, type CliAgentEvent } from "./cliAgent.js";
+import {
+  CompatProxyManager,
+  COMPAT_AUTH_TOKEN,
+  type CompatProvider,
+  type CompatProxyHandle,
+} from "./compatProxy.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { OllamaChat } from "./ollamaChat.js";
 import type { ProviderName } from "./providers.js";
@@ -17,6 +25,174 @@ const PORT = Number(process.env.WEB_PORT ?? 7878);
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(MODULE_DIR, "..");
 const PUBLIC_DIR = path.resolve(REPO_ROOT, "public");
+const ACCOUNTS_FILE = path.resolve(REPO_ROOT, "data", "accounts.json");
+
+const SESSION_COOKIE = "tv_session";
+const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+type Account = {
+  username: string;
+  password: string;
+  displayName?: string;
+  tier?: string;
+  avatar?: string;
+};
+
+type Session = {
+  username: string;
+  displayName: string;
+  tier: string;
+  avatar: string;
+  expiresAt: number;
+};
+
+const sessions = new Map<string, Session>();
+
+function normalizeAvatar(raw: string | undefined, fallbackName: string): string {
+  const source = (raw && raw.trim().length > 0 ? raw : fallbackName).trim();
+  const first = source[0] ?? "U";
+  return first.toUpperCase().slice(0, 2);
+}
+
+async function readAccounts(): Promise<Account[]> {
+  try {
+    const text = await fs.readFile(ACCOUNTS_FILE, "utf8");
+    const json = JSON.parse(text) as { users?: unknown };
+    if (!Array.isArray(json?.users)) return [];
+    const accounts: Account[] = [];
+    for (const entry of json.users) {
+      if (typeof entry !== "object" || entry === null) continue;
+      const u = entry as Record<string, unknown>;
+      if (typeof u.username !== "string" || typeof u.password !== "string") continue;
+      if (u.username.length === 0) continue;
+      const account: Account = { username: u.username, password: u.password };
+      if (typeof u.displayName === "string") account.displayName = u.displayName;
+      if (typeof u.tier === "string") account.tier = u.tier;
+      if (typeof u.avatar === "string") account.avatar = u.avatar;
+      accounts.push(account);
+    }
+    return accounts;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+function parseCookies(req: IncomingMessage): Record<string, string> {
+  const header = req.headers.cookie ?? "";
+  const out: Record<string, string> = {};
+  for (const part of header.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx);
+    const value = trimmed.slice(idx + 1);
+    try {
+      out[key] = decodeURIComponent(value);
+    } catch {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function getSession(req: IncomingMessage): Session | null {
+  const cookies = parseCookies(req);
+  const token = cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt < Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function setSessionCookie(res: ServerResponse, token: string): void {
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}`,
+  );
+}
+
+function clearSessionCookie(res: ServerResponse): void {
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`,
+  );
+}
+
+function sessionPayload(session: Session): {
+  username: string;
+  displayName: string;
+  tier: string;
+  avatar: string;
+} {
+  return {
+    username: session.username,
+    displayName: session.displayName,
+    tier: session.tier,
+    avatar: session.avatar,
+  };
+}
+
+async function handleLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = ((await readJson(req)) ?? {}) as { username?: string; password?: string };
+  const username = typeof body.username === "string" ? body.username.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!username || !password) {
+    return sendJson(res, 400, { error: "Username and password are required." });
+  }
+
+  let accounts: Account[];
+  try {
+    accounts = await readAccounts();
+  } catch (error) {
+    return sendJson(res, 500, {
+      error: `Failed to read accounts file: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  if (accounts.length === 0) {
+    return sendJson(res, 500, {
+      error: `No accounts configured. Add users to ${ACCOUNTS_FILE}.`,
+    });
+  }
+
+  const account = accounts.find((a) => a.username === username && a.password === password);
+  if (!account) {
+    return sendJson(res, 401, { error: "Invalid username or password." });
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const displayName = account.displayName ?? account.username;
+  const session: Session = {
+    username: account.username,
+    displayName,
+    tier: account.tier ?? "",
+    avatar: normalizeAvatar(account.avatar, displayName),
+    expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
+  };
+  sessions.set(token, session);
+  setSessionCookie(res, token);
+  return sendJson(res, 200, { ok: true, user: sessionPayload(session) });
+}
+
+function handleLogout(req: IncomingMessage, res: ServerResponse): void {
+  const cookies = parseCookies(req);
+  const token = cookies[SESSION_COOKIE];
+  if (token) sessions.delete(token);
+  clearSessionCookie(res);
+  return sendJson(res, 200, { ok: true });
+}
+
+function handleMe(req: IncomingMessage, res: ServerResponse): void {
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { error: "Not authenticated." });
+  return sendJson(res, 200, { ok: true, user: sessionPayload(session) });
+}
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -31,12 +207,19 @@ const MIME_TYPES: Record<string, string> = {
 
 const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
 
+type ChatMode = "cli" | "lightweight";
+
 type ServerState = {
   agent: CodingAgent | null;
+  cliAgent: CliAgent | null;
   config: AppConfig | null;
   cwd: string;
   error: string | null;
   chat: OllamaChat;
+  chatMode: ChatMode;
+  proxy: CompatProxyManager;
+  proxyHandle: CompatProxyHandle | null;
+  proxyError: string | null;
 };
 
 function buildChat(existing?: OllamaChat): OllamaChat {
@@ -74,13 +257,90 @@ async function resolveDefaultOllamaModel(): Promise<void> {
 
 await resolveDefaultOllamaModel();
 
+function detectChatMode(): ChatMode {
+  const override = process.env.TV_CHAT_MODE?.trim().toLowerCase();
+  if (override === "lightweight") return "lightweight";
+  if (override === "cli") return "cli";
+  // Default: prefer the CLI when the bundled binary is reachable.
+  return "cli";
+}
+
 const state: ServerState = {
   agent: null,
+  cliAgent: null,
   config: null,
   cwd: process.cwd(),
   error: null,
   chat: buildChat(),
+  chatMode: detectChatMode(),
+  proxy: new CompatProxyManager(),
+  proxyHandle: null,
+  proxyError: null,
 };
+
+function configToCompatProvider(provider: ProviderName | undefined | null): CompatProvider | null {
+  if (provider === "ollama" || provider === "gemini") return provider;
+  return null;
+}
+
+async function ensureProxyForConfig(): Promise<CompatProxyHandle | null> {
+  const config = state.config;
+  if (!config) return null;
+  const compatProvider = configToCompatProvider(config.provider);
+  if (!compatProvider) {
+    // Anthropic doesn't need a proxy.
+    await state.proxy.stop();
+    state.proxyHandle = null;
+    state.proxyError = null;
+    return null;
+  }
+  try {
+    const handle = await state.proxy.ensure({
+      provider: compatProvider,
+      model: config.model,
+      ...(compatProvider === "ollama"
+        ? {
+            ...(config.baseUrl ? { ollamaBaseUrl: config.baseUrl } : {}),
+            ...(config.apiKey ? { ollamaApiKey: config.apiKey } : {}),
+            ...(config.keepAlive ? { ollamaKeepAlive: config.keepAlive } : {}),
+            ...(config.numCtx !== undefined ? { ollamaNumCtx: config.numCtx } : {}),
+            ...(config.numPredict !== undefined ? { ollamaNumPredict: config.numPredict } : {}),
+          }
+        : {}),
+      ...(compatProvider === "gemini" && config.apiKey ? { geminiApiKey: config.apiKey } : {}),
+    });
+    state.proxyHandle = handle;
+    state.proxyError = null;
+    return handle;
+  } catch (error) {
+    state.proxyHandle = null;
+    state.proxyError = error instanceof Error ? error.message : String(error);
+    return null;
+  }
+}
+
+function cliEnvOverrides(handle: CompatProxyHandle | null): NodeJS.ProcessEnv {
+  if (!handle) return {};
+  return {
+    ANTHROPIC_BASE_URL: handle.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: COMPAT_AUTH_TOKEN,
+    ANTHROPIC_API_KEY: "",
+  };
+}
+
+function buildCliAgent(cwd?: string, model?: string): void {
+  if (state.cliAgent) {
+    state.cliAgent.dispose();
+    state.cliAgent = null;
+  }
+  const workingDir = cwd ?? state.cwd;
+  const cliArgs: ConstructorParameters<typeof CliAgent>[0] = {
+    cwd: workingDir,
+    env: cliEnvOverrides(state.proxyHandle),
+  };
+  if (model && model.trim().length > 0) cliArgs.model = model.trim();
+  state.cliAgent = new CliAgent(cliArgs);
+}
 
 function buildAgent(overrides?: Partial<Pick<AppConfig, "provider" | "model">>, cwd?: string): void {
   try {
@@ -113,6 +373,130 @@ function buildAgent(overrides?: Partial<Pick<AppConfig, "provider" | "model">>, 
     state.config = null;
     state.error = error instanceof Error ? error.message : String(error);
   }
+}
+
+const TOOLS_BUNDLE_DIR = path.resolve(REPO_ROOT, "src", "tools");
+
+type BundledTool = {
+  name: string;
+  folder: string;
+  description: string;
+};
+
+function humanizeToolName(folder: string): string {
+  const base = folder.replace(/Tool$/i, "");
+  return base
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .trim();
+}
+
+function sanitizeDescriptionLine(raw: string): string {
+  const stripped = raw.replace(/\${[^}]*}/g, "").replace(/^[\s#>*•\-]+/, "").trim();
+  if (stripped.length < 12) return "";
+  if (/^(usage|notes|examples?|args|arguments|parameters|warning|important)\b:?$/i.test(stripped)) {
+    return "";
+  }
+  return stripped.length > 220 ? stripped.slice(0, 217).trimEnd() + "…" : stripped;
+}
+
+function firstGoodLine(body: string): string {
+  for (const rawLine of body.split("\n")) {
+    const cleaned = sanitizeDescriptionLine(rawLine);
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
+function collectBacktickBodies(text: string): string[] {
+  const bodies: string[] = [];
+  const re = /return\s+`/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const start = match.index + match[0].length;
+    let i = start;
+    while (i < text.length) {
+      if (text[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      if (text[i] === "`") break;
+      i++;
+    }
+    bodies.push(text.slice(start, i));
+  }
+  return bodies;
+}
+
+function extractFirstLineFromPrompt(text: string): string {
+  const descConst = text.match(/export\s+const\s+\w*DESCRIPTION\w*\s*=\s*['"`]([^'"`]+)['"`]/i);
+  if (descConst && descConst[1]) {
+    const cleaned = sanitizeDescriptionLine(descConst[1]);
+    if (cleaned) return cleaned;
+  }
+
+  const promptConst = text.match(/export\s+const\s+\w*(?:PROMPT|DESCRIPTION)\w*\s*=\s*`([\s\S]*?)`/i);
+  if (promptConst && promptConst[1]) {
+    const cleaned = firstGoodLine(promptConst[1]);
+    if (cleaned) return cleaned;
+  }
+
+  const bodies = collectBacktickBodies(text);
+  let best = "";
+  for (const body of bodies) {
+    const firstChar = body.replace(/^\s+/, "")[0] ?? "";
+    if (!/[A-Za-z]/.test(firstChar)) continue;
+    const line = firstGoodLine(body);
+    if (line && line.length > best.length) best = line;
+  }
+  if (best) return best;
+
+  for (const body of bodies) {
+    const line = firstGoodLine(body);
+    if (line) return line;
+  }
+  return "";
+}
+
+async function readToolDescription(folder: string): Promise<string> {
+  const candidates = ["prompt.ts", "prompt.tsx"];
+  for (const file of candidates) {
+    try {
+      const text = await fs.readFile(path.join(TOOLS_BUNDLE_DIR, folder, file), "utf8");
+      const description = extractFirstLineFromPrompt(text);
+      if (description) return description;
+    } catch {
+      /* file missing — try next */
+    }
+  }
+  return "";
+}
+
+async function collectBundledTools(): Promise<BundledTool[]> {
+  try {
+    const entries = await fs.readdir(TOOLS_BUNDLE_DIR, { withFileTypes: true });
+    const folders = entries
+      .filter((e) => e.isDirectory() && /Tool$/.test(e.name))
+      .map((e) => e.name)
+      .sort((a, b) => a.localeCompare(b));
+    return Promise.all(
+      folders.map(async (folder) => ({
+        name: humanizeToolName(folder),
+        folder,
+        description: await readToolDescription(folder),
+      })),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function collectAllTools(): Promise<{
+  active: typeof toolDefinitions;
+  bundled: BundledTool[];
+}> {
+  const bundled = await collectBundledTools();
+  return { active: toolDefinitions, bundled };
 }
 
 async function listFilesInWorkspace(url: URL, res: ServerResponse): Promise<void> {
@@ -421,11 +805,46 @@ async function pullOllamaModel(name: string, req: IncomingMessage, res: ServerRe
 }
 
 buildAgent();
+await ensureProxyForConfig();
+buildCliAgent(state.cwd, state.config?.model);
+
+const disposeAgents = (): void => {
+  if (state.cliAgent) {
+    state.cliAgent.dispose();
+    state.cliAgent = null;
+  }
+  void state.proxy.stop();
+};
+process.on("SIGINT", () => {
+  disposeAgents();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  disposeAgents();
+  process.exit(143);
+});
+process.on("exit", disposeAgents);
 
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? `${HOST}:${PORT}`}`);
     const pathname = url.pathname;
+
+    // ---- Auth endpoints (open) ----
+    if (req.method === "POST" && pathname === "/api/auth/login") {
+      return handleLogin(req, res);
+    }
+    if (req.method === "POST" && pathname === "/api/auth/logout") {
+      return handleLogout(req, res);
+    }
+    if (req.method === "GET" && pathname === "/api/auth/me") {
+      return handleMe(req, res);
+    }
+
+    // ---- Auth gate for every other /api/* endpoint ----
+    if (pathname.startsWith("/api/") && !getSession(req)) {
+      return sendJson(res, 401, { error: "Not authenticated." });
+    }
 
     if (req.method === "GET" && pathname === "/api/info") {
       return sendJson(res, 200, {
@@ -435,7 +854,32 @@ const server = createServer(async (req, res) => {
         cwd: state.cwd,
         ready: state.agent !== null,
         error: state.error,
+        chatMode: state.chatMode,
+        cliSessionId: state.cliAgent?.getSessionId() ?? null,
+        proxy: state.proxyHandle
+          ? {
+              provider: state.proxyHandle.provider,
+              model: state.proxyHandle.model,
+              baseUrl: state.proxyHandle.baseUrl,
+              port: state.proxyHandle.port,
+              ownsProcess: state.proxyHandle.ownsProcess,
+            }
+          : null,
+        proxyError: state.proxyError,
       });
+    }
+
+    if (req.method === "POST" && pathname === "/api/chat/mode") {
+      const body = ((await readJson(req)) ?? {}) as { mode?: string };
+      const raw = typeof body.mode === "string" ? body.mode.trim().toLowerCase() : "";
+      if (raw !== "cli" && raw !== "lightweight") {
+        return sendJson(res, 400, { error: "mode must be 'cli' or 'lightweight'" });
+      }
+      state.chatMode = raw;
+      if (raw === "cli" && !state.cliAgent) {
+        buildCliAgent(state.cwd, state.config?.model);
+      }
+      return sendJson(res, 200, { ok: true, chatMode: state.chatMode });
     }
 
     if (req.method === "GET" && pathname === "/api/ollama/ps") {
@@ -549,9 +993,16 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { tools: toolDefinitions });
     }
 
+    if (req.method === "GET" && pathname === "/api/tools/all") {
+      return sendJson(res, 200, await collectAllTools());
+    }
+
     if (req.method === "POST" && pathname === "/api/clear") {
       if (state.agent) {
         state.agent.clear();
+      }
+      if (state.cliAgent) {
+        state.cliAgent.clear();
       }
       return sendJson(res, 200, { ok: true });
     }
@@ -594,6 +1045,8 @@ const server = createServer(async (req, res) => {
       if (onlyModelChanged && state.agent && state.config) {
         state.agent.setModel(overrides.model!);
         state.config = { ...state.config, model: overrides.model! };
+        await ensureProxyForConfig();
+        buildCliAgent(state.cwd, state.config.model);
         return sendJson(res, 200, {
           ok: true,
           provider: state.config.provider,
@@ -622,6 +1075,9 @@ const server = createServer(async (req, res) => {
           process.env.OLLAMA_BASE_URL = previousBaseUrl;
         }
       }
+
+      await ensureProxyForConfig();
+      buildCliAgent(nextCwd, state.config?.model);
 
       if (!state.agent) {
         return sendJson(res, 400, { error: state.error });
@@ -723,33 +1179,107 @@ server.listen(PORT, HOST, async () => {
   }
 });
 
-async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!state.agent) {
-    return sendJson(res, 500, {
-      error: state.error ?? "Agent is not configured. Set provider credentials and try again.",
-    });
-  }
+function openSseStream(res: ServerResponse): (event: string, data: unknown) => void {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  return (event: string, data: unknown): void => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+}
 
+async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = ((await readJson(req)) ?? {}) as { prompt?: string };
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   if (!prompt) {
     return sendJson(res, 400, { error: "prompt is required" });
   }
 
-  res.statusCode = 200;
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
+  if (state.chatMode === "cli") {
+    return handleChatViaCli(prompt, req, res);
+  }
+  return handleChatViaLightweight(prompt, req, res);
+}
 
-  const sendEvent = (event: string, data: unknown): void => {
-    if (res.writableEnded) {
-      return;
+async function handleChatViaCli(
+  prompt: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  // Lazy-init / refresh proxy if config calls for one but it isn't up yet.
+  const compatProvider = configToCompatProvider(state.config?.provider);
+  if (compatProvider && !state.proxyHandle) {
+    await ensureProxyForConfig();
+    buildCliAgent(state.cwd, state.config?.model);
+  } else if (!compatProvider && state.proxyHandle) {
+    // Provider switched to Anthropic; drop proxy.
+    await state.proxy.stop();
+    state.proxyHandle = null;
+    buildCliAgent(state.cwd, state.config?.model);
+  }
+  if (compatProvider && !state.proxyHandle) {
+    return sendJson(res, 500, {
+      error: state.proxyError
+        ? `Compat proxy could not start: ${state.proxyError}`
+        : "Compat proxy is not running.",
+    });
+  }
+  if (!state.cliAgent) {
+    buildCliAgent(state.cwd, state.config?.model);
+  }
+  if (!state.cliAgent) {
+    return sendJson(res, 500, { error: "Failed to initialize CLI agent." });
+  }
+
+  const sendEvent = openSseStream(res);
+  let clientClosed = false;
+  req.on("close", () => {
+    clientClosed = true;
+  });
+
+  try {
+    const result = await state.cliAgent.runTurn(prompt, {
+      onEvent: (event: CliAgentEvent) => {
+        if (clientClosed) return;
+        sendEvent(event.type, event);
+      },
+    });
+    if (!clientClosed) {
+      if (result.isError) {
+        sendEvent("error", { message: result.text || "CLI agent returned an error." });
+      } else {
+        sendEvent("done", { text: result.text });
+      }
     }
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
+  } catch (error) {
+    if (!clientClosed) {
+      sendEvent("error", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    if (!res.writableEnded) {
+      res.end();
+    }
+  }
+}
 
+async function handleChatViaLightweight(
+  prompt: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (!state.agent) {
+    return sendJson(res, 500, {
+      error: state.error ?? "Agent is not configured. Set provider credentials and try again.",
+    });
+  }
+
+  const sendEvent = openSseStream(res);
   let clientClosed = false;
   req.on("close", () => {
     clientClosed = true;
@@ -758,9 +1288,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
   try {
     const result = await state.agent.runTurn(prompt, {
       onEvent: (event: AgentEvent) => {
-        if (clientClosed) {
-          return;
-        }
+        if (clientClosed) return;
         sendEvent(event.type, event);
       },
     });

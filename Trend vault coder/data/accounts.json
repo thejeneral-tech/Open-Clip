@@ -1,0 +1,12 @@
+{
+  "_comment": "Add accounts to the users array below. Each account needs username and password; displayName, tier, and avatar are optional. Passwords are stored in plain text — keep this file private.",
+  "users": [
+    {
+      "username": "admin",
+      "password": "changeme",
+      "displayName": "Admin",
+      "tier": "Max",
+      "avatar": "A"
+    }
+  ]
+}

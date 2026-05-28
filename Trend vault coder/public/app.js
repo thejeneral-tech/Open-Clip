@@ -65,6 +65,12 @@ const state = {
   },
 };
 
+const auth = {
+  authed: false,
+  user: null,
+  bootedPostAuth: false,
+};
+
 // ---------------- helpers ----------------
 
 function el(tag, attrs = {}, children = []) {
@@ -293,7 +299,7 @@ function switchTab(tab) {
 
 function switchView(view) {
   state.view = view;
-  for (const v of ["home", "chat", "pure-chat", "tools", "routines", "customize", "models", "projects", "artifacts"]) {
+  for (const v of ["home", "chat", "pure-chat", "tools", "routines", "customize", "models", "projects"]) {
     const node = $(`view-${v}`);
     if (node) node.hidden = v !== view;
   }
@@ -314,8 +320,6 @@ function switchView(view) {
     if (typeof refreshModelsView === "function") refreshModelsView();
   } else if (view === "projects") {
     renderProjects();
-  } else if (view === "artifacts") {
-    loadArtifacts("");
   } else if (view === "chat") {
     // When entering the Code (agent) view explicitly, render the active session's
     // history. Skip mid-stream to avoid wiping the in-progress assistant block.
@@ -792,32 +796,91 @@ async function fetchInfo() {
     if (data?.cwd) rememberFolder(data.cwd);
     updateModelButton();
     updateContextPills();
+    updateChatModeButton();
     setModelStatus(data.ready ? "ok" : data.error ? "error" : "warn");
   } catch {
     setModelStatus("error");
   }
 }
 
+function updateChatModeButton() {
+  const btn = $("chat-mode-btn");
+  const label = $("chat-mode-label");
+  if (!btn || !label) return;
+  const mode = state.info?.chatMode === "lightweight" ? "lightweight" : "cli";
+  const proxy = state.info?.proxy || null;
+  const proxyError = state.info?.proxyError || null;
+  btn.dataset.mode = mode;
+  if (mode === "cli") {
+    label.textContent = proxy ? `CLI · ${proxy.provider}` : "CLI agent";
+    if (proxyError) {
+      btn.title = `CLI mode, but compat proxy failed: ${proxyError}`;
+    } else if (proxy) {
+      btn.title = `CLI agent routed through the ${proxy.provider} compat proxy at ${proxy.baseUrl}. Click to switch to the lite agent.`;
+    } else {
+      btn.title =
+        "Using the bundled CLI — full tool set. Click to switch to the lite agent.";
+    }
+  } else {
+    label.textContent = "Lite agent";
+    btn.title = "Using the lightweight built-in agent. Click to switch to the CLI.";
+  }
+}
+
+async function toggleChatMode() {
+  const current = state.info?.chatMode === "lightweight" ? "lightweight" : "cli";
+  const next = current === "cli" ? "lightweight" : "cli";
+  try {
+    const res = await fetch("/api/chat/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: next }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.warn("Failed to switch chat mode:", body.error || res.status);
+      return;
+    }
+    const data = await res.json();
+    if (state.info) state.info.chatMode = data.chatMode;
+    updateChatModeButton();
+  } catch (err) {
+    console.warn("Failed to switch chat mode:", err);
+  }
+}
+
+function renderToolList(listEl, tools, emptyText) {
+  listEl.innerHTML = "";
+  if (!tools.length) {
+    listEl.appendChild(el("div", { class: "muted" }, emptyText));
+    return;
+  }
+  for (const tool of tools) {
+    const children = [el("div", { class: "tool-name-big" }, tool.name)];
+    if (tool.folder && tool.folder !== tool.name) {
+      children.push(el("div", { class: "tool-folder" }, tool.folder));
+    }
+    children.push(el("div", { class: "tool-desc" }, tool.description || ""));
+    listEl.appendChild(el("li", {}, children));
+  }
+}
+
 async function fetchTools() {
   try {
-    const res = await fetch("/api/tools");
+    const res = await fetch("/api/tools/all");
     const data = await res.json();
-    const list = $("tools-list");
-    list.innerHTML = "";
-    const tools = data.tools || [];
-    $("tools-count").textContent = String(tools.length);
-    for (const tool of tools) {
-      list.appendChild(
-        el("li", {}, [
-          el("div", { class: "tool-name-big" }, tool.name),
-          el("div", { class: "tool-desc" }, tool.description || ""),
-        ]),
-      );
-    }
-    if (tools.length === 0) {
-      list.appendChild(el("div", { class: "muted" }, "No tools registered."));
-    }
-  } catch {}
+    const active = Array.isArray(data.active) ? data.active : [];
+    const bundled = Array.isArray(data.bundled) ? data.bundled : [];
+    renderToolList($("tools-list"), active, "No active tools registered.");
+    renderToolList($("tools-bundled-list"), bundled, "No bundled tools found.");
+    const activeCount = $("tools-active-count");
+    const bundledCount = $("tools-bundled-count");
+    if (activeCount) activeCount.textContent = `(${active.length})`;
+    if (bundledCount) bundledCount.textContent = `(${bundled.length})`;
+    $("tools-count").textContent = String(active.length + bundled.length);
+  } catch {
+    /* leave previous render */
+  }
 }
 
 function updateModelButton() {
@@ -1387,135 +1450,6 @@ function filterRecentsByProject() {
   for (const s of sorted) {
     list.appendChild(renderSessionRow(s, s.id === state.activeSessionId));
   }
-}
-
-// ---------------- artifacts ----------------
-
-const ARTIFACT_STATE = { currentPath: "" };
-
-async function loadArtifacts(subPath) {
-  ARTIFACT_STATE.currentPath = subPath || "";
-  const list = $("artifacts-list");
-  const cwdLabel = $("artifacts-cwd");
-  const breadcrumb = $("artifacts-breadcrumb");
-  if (!list) return;
-  list.innerHTML = '<div class="muted">Loading…</div>';
-
-  try {
-    const res = await fetch(
-      `/api/files?path=${encodeURIComponent(ARTIFACT_STATE.currentPath)}`,
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      list.innerHTML = "";
-      list.appendChild(el("div", { class: "muted" }, data.error || "Failed to load"));
-      return;
-    }
-
-    if (cwdLabel) {
-      cwdLabel.textContent = `Files in ${data.cwd}${ARTIFACT_STATE.currentPath ? " / " + ARTIFACT_STATE.currentPath : ""}`;
-    }
-    renderArtifactBreadcrumb(breadcrumb, ARTIFACT_STATE.currentPath);
-
-    list.innerHTML = "";
-
-    if (ARTIFACT_STATE.currentPath) {
-      const upRow = el("button", { class: "artifact-row dir", type: "button" }, [
-        el("span", { class: "artifact-icon" }, "↩"),
-        el("span", { class: "artifact-name" }, ".."),
-      ]);
-      upRow.addEventListener("click", () => {
-        const parts = ARTIFACT_STATE.currentPath.split("/").filter(Boolean);
-        parts.pop();
-        loadArtifacts(parts.join("/"));
-      });
-      list.appendChild(upRow);
-    }
-
-    if (data.items.length === 0) {
-      list.appendChild(el("div", { class: "muted", style: "padding: 8px 12px;" }, "(empty)"));
-      return;
-    }
-
-    for (const item of data.items) {
-      const isDir = item.type === "dir";
-      const row = el("button", {
-        class: `artifact-row${isDir ? " dir" : ""}`,
-        type: "button",
-      }, [
-        el("span", { class: "artifact-icon" }, isDir ? "📁" : "📄"),
-        el("span", { class: "artifact-name" }, item.name),
-        el("span", { class: "artifact-size" }, formatFileSize(item.size, isDir)),
-      ]);
-      row.addEventListener("click", () => {
-        if (isDir) loadArtifacts(item.path);
-        else openArtifactViewer(item.path);
-      });
-      list.appendChild(row);
-    }
-  } catch (error) {
-    list.innerHTML = "";
-    list.appendChild(el("div", { class: "muted" }, error?.message || "Failed to load"));
-  }
-}
-
-function renderArtifactBreadcrumb(el_, currentPath) {
-  if (!el_) return;
-  el_.innerHTML = "";
-  const root = document.createElement("button");
-  root.className = "crumb";
-  root.type = "button";
-  root.textContent = "workspace";
-  root.addEventListener("click", () => loadArtifacts(""));
-  el_.appendChild(root);
-
-  if (!currentPath) return;
-  const parts = currentPath.split("/").filter(Boolean);
-  let accum = "";
-  for (const part of parts) {
-    accum = accum ? `${accum}/${part}` : part;
-    el_.appendChild(el("span", { class: "sep" }, "/"));
-    const seg = accum;
-    const b = document.createElement("button");
-    b.className = "crumb";
-    b.type = "button";
-    b.textContent = part;
-    b.addEventListener("click", () => loadArtifacts(seg));
-    el_.appendChild(b);
-  }
-}
-
-function formatFileSize(bytes, isDir) {
-  if (isDir) return "";
-  if (bytes == null) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function openArtifactViewer(filePath) {
-  const viewer = $("artifact-viewer");
-  const pathEl = $("artifact-viewer-path");
-  const bodyEl = $("artifact-viewer-body");
-  pathEl.textContent = filePath;
-  bodyEl.textContent = "Loading…";
-  viewer.hidden = false;
-  try {
-    const res = await fetch(`/api/files/read?path=${encodeURIComponent(filePath)}`);
-    const data = await res.json();
-    if (!res.ok) {
-      bodyEl.textContent = data.error || "Failed to read";
-      return;
-    }
-    bodyEl.textContent =
-      data.content + (data.truncated ? "\n\n[... truncated — file exceeded 200 KB]" : "");
-  } catch (error) {
-    bodyEl.textContent = error?.message || "Failed to read";
-  }
-}
-
-function closeArtifactViewer() {
-  $("artifact-viewer").hidden = true;
 }
 
 // ---------------- routines ----------------
@@ -2903,12 +2837,6 @@ function wireUp() {
     projectFolderInput.addEventListener("focus", openFolderPickerForProjectField);
   }
 
-  // Artifact viewer close
-  const artifactCloseBtn = $("artifact-viewer-close");
-  if (artifactCloseBtn) {
-    artifactCloseBtn.addEventListener("click", closeArtifactViewer);
-  }
-
   // Folder picker modal wireup
   for (const closer of qsa("[data-folder-picker-close]")) {
     closer.addEventListener("click", closeFolderPicker);
@@ -3004,8 +2932,16 @@ function wireUp() {
     renderRoutines();
   });
 
-  // User card → opens customize
-  $("user-card").addEventListener("click", () => switchView("customize"));
+  // User card → opens account menu (sign out, customize)
+  $("user-card").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = $("user-menu");
+    if (menu && !menu.hidden) {
+      closeUserMenu();
+    } else {
+      openUserMenu();
+    }
+  });
 
   // Settings modal
   $("settings-save").addEventListener("click", saveSettings);
@@ -3018,6 +2954,9 @@ function wireUp() {
   $("accept-edits-btn").addEventListener("click", () => {
     $("accept-edits-btn").classList.toggle("active");
   });
+
+  const chatModeBtn = $("chat-mode-btn");
+  if (chatModeBtn) chatModeBtn.addEventListener("click", toggleChatMode);
 
   // Sidebar toggle — collapse the grid column so main content fills the space,
   // and surface a floating "show" button so the user can bring the sidebar back.
@@ -3040,8 +2979,6 @@ function wireUp() {
       if (cwdPop && !cwdPop.hidden && typeof closeCwdPopover === "function") closeCwdPopover();
       const settings = $("settings-modal");
       if (settings && !settings.hidden) closeSettings();
-      const viewer = $("artifact-viewer");
-      if (viewer && !viewer.hidden) closeArtifactViewer();
       const projectModal = $("project-modal");
       if (projectModal && !projectModal.hidden) closeProjectModal();
     }
@@ -3060,17 +2997,180 @@ function exportSession() {
   URL.revokeObjectURL(url);
 }
 
+// ---------------- auth ----------------
+
+function hydrateUserFromAuth(user) {
+  if (!user) return;
+  state.user = {
+    name: user.displayName || user.username || "User",
+    tier: user.tier || "",
+    avatar:
+      (user.avatar && user.avatar.trim()) ||
+      (user.displayName || user.username || "U").slice(0, 1).toUpperCase(),
+  };
+  saveUser();
+  applyUser();
+}
+
+function showLogin({ pending = false } = {}) {
+  document.body.classList.remove(pending ? "auth-required" : "auth-pending");
+  document.body.classList.add(pending ? "auth-pending" : "auth-required");
+  if (!pending) {
+    setTimeout(() => {
+      const u = $("login-username");
+      if (u) u.focus();
+    }, 40);
+  }
+}
+
+function finishAuth() {
+  document.body.classList.remove("auth-pending", "auth-required");
+}
+
+async function checkAuth() {
+  try {
+    const res = await fetch("/api/auth/me", { credentials: "same-origin" });
+    if (res.ok) {
+      const data = await res.json();
+      auth.authed = true;
+      auth.user = data.user;
+      hydrateUserFromAuth(data.user);
+      finishAuth();
+      return true;
+    }
+  } catch {
+    /* fall through to login */
+  }
+  auth.authed = false;
+  auth.user = null;
+  showLogin();
+  return false;
+}
+
+async function bootAuthedApp() {
+  if (auth.bootedPostAuth) return;
+  auth.bootedPostAuth = true;
+  try {
+    await fetchInfo();
+    updateModelButtonLabel();
+    applyEffortAndFastMode();
+  } catch {
+    /* fetchInfo handles its own status display */
+  }
+  fetchTools();
+}
+
+async function doLogin(event) {
+  if (event) event.preventDefault();
+  const username = $("login-username").value.trim();
+  const password = $("login-password").value;
+  const errorEl = $("login-error");
+  const submit = $("login-submit");
+  errorEl.hidden = true;
+  errorEl.textContent = "";
+  if (!username || !password) {
+    errorEl.textContent = "Enter a username and password.";
+    errorEl.hidden = false;
+    return;
+  }
+  submit.disabled = true;
+  submit.textContent = "Signing in…";
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      errorEl.textContent = data.error || `Sign in failed (${res.status}).`;
+      errorEl.hidden = false;
+      submit.disabled = false;
+      submit.textContent = "Sign in";
+      return;
+    }
+    auth.authed = true;
+    auth.user = data.user;
+    hydrateUserFromAuth(data.user);
+    finishAuth();
+    $("login-password").value = "";
+    submit.disabled = false;
+    submit.textContent = "Sign in";
+    await bootAuthedApp();
+  } catch (err) {
+    errorEl.textContent = (err && err.message) || "Sign in failed.";
+    errorEl.hidden = false;
+    submit.disabled = false;
+    submit.textContent = "Sign in";
+  }
+}
+
+async function doLogout() {
+  closeUserMenu();
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } catch {
+    /* ignore — we reload regardless */
+  }
+  window.location.reload();
+}
+
+function openUserMenu() {
+  const card = $("user-card");
+  const menu = $("user-menu");
+  if (!card || !menu) return;
+  $("user-menu-avatar").textContent = state.user.avatar || "A";
+  $("user-menu-display-name").textContent = state.user.name || "User";
+  $("user-menu-username").textContent = (auth.user && auth.user.username) || "";
+  menu.hidden = false;
+  const r = card.getBoundingClientRect();
+  menu.style.visibility = "hidden";
+  menu.style.left = `${Math.max(8, r.left)}px`;
+  menu.style.bottom = `${window.innerHeight - r.top + 6}px`;
+  menu.style.right = "auto";
+  menu.style.visibility = "visible";
+}
+
+function closeUserMenu() {
+  const menu = $("user-menu");
+  if (menu) menu.hidden = true;
+}
+
+function wireAuth() {
+  const form = $("login-form");
+  if (form) form.addEventListener("submit", doLogin);
+  const logoutBtn = $("user-menu-logout");
+  if (logoutBtn) logoutBtn.addEventListener("click", doLogout);
+  const customizeBtn = $("user-menu-customize");
+  if (customizeBtn) {
+    customizeBtn.addEventListener("click", () => {
+      closeUserMenu();
+      switchView("customize");
+    });
+  }
+  document.addEventListener("click", (e) => {
+    const menu = $("user-menu");
+    if (!menu || menu.hidden) return;
+    if (menu.contains(e.target)) return;
+    if ($("user-card").contains(e.target)) return;
+    closeUserMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("user-menu").hidden) closeUserMenu();
+  });
+}
+
 // ---------------- boot ----------------
 
 loadAll();
 loadModelPickerSettings();
 applyUser();
 wireUp();
+wireAuth();
 renderSidebarSessions();
 switchTab("code");
-fetchInfo().then(() => {
-  updateModelButtonLabel();
-  applyEffortAndFastMode();
+checkAuth().then((ok) => {
+  if (ok) bootAuthedApp();
 });
-fetchTools();
 renderStats();
