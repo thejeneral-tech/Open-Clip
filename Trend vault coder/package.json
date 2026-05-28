@@ -18,7 +18,8 @@
     "claude:version": "node vendor/claude-code-bundle/cli.js --version",
     "launch": "python launchers/trendvault-coder.py",
     "launch:py": "python launchers/trendvault-coder.py",
-    "launch:sh": "bash launchers/claw-web.sh"
+    "launch:sh": "bash launchers/claw-web.sh",
+    "launch:gui": "python launchers/trendvault-gui.py"
   },
   "engines": {
     "node": ">=22"
