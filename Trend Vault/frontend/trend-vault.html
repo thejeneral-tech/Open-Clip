@@ -2792,9 +2792,32 @@ function renderTtsStatus(d){
 // ── Pull the full lifecycle state (steps, runtime path, working endpoint)
 //     from /api/fish-s2pro/status and merge it into state.fishEngine. The
 //     UI panels (checklist + config summary) react to this immediately. -->
+// One-time latch: when /api/fish-s2pro/status returns 404 (e.g. the user is
+// running an older Trend Vault server build that doesn't have the Fish
+// endpoints yet), we cache that fact so we stop hammering the server with
+// polling requests every two seconds for the rest of the session.
+let _fishEndpointsAvailable = true;
+
 async function refreshFishStatusDeep(){
+  if(!_fishEndpointsAvailable) return;
   try{
     const r = await fetch(`${API_BASE}/api/fish-s2pro/status`);
+    if(r.status === 404){
+      // Server doesn't have Fish endpoints — likely an outdated build.
+      // Latch the flag, surface a one-time toast, and stop polling.
+      _fishEndpointsAvailable = false;
+      state.fishEngine = Object.assign({}, state.fishEngine || {}, {
+        state:   'server_outdated',
+        message: 'Fish Speech endpoints not present on this Trend Vault server. Restart the server (or pull the latest code) to enable Fish Speech S2 Pro.',
+      });
+      renderFishDot();
+      renderFishInstallPrompt();
+      if(typeof showToast === 'function'){
+        showToast('Restart your Trend Vault server — Fish Speech endpoints are missing from the running build.', 'error');
+      }
+      console.warn('[Fish] /api/fish-s2pro/status 404 — server is missing Fish endpoints. Stopping further polls.');
+      return;
+    }
     if(!r.ok) return;
     const d = await r.json();
     state.fishEngine = Object.assign({}, state.fishEngine || {}, {
@@ -2984,6 +3007,10 @@ window.refreshTtsEngineStatus = refreshTtsEngineStatus;
 // until the job completes or fails. Updates the progress bar inline.
 let _fishInstallPoll = null;
 async function installFishS2Pro(){
+  if(!_fishEndpointsAvailable){
+    showToast('Fish Speech endpoints not on this server — restart the Trend Vault server first.', 'error');
+    return;
+  }
   const btn = document.getElementById('fishInstallBtn');
   const lbl = document.getElementById('fishInstallProgressLabel');
   const bar = document.getElementById('fishInstallProgressBar');
@@ -3016,6 +3043,10 @@ window.installFishS2Pro = installFishS2Pro;
 // checklist updates live in the UI.
 let _fishStartPoll = null;
 async function startFishS2Pro(){
+  if(!_fishEndpointsAvailable){
+    showToast('Fish Speech endpoints not on this server — restart the Trend Vault server first.', 'error');
+    return;
+  }
   const btn = document.getElementById('fishStartBtn');
   const lbl = document.getElementById('fishStartProgressLabel');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Starting…'; }
@@ -3058,6 +3089,10 @@ window.startFishS2Pro = startFishS2Pro;
 
 // ── Repair Fish Speech (rebuild venv + deps, keep model) ────────────────
 async function repairFishS2Pro(){
+  if(!_fishEndpointsAvailable){
+    showToast('Fish Speech endpoints not on this server — restart the Trend Vault server first.', 'error');
+    return;
+  }
   if(!confirm('This will wipe the Fish Speech venv and reinstall dependencies. The model files at ' +
               (state.fishEngine?.modelDir || 'your model dir') + ' will NOT be touched. Continue?')) return;
   const btn = document.getElementById('fishRepairBtn');
@@ -3858,7 +3893,12 @@ function randomPrompt(){
 // ═══════════════════════════════════════════════════════════════════
 
 function buildToneGrid(){
+  // ── Defensive: some pages (and certain login states on the Linux server)
+  //     don't include #toneGrid. Returning silently when the container is
+  //     missing avoids the "Cannot set properties of null (innerHTML)"
+  //     crash that used to abort init.
   const g = document.getElementById('toneGrid');
+  if(!g) return;
   g.innerHTML = TONES.map(t=>`
     <button class="tone-chip${t.id===state.tone?' active':''}" data-tone="${t.id}" onclick="selectTone('${t.id}')">${t.emoji} ${t.label}</button>
   `).join('');

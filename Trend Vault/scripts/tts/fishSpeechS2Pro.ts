@@ -919,16 +919,53 @@ export async function checkFishServerStatus(): Promise<FishServerInfo> {
   };
 }
 
-/** Detect if something else is already listening on the configured port. */
+/**
+ * Detect if something is already listening on the configured port.
+ *
+ * Uses a raw TCP connect (not HTTP fetch) for accurate results:
+ *   • connect succeeds                → port has a listener (occupied)
+ *   • ECONNREFUSED                    → nothing is listening (free)
+ *   • everything else (timeout, etc.) → treat as free so we don't refuse
+ *                                       to spawn on a transient network
+ *                                       hiccup. The startup pipeline will
+ *                                       error cleanly later if there's a
+ *                                       real conflict.
+ *
+ * The previous HTTP-based probe returned false positives on Windows when
+ * the loopback stack took >1s to RST the connection, which made
+ * startFishServer() refuse to spawn even though port 8080 was empty.
+ */
 async function _isPortOccupied(url: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const net = require('net');
+  let host = '127.0.0.1';
+  let port = 8080;
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(1000) });
-    return r.status > 0;
-  } catch (e) {
-    const msg = (e as Error).message || '';
-    // ECONNREFUSED on Node means nobody is listening — port is free.
-    return !/ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(msg);
-  }
+    const u = new URL(url);
+    host = u.hostname || host;
+    port = parseInt(u.port || '8080', 10) || port;
+  } catch { /* use defaults */ }
+
+  return new Promise<boolean>((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const settle = (occupied: boolean) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch { /* ignore */ }
+      resolve(occupied);
+    };
+    socket.setTimeout(1500);
+    socket.once('connect', () => settle(true));
+    socket.once('timeout', () => settle(false));   // no SYN-ACK in 1.5s → not listening
+    socket.once('error', (err: NodeJS.ErrnoException) => {
+      // ECONNREFUSED is the canonical "nothing on this port" signal.
+      // Anything else is treated as "free" too so we don't get stuck.
+      settle(err && err.code === 'ECONNREFUSED' ? false : false);
+    });
+    try { socket.connect(port, host); }
+    catch { settle(false); }
+  });
 }
 
 /**
@@ -1714,12 +1751,12 @@ export const FISH_VOICE_PRESETS: FishVoicePreset[] = [
     fishDefaults: { speed: 0.86, temperature: 0.85, pitchSemitones: -3, normalize: true },
     category: 'horror', tags: ['horror','whisper','haunting','creepy'],
     exampleLine: "Don't turn around. Not yet." },
-  { id: 'fish_reddit_storyteller',     name: 'Fish S2 Pro — Reddit Storyteller',     icon: '🗣️', description: 'Reddit • Engaging • Story-Mode',
+  { id: 'fish_reddit_storyteller',     name: 'Fish S2 Pro â Reddit Storyteller',     icon: 'ð£ï¸', description: 'Reddit â¢ Engaging â¢ Story-Mode',
     engine: 'fish-speech-s2-pro', voiceId: 'reddit_storyteller',
     defaults: { pitch:  0, rate:  -2, speed: 0.98, volume:  0, intensity: 35 },
     fishDefaults: { speed: 0.98, temperature: 0.75, pitchSemitones:  0, normalize: true },
     category: 'storytelling', tags: ['reddit','storyteller','engaging','narrative'],
-    exampleLine: "So this happened last week — and I still can't believe it." },
+    exampleLine: "So this happened last week â and I still can't believe it." },
 ];
 
 export function findFishPreset(id: string | undefined): FishVoicePreset | undefined {
@@ -1733,8 +1770,7 @@ export function isFishEngine(presetId?: string, engine?: string): boolean {
   return false;
 }
 
-// ── Prosody tags ────────────────────────────────────────────────────────
-
+// ââ Prosody tags ââ
 export const FISH_STYLE_TAGS = [
   '[whisper]', '[laughing]', '[sad]', '[angry]', '[shouting]', '[pause]', '[emphasis]',
 ] as const;

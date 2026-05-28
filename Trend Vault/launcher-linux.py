@@ -156,26 +156,90 @@ else:
     _KOKORO_CMD = ['python3', _KOKORO_SCRIPT]
 
 # ── Fish Speech S2 Pro ───────────────────────────────────────────────────────
-# Second local TTS engine alongside Kokoro. Mirrors Kokoro's shape exactly.
-# Model weights live OUTSIDE the project at ~/.cache/trendvault/models/s2-pro
-# (override with FISH_S2_PRO_MODEL_PATH). Server URL: FISH_TTS_URL (default
-# http://127.0.0.1:8080).
-_FISH_VENV_PY = os.path.join(ROOT, 'fish-speech', '.venv', 'bin', 'python')
-_FISH_FALLBACK_SH = os.path.join(ROOT, 'scripts', 'start-fish-speech.sh')
+# Second local TTS engine alongside Kokoro. Linux/macOS path layout:
+#
+#   Runtime: ~/.local/share/trendvault/runtimes/fish-speech  (FISH_SPEECH_RUNTIME_PATH)
+#   Venv:    <runtime>/.venv                                  (FISH_SPEECH_VENV_PATH)
+#   Model:   FISH_S2_PRO_MODEL_PATH  (whatever the user already has)
+#   URL:     FISH_TTS_URL            (default http://127.0.0.1:8080)
+#
+# Startup strategy (mirrors what start-fish-speech.bat does on Windows):
+#   1. PREFERRED — invoke fish_speech_server.py (cross-platform Python
+#      launcher that handles git clone + Python 3.10/3.11 selection +
+#      venv creation + pip install + api_server start in one shot).
+#   2. FALLBACK 1 — if a runtime venv exists, run tools.api_server directly.
+#   3. FALLBACK 2 — scripts/start-fish-speech.sh shell helper if present.
+#   4. LAST RESORT — bare python3 -m tools.api_server (fails fast with a
+#      clear "Run setup first" message if the venv doesn't exist).
+#
+# The /api/fish-s2pro/start endpoint exposed by the Node server does the same
+# pipeline programmatically — this launcher card is essentially the GUI
+# button equivalent for users who want to run Fish Speech standalone.
+
+_FISH_SERVER_PY     = os.path.join(ROOT, 'fish_speech_server.py')
+
+# Runtime path mirrors fishSpeechS2Pro.ts:_defaultRuntimePath() on Linux:
+#   XDG_DATA_HOME or ~/.local/share, then trendvault/runtimes/fish-speech.
+_XDG_DATA = os.environ.get('XDG_DATA_HOME') or os.path.join(os.path.expanduser('~'), '.local', 'share')
+_FISH_RUNTIME_DEFAULT = os.environ.get('FISH_SPEECH_RUNTIME_PATH') or os.path.join(_XDG_DATA, 'trendvault', 'runtimes', 'fish-speech')
+_FISH_VENV_DEFAULT    = os.environ.get('FISH_SPEECH_VENV_PATH')    or os.path.join(_FISH_RUNTIME_DEFAULT, '.venv')
+_FISH_VENV_PY         = os.path.join(_FISH_VENV_DEFAULT, 'bin', 'python')
+_FISH_FALLBACK_SH     = os.path.join(ROOT, 'scripts', 'start-fish-speech.sh')
 _FISH_MODEL_DIR_DEFAULT = resolve_fish_s2_pro_path() or _FISH_S2_PRO_DEFAULT_CACHE
-if os.path.isfile(_FISH_VENV_PY):
+
+
+def _resolve_host_python_for_fish() -> str | None:
+    """Find the best host Python to bootstrap Fish Speech.
+
+    Mirrors fishSpeechS2Pro.ts::findCompatiblePython() priority order:
+      1. python3.11 / python3.10  (canonical names)
+      2. uv-managed Python 3.11
+      3. python3 / python  (only if its version is 3.10 or 3.11)
+
+    Returns the path to a usable interpreter, or None if no compatible
+    Python could be found.
+    """
+    for name in ('python3.11', 'python3.10', 'python3', 'python'):
+        path = shutil.which(name)
+        if not path:
+            continue
+        try:
+            r = subprocess.run(
+                [path, '-c', 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")'],
+                capture_output=True, text=True, timeout=4,
+            )
+            ver = (r.stdout or '').strip()
+            if ver in ('3.10', '3.11'):
+                return path
+        except Exception:
+            continue
+    return None
+
+
+# Build the launcher card's start command.
+if os.path.isfile(_FISH_SERVER_PY):
+    # Strategy 1 — the cross-platform fish_speech_server.py launcher.
+    # Prefer the venv python if it exists (faster — skips host Python probe).
+    # Otherwise pick the best host Python (3.10/3.11) we can find.
+    if os.path.isfile(_FISH_VENV_PY):
+        _FISH_CMD = [_FISH_VENV_PY, _FISH_SERVER_PY]
+    else:
+        _host_py = _resolve_host_python_for_fish() or 'python3'
+        _FISH_CMD = [_host_py, _FISH_SERVER_PY]
+elif os.path.isfile(_FISH_VENV_PY):
+    # Strategy 2 — venv built but no fish_speech_server.py; run api_server directly.
     _FISH_CMD = [_FISH_VENV_PY, '-m', 'tools.api_server',
                  '--listen', '127.0.0.1:8080',
                  '--llama-checkpoint-path', _FISH_MODEL_DIR_DEFAULT]
 elif os.path.isfile(_FISH_FALLBACK_SH):
+    # Strategy 3 — shell helper (scripts/start-fish-speech.sh).
     _FISH_CMD = ['bash', _FISH_FALLBACK_SH]
 else:
-    # Last resort: hope the system python has fish-speech installed. This
-    # will fail loudly rather than silently, which is what we want when
-    # the user clicks Start before running setup.
+    # Strategy 4 — bare python3; will print a useful error if nothing's set up.
     _FISH_CMD = ['python3', '-m', 'tools.api_server',
                  '--listen', '127.0.0.1:8080',
                  '--llama-checkpoint-path', _FISH_MODEL_DIR_DEFAULT]
+
 
 def fish_speech_http_ok(timeout: float = 2.0) -> tuple[bool, str]:
     """Probe the Fish Speech HTTP server defined by FISH_TTS_URL (default 8080).
@@ -1838,9 +1902,30 @@ class TrendVaultLauncher(tk.Tk):
             self._log_line(
                 'Fish runtime'.ljust(15) + '  ' + (
                     'OK (' + _FISH_VENV_PY + ')' if fish_runtime_ok
-                    else 'MISSING -- create fish-speech/.venv and pip install fish-speech, or set FISH_TTS_URL to an external server'
+                    else 'MISSING -- press Start on the Fish Speech S2 Pro card (fish_speech_server.py will clone + build the venv automatically), or set FISH_TTS_URL to an external server'
                 ),
                 TEXT if fish_runtime_ok else AMBER
+            )
+            # Host Python compatibility check — fish_speech_server.py needs
+            # a Python 3.10 or 3.11 interpreter to BOOTSTRAP the venv when it
+            # doesn't exist yet. We report the best available so the user
+            # knows whether they need to apt install python3.11 first.
+            fish_host_py = _resolve_host_python_for_fish()
+            self._log_line(
+                'Fish host py'.ljust(15) + '  ' + (
+                    'OK (' + fish_host_py + ')' if fish_host_py
+                    else 'MISSING -- no Python 3.10/3.11 found on PATH. Install python3.11: sudo apt install python3.11 python3.11-venv (Debian/Ubuntu)'
+                ),
+                TEXT if fish_host_py else AMBER
+            )
+            # fish_speech_server.py — the cross-platform launcher itself.
+            fish_server_py_ok = os.path.isfile(_FISH_SERVER_PY)
+            self._log_line(
+                'Fish launcher'.ljust(15) + '  ' + (
+                    'OK (' + _FISH_SERVER_PY + ')' if fish_server_py_ok
+                    else 'MISSING -- fish_speech_server.py not found at project root (re-pull repo)'
+                ),
+                TEXT if fish_server_py_ok else AMBER
             )
             # Fish Speech HTTP probe — confirms the running server is real.
             fish_http_ok, fish_http_base = fish_speech_http_ok()

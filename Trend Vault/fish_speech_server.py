@@ -421,17 +421,39 @@ REQUIRED_MODULES = ['torch', 'torchaudio', 'transformers', 'fish_speech']
 
 
 def check_deps(cfg: dict) -> bool:
-    """Quick import-check for the four required modules."""
+    """
+    Verify that each REQUIRED_MODULES item is importable in the venv.
+
+    Torch's first cold import on Windows can easily take 60-90s (CUDA DLL
+    walk, ProactorEventLoop init, antivirus scan of the new wheel). We
+    used to run all four imports in a single subprocess with a 30s
+    timeout — torch alone blew that budget every time, killing the whole
+    check. We now check each module in its own subprocess with a per-call
+    180s ceiling. If a module is genuinely broken it still errors fast;
+    if it's just torch warming up, we wait it out.
+    """
     venv_py = get_venv_python(cfg)
     if not Path(venv_py).is_file():
         return False
-    checks = '\n'.join(
-        f"try:\n    import {m}; print('OK {m}')\nexcept Exception as e: print('FAIL {m}:',e)"
-        for m in REQUIRED_MODULES
-    )
-    r = subprocess.run([venv_py, '-c', checks], capture_output=True, text=True, timeout=30)
-    out = r.stdout
-    return all(f'OK {m}' in out for m in REQUIRED_MODULES)
+    for m in REQUIRED_MODULES:
+        # Per-module probe — slow imports no longer poison the others.
+        # 180s is enough for torch's cold-load worst case (Windows + CUDA).
+        try:
+            log(f"  Importing {m}... (up to 180s)")
+            r = subprocess.run(
+                [venv_py, '-c',
+                 f"import {m}; print('OK {m}')"],
+                capture_output=True, text=True, timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            log(f"  [FAIL] {m}: import did not finish within 180s")
+            return False
+        out = (r.stdout or '') + (r.stderr or '')
+        if f'OK {m}' not in out:
+            log(f"  [FAIL] {m}: {out.strip()[:300]}")
+            return False
+        log(f"  [OK] {m}")
+    return True
 
 
 def _patch_pyproject(runtime: str) -> None:
