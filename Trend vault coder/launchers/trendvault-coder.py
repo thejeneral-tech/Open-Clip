@@ -20,6 +20,25 @@ import sys
 
 # ---------- bootstrap rich -----------------------------------------------
 
+def _pip_install(pkg: str) -> bool:
+    """Install `pkg` into the running Python, handling modern Linux distros.
+
+    Ubuntu 23.04+ / Debian 12+ / Fedora 38+ ship PEP 668 ("externally
+    managed") interpreters that refuse `pip install` system-wide. We try
+    the gentlest invocation first, then progressively fall back so the
+    launcher actually boots on a fresh box instead of bailing on bootstrap.
+    """
+    base = [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check"]
+    for extra in ([], ["--user"], ["--user", "--break-system-packages"]):
+        try:
+            rc = subprocess.run(base + extra + [pkg]).returncode
+        except OSError:
+            return False
+        if rc == 0:
+            return True
+    return False
+
+
 def _ensure_rich() -> None:
     try:
         import rich  # noqa: F401
@@ -27,12 +46,19 @@ def _ensure_rich() -> None:
     except ImportError:
         pass
     print("Installing 'rich' for the launcher UI (one-time)…")
-    rc = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", "rich"],
-    ).returncode
-    if rc != 0:
-        print("error: failed to install 'rich'. Run: python -m pip install rich")
-        sys.exit(1)
+    if _pip_install("rich"):
+        return
+    print("error: failed to install 'rich'.", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Your Python environment likely blocks system-wide pip installs.", file=sys.stderr)
+    print("Either install via your package manager, e.g.:", file=sys.stderr)
+    print("  Debian / Ubuntu:  sudo apt install python3-rich", file=sys.stderr)
+    print("  Fedora / RHEL:    sudo dnf install python3-rich", file=sys.stderr)
+    print("  Arch:             sudo pacman -S python-rich", file=sys.stderr)
+    print("…or create a venv and re-run the launcher from inside it:", file=sys.stderr)
+    print("  python3 -m venv .venv && source .venv/bin/activate", file=sys.stderr)
+    print("  python -m pip install rich", file=sys.stderr)
+    sys.exit(1)
 
 
 _ensure_rich()

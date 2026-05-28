@@ -48,6 +48,24 @@ def _check_tkinter_present() -> None:
     sys.exit(1)
 
 
+def _pip_install(pkg: str) -> bool:
+    """Install `pkg`, with fallbacks for PEP 668 (Ubuntu 23.04+, Debian 12+, Fedora 38+).
+
+    Modern distros refuse system-wide pip installs. We try the plain invocation
+    first, then `--user`, then `--user --break-system-packages` so the launcher
+    actually starts on a fresh box.
+    """
+    base = [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check"]
+    for extra in ([], ["--user"], ["--user", "--break-system-packages"]):
+        try:
+            rc = subprocess.run(base + extra + [pkg]).returncode
+        except OSError:
+            return False
+        if rc == 0:
+            return True
+    return False
+
+
 def _ensure_pip_package(pkg: str, import_name: str | None = None) -> None:
     name = import_name or pkg
     try:
@@ -56,12 +74,18 @@ def _ensure_pip_package(pkg: str, import_name: str | None = None) -> None:
     except ImportError:
         pass
     print(f"Installing '{pkg}' for the launcher UI (one-time)…")
-    rc = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", pkg],
-    ).returncode
-    if rc != 0:
-        print(f"error: failed to install '{pkg}'. Run: python -m pip install {pkg}", file=sys.stderr)
-        sys.exit(1)
+    if _pip_install(pkg):
+        return
+    print(f"error: failed to install '{pkg}'.", file=sys.stderr)
+    print(file=sys.stderr)
+    if platform.system() == "Linux":
+        print("Your Python likely blocks system-wide pip installs (PEP 668).", file=sys.stderr)
+        print("Create a venv and re-run from inside it:", file=sys.stderr)
+        print("  python3 -m venv .venv && source .venv/bin/activate", file=sys.stderr)
+        print(f"  python -m pip install {pkg}", file=sys.stderr)
+    else:
+        print(f"Run manually: python -m pip install {pkg}", file=sys.stderr)
+    sys.exit(1)
 
 
 _check_tkinter_present()
