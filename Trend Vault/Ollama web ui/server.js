@@ -36,16 +36,42 @@ const CLAW_DEV_CLI = path.resolve(
   ROOT, "claw-dev-main", "Leonxlnx-claude-code", "package", "cli.js"
 );
 const CODE_CWD = process.env.CODE_CWD || path.resolve(ROOT, "..");
+const LAST_MODEL_FILE = path.join(ROOT, "last-model.txt");
 
 // In-flight claw-dev subprocess jobs keyed by jobId.
 const clawJobs = new Map();
 
 // The compat proxy doesn't know which Ollama model claw-dev was launched for —
 // claw-dev sends `model: "claude-sonnet-4-6"` (or whatever) in /v1/messages,
-// not an Ollama tag. We stash the user's chosen Ollama model here at /code/chat
-// time so the proxy can rewrite the model before forwarding upstream.
+// not an Ollama tag. We stash the user's chosen Ollama model here so the proxy
+// can rewrite the model before forwarding upstream. It's set from three
+// sources, in order of precedence at request time:
+//   1. /code/chat body (per-turn override)
+//   2. /code/model POST (UI topbar picker — fires on change so the proxy is
+//      always ready, even before the first chat)
+//   3. OLLAMA_MODEL env var (CLI default for headless runs)
+//   4. last-model.txt persisted between server restarts
 // Single-tab single-job app, so a module-level slot is fine.
 let currentOllamaModel = "";
+try {
+  const persisted = fs.readFileSync(LAST_MODEL_FILE, "utf8").trim();
+  if (persisted) currentOllamaModel = persisted;
+} catch { /* file may not exist yet — fine */ }
+if (!currentOllamaModel && process.env.OLLAMA_MODEL) {
+  currentOllamaModel = process.env.OLLAMA_MODEL.trim();
+}
+
+// The active claw-dev job's emit() function. Set by runClawTurn before the
+// child is spawned and cleared on close. The compat proxy uses this to surface
+// request/response cadence as kind:"status" events in the chat — so when claw-
+// dev is "just thinking", the user can see whether it's waiting on Ollama,
+// retrying, or stuck. Single-job assumption matches currentOllamaModel above.
+let activeClawEmit = null;
+function emitClawStatus(message) {
+  if (activeClawEmit) {
+    try { activeClawEmit({ kind: "status", message }); } catch { /* ignore */ }
+  }
+}
 
 function pathnameOf(reqUrl) {
   return new URL(reqUrl, "http://x").pathname;
@@ -241,6 +267,23 @@ function handleCodeChat(req, res) {
     .catch((e) => writeJson(res, 400, { error: `Bad JSON: ${e.message}` }));
 }
 
+/* Persist the currently-selected Ollama model so:
+   - the compat proxy has a default even before the first chat
+   - server restarts remember the user's pick
+   - tooling outside the UI (CLI ping, health probe) sees the right model. */
+function handleCodeSetModel(req, res) {
+  readJsonBody(req)
+    .then((body) => {
+      const next = (body.ollamaModel || "").toString().trim();
+      if (!next) return writeJson(res, 400, { error: "ollamaModel is required" });
+      currentOllamaModel = next;
+      try { fs.writeFileSync(LAST_MODEL_FILE, next + "\n", "utf8"); }
+      catch (e) { console.warn(`[code] could not persist last-model.txt: ${e.message}`); }
+      writeJson(res, 200, { ok: true, ollamaModel: currentOllamaModel });
+    })
+    .catch((e) => writeJson(res, 400, { error: `Bad JSON: ${e.message}` }));
+}
+
 function runClawTurn(req, res, body) {
   const prompt = (body.prompt || "").toString();
   if (!prompt.trim()) return writeJson(res, 400, { error: "Empty prompt" });
@@ -295,6 +338,7 @@ function runClawTurn(req, res, body) {
   // claw-dev's first /v1/messages call may fire within milliseconds of spawn
   // so the assignment has to happen before the spawn() call below.
   currentOllamaModel = ollamaModel;
+  try { fs.writeFileSync(LAST_MODEL_FILE, ollamaModel + "\n", "utf8"); } catch {}
 
   const args = [
     CLAW_DEV_CLI,
@@ -358,6 +402,11 @@ function runClawTurn(req, res, body) {
   // Strip any OAuth token from the parent env so we don't pick up the
   // user's logged-in identity by accident.
   delete childEnv.CLAUDE_CODE_OAUTH_TOKEN;
+
+  // Surface compat-proxy + claw-dev cadence in the chat for the lifetime of
+  // this turn. See activeClawEmit definition at top of file.
+  activeClawEmit = emit;
+  emitClawStatus(`spawning claw-dev (model: ${ollamaModel})`);
 
   const child = spawn(process.execPath, args, {
     cwd,
@@ -430,6 +479,7 @@ function runClawTurn(req, res, body) {
 
   child.on("close", (code, sig) => {
     clawJobs.delete(jobId);
+    if (activeClawEmit === emit) activeClawEmit = null;
     if (stdoutBuf.trim()) {
       try {
         const evt = JSON.parse(stdoutBuf.trim());
@@ -478,6 +528,7 @@ function runClawTurn(req, res, body) {
 
   child.on("error", (err) => {
     clawJobs.delete(jobId);
+    if (activeClawEmit === emit) activeClawEmit = null;
     emit({ kind: "error", message: `claw-dev failed to launch: ${err.message}` });
     if (!res.writableEnded) {
       emit({ kind: "exit" });
@@ -563,6 +614,22 @@ function forwardClawEvent(emit, evt) {
       sessionId: evt.session_id || null,
       model: evt.model || null,
       tools: Array.isArray(evt.tools) ? evt.tools : [],
+    });
+    return;
+  }
+
+  // claw-dev emits these between API failures while it backs off. They're
+  // the #1 reason the chat "just thinks" with no token output — without
+  // surfacing them the user has no idea anything is happening. Render as
+  // kind:"status" so they replace the "thinking…" label live.
+  if (evt.type === "system" && evt.subtype === "api_retry") {
+    const attempt = evt.attempt || 0;
+    const max = evt.max_retries || 0;
+    const delaySec = evt.retry_delay_ms ? (evt.retry_delay_ms / 1000).toFixed(1) : "?";
+    const reason = evt.error_status || evt.error || "unknown";
+    emit({
+      kind: "status",
+      message: `retrying API call (${attempt}/${max}) in ${delaySec}s — last error: ${reason}`,
     });
     return;
   }
@@ -818,6 +885,12 @@ async function handleAnthropicMessages(req, res) {
     return res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: e.message } }));
   }
 
+  // Resolve the upstream Ollama model. We prefer the currently-selected one,
+  // but fall back to env so headless and pre-pick scenarios still work.
+  if (!currentOllamaModel) {
+    const envFallback = (process.env.OLLAMA_MODEL || "").trim();
+    if (envFallback) currentOllamaModel = envFallback;
+  }
   if (!currentOllamaModel) {
     res.writeHead(400, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
@@ -832,6 +905,12 @@ async function handleAnthropicMessages(req, res) {
   const wantStream = body.stream === true;
   const originalModel = body.model || "claude-sonnet-4-6";
   const ollamaBody = anthropicToOllamaBody(body);
+
+  // Surface a status line for every /v1/messages turn so the chat shows when
+  // claw-dev is calling upstream vs. just sitting between calls.
+  const msgCount = Array.isArray(body.messages) ? body.messages.length : 0;
+  const toolCount = Array.isArray(body.tools) ? body.tools.length : 0;
+  emitClawStatus(`→ ollama (${currentOllamaModel}) · ${msgCount} msg, ${toolCount} tools`);
 
   if (!wantStream) {
     // claw-dev always streams, but support the non-streaming path for
@@ -1030,8 +1109,14 @@ async function streamOllamaAsAnthropicSSE(res, ollamaBody, originalModel) {
     }
   });
 
+  const upstreamStart = Date.now();
+  let sawFirstChunk = false;
   await new Promise((resolve) => {
     resp.on("data", (chunk) => {
+      if (!sawFirstChunk) {
+        sawFirstChunk = true;
+        emitClawStatus(`← first chunk from ollama in ${Date.now() - upstreamStart}ms`);
+      }
       buf += chunk;
       let nl;
       while ((nl = buf.indexOf("\n")) !== -1) {
@@ -1045,6 +1130,7 @@ async function streamOllamaAsAnthropicSSE(res, ollamaBody, originalModel) {
             type: "error",
             error: { type: "api_error", message: String(obj.error) },
           });
+          emitClawStatus(`ollama error: ${String(obj.error).slice(0, 120)}`);
           continue;
         }
         const msg = obj.message || {};
@@ -1069,6 +1155,10 @@ async function streamOllamaAsAnthropicSSE(res, ollamaBody, originalModel) {
     resp.on("end", resolve);
     resp.on("error", () => resolve());
   });
+
+  emitClawStatus(
+    `← ollama done · ${outputTokens} out / ${inputTokens} in · ${Date.now() - upstreamStart}ms`
+  );
 
   clearInterval(pinger);
   if (aborted.v) return;
@@ -1153,6 +1243,8 @@ const server = http.createServer((req, res) => {
     handleCodeCheck(req, res);
   } else if (pathname === "/code/chat" && req.method === "POST") {
     handleCodeChat(req, res);
+  } else if (pathname === "/code/model" && req.method === "POST") {
+    handleCodeSetModel(req, res);
   } else if (pathname === "/code/stop" && req.method === "POST") {
     handleCodeStop(req, res);
   } else if (pathname === "/code/fs/list" && req.method === "GET") {

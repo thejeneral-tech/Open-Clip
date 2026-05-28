@@ -653,6 +653,19 @@
     });
   });
 
+  // Tell the local server about the picked Ollama model so the compat proxy
+  // has a default before the first chat fires. Fire-and-forget — failures
+  // here aren't fatal; the chat path also re-sets the model at turn time.
+  function pushCodeModelToServer() {
+    const name = el.modelSelect?.value || "";
+    if (!name) return;
+    fetch("/code/model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ollamaModel: name }),
+    }).catch(() => { /* silent */ });
+  }
+
   /* ----------------------------------------------------------
      Ollama: list / pull / delete / run
      ---------------------------------------------------------- */
@@ -705,6 +718,7 @@
         CODE_MODEL_HINTS.some((h) => n.toLowerCase().includes(h)));
       if (coder) el.modelSelect.value = coder;
     }
+    pushCodeModelToServer();
   }
 
   function setStatus(online) {
@@ -1410,10 +1424,16 @@
     wrap.appendChild(label);
     const start = performance.now();
     let tokens = 0;
+    // Latest status message from the server (proxy traffic, api_retry, etc.)
+    // While generation hasn't started, this replaces the static "thinking…"
+    // so the user can see *why* claw-dev is silent. Once tokens flow, the
+    // token counter takes over so we don't drown out throughput.
+    let statusText = "";
     const render = () => {
       const elapsed = (performance.now() - start) / 1000;
       if (tokens <= 0) {
-        label.textContent = `thinking… ${elapsed.toFixed(1)}s`;
+        const head = statusText || "thinking";
+        label.textContent = `${head}… ${elapsed.toFixed(1)}s`;
         return;
       }
       const tps = elapsed > 0 ? tokens / elapsed : 0;
@@ -1425,6 +1445,7 @@
       el: wrap,
       addTokens(n) { tokens += n; render(); },
       setTokens(n) { tokens = n; render(); },
+      setStatus(text) { statusText = String(text || ""); render(); },
       stop() { clearInterval(tick); },
     };
   }
@@ -1644,6 +1665,13 @@
               assistantMsg.blocks.push(e);
               appendBlockEl(blocksEl, e);
             }
+          } else if (env.kind === "status") {
+            // Live cadence info from the server (proxy hit, api_retry, etc.)
+            // Replaces the static "thinking…" label until tokens start
+            // flowing, then is naturally taken over by the token counter.
+            // No DOM block — status is transient and shouldn't clutter the
+            // saved transcript.
+            live.setStatus(env.message || "");
           } else if (env.kind === "warning") {
             const w = { type: "text", text: `_${env.message}_` };
             assistantMsg.blocks.push(w);
@@ -2382,6 +2410,11 @@
         ctx().save();
       }
       if (activeView === "code") refreshCodeBanner();
+      // Always notify the server — claw-dev runs through the compat proxy
+      // which uses currentOllamaModel as its default, regardless of which
+      // view the user is in. Keeping them in sync means the next Code run
+      // doesn't 400 with "No Ollama model selected".
+      pushCodeModelToServer();
     });
 
     // Code banner buttons
