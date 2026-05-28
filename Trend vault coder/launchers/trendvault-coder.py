@@ -179,6 +179,77 @@ def strip_ansi(line: str) -> str:
     return ANSI_ESCAPE_RE.sub("", line)
 
 
+def _is_wsl() -> bool:
+    """Detect Windows Subsystem for Linux. /proc/version mentions Microsoft."""
+    if platform.system() != "Linux":
+        return False
+    try:
+        with open("/proc/version", "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read().lower()
+    except OSError:
+        return False
+    return "microsoft" in text or "wsl" in text
+
+
+def _open_url_for_platform(url: str) -> bool:
+    """Best-effort cross-platform browser open. Returns True on apparent success.
+
+    Python's stdlib webbrowser.open() works fine on Windows/macOS and on Linux
+    desktops with xdg-open. It quietly fails on WSL, headless servers, and SSH
+    sessions, leaving the user staring at a launcher that says "opening
+    browser…" forever. We special-case those.
+    """
+    system = platform.system()
+
+    # ---- WSL: shell out to the Windows host so the user's real browser opens.
+    if _is_wsl():
+        for cmd in (
+            ["wslview", url],
+            ["powershell.exe", "-NoProfile", "-Command", f"Start-Process '{url}'"],
+            ["cmd.exe", "/c", "start", "", url],
+        ):
+            if not shutil.which(cmd[0]):
+                continue
+            try:
+                rc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                ).returncode
+            except Exception:  # noqa: BLE001
+                continue
+            if rc == 0:
+                return True
+        return False
+
+    # ---- Headless Linux: no DISPLAY / no Wayland → skip silently.
+    if system == "Linux" and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        return False
+
+    # ---- Native macOS: use `open` (more reliable than the stdlib fallback).
+    if system == "Darwin" and shutil.which("open"):
+        try:
+            rc = subprocess.run(
+                ["open", url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode
+            if rc == 0:
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ---- Everything else (Windows, Linux desktop): let stdlib try.
+    try:
+        return bool(webbrowser.open(url, new=2))
+    except Exception:  # noqa: BLE001 — browser launch is best-effort
+        return False
+
+
 # ---------- the launcher dashboard --------------------------------------
 
 class Launcher:
@@ -430,11 +501,13 @@ class Launcher:
 
     def _open_browser_later(self) -> None:
         time.sleep(2.0)
-        try:
-            webbrowser.open(self.url, new=2)
+        if _open_url_for_platform(self.url):
             self._set("browser", DONE, self.url)
-        except Exception:  # noqa: BLE001 — browser launch is best-effort
-            self._set("browser", FAILED, "could not open")
+        else:
+            # Don't surface this as a hard failure — the server is fine, the
+            # user just has to click the URL themselves (common on WSL without
+            # wslu / headless boxes / SSH sessions).
+            self._set("browser", SKIPPED, f"open {self.url} manually")
 
     # ----- shutdown -----
     def shutdown(self) -> None:
