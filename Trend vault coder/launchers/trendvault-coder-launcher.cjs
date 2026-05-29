@@ -196,11 +196,58 @@ async function configureCompatProvider(provider, env, rl) {
     }
     case "ollama": {
       env.OLLAMA_BASE_URL = env.OLLAMA_BASE_URL?.trim() || "http://127.0.0.1:11434";
-      env.OLLAMA_MODEL = env.OLLAMA_MODEL?.trim() || "qwen3";
       env.OLLAMA_KEEP_ALIVE = env.OLLAMA_KEEP_ALIVE?.trim() || "30m";
+
+      const userPickedModel = env.OLLAMA_MODEL?.trim();
+      const probe = await fetchOllamaModels(env.OLLAMA_BASE_URL);
+
+      if (!probe.ok) {
+        process.stdout.write(
+          `\nWarning: couldn't reach Ollama at ${env.OLLAMA_BASE_URL} (${probe.error}).\n`,
+        );
+        process.stdout.write("Continuing anyway — start Ollama before sending a message.\n");
+        env.OLLAMA_MODEL = userPickedModel || "qwen3";
+      } else if (userPickedModel) {
+        // User specified a model — verify it. Allow base-name match so
+        // "qwen3" resolves to "qwen3:8b" if that's what's installed.
+        env.OLLAMA_MODEL = resolveModelName(userPickedModel, probe.models)
+          || userPickedModel;
+        if (!probe.models.includes(env.OLLAMA_MODEL)) {
+          process.stdout.write(
+            `\nWarning: model '${userPickedModel}' is not installed in Ollama.\n`,
+          );
+          process.stdout.write(
+            `Installed: ${probe.models.length > 0 ? probe.models.join(", ") : "(none)"}\n`,
+          );
+          process.stdout.write(`Pull it first with:  ollama pull ${userPickedModel}\n`);
+        } else if (env.OLLAMA_MODEL !== userPickedModel) {
+          process.stdout.write(
+            `\nResolved OLLAMA_MODEL '${userPickedModel}' -> '${env.OLLAMA_MODEL}'.\n`,
+          );
+        }
+      } else {
+        // No user pick — choose a real installed model so we don't 404 on
+        // 'qwen3' just because the user pulled a different one.
+        if (probe.models.length === 0) {
+          throw new Error(
+            `Ollama is running at ${env.OLLAMA_BASE_URL} but has no models installed.\n` +
+              `Pull one first, e.g.:  ollama pull qwen3`,
+          );
+        }
+        env.OLLAMA_MODEL = pickPreferredModel(probe.models);
+        process.stdout.write(
+          `\nNo OLLAMA_MODEL set — auto-picked '${env.OLLAMA_MODEL}'.\n`,
+        );
+        if (probe.models.length > 1) {
+          process.stdout.write(
+            `Other installed models: ${probe.models.filter((m) => m !== env.OLLAMA_MODEL).join(", ")}\n`,
+          );
+          process.stdout.write("Set OLLAMA_MODEL=<name> to override.\n");
+        }
+      }
+
       process.stdout.write(`\nLaunching Ollama mode against ${env.OLLAMA_BASE_URL} with model ${env.OLLAMA_MODEL}.\n`);
       process.stdout.write(`Ollama keep-alive is set to ${env.OLLAMA_KEEP_ALIVE} for faster follow-up turns.\n`);
-      process.stdout.write("Make sure Ollama is running and the model is already pulled.\n");
       break;
     }
     default:
@@ -286,6 +333,73 @@ async function ensureCompatProxy(provider, env) {
     const detail = tail ? `\nLast proxy output:\n${tail}` : "";
     throw new Error(`${err.message}${detail}`);
   }
+}
+
+function fetchOllamaModels(baseUrl) {
+  // GET <baseUrl>/api/tags  →  { models: [{ name: "qwen3:8b" }, ...] }
+  return new Promise((resolve) => {
+    let target;
+    try {
+      target = new URL("/api/tags", baseUrl);
+    } catch (err) {
+      resolve({ ok: false, error: `bad OLLAMA_BASE_URL: ${err.message}` });
+      return;
+    }
+    const req = http.get(target, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          resolve({ ok: false, error: `HTTP ${res.statusCode}` });
+          return;
+        }
+        try {
+          const json = JSON.parse(body);
+          const models = Array.isArray(json?.models)
+            ? json.models
+                .map((m) => (m && typeof m.name === "string" ? m.name : ""))
+                .filter((n) => n.length > 0)
+            : [];
+          resolve({ ok: true, models });
+        } catch (err) {
+          resolve({ ok: false, error: `bad JSON from /api/tags: ${err.message}` });
+        }
+      });
+    });
+    req.on("error", (err) => resolve({ ok: false, error: err.message }));
+    req.setTimeout(2000, () => {
+      req.destroy();
+      resolve({ ok: false, error: "timeout after 2s" });
+    });
+  });
+}
+
+function resolveModelName(requested, installed) {
+  // Exact match wins.
+  if (installed.includes(requested)) return requested;
+  // Then "qwen3" should resolve to e.g. "qwen3:8b" or "qwen3:latest".
+  const prefixMatches = installed.filter((m) => m === requested || m.startsWith(`${requested}:`));
+  if (prefixMatches.length > 0) {
+    // Prefer ":latest" if present, otherwise the first prefix match.
+    const latest = prefixMatches.find((m) => m === `${requested}:latest`);
+    return latest || prefixMatches[0];
+  }
+  return null;
+}
+
+function pickPreferredModel(installed) {
+  // Heuristic: prefer a qwen-family chat model if the user has one,
+  // otherwise the first installed model. Tweak freely.
+  const preferred = ["qwen3:latest", "qwen3", "qwen2.5:latest", "llama3.1:latest", "llama3:latest"];
+  for (const name of preferred) {
+    if (installed.includes(name)) return name;
+  }
+  const qwenAny = installed.find((m) => m.startsWith("qwen3:") || m.startsWith("qwen2.5:"));
+  if (qwenAny) return qwenAny;
+  return installed[0];
 }
 
 function modelForProvider(provider, env) {
