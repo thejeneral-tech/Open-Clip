@@ -10,11 +10,30 @@ const { WebSocketServer } = require('ws');
 const pty = require('@homebridge/node-pty-prebuilt-multiarch');
 
 const PORT = process.env.PORT || 7878;
-const HOST = '127.0.0.1'; // localhost only — this app can run shell commands on your machine
+const HOST = '127.0.0.1'; // always bound here for local access; also bound to the Tailscale IP if the tailnet is up
 const OLLAMA_URL = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 
 const isWin = process.platform === 'win32';
 const shell = isWin ? (process.env.COMSPEC || 'cmd.exe') : (process.env.SHELL || '/bin/bash');
+
+// Tailscale hands out IPv4 addresses in the 100.64.0.0/10 CGNAT range. Returns this
+// machine's Tailscale IP if the tailnet is up, else null. Prefers an interface whose
+// name looks like Tailscale, then falls back to any address in that range.
+function getTailscaleIPv4() {
+  const ifaces = os.networkInterfaces();
+  let named = null;
+  let cgnat = null;
+  for (const [name, addrs] of Object.entries(ifaces)) {
+    for (const a of addrs || []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      const m = /^(\d+)\.(\d+)\./.exec(a.address);
+      if (!m || Number(m[1]) !== 100 || Number(m[2]) < 64 || Number(m[2]) > 127) continue;
+      if (/tailscale/i.test(name)) { if (!named) named = a.address; }
+      else if (!cgnat) cgnat = a.address;
+    }
+  }
+  return named || cgnat || null;
+}
 
 // --- auth: file-based accounts + in-memory sessions ---
 // Accounts live in users.json (edit it to add users / change passwords).
@@ -447,7 +466,7 @@ function buildArgs(model) {
   return isWin ? ['/c', cmd] : ['-lc', cmd];
 }
 
-wss.on('connection', (ws, req) => {
+function handlePtyConnection(ws, req) {
   // require a valid session — the browser sends the cookie on the handshake
   if (!getSession(req)) {
     ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
@@ -504,15 +523,35 @@ wss.on('connection', (ws, req) => {
     onExit.dispose();
     try { term.kill(); } catch (_) {}
   });
-});
+}
+
+wss.on('connection', handlePtyConnection);
 
 ensureUsersFile();
+
+const tailscaleIP = getTailscaleIPv4();
+
+// Bind a second listener on the Tailscale IP so devices on the tailnet can reach the
+// UI, while localhost stays bound for the local GUI. Reuses the same app + PTY handler.
+if (tailscaleIP && tailscaleIP !== HOST) {
+  const tsServer = http.createServer(app);
+  const tsWss = new WebSocketServer({ server: tsServer, path: '/pty' });
+  tsWss.on('connection', handlePtyConnection);
+  tsServer.on('error', (e) => {
+    console.warn(`  ⚠  Could not bind Tailscale address ${tailscaleIP}:${PORT} — ${(e && e.message) || e}`);
+  });
+  tsServer.listen(PORT, tailscaleIP);
+}
 
 server.listen(PORT, HOST, () => {
   const users = loadUsers();
   console.log(`\n  Claude Code Web UI  →  http://${HOST}:${PORT}\n`);
   console.log(`  Backend: ollama launch claude   |   Ollama API: ${OLLAMA_URL}`);
-  console.log(`  Bound to ${HOST} only (not exposed to your network).`);
+  if (tailscaleIP && tailscaleIP !== HOST) {
+    console.log(`  Also on Tailscale  →  http://${tailscaleIP}:${PORT}  (reachable by devices on your tailnet)`);
+  } else {
+    console.log(`  Bound to ${HOST} only (Tailscale not detected — not exposed to your network).`);
+  }
   console.log(`  Accounts (${users.length}): ${users.map(u => u.username).join(', ')}`);
   console.log(`  Edit ${USERS_FILE} to add users or change passwords.`);
   if (users.some(u => u.password === 'admin')) {
