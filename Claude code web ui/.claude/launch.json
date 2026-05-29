@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
       "port": 7878
+    },
+    {
+      "name": "claude-web-ui-preview",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set \"PORT=7901\" && node server.js"],
+      "port": 7901
     }
   ]
 }

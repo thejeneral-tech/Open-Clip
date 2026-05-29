@@ -3096,19 +3096,25 @@ function setTermStatus(stateName, text) {
 async function populateTermModels() {
   const select = $("term-model");
   if (!select) return;
+  const prev = select.value;
   let models = [];
   try {
     const m = await fetch("/api/models").then((r) => r.json());
     if (m && m.ok && Array.isArray(m.models)) models = m.models;
   } catch {
-    /* Ollama unreachable — fall back to a default below */
+    /* Ollama unreachable — leave the list empty below */
   }
-  if (!models.length) models = ["qwen2.5-coder:7b"];
   select.innerHTML = "";
-  for (const name of models) select.appendChild(el("option", { value: name }, name));
-  const coder = models.find((n) => /coder/i.test(n));
-  select.value = coder || models[0];
   codeTerm.modelsLoaded = true;
+  if (!models.length) {
+    select.appendChild(el("option", { value: "", disabled: true, selected: true },
+      "No models installed — pull one in Models"));
+    return;
+  }
+  for (const name of models) select.appendChild(el("option", { value: name }, name));
+  // Keep the user's previous pick if it's still installed; otherwise prefer a coder model.
+  const coder = models.find((n) => /coder/i.test(n));
+  select.value = models.includes(prev) ? prev : (coder || models[0]);
 }
 
 async function populateTermCwd() {
@@ -3127,7 +3133,7 @@ async function populateTermCwd() {
 }
 
 function enterCodeTerminal() {
-  if (!codeTerm.modelsLoaded) populateTermModels();
+  populateTermModels(); // always refresh so the list reflects whatever is installed now
   if (!codeTerm.cwdLoaded) populateTermCwd();
   // If a session is already live, refit once the view has real dimensions.
   if (codeTerm.term && codeTerm.fit) {
@@ -3256,11 +3262,25 @@ function launchCodeTerminal() {
   setTimeout(() => term.focus(), 0);
 }
 
+// Open the folder picker for the terminal's working-directory field. Picks fill
+// #term-cwd without touching the agent's CWD — Launch uses whatever's in the field.
+function openFolderPickerForTermCwd() {
+  const input = $("term-cwd");
+  const initial = (input?.value || state.info?.cwd || "").trim();
+  openFolderPicker(initial, {
+    title: "Pick working directory",
+    confirmLabel: "Use this folder",
+    onConfirm: (picked) => { if (input) input.value = picked; },
+  });
+}
+
 function wireCodeTerminal() {
   const launch = $("term-launch");
   if (launch) launch.addEventListener("click", launchCodeTerminal);
   const restart = $("term-restart");
   if (restart) restart.addEventListener("click", launchCodeTerminal);
+  const browse = $("term-cwd-browse");
+  if (browse) browse.addEventListener("click", openFolderPickerForTermCwd);
   const cwd = $("term-cwd");
   if (cwd) {
     cwd.addEventListener("keydown", (e) => {

@@ -2670,6 +2670,9 @@ body.auth-pending .login-tagline {
   width: 100%;
   font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 }
+.terminal-cwd-row { display: flex; gap: 8px; align-items: center; }
+.terminal-cwd-row input { flex: 1 1 auto; }
+.terminal-cwd-row .ghost-btn { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; font-size: 12px; }
 
 .terminal-bar-right .primary-btn.small,
 .terminal-bar-right .ghost-btn.small { padding: 8px 14px; font-size: 12px; }

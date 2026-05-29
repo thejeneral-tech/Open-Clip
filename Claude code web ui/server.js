@@ -178,6 +178,62 @@ app.get('/api/defaults', (req, res) => {
   res.json({ cwd: process.env.CLAUDE_CWD || process.cwd(), home: os.homedir() });
 });
 
+// --- filesystem browsing for the folder picker (directories only) ---
+// Gated by the /api/ auth check above. This exposes the same directory access the
+// terminal already has (it launches a shell in any chosen folder), so it adds no new
+// capability beyond what an authenticated session can already do.
+app.get('/api/fs/home', (req, res) => {
+  res.json({ home: os.homedir() });
+});
+
+app.get('/api/fs/list', (req, res) => {
+  const raw = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+
+  // Windows root level (empty path): enumerate drive letters that respond.
+  if (!raw && isWin) {
+    const drives = [];
+    for (let c = 67; c <= 90; c++) { // C..Z (skip A/B floppies)
+      const root = `${String.fromCharCode(c)}:\\`;
+      try { fs.accessSync(root); drives.push({ name: root, path: root }); } catch (_) {}
+    }
+    return res.json({ path: '', parent: null, isRoot: true, items: drives });
+  }
+
+  let abs;
+  try {
+    abs = path.resolve(raw || '/');
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
+  let entries;
+  try {
+    entries = fs.readdirSync(abs, { withFileTypes: true });
+  } catch (e) {
+    return res.status(400).json({ error: (e && e.message) || 'Cannot read directory' });
+  }
+
+  const items = entries
+    .filter(d => {
+      if (d.isDirectory()) return true;
+      if (d.isSymbolicLink()) {
+        try { return fs.statSync(path.join(abs, d.name)).isDirectory(); } catch (_) { return false; }
+      }
+      return false;
+    })
+    .map(d => ({ name: d.name, path: path.join(abs, d.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
+  const parent = path.dirname(abs);
+  const atRoot = parent === abs; // dirname of a filesystem root returns itself
+  res.json({
+    path: abs,
+    parent: atRoot ? (isWin ? '' : null) : parent,
+    isRoot: false,
+    items,
+  });
+});
+
 // --- Ollama model management (proxied to the local Ollama API) ---
 
 // models currently loaded in memory

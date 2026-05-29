@@ -164,10 +164,13 @@
                     <option value="" disabled selected>Loading…</option>
                   </select>
                 </label>
-                <label class="terminal-field terminal-field-cwd">
+                <div class="terminal-field terminal-field-cwd">
                   <span>Folder</span>
-                  <input type="text" id="term-cwd" spellcheck="false" autocomplete="off" placeholder="working directory" />
-                </label>
+                  <div class="terminal-cwd-row">
+                    <input type="text" id="term-cwd" spellcheck="false" autocomplete="off" placeholder="working directory" />
+                    <button type="button" class="ghost-btn small" id="term-cwd-browse" title="Browse folders">Browse…</button>
+                  </div>
+                </div>
               </div>
               <div class="terminal-bar-right">
                 <button type="button" class="primary-btn small" id="term-launch">▶ Launch</button>
