@@ -130,6 +130,26 @@ const server = createServer(async (req, res) => {
   }
 });
 
+server.on("error", (err: NodeJS.ErrnoException) => {
+  // Surface a readable diagnosis instead of an unhandled exception. Most
+  // commonly fires as EADDRINUSE when a previous proxy run is still bound
+  // to PORT (8789 for Ollama by default).
+  if (err.code === "EADDRINUSE") {
+    process.stderr.write(
+      `compat-proxy: port ${PORT} is already in use on 127.0.0.1.\n` +
+        `  Another proxy or process is bound to it. Stop it (or set ANTHROPIC_COMPAT_PORT\n` +
+        `  to a different port) and try again.\n`,
+    );
+  } else if (err.code === "EACCES") {
+    process.stderr.write(
+      `compat-proxy: not allowed to bind port ${PORT} on 127.0.0.1 (${err.message}).\n`,
+    );
+  } else {
+    process.stderr.write(`compat-proxy: listen error: ${err.message}\n`);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, "127.0.0.1", () => {
   process.stdout.write(
     `TrendVault Coder Anthropic-compatible proxy listening on http://127.0.0.1:${PORT} (${PROVIDER}:${ACTIVE_MODEL})\n`,

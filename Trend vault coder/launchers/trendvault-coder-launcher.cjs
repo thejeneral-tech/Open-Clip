@@ -216,30 +216,76 @@ async function ensureCompatProxy(provider, env) {
     return;
   }
 
+  // Pipe stdio so we can both surface real errors (previously hidden by
+  // stdio: "ignore" — which made every Ollama crash look identical) and
+  // include the tail in the error message if startup fails.
+  const stdio = ["ignore", "pipe", "pipe"];
   proxyProcess =
     process.platform === "win32"
       ? spawn("cmd.exe", ["/d", "/s", "/c", "npm run proxy:compat"], {
           cwd: workspaceRoot,
-          stdio: "ignore",
+          stdio,
           windowsHide: true,
           env,
         })
       : spawn("npm", ["run", "proxy:compat"], {
           cwd: workspaceRoot,
-          stdio: "ignore",
+          stdio,
           env,
         });
 
   ownsProxyProcess = true;
 
+  const recentProxyLines = [];
+  const RECENT_LINE_CAP = 40;
+  const recordProxyLine = (text) => {
+    for (const line of String(text).split(/\r?\n/)) {
+      if (!line) continue;
+      recentProxyLines.push(line);
+      while (recentProxyLines.length > RECENT_LINE_CAP) recentProxyLines.shift();
+    }
+  };
+
+  proxyProcess.stdout?.setEncoding("utf8");
+  proxyProcess.stderr?.setEncoding("utf8");
+  proxyProcess.stdout?.on("data", (chunk) => {
+    recordProxyLine(chunk);
+    process.stdout.write(`[compat-proxy] ${chunk}`);
+  });
+  proxyProcess.stderr?.on("data", (chunk) => {
+    recordProxyLine(chunk);
+    process.stderr.write(`[compat-proxy] ${chunk}`);
+  });
+
+  // Without this, a spawn-level error (npm not on PATH, etc.) bubbled up
+  // as an uncaught exception and slammed the cmd.exe window shut before
+  // the user could read it.
+  proxyProcess.on("error", (err) => {
+    if (exiting) return;
+    console.error(`\nFailed to spawn compatibility proxy: ${err.message}`);
+    cleanupAndExit(1);
+  });
+
   proxyProcess.on("exit", (code) => {
     if (!exiting && code && code !== 0) {
-      console.error(`Compatibility proxy exited early with code ${code}.`);
+      console.error(`\nCompatibility proxy exited early with code ${code}.`);
+      if (recentProxyLines.length > 0) {
+        console.error("Last proxy output:");
+        for (const line of recentProxyLines.slice(-15)) console.error(`  ${line}`);
+      } else {
+        console.error("(no output captured — try `npm run proxy:compat` directly to debug)");
+      }
       cleanupAndExit(code);
     }
   });
 
-  await waitForProxy(proxyUrl, provider, modelForProvider(provider, env));
+  try {
+    await waitForProxy(proxyUrl, provider, modelForProvider(provider, env));
+  } catch (err) {
+    const tail = recentProxyLines.slice(-15).join("\n");
+    const detail = tail ? `\nLast proxy output:\n${tail}` : "";
+    throw new Error(`${err.message}${detail}`);
+  }
 }
 
 function modelForProvider(provider, env) {
