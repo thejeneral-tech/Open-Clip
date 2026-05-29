@@ -522,6 +522,90 @@ function buildArgs(model) {
   return isWin ? ['/c', cmd] : ['-lc', cmd];
 }
 
+// Live PTY sessions keyed by the client-supplied session id. The PTY (and the agent
+// process running in it) is kept alive across WebSocket disconnects so a browser
+// refresh doesn't lose the running session — the client reattaches by the same id.
+const ptySessions = new Map();
+const PTY_BUFFER_LIMIT = 256 * 1024; // bytes of recent output replayed on reattach
+
+function bufferOutput(sess, data) {
+  sess.buffer.push(data);
+  sess.bufferBytes += Buffer.byteLength(data, 'utf8');
+  while (sess.bufferBytes > PTY_BUFFER_LIMIT && sess.buffer.length > 1) {
+    const dropped = sess.buffer.shift();
+    sess.bufferBytes -= Buffer.byteLength(dropped, 'utf8');
+  }
+}
+
+function disposeSession(sess) {
+  try { sess.onData && sess.onData.dispose(); } catch (_) {}
+  try { sess.onExit && sess.onExit.dispose(); } catch (_) {}
+  ptySessions.delete(sess.id);
+}
+
+// Bind a socket to a session: stream output to it and accept its input. The PTY is
+// shared — closing the socket only detaches it, leaving the process running.
+function attachSocket(sess, ws, { cols, rows, reattached }) {
+  // Replace any previous socket on this session (e.g. a stale tab) so only one drives it.
+  if (sess.ws && sess.ws !== ws && sess.ws.readyState === sess.ws.OPEN) {
+    try { sess.ws.close(); } catch (_) {}
+  }
+  sess.ws = ws;
+
+  ws.send(JSON.stringify({
+    type: 'status', state: 'running',
+    session: sess.id, model: sess.model, cwd: sess.cwd, reattached: !!reattached,
+  }));
+
+  // Replay recent output so a refreshed client gets its scrollback back.
+  if (reattached && sess.buffer.length) {
+    const replay = sess.buffer.join('');
+    if (replay) ws.send(Buffer.from(replay, 'utf8'));
+  }
+
+  // Match the PTY to the (possibly new) viewport.
+  if (cols && rows) { try { sess.term.resize(cols, rows); } catch (_) {} }
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+    if (msg.type === 'input' && typeof msg.data === 'string') {
+      try { sess.term.write(msg.data); } catch (_) {}
+    } else if (msg.type === 'resize' && msg.cols && msg.rows) {
+      try { sess.term.resize(msg.cols, msg.rows); } catch (_) {}
+    }
+  });
+
+  ws.on('close', () => {
+    // Keep the PTY alive across refreshes — only detach this socket.
+    if (sess.ws === ws) sess.ws = null;
+  });
+}
+
+function spawnSession(id, { model, cwd, cols, rows }) {
+  const term = pty.spawn(shell, buildArgs(model), {
+    name: 'xterm-256color', cols, rows, cwd, env: process.env,
+  });
+  const sess = {
+    id, term, model, cwd, ws: null,
+    buffer: [], bufferBytes: 0,
+    createdAt: Date.now(),
+  };
+  ptySessions.set(id, sess);
+
+  sess.onData = term.onData(d => {
+    bufferOutput(sess, d);
+    if (sess.ws && sess.ws.readyState === sess.ws.OPEN) sess.ws.send(Buffer.from(d, 'utf8'));
+  });
+  sess.onExit = term.onExit(({ exitCode }) => {
+    if (sess.ws && sess.ws.readyState === sess.ws.OPEN) {
+      sess.ws.send(JSON.stringify({ type: 'exit', code: exitCode }));
+    }
+    disposeSession(sess);
+  });
+  return sess;
+}
+
 function handlePtyConnection(ws, req) {
   // require a valid session — the browser sends the cookie on the handshake
   if (!getSession(req)) {
@@ -530,11 +614,36 @@ function handlePtyConnection(ws, req) {
     return;
   }
   const url = new URL(req.url, 'http://localhost');
+  const sessionId = (url.searchParams.get('session') || '').trim();
+  const mode = (url.searchParams.get('mode') || 'create').trim(); // 'create' | 'attach'
+  const cols = parseInt(url.searchParams.get('cols'), 10) || 100;
+  const rows = parseInt(url.searchParams.get('rows'), 10) || 30;
+
+  // Reattach to a process that's still running for this id (the refresh case).
+  if (sessionId && ptySessions.has(sessionId)) {
+    if (mode === 'create') {
+      // An explicit (re)launch for a live id replaces the old process.
+      const old = ptySessions.get(sessionId);
+      try { old.term.kill(); } catch (_) {}
+      if (old.ws && old.ws !== ws) { try { old.ws.close(); } catch (_) {} }
+      disposeSession(old);
+    } else {
+      attachSocket(ptySessions.get(sessionId), ws, { cols, rows, reattached: true });
+      return;
+    }
+  }
+
+  // Attach-only, but nothing is running — tell the client so it can offer a relaunch.
+  if (mode === 'attach') {
+    ws.send(JSON.stringify({ type: 'gone', message: 'Session is no longer running' }));
+    ws.close();
+    return;
+  }
+
+  // Create a fresh session.
   const model = (url.searchParams.get('model') || 'qwen2.5-coder:7b').trim();
   let cwd = url.searchParams.get('cwd') || os.homedir();
   if (!cwd || !fs.existsSync(cwd)) cwd = os.homedir();
-  const cols = parseInt(url.searchParams.get('cols'), 10) || 100;
-  const rows = parseInt(url.searchParams.get('rows'), 10) || 30;
 
   // basic guard against absurd model strings going onto a shell line
   if (!/^[\w.:\-\/]+$/.test(model)) {
@@ -543,45 +652,40 @@ function handlePtyConnection(ws, req) {
     return;
   }
 
-  let term;
+  const id = sessionId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  let sess;
   try {
-    term = pty.spawn(shell, buildArgs(model), {
-      name: 'xterm-256color', cols, rows, cwd, env: process.env,
-    });
+    sess = spawnSession(id, { model, cwd, cols, rows });
   } catch (e) {
     ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) }));
     ws.close();
     return;
   }
-
-  ws.send(JSON.stringify({ type: 'status', state: 'running', model, cwd }));
-
-  const onData = term.onData(d => {
-    if (ws.readyState === ws.OPEN) ws.send(Buffer.from(d, 'utf8'));
-  });
-  const onExit = term.onExit(({ exitCode }) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'exit', code: exitCode }));
-    try { ws.close(); } catch (_) {}
-  });
-
-  ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch { return; }
-    if (msg.type === 'input' && typeof msg.data === 'string') {
-      term.write(msg.data);
-    } else if (msg.type === 'resize' && msg.cols && msg.rows) {
-      try { term.resize(msg.cols, msg.rows); } catch (_) {}
-    }
-  });
-
-  ws.on('close', () => {
-    onData.dispose();
-    onExit.dispose();
-    try { term.kill(); } catch (_) {}
-  });
+  attachSocket(sess, ws, { cols, rows, reattached: false });
 }
 
 wss.on('connection', handlePtyConnection);
+
+// List the PTY sessions that are still running, so the client can tell which saved
+// sidebar entries can be reattached versus relaunched.
+app.get('/api/pty/sessions', (req, res) => {
+  const items = [];
+  for (const s of ptySessions.values()) {
+    items.push({ id: s.id, model: s.model, cwd: s.cwd, createdAt: s.createdAt });
+  }
+  res.json({ ok: true, sessions: items });
+});
+
+// Kill a running session (terminate the agent process) and forget it. Used when the
+// user removes a session from the sidebar.
+app.post('/api/pty/:id/kill', (req, res) => {
+  const sess = ptySessions.get(req.params.id);
+  if (!sess) return res.json({ ok: true, killed: false });
+  try { sess.term.kill(); } catch (_) {}
+  if (sess.ws) { try { sess.ws.close(); } catch (_) {} }
+  disposeSession(sess);
+  res.json({ ok: true, killed: true });
+});
 
 ensureUsersFile();
 

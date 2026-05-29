@@ -64,6 +64,11 @@
 
         <!-- ============ CODE subsection ============ -->
         <div class="sidebar-subsection" data-subsection="code">
+          <button class="new-session-btn" id="new-term-session-btn">
+            <span class="plus">+</span>
+            <span>New terminal</span>
+          </button>
+
           <nav class="sidebar-nav">
             <button class="nav-item" data-view="terminal">
               <span class="nav-icon">
@@ -74,9 +79,14 @@
           </nav>
 
           <div class="sidebar-section">
+            <div class="section-header"><span class="section-name">Sessions</span></div>
+            <div class="session-list" id="term-sessions-list"></div>
+          </div>
+
+          <div class="sidebar-section">
             <div class="section-header"><span class="section-name">About</span></div>
             <div class="muted" style="padding: 6px 12px 4px 12px; font-size: 11px; line-height: 1.55;">
-              Launch the Claude coding agent in a live terminal. Pick a model and working folder, then run.
+              Launch the Claude coding agent in a live terminal. Sessions stay running and reattach after a refresh.
             </div>
           </div>
         </div>

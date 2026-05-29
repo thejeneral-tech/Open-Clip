@@ -9,6 +9,8 @@ const LS_KEYS = {
   user: "claw.user.v1",
   events: "claw.events.v1",
   recentFolders: "claw.recentFolders.v1",
+  termSessions: "claw.termSessions.v1",
+  activeTermSession: "claw.activeTermSession.v1",
 };
 
 const MAX_RECENT_FOLDERS = 8;
@@ -44,6 +46,8 @@ const state = {
   activeSessionId: null,
   activeProjectId: null,
   sessions: [],
+  termSessions: [], // [{ id, name, model, cwd, createdAt, updatedAt }]
+  activeTermSessionId: null,
   user: { name: "there", tier: "Max", avatar: "A" },
   events: [],
   recentFolders: [], // [{ name, path, lastUsed }]
@@ -136,6 +140,8 @@ function loadAll() {
   state.user = { ...state.user, ...load(LS_KEYS.user, {}) };
   state.events = load(LS_KEYS.events, []);
   state.recentFolders = load(LS_KEYS.recentFolders, []);
+  state.termSessions = load(LS_KEYS.termSessions, []);
+  state.activeTermSessionId = load(LS_KEYS.activeTermSession, null);
 }
 
 function saveRecentFolders() { save(LS_KEYS.recentFolders, state.recentFolders); }
@@ -267,6 +273,109 @@ function activateSession(id) {
   fetch("/api/clear", { method: "POST" }).catch(() => {});
   // Replay messages as user/system prompts? The backend would lose context — that's a known
   // limitation; the client view shows the prior conversation, but new turns start fresh.
+}
+
+// ---------------- terminal sessions ----------------
+// These persist in localStorage so the sidebar list survives a refresh. The live
+// PTY process lives on the server (keyed by the same id) and is reattached on reload.
+
+function saveTermSessions() { save(LS_KEYS.termSessions, state.termSessions); }
+function saveActiveTermSession() { save(LS_KEYS.activeTermSession, state.activeTermSessionId); }
+
+function activeTermSession() {
+  return state.termSessions.find((s) => s.id === state.activeTermSessionId) || null;
+}
+
+function termSessionName(cwd) {
+  return folderNameFromPath(cwd) || "Terminal";
+}
+
+function newTermSession({ model, cwd } = {}) {
+  const session = {
+    id: uid(),
+    name: termSessionName(cwd),
+    model: model || "",
+    cwd: cwd || "",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  state.termSessions.unshift(session);
+  state.activeTermSessionId = session.id;
+  saveTermSessions();
+  saveActiveTermSession();
+  return session;
+}
+
+function updateTermSession(id, patch) {
+  const s = state.termSessions.find((x) => x.id === id);
+  if (!s) return;
+  Object.assign(s, patch, { updatedAt: Date.now() });
+  saveTermSessions();
+}
+
+function deleteTermSession(id) {
+  state.termSessions = state.termSessions.filter((s) => s.id !== id);
+  if (state.activeTermSessionId === id) {
+    state.activeTermSessionId = null;
+    saveActiveTermSession();
+  }
+  saveTermSessions();
+  // Kill the live process too, so removing the entry actually frees it.
+  fetch(`/api/pty/${id}/kill`, { method: "POST" }).catch(() => {});
+}
+
+function terminalSessionIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("class", "session-icon");
+  const rect = document.createElementNS(ns, "rect");
+  rect.setAttribute("x", "3"); rect.setAttribute("y", "4");
+  rect.setAttribute("width", "18"); rect.setAttribute("height", "16"); rect.setAttribute("rx", "2");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "m7 9 3 3-3 3M14 15h3");
+  svg.appendChild(rect); svg.appendChild(path);
+  return svg;
+}
+
+function renderTermSessions() {
+  const list = $("term-sessions-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const sorted = [...state.termSessions].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!sorted.length) {
+    list.appendChild(
+      el("div", { class: "muted", style: "padding: 6px 12px; font-size: 11px;" }, "No sessions yet"),
+    );
+    return;
+  }
+  for (const s of sorted) {
+    list.appendChild(renderTermSessionRow(s, s.id === state.activeTermSessionId));
+  }
+}
+
+function renderTermSessionRow(session, isActive) {
+  const row = el("button", { class: `session-row ${isActive ? "active" : ""}`, type: "button" });
+  row.appendChild(terminalSessionIcon());
+  row.appendChild(el("span", { class: "session-title", title: session.cwd || "" }, session.name || "Terminal"));
+  row.addEventListener("click", () => openTermSession(session.id));
+  const del = el("span", { class: "session-delete", title: "Close session" }, "×");
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const wasActive = state.activeTermSessionId === session.id;
+    deleteTermSession(session.id);
+    renderTermSessions();
+    if (wasActive) { teardownCodeTerminal(); resetTerminalToLaunch(); }
+  });
+  row.appendChild(del);
+  return row;
 }
 
 // ---------------- views ----------------
@@ -2967,6 +3076,10 @@ async function bootAuthedApp() {
   } catch {
     /* fetchInfo handles its own status display */
   }
+  // Now that we're authenticated, reattach to a live terminal session if one is active
+  // (this is what survives a page refresh).
+  renderTermSessions();
+  if (state.view === "terminal") enterCodeTerminal();
 }
 
 async function doLogin(event) {
@@ -3080,6 +3193,7 @@ const codeTerm = {
   fit: null,
   ws: null,
   launched: false,
+  sessionId: null, // id of the term session currently bound to this view
   modelsLoaded: false,
   cwdLoaded: false,
   onResize: null,
@@ -3112,9 +3226,11 @@ async function populateTermModels() {
     return;
   }
   for (const name of models) select.appendChild(el("option", { value: name }, name));
-  // Keep the user's previous pick if it's still installed; otherwise prefer a coder model.
+  // Prefer the active session's model, then the user's previous pick, then a coder model.
+  const sess = activeTermSession();
+  const want = (sess && sess.model) || prev;
   const coder = models.find((n) => /coder/i.test(n));
-  select.value = models.includes(prev) ? prev : (coder || models[0]);
+  select.value = models.includes(want) ? want : (coder || models[0]);
 }
 
 async function populateTermCwd() {
@@ -3133,12 +3249,65 @@ async function populateTermCwd() {
 }
 
 function enterCodeTerminal() {
+  const sess = activeTermSession();
+  // Seed the folder field from the active session first, so the async default fetch
+  // in populateTermCwd() doesn't clobber it.
+  if (sess) {
+    const cwdInput = $("term-cwd");
+    if (cwdInput && sess.cwd) cwdInput.value = sess.cwd;
+    codeTerm.cwdLoaded = true;
+  }
   populateTermModels(); // always refresh so the list reflects whatever is installed now
   if (!codeTerm.cwdLoaded) populateTermCwd();
-  // If a session is already live, refit once the view has real dimensions.
-  if (codeTerm.term && codeTerm.fit) {
-    setTimeout(() => { try { codeTerm.fit.fit(); } catch {} }, 50);
+
+  // Already bound to the active session — just refit to the current viewport.
+  if (codeTerm.launched && codeTerm.sessionId === state.activeTermSessionId) {
+    setTimeout(() => { try { codeTerm.fit && codeTerm.fit.fit(); } catch {} }, 50);
+    return;
   }
+  // Reattach to the active session's live process (the refresh case). Wait until
+  // authenticated so we don't open a socket the server will reject on boot.
+  if (sess) {
+    if (auth.authed) attachTermSession(sess);
+  } else {
+    resetTerminalToLaunch();
+  }
+}
+
+function attachTermSession(sess) {
+  connectTerminal({ sessionId: sess.id, model: sess.model, cwd: sess.cwd, mode: "attach" });
+}
+
+// Click a saved session in the sidebar: make it active and (re)bind the view to it.
+function openTermSession(id) {
+  const sess = state.termSessions.find((s) => s.id === id);
+  if (!sess) return;
+  state.activeTermSessionId = id;
+  saveActiveTermSession();
+  renderTermSessions();
+  if (state.view !== "terminal") switchView("terminal"); // → enterCodeTerminal attaches
+  else enterCodeTerminal();
+}
+
+// "New terminal" button: detach the current view (its process keeps running in the
+// sidebar) and show a fresh launch form with no active session.
+function startNewTermSession() {
+  teardownCodeTerminal();
+  state.activeTermSessionId = null;
+  saveActiveTermSession();
+  renderTermSessions();
+  resetTerminalToLaunch();
+  if (state.view !== "terminal") switchView("terminal");
+}
+
+function resetTerminalToLaunch() {
+  const host = $("code-terminal");
+  if (host) host.innerHTML = "";
+  setTermStatus("stopped", "Stopped");
+  const launchBtn = $("term-launch");
+  const restartBtn = $("term-restart");
+  if (launchBtn) launchBtn.hidden = false;
+  if (restartBtn) restartBtn.hidden = true;
 }
 
 function sendTerm(obj) {
@@ -3154,6 +3323,17 @@ function handleTermControl(msg) {
     try {
       codeTerm.term.writeln(`\r\n\x1b[90m— Claude Code exited (code ${msg.code}). Press Restart to relaunch. —\x1b[0m`);
     } catch {}
+  } else if (msg.type === "gone") {
+    // Reattach failed because the process is no longer running (e.g. the server was
+    // restarted). Offer a relaunch — the model/folder are already filled in.
+    setTermStatus("stopped", "Session ended");
+    try {
+      codeTerm.term.writeln(`\r\n\x1b[90m— this session is no longer running. Press Launch to start it again. —\x1b[0m`);
+    } catch {}
+    const launchBtn = $("term-launch");
+    const restartBtn = $("term-restart");
+    if (launchBtn) launchBtn.hidden = false;
+    if (restartBtn) restartBtn.hidden = true;
   } else if (msg.type === "error") {
     setTermStatus("error", "Error");
     try { codeTerm.term.writeln(`\r\n\x1b[31m${msg.message}\x1b[0m`); } catch {}
@@ -3165,31 +3345,50 @@ function teardownCodeTerminal() {
     window.removeEventListener("resize", codeTerm.onResize);
     codeTerm.onResize = null;
   }
-  try { codeTerm.ws && codeTerm.ws.close(); } catch {}
+  // Mark this socket so its onclose handler doesn't report a spurious "Disconnected" —
+  // we're detaching on purpose; the server keeps the PTY running.
+  if (codeTerm.ws) { codeTerm.ws._intentional = true; try { codeTerm.ws.close(); } catch {} }
   try { codeTerm.term && codeTerm.term.dispose(); } catch {}
   codeTerm.ws = null;
   codeTerm.term = null;
   codeTerm.fit = null;
   codeTerm.launched = false;
+  codeTerm.sessionId = null;
 }
 
+// Launch (or relaunch) the active session — or start a new one if none is active.
+// mode:"create" tells the server to spawn a fresh process, replacing any live one
+// for this id.
 function launchCodeTerminal() {
-  if (typeof Terminal !== "function" || typeof FitAddon === "undefined") {
-    setTermStatus("error", "xterm failed to load");
-    return;
-  }
   const model = ($("term-model").value || "").trim();
   const cwd = ($("term-cwd").value || "").trim();
   if (!model) { setTermStatus("error", "Pick a model"); return; }
 
-  // Relaunching tears down the previous session first.
-  teardownCodeTerminal();
   rememberFolder(cwd);
   if (typeof renderCwdList === "function") { try { renderCwdList(); } catch {} }
 
+  let sess = activeTermSession();
+  if (sess) updateTermSession(sess.id, { model, cwd, name: termSessionName(cwd) });
+  else sess = newTermSession({ model, cwd });
+  renderTermSessions();
+
+  connectTerminal({ sessionId: sess.id, model, cwd, mode: "create" });
+}
+
+// Open a WebSocket to the PTY and wire xterm to it. mode:"attach" reattaches to a
+// running process (replaying its recent output); mode:"create" spawns a new one.
+function connectTerminal({ sessionId, model, cwd, mode }) {
+  if (typeof Terminal !== "function" || typeof FitAddon === "undefined") {
+    setTermStatus("error", "xterm failed to load");
+    return;
+  }
+
+  // Detach from whatever was bound before (the old process keeps running server-side).
+  teardownCodeTerminal();
+
   const host = $("code-terminal");
   host.innerHTML = "";
-  setTermStatus("connecting", "Connecting…");
+  setTermStatus("connecting", mode === "attach" ? "Reattaching…" : "Connecting…");
 
   const term = new Terminal({
     cursorBlink: true,
@@ -3215,12 +3414,19 @@ function launchCodeTerminal() {
   term.open(host);
   fit.fit();
 
-  term.writeln("\x1b[38;5;208m◆ Claude Code on Ollama\x1b[0m");
-  term.writeln(`\x1b[90mLaunching: ollama launch claude --model ${model}\x1b[0m`);
-  term.writeln("");
+  if (mode === "attach") {
+    term.writeln("\x1b[90mReattaching to session…\x1b[0m");
+  } else {
+    term.writeln("\x1b[38;5;208m◆ Claude Code on Ollama\x1b[0m");
+    term.writeln(`\x1b[90mLaunching: ollama launch claude --model ${model}\x1b[0m`);
+    term.writeln("");
+  }
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const qs = new URLSearchParams({ model, cwd, cols: term.cols, rows: term.rows }).toString();
+  const params = { session: sessionId, mode, cols: term.cols, rows: term.rows };
+  if (model) params.model = model;
+  if (cwd) params.cwd = cwd;
+  const qs = new URLSearchParams(params).toString();
   const ws = new WebSocket(`${proto}://${location.host}/pty?${qs}`);
   ws.binaryType = "arraybuffer";
 
@@ -3236,8 +3442,10 @@ function launchCodeTerminal() {
     }
   };
   ws.onclose = () => {
+    if (ws._intentional) return; // we tore this socket down on purpose
     const wrap = $("term-status");
-    if (!wrap || (wrap.dataset.state !== "exited" && wrap.dataset.state !== "error")) {
+    const st = wrap && wrap.dataset.state;
+    if (st !== "exited" && st !== "error" && st !== "stopped") {
       setTermStatus("exited", "Disconnected");
       try { term.writeln("\r\n\x1b[90m— connection closed —\x1b[0m"); } catch {}
     }
@@ -3248,6 +3456,7 @@ function launchCodeTerminal() {
   codeTerm.fit = fit;
   codeTerm.ws = ws;
   codeTerm.launched = true;
+  codeTerm.sessionId = sessionId;
 
   const launchBtn = $("term-launch");
   const restartBtn = $("term-restart");
@@ -3279,6 +3488,8 @@ function wireCodeTerminal() {
   if (launch) launch.addEventListener("click", launchCodeTerminal);
   const restart = $("term-restart");
   if (restart) restart.addEventListener("click", launchCodeTerminal);
+  const newSession = $("new-term-session-btn");
+  if (newSession) newSession.addEventListener("click", startNewTermSession);
   const browse = $("term-cwd-browse");
   if (browse) browse.addEventListener("click", openFolderPickerForTermCwd);
   const cwd = $("term-cwd");
@@ -3297,6 +3508,7 @@ applyUser();
 wireUp();
 wireAuth();
 renderSidebarSessions();
+renderTermSessions();
 switchTab("code");
 checkAuth().then((ok) => {
   if (ok) bootAuthedApp();
