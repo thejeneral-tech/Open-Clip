@@ -1,0 +1,20 @@
+{
+  "name": "claude-code-web-ui",
+  "version": "1.0.0",
+  "description": "Web UI wrapping ollama launch claude",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.13.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "express": "^4.22.2",
+    "ws": "^8.21.0"
+  }
+}

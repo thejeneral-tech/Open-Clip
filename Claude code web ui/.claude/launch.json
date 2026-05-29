@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "claude-web-ui",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 7878
+    }
+  ]
+}

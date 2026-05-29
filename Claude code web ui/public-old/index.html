@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrendVault Coder</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/vendor/xterm/xterm.css" />
+  </head>
+  <body class="auth-pending">
+    <!-- =========== LOGIN OVERLAY =========== -->
+    <div class="login-overlay" id="login-overlay">
+      <div class="login-panel">
+        <div class="login-brand">
+          <span class="login-brand-glyph">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="#d97757"><path d="M12 2 13.5 8.5 20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2z"/></svg>
+          </span>
+          <h1>TrendVault Coder</h1>
+        </div>
+        <p class="login-tagline">Sign in to continue.</p>
+        <form class="login-form" id="login-form" autocomplete="off">
+          <label class="field">
+            <span>Username</span>
+            <input type="text" id="login-username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input type="password" id="login-password" autocomplete="current-password" required />
+          </label>
+          <p class="error" id="login-error" hidden></p>
+          <button type="submit" class="primary-btn login-submit" id="login-submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="app" id="app">
+      <button class="sidebar-show" id="show-sidebar" type="button" title="Show sidebar" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+      <!-- =========== SIDEBAR =========== -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-titlebar">
+          <button class="icon-only" id="toggle-sidebar" title="Hide sidebar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+        </div>
+
+        <div class="sidebar-top">
+          <div class="mode-tabs" role="tablist" aria-label="Mode">
+            <button class="mode-tab" data-tab="chat" role="tab" title="Pure Ollama chat — no tools">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              <span>Chat</span>
+            </button>
+            <button class="mode-tab" data-tab="cowork" role="tab" title="Cowork — reusable workflows">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M14 7l-2-2M14 7l-2 2"/><path d="M20 17H10M10 17l2-2M10 17l2 2"/></svg>
+              <span>Cowork</span>
+            </button>
+            <button class="mode-tab" data-tab="code" role="tab" title="Code — full agent with tools">
+              <span class="code-glyph">&lt;/&gt;</span>
+              <span>Code</span>
+            </button>
+            <button class="mode-tab" data-tab="models" role="tab" title="Models — manage Ollama models">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
+              <span>Models</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ============ CODE subsection (the rich old UI) ============ -->
+        <div class="sidebar-subsection" data-subsection="code">
+          <button class="new-session-btn" id="new-session-btn">
+            <span class="plus">+</span>
+            <span>New session</span>
+          </button>
+
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-view="home">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 4l9 8"/><path d="M5 11v9h14v-9"/></svg>
+              </span>
+              <span>Home</span>
+            </button>
+            <button class="nav-item" data-view="projects">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>
+              </span>
+              <span>Projects</span>
+            </button>
+            <button class="nav-item" data-view="tools">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6 2 2 6-6a4 4 0 0 0 5.4-5.4l-2.6 2.6-1.4-1.4 2.6-2.6z"/></svg>
+              </span>
+              <span>Tools</span>
+              <span class="badge" id="tools-count">0</span>
+            </button>
+            <button class="nav-item" data-view="terminal">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M14 15h3"/></svg>
+              </span>
+              <span>Terminal</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section recents">
+            <div class="section-header">
+              <span class="section-name">Recents</span>
+            </div>
+            <div class="session-list" id="recents-list"></div>
+          </div>
+        </div>
+
+        <!-- ============ CHAT subsection ============ -->
+        <div class="sidebar-subsection" data-subsection="chat" hidden>
+          <button class="new-session-btn" id="new-pure-chat-btn">
+            <span class="plus">+</span>
+            <span>New chat</span>
+          </button>
+
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-view="pure-chat">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              </span>
+              <span>Conversation</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section">
+            <div class="section-header"><span class="section-name">About</span></div>
+            <div class="muted" style="padding: 6px 12px 4px 12px; font-size: 11px; line-height: 1.55;">
+              Pure Ollama chat — no tools, no agent. The conversation stays in memory until you start a new one.
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ COWORK subsection ============ -->
+        <div class="sidebar-subsection" data-subsection="cowork" hidden>
+          <button class="new-session-btn" id="new-workflow-btn">
+            <span class="plus">+</span>
+            <span>New workflow</span>
+          </button>
+
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-view="routines">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+              </span>
+              <span>Workflows</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section">
+            <div class="section-header"><span class="section-name">About</span></div>
+            <div class="muted" style="padding: 6px 12px 4px 12px; font-size: 11px; line-height: 1.55;">
+              Save reusable workflows. Click a card to drop the prompt into the composer.
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ MODELS subsection ============ -->
+        <div class="sidebar-subsection" data-subsection="models" hidden>
+          <button class="new-session-btn" id="refresh-models-btn">
+            <span class="plus">↻</span>
+            <span>Refresh list</span>
+          </button>
+
+          <nav class="sidebar-nav">
+            <button class="nav-item" data-view="models">
+              <span class="nav-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
+              </span>
+              <span>Installed models</span>
+            </button>
+          </nav>
+
+          <div class="sidebar-section">
+            <div class="section-header"><span class="section-name">About</span></div>
+            <div class="muted" style="padding: 6px 12px 4px 12px; font-size: 11px; line-height: 1.55;">
+              Inspect what Ollama has installed locally. Pulls and pushes happen in your terminal.
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="user-card" id="user-card">
+            <span class="avatar" id="avatar">A</span>
+            <div class="user-info">
+              <span class="user-name"><span id="user-name">User</span> <span class="user-tier" id="user-tier">Max</span></span>
+            </div>
+            <span class="chev">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- =========== MAIN =========== -->
+      <main class="main">
+        <div class="main-scroll" id="main-scroll">
+          <!-- HOME VIEW -->
+          <section class="view home-view" id="view-home">
+            <div class="home-inner">
+              <h1 class="greeting">
+                <span class="anthropic-glyph">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="#d97757"><path d="M12 2 13.5 8.5 20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2zM5 17l.6 2.4L8 20l-2.4.6L5 23l-.6-2.4L2 20l2.4-.6L5 17zM19 14l.5 2 2 .5-2 .5-.5 2-.5-2-2-.5 2-.5.5-2z"/></svg>
+                </span>
+                What's up next, <span id="greeting-name">there</span>?
+              </h1>
+
+              <div class="stats-card">
+                <div class="stats-header">
+                  <div class="stats-tabs">
+                    <button class="stats-tab active" data-stats-view="overview">Overview</button>
+                    <button class="stats-tab" data-stats-view="models">Models</button>
+                  </div>
+                  <div class="stats-range">
+                    <button class="range-btn active" data-range="all">All</button>
+                    <button class="range-btn" data-range="30">30d</button>
+                    <button class="range-btn" data-range="7">7d</button>
+                  </div>
+                </div>
+
+                <div class="stats-pane" data-stats-pane="overview">
+                  <div class="stats-grid">
+                    <div class="stat">
+                      <div class="stat-name">Sessions</div>
+                      <div class="stat-value" id="stat-sessions">0</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Messages</div>
+                      <div class="stat-value" id="stat-messages">0</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Total tokens</div>
+                      <div class="stat-value" id="stat-tokens">0</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Active days</div>
+                      <div class="stat-value" id="stat-active-days">0</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Current streak</div>
+                      <div class="stat-value" id="stat-current-streak">0d</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Longest streak</div>
+                      <div class="stat-value" id="stat-longest-streak">0d</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Peak hour</div>
+                      <div class="stat-value" id="stat-peak-hour">—</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-name">Favorite model</div>
+                      <div class="stat-value" id="stat-fav-model">—</div>
+                    </div>
+                  </div>
+                  <div class="heatmap" id="heatmap" aria-label="Activity heatmap"></div>
+                  <div class="stats-footer" id="stats-footer">
+                    Start a conversation to begin tracking activity.
+                  </div>
+                </div>
+
+                <div class="stats-pane" data-stats-pane="models" hidden>
+                  <div class="models-list" id="models-list">
+                    <div class="muted">No model usage recorded yet.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CHAT VIEW (agent + tools) -->
+          <section class="view chat-view" id="view-chat" hidden>
+            <div class="messages" id="messages" aria-live="polite"></div>
+          </section>
+
+          <!-- CODE TERMINAL VIEW (ollama launch claude) -->
+          <section class="view terminal-view" id="view-terminal" hidden>
+            <div class="terminal-bar">
+              <div class="terminal-bar-left">
+                <span class="terminal-status" id="term-status" data-state="stopped">
+                  <span class="terminal-status-dot"></span>
+                  <span class="terminal-status-text" id="term-status-text">Stopped</span>
+                </span>
+                <label class="terminal-field">
+                  <span>Model</span>
+                  <select id="term-model">
+                    <option value="" disabled selected>Loading…</option>
+                  </select>
+                </label>
+                <label class="terminal-field terminal-field-cwd">
+                  <span>Folder</span>
+                  <input type="text" id="term-cwd" spellcheck="false" autocomplete="off" placeholder="working directory" />
+                </label>
+              </div>
+              <div class="terminal-bar-right">
+                <button type="button" class="primary-btn small" id="term-launch">▶ Launch</button>
+                <button type="button" class="ghost-btn small" id="term-restart" hidden>↻ Restart</button>
+              </div>
+            </div>
+            <p class="terminal-hint muted small" id="term-hint">
+              Runs <code>ollama launch claude</code> in this folder and streams it here. Claude Code can read, edit and run files — point it at a folder you trust.
+            </p>
+            <div class="terminal-host" id="code-terminal"></div>
+          </section>
+
+          <!-- PURE CHAT VIEW (Ollama only — no tools, no agent loop) -->
+          <section class="view pure-chat-view" id="view-pure-chat" hidden>
+            <div class="pure-chat-messages" id="pure-chat-messages" aria-live="polite">
+              <div class="pure-chat-greeting" id="pure-chat-greeting">
+                <div class="pure-chat-greeting-star">
+                  <svg viewBox="0 0 24 24" width="32" height="32" fill="#d97757">
+                    <path d="M12 2 13.5 8.5 20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2z"/>
+                  </svg>
+                </div>
+                <h1 class="pure-chat-greeting-title" id="pure-chat-greeting-title">Hello.</h1>
+                <p class="muted">Send a message below to start chatting with Ollama.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- PROJECTS VIEW -->
+          <section class="view projects-view" id="view-projects" hidden>
+            <div class="view-inner wide">
+              <header class="projects-header">
+                <h1 class="projects-title">Projects</h1>
+                <div class="projects-actions">
+                  <button class="projects-icon-btn" id="projects-sort" type="button" title="Sort">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4l-3 3M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/></svg>
+                  </button>
+                  <button class="projects-icon-btn" id="projects-search-btn" type="button" title="Search">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                  </button>
+                  <button class="cream-btn" id="add-project-btn" type="button">New project</button>
+                </div>
+              </header>
+              <input type="text" class="projects-search" id="projects-search" placeholder="Search projects…" autocomplete="off" hidden />
+              <div class="projects-grid" id="projects-grid"></div>
+            </div>
+          </section>
+
+          <!-- TOOLS VIEW -->
+          <section class="view tools-view" id="view-tools" hidden>
+            <div class="view-inner">
+              <header class="view-header">
+                <h2>Tools</h2>
+                <p class="muted">Every tool available in this project. Active tools are wired into the agent; bundled tools ship with the workspace and can be enabled.</p>
+              </header>
+
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <h3>Active <span class="muted small" id="tools-active-count">(0)</span></h3>
+                  <p class="muted small">Wired into the agent — the model can call these directly in your workspace.</p>
+                </div>
+                <ul class="tool-grid" id="tools-list"></ul>
+              </div>
+
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <h3>Bundled <span class="muted small" id="tools-bundled-count">(0)</span></h3>
+                  <p class="muted small">Tool implementations present in <code>src/tools/</code>. Not wired into the agent yet.</p>
+                </div>
+                <ul class="tool-grid" id="tools-bundled-list"></ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- COWORK / ROUTINES VIEW -->
+          <section class="view routines-view" id="view-routines" hidden>
+            <div class="view-inner">
+              <header class="view-header">
+                <h2>Cowork</h2>
+                <p class="muted">Reusable workflows — click a card to drop its prompt into the composer, then send it through Chat or Code.</p>
+              </header>
+              <div class="routines-grid" id="routines-grid"></div>
+              <button class="ghost-btn" id="add-routine-btn">+ New workflow</button>
+            </div>
+          </section>
+
+          <!-- MODELS VIEW -->
+          <section class="view models-view" id="view-models" hidden>
+            <div class="view-inner wide">
+              <header class="view-header">
+                <h2>Models</h2>
+                <p class="muted">Manage Ollama models — see what's loaded, pull new ones, and remove old ones.</p>
+              </header>
+
+              <!-- Running models -->
+              <div class="panel-card">
+                <div class="panel-card-header">
+                  <div class="panel-card-title">
+                    <h3>Running models</h3>
+                    <span class="muted" id="running-count">—</span>
+                  </div>
+                  <button type="button" class="ghost-btn small" id="running-refresh">Refresh</button>
+                </div>
+                <p class="muted small">
+                  Models currently loaded in memory by Ollama. They auto-unload after a few minutes of inactivity, or you can Unload them here to free RAM/VRAM right now.
+                </p>
+                <div class="models-list-wrap" id="running-models">
+                  <div class="muted small centered">Loading…</div>
+                </div>
+              </div>
+
+              <!-- Pull a model -->
+              <div class="panel-card">
+                <div class="panel-card-header">
+                  <div class="panel-card-title">
+                    <h3>Pull a model</h3>
+                  </div>
+                </div>
+                <p class="muted small">
+                  Download from <a class="link" href="https://ollama.com/library" target="_blank" rel="noopener">ollama.com/library</a>. Pull progress streams below.
+                </p>
+                <form id="pull-form" class="pull-row" autocomplete="off">
+                  <input type="text" id="pull-input" placeholder="e.g. llama3.2  or  qwen2.5-coder:7b" />
+                  <button type="submit" class="primary-btn" id="pull-btn">Pull</button>
+                </form>
+                <div class="suggested-row">
+                  <span class="muted small">Suggested:</span>
+                  <button type="button" class="suggested-pill" data-suggest="llama3.2">llama3.2</button>
+                  <button type="button" class="suggested-pill" data-suggest="llama3.2:1b">llama3.2:1b <span class="dim">~1.3 GB</span></button>
+                  <button type="button" class="suggested-pill" data-suggest="qwen2.5-coder:7b">qwen2.5-coder:7b <span class="dim">~4.7 GB</span></button>
+                  <button type="button" class="suggested-pill" data-suggest="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b <span class="dim">~1 GB</span></button>
+                  <button type="button" class="suggested-pill" data-suggest="deepseek-coder-v2">deepseek-coder-v2</button>
+                  <button type="button" class="suggested-pill" data-suggest="phi3.5">phi3.5</button>
+                  <button type="button" class="suggested-pill" data-suggest="mistral">mistral</button>
+                  <button type="button" class="suggested-pill" data-suggest="gemma2:9b">gemma2:9b</button>
+                </div>
+                <div class="pull-progress" id="pull-progress" hidden></div>
+              </div>
+
+              <!-- Installed models -->
+              <div class="panel-card">
+                <div class="panel-card-header">
+                  <div class="panel-card-title">
+                    <h3>Installed models</h3>
+                    <span class="muted" id="installed-count">—</span>
+                  </div>
+                  <button type="button" class="ghost-btn small" id="installed-refresh">Refresh</button>
+                </div>
+                <div class="models-list-wrap" id="installed-models">
+                  <div class="muted small centered">Loading…</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CUSTOMIZE VIEW -->
+          <section class="view customize-view" id="view-customize" hidden>
+            <div class="view-inner">
+              <header class="view-header">
+                <h2>Customize</h2>
+                <p class="muted">Personalise the workspace.</p>
+              </header>
+              <div class="customize-fields">
+                <label class="field">
+                  <span>Display name</span>
+                  <input type="text" id="customize-name" placeholder="e.g. Antonio" />
+                </label>
+                <label class="field">
+                  <span>Tier label</span>
+                  <input type="text" id="customize-tier" placeholder="e.g. Max" />
+                </label>
+                <label class="field">
+                  <span>Avatar letter</span>
+                  <input type="text" id="customize-avatar" maxlength="2" placeholder="A" />
+                </label>
+                <label class="field">
+                  <span>Working directory</span>
+                  <input type="text" id="customize-cwd" placeholder="absolute path" />
+                </label>
+                <div class="modal-actions">
+                  <button type="button" class="primary-btn" id="customize-save">Save</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- =========== COMPOSER =========== -->
+        <div class="composer-wrap">
+          <div class="composer-context">
+            <button class="ctx-pill" id="ctx-local" type="button">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>
+              <span>Local</span>
+            </button>
+            <button class="ctx-pill" id="ctx-folder" type="button">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H3z"/></svg>
+              <span id="ctx-folder-name">—</span>
+            </button>
+            <button class="ctx-pill ctx-add" id="ctx-add" type="button" title="Change working directory">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+
+          <form class="composer" id="composer" autocomplete="off">
+            <textarea
+              id="prompt-input"
+              rows="2"
+              placeholder="Describe a task or ask a question"
+              aria-label="Prompt"
+            ></textarea>
+            <button class="composer-submit" type="submit" id="send-btn" title="Send (Enter)">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 17v-7H4l8-8 8 8h-5v7H9z" transform="rotate(180 12 12)"/></svg>
+            </button>
+          </form>
+
+          <div class="composer-footer">
+            <div class="composer-actions-left">
+              <button class="footer-btn active" id="accept-edits-btn" type="button" title="Auto-accept agent edits">
+                <span class="check">✓</span>
+                <span>Accept edits</span>
+              </button>
+              <button class="footer-btn chat-mode-btn" id="chat-mode-btn" type="button" title="Switch agent runtime">
+                <span class="chat-mode-dot" aria-hidden="true"></span>
+                <span class="chat-mode-label" id="chat-mode-label">CLI</span>
+              </button>
+            </div>
+            <div class="composer-actions-right">
+              <button class="context-meter" id="context-meter" type="button" title="Context usage in this session">
+                <span class="context-meter-label">Context</span>
+                <span class="context-meter-val" id="context-meter-val">0 / —</span>
+                <span class="context-meter-pct" id="context-meter-pct">0%</span>
+              </button>
+              <button class="model-btn" id="model-btn" type="button">
+                <span class="model-name" id="model-name">…</span>
+                <span class="model-sep" aria-hidden="true">·</span>
+                <span class="model-tier" id="model-tier-pill">Max</span>
+                <span class="model-status" id="model-status" title="agent status">
+                  <span class="model-status-ring" aria-hidden="true"></span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- =========== USER MENU POPOVER =========== -->
+    <div class="popover user-menu" id="user-menu" hidden role="dialog" aria-label="Account">
+      <div class="user-menu-header">
+        <span class="avatar" id="user-menu-avatar">A</span>
+        <div class="user-menu-info">
+          <span class="user-menu-name" id="user-menu-display-name">User</span>
+          <span class="user-menu-username muted" id="user-menu-username">—</span>
+        </div>
+      </div>
+      <div class="popover-divider"></div>
+      <button type="button" class="popover-row" id="user-menu-customize">
+        <span class="row-name">Customize</span>
+      </button>
+      <button type="button" class="popover-row user-menu-logout" id="user-menu-logout">
+        <span class="row-name">Sign out</span>
+      </button>
+    </div>
+
+    <!-- =========== MODEL POPOVER =========== -->
+    <div class="popover-backdrop" id="popover-backdrop" hidden></div>
+    <div class="popover" id="model-popover" hidden role="dialog" aria-label="Model selector">
+      <div class="popover-arrow"></div>
+
+      <div class="popover-section">
+        <div class="popover-section-header">
+          <span class="popover-section-title">Models</span>
+          <span class="popover-shortcuts" aria-hidden="true">
+            <kbd>⇧</kbd><kbd>Ctrl</kbd><kbd>I</kbd>
+          </span>
+        </div>
+        <div class="model-list" id="model-list">
+          <div class="popover-empty">Probing Ollama…</div>
+        </div>
+      </div>
+
+      <div class="popover-section">
+        <div class="popover-section-header">
+          <span class="popover-section-title">Effort</span>
+          <span class="popover-shortcuts" aria-hidden="true">
+            <kbd>⇧</kbd><kbd>Ctrl</kbd><kbd>E</kbd>
+          </span>
+        </div>
+        <div class="effort-list" id="effort-list">
+          <button class="popover-row" type="button" data-effort="low">
+            <span class="row-name">Low</span>
+            <span class="row-check"></span>
+          </button>
+          <button class="popover-row" type="button" data-effort="medium">
+            <span class="row-name">Medium</span>
+            <span class="row-check"></span>
+          </button>
+          <button class="popover-row" type="button" data-effort="high">
+            <span class="row-name">High</span>
+            <span class="row-check"></span>
+          </button>
+          <button class="popover-row" type="button" data-effort="extra-high">
+            <span class="row-name">Extra high</span>
+            <span class="row-check"></span>
+          </button>
+          <button class="popover-row" type="button" data-effort="max">
+            <span class="row-name">Max</span>
+            <span class="row-check"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="popover-section">
+        <div class="popover-section-header">
+          <span class="popover-section-title">Fast mode</span>
+        </div>
+        <button class="popover-row fast-mode-row" type="button" id="fast-mode-row">
+          <span class="row-name">Enable fast mode</span>
+          <span class="toggle" id="fast-mode-toggle" role="switch" aria-checked="false">
+            <span class="toggle-thumb"></span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- =========== CWD / RECENT FOLDERS POPOVER =========== -->
+    <div class="popover cwd-popover" id="cwd-popover" hidden role="dialog" aria-label="Working directory">
+      <div class="popover-section">
+        <div class="popover-section-header">
+          <span class="popover-section-title">Recent</span>
+        </div>
+        <div class="cwd-list" id="cwd-list">
+          <div class="popover-empty">Loading…</div>
+        </div>
+        <div class="popover-divider"></div>
+        <button class="popover-row" type="button" id="cwd-open-folder">
+          <span class="row-name">Open folder…</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- =========== CREATE PROJECT MODAL =========== -->
+    <div class="project-modal" id="project-modal" hidden aria-modal="true" role="dialog" aria-labelledby="project-modal-title">
+      <div class="modal-backdrop" data-project-modal-close></div>
+      <div class="project-modal-panel">
+        <!-- Step 1: choose option -->
+        <div class="project-modal-step" data-step="options">
+          <h2 id="project-modal-title">Create a new project</h2>
+          <p class="muted">A dedicated place for ongoing work, where context builds over time. Files and instructions stay in a folder on your computer.</p>
+
+          <button class="project-option" type="button" data-option="scratch">
+            <span class="project-option-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <span class="project-option-text">
+              <span class="project-option-title">Start from scratch</span>
+              <span class="project-option-desc">Set up a new folder with instructions and files.</span>
+            </span>
+            <span class="project-option-chev">›</span>
+          </button>
+
+          <button class="project-option" type="button" data-option="import">
+            <span class="project-option-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M3 7l2-3h14l2 3"/><path d="M10 14l2 2 4-4"/></svg>
+            </span>
+            <span class="project-option-text">
+              <span class="project-option-title">Import a project</span>
+              <span class="project-option-desc">Bring a project you made in Chat over to Cowork.</span>
+            </span>
+            <span class="project-option-chev">›</span>
+          </button>
+
+          <button class="project-option" type="button" data-option="existing">
+            <span class="project-option-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6l2 2h8a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/></svg>
+            </span>
+            <span class="project-option-text">
+              <span class="project-option-title">Use an existing folder</span>
+              <span class="project-option-desc">Give Claude a folder you already work from.</span>
+            </span>
+            <span class="project-option-chev">›</span>
+          </button>
+        </div>
+
+        <!-- Step 2: configure -->
+        <div class="project-modal-step" data-step="form" hidden>
+          <button class="project-modal-back" type="button" data-project-back>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>
+            <span>Back</span>
+          </button>
+          <h2 id="project-form-title">Start from scratch</h2>
+          <p class="muted" id="project-form-desc">Set up a new folder with instructions and files.</p>
+
+          <label class="field">
+            <span>Project name</span>
+            <input type="text" id="project-name-input" placeholder="e.g. trend-vault" autocomplete="off" />
+          </label>
+
+          <label class="field project-folder-field" id="project-folder-field" hidden>
+            <span>Folder path</span>
+            <div class="project-folder-row">
+              <input type="text" id="project-folder-input" placeholder="C:\path\to\folder" autocomplete="off" readonly />
+              <button type="button" class="ghost-btn small" id="project-folder-browse">Browse…</button>
+            </div>
+            <small class="muted">Pointing to a folder will switch the agent's working directory.</small>
+          </label>
+
+          <div class="project-import-list" id="project-import-list" hidden>
+            <div class="project-import-title">Chats to bring over</div>
+            <div class="project-import-sessions" id="project-import-sessions"></div>
+          </div>
+
+          <p class="error" id="project-error" hidden></p>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" data-project-modal-close>Cancel</button>
+            <button type="button" class="primary-btn" id="project-create-btn">Create project</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========== FOLDER PICKER MODAL =========== -->
+    <div class="folder-picker" id="folder-picker" hidden aria-modal="true" role="dialog" aria-labelledby="folder-picker-title">
+      <div class="modal-backdrop" data-folder-picker-close></div>
+      <div class="folder-picker-panel">
+        <div class="folder-picker-header">
+          <h2 id="folder-picker-title">Pick default working directory</h2>
+          <button class="folder-picker-close" type="button" data-folder-picker-close aria-label="Close">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="folder-picker-toolbar">
+          <button class="folder-picker-nav" type="button" id="folder-picker-up">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+            <span>Up</span>
+          </button>
+          <button class="folder-picker-nav" type="button" id="folder-picker-home">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 4l9 8"/><path d="M5 11v9h14v-9"/></svg>
+            <span>Home</span>
+          </button>
+        </div>
+
+        <form class="folder-picker-go" id="folder-picker-form" autocomplete="off">
+          <input type="text" id="folder-picker-input" placeholder="Type or paste an absolute path…" spellcheck="false" />
+          <button type="submit" class="folder-picker-go-btn">Go</button>
+        </form>
+
+        <div class="folder-picker-body">
+          <div class="folder-picker-list" id="folder-picker-list">
+            <div class="folder-picker-empty">Loading…</div>
+          </div>
+        </div>
+
+        <div class="folder-picker-foot-label" id="folder-picker-foot-label">(drives)</div>
+
+        <div class="folder-picker-actions">
+          <button type="button" class="ghost-btn" data-folder-picker-close>Cancel</button>
+          <button type="button" class="primary-btn" id="folder-picker-confirm">Use as default directory</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========== SETTINGS MODAL (still available) =========== -->
+    <div class="modal" id="settings-modal" hidden aria-modal="true" role="dialog" aria-labelledby="settings-title">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-panel">
+        <h2 id="settings-title">Settings</h2>
+        <p class="muted">
+          Provider keys come from your <code>.env</code>. Changing provider here rebuilds the agent without restarting the server.
+        </p>
+
+        <label class="field">
+          <span>Provider</span>
+          <select id="provider-select">
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Gemini</option>
+            <option value="ollama">Ollama (local)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Model</span>
+          <input type="text" id="model-input" placeholder="e.g. claude-sonnet-4-20250514" />
+        </label>
+
+        <label class="field" id="ollama-baseurl-field" hidden>
+          <span>Ollama base URL</span>
+          <input type="text" id="baseurl-input" placeholder="http://127.0.0.1:11434" />
+        </label>
+
+        <div class="field" id="ollama-status-field" hidden>
+          <span>Ollama status</span>
+          <div class="ollama-status" id="ollama-status">
+            <span class="ollama-status-dot"></span>
+            <span class="ollama-status-text">checking…</span>
+            <button type="button" id="ollama-refresh" class="ghost-btn small">Refresh</button>
+          </div>
+          <div class="muted" id="ollama-models"></div>
+        </div>
+
+        <label class="field">
+          <span>Working directory</span>
+          <input type="text" id="cwd-input" placeholder="absolute path" />
+        </label>
+
+        <p class="error" id="settings-error" hidden></p>
+
+        <div class="modal-actions">
+          <button type="button" id="settings-cancel" class="ghost-btn" data-modal-close>Cancel</button>
+          <button type="button" id="settings-save" class="primary-btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/vendor/xterm/xterm.js"></script>
+    <script src="/vendor/xterm/addon-fit.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "_comment": "Add or edit accounts below. Each entry needs a unique \"username\" and a \"password\". Changes take effect on the next sign-in — no server restart needed. Passwords are stored in plain text, so keep this file private.",
+  "users": [
+    {
+      "username": "admin",
+      "password": "admin"
+    }
+  ]
+}
