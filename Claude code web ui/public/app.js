@@ -417,9 +417,11 @@ function switchView(view) {
     // history. Skip mid-stream to avoid wiping the in-progress assistant block.
     if (!state.busy) renderChat();
   }
-  // The terminal view captures keystrokes directly, so hide the chat composer there.
+  // The composer only belongs in the chat views — hide it on the terminal, models,
+  // and customize pages (terminal also captures keystrokes directly).
   const composerWrap = document.querySelector(".composer-wrap");
-  if (composerWrap) composerWrap.style.display = view === "terminal" ? "none" : "";
+  const showComposer = view === "chat" || view === "pure-chat";
+  if (composerWrap) composerWrap.style.display = showComposer ? "" : "none";
   updateComposerForView();
 }
 
