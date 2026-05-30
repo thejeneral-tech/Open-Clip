@@ -34,7 +34,7 @@ const FAST_MODE_NUM_CTX = 4096;
 
 const TAB_DEFAULT_VIEW = {
   chat: "pure-chat",
-  code: "terminal",
+  code: "chat", // Code tab opens the agent chat; the raw Terminal is a secondary view
   models: "models",
 };
 
@@ -269,10 +269,9 @@ function activateSession(id) {
   renderChat();
   switchView("chat");
   renderContextMeter();
-  // Clear the backend agent so its server-side context matches the client's view.
-  fetch("/api/clear", { method: "POST" }).catch(() => {});
-  // Replay messages as user/system prompts? The backend would lose context — that's a known
-  // limitation; the client view shows the prior conversation, but new turns start fresh.
+  // Each chat session has its own persistent CLI agent on the server (keyed by this
+  // id), so switching sessions just routes new turns to that agent — its context is
+  // preserved as long as it's alive. Nothing to clear here.
 }
 
 // ---------------- terminal sessions ----------------
@@ -397,6 +396,7 @@ function switchTab(tab) {
 
 function switchView(view) {
   state.view = view;
+  if (typeof closeSlashMenu === "function") closeSlashMenu();
   for (const v of ["chat", "pure-chat", "customize", "models", "terminal"]) {
     const node = $(`view-${v}`);
     if (node) node.hidden = v !== view;
@@ -443,7 +443,11 @@ function renderChat() {
   const messages = $("messages");
   messages.innerHTML = "";
   const session = activeSession();
-  if (!session) return;
+  if (!session || !session.messages.length) {
+    messages.appendChild(renderChatGreeting());
+    scrollToBottom();
+    return;
+  }
   for (const msg of session.messages) {
     if (msg.kind === "text") {
       addMessageNode(msg.role, msg.content);
@@ -470,28 +474,66 @@ function addMessageNode(role, content) {
 
 function summarizeToolCall(name, input) {
   const i = input || {};
+  const base = (p) =>
+    typeof p === "string" && p ? p.split(/[\\/]/).filter(Boolean).pop() || p : "";
+  const fp = i.file_path || i.notebook_path || i.path;
   switch (name) {
-    case "list_files": {
-      const p = (typeof i.path === "string" && i.path) || ".";
-      return `Listed files in ${p}`;
+    // --- Claude Code's real tool set ---
+    case "Read":
+      return fp ? `Read ${base(fp)}` : "Read a file";
+    case "Write":
+      return fp ? `Wrote ${base(fp)}` : "Wrote a file";
+    case "Edit":
+    case "MultiEdit":
+      return fp ? `Edited ${base(fp)}` : "Edited a file";
+    case "NotebookEdit":
+      return fp ? `Edited ${base(fp)}` : "Edited a notebook";
+    case "Bash": {
+      const c = typeof i.command === "string" ? i.command : "";
+      return c ? `Ran \`${truncate(c, 60)}\`` : i.description || "Ran a command";
     }
-    case "read_file": {
-      const p = (typeof i.path === "string" && i.path) || "a file";
-      return `Read ${p}`;
-    }
-    case "write_file": {
-      const p = (typeof i.path === "string" && i.path) || "a file";
-      return `Wrote ${p}`;
-    }
+    case "BashOutput":
+      return "Read command output";
+    case "KillShell":
+    case "KillBash":
+      return "Stopped a background command";
+    case "Glob":
+      return i.pattern ? `Globbed ${truncate(i.pattern, 40)}` : "Found files";
+    case "Grep":
+      return i.pattern ? `Searched for "${truncate(i.pattern, 40)}"` : "Searched";
+    case "LS":
+      return i.path ? `Listed ${base(i.path)}` : "Listed files";
+    case "Task":
+      return i.description ? `Subagent: ${truncate(i.description, 50)}` : "Ran a subagent";
+    case "WebFetch":
+      return i.url ? `Fetched ${truncate(i.url, 50)}` : "Fetched a URL";
+    case "WebSearch":
+      return i.query ? `Searched the web for "${truncate(i.query, 40)}"` : "Web search";
+    case "TodoWrite":
+      return "Updated the to-do list";
+    case "ExitPlanMode":
+      return "Proposed a plan";
+
+    // --- legacy lite-agent tool names (so older saved sessions still render) ---
+    case "list_files":
+      return `Listed files in ${(typeof i.path === "string" && i.path) || "."}`;
+    case "read_file":
+      return `Read ${(typeof i.path === "string" && i.path) || "a file"}`;
+    case "write_file":
+      return `Wrote ${(typeof i.path === "string" && i.path) || "a file"}`;
     case "search_text": {
-      const q = typeof i.pattern === "string" ? i.pattern : (typeof i.query === "string" ? i.query : "");
+      const q = typeof i.pattern === "string" ? i.pattern : typeof i.query === "string" ? i.query : "";
       return q ? `Searched for "${truncate(q, 40)}"` : "Searched";
     }
     case "run_shell": {
       const c = typeof i.command === "string" ? i.command : "";
       return c ? `Ran \`${truncate(c, 60)}\`` : "Ran a command";
     }
+
     default:
+      if (typeof name === "string" && name.startsWith("mcp__")) {
+        return `MCP: ${name.slice(5).replace(/__/g, " · ")}`;
+      }
       return name || "Used a tool";
   }
 }
@@ -570,9 +612,13 @@ async function sendPrompt(prompt) {
   state.busy = true;
   const sendBtn = $("send-btn");
   const promptInput = $("prompt-input");
-  sendBtn.disabled = true;
-  promptInput.disabled = true;
+  setComposerBusy(true);
+  promptInput.value = "";
   setModelStatus("busy");
+
+  // Drop the empty-state greeting before the first real message lands.
+  const greeting = $("messages").querySelector(".chat-greeting");
+  if (greeting) greeting.remove();
 
   session.messages.push({ kind: "text", role: "user", content: prompt });
   session.updatedAt = Date.now();
@@ -756,11 +802,20 @@ async function sendPrompt(prompt) {
   let assistantText = "";
   const toolRecords = new Map();
 
+  const controller = new AbortController();
+  state.abortController = controller;
+
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        sessionId: session.id,
+        model: state.info?.model || undefined,
+        cwd: state.info?.cwd || undefined,
+      }),
+      signal: controller.signal,
     });
 
     if (!response.ok || !response.body) {
@@ -869,15 +924,44 @@ async function sendPrompt(prompt) {
     renderContextMeter();
   } catch (error) {
     stopTurnStats();
-    addMessageNode("error", error?.message || String(error));
-    setModelStatus("error");
+    if (error && error.name === "AbortError") {
+      // User hit Stop — not an error. Leave whatever streamed so far in place.
+      addMessageNode("system", "⏹ Stopped.");
+      setModelStatus("ok");
+    } else {
+      addMessageNode("error", error?.message || String(error));
+      setModelStatus("error");
+    }
   } finally {
     stopTurnStats();
     state.busy = false;
-    sendBtn.disabled = false;
-    promptInput.disabled = false;
-    promptInput.value = "";
+    if (state.abortController === controller) state.abortController = null;
+    setComposerBusy(false);
     promptInput.focus();
+  }
+}
+
+// Toggle the composer between Send and Stop while a turn is in flight. The send
+// button doubles as the Stop control so there's no extra chrome.
+function setComposerBusy(busy) {
+  const sendBtn = $("send-btn");
+  const input = $("prompt-input");
+  if (sendBtn) {
+    sendBtn.classList.toggle("is-stop", !!busy);
+    sendBtn.title = busy ? "Stop (Esc)" : "Send (Enter)";
+  }
+  if (input) input.disabled = false; // keep typeable; new sends are gated on state.busy
+}
+
+// Stop the in-flight turn: abort the SSE stream and kill the session's agent process
+// on the server (there is no soft-interrupt, so the live context ends here — the next
+// message starts a fresh agent). The visible conversation is untouched.
+async function stopTurn() {
+  if (!state.busy) return;
+  try { state.abortController && state.abortController.abort(); } catch (_) {}
+  const s = activeSession();
+  if (s) {
+    try { await fetch(`/api/chat/${encodeURIComponent(s.id)}/stop`, { method: "POST" }); } catch (_) {}
   }
 }
 
@@ -2739,6 +2823,118 @@ async function setPureChatModel(model) {
   } catch {}
 }
 
+// ---------------- slash commands ----------------
+
+// The shortlist surfaced in the "/" autocomplete. You can type ANY slash command —
+// this is just the discoverable set. Interactive-only commands (e.g. /login, /config,
+// /help) report "isn't available in this environment" when run headless; the rest work.
+const SLASH_COMMANDS = [
+  { cmd: "/clear", desc: "Start a fresh conversation (clears the agent's context)" },
+  { cmd: "/compact", desc: "Summarise the conversation to free up context" },
+  { cmd: "/context", desc: "Show what's currently loaded into context" },
+  { cmd: "/cost", desc: "Show token usage for this session" },
+  { cmd: "/model", desc: "Show or change the model" },
+  { cmd: "/agents", desc: "Manage subagents" },
+  { cmd: "/init", desc: "Generate a CLAUDE.md describing this project" },
+  { cmd: "/review", desc: "Review a pull request" },
+  { cmd: "/security-review", desc: "Security review of pending changes" },
+  { cmd: "/memory", desc: "View or edit memory files" },
+  { cmd: "/help", desc: "List commands (interactive-only — may be unavailable here)" },
+];
+
+const slash = { open: false, items: [], index: 0 };
+
+// Show the menu only in the Code agent chat, and only while the user is still typing
+// the command token (a leading "/" with no whitespace yet).
+function updateSlashMenu() {
+  const menu = $("slash-menu");
+  if (!menu) return;
+  const v = $("prompt-input")?.value || "";
+  if (state.view !== "chat" || !/^\/[^\s]*$/.test(v)) { closeSlashMenu(); return; }
+
+  const q = v.slice(1).toLowerCase();
+  const items = SLASH_COMMANDS.filter((c) => c.cmd.slice(1).toLowerCase().startsWith(q));
+  if (!items.length) { closeSlashMenu(); return; }
+
+  slash.open = true;
+  slash.items = items;
+  if (slash.index >= items.length) slash.index = 0;
+  renderSlashMenu();
+  menu.hidden = false;
+}
+
+function renderSlashMenu() {
+  const menu = $("slash-menu");
+  if (!menu) return;
+  menu.innerHTML = "";
+  slash.items.forEach((c, idx) => {
+    menu.appendChild(
+      el(
+        "div",
+        {
+          class: `slash-item${idx === slash.index ? " active" : ""}`,
+          role: "option",
+          onmousedown: (e) => { e.preventDefault(); acceptSlash(c); }, // mousedown beats blur
+          onmousemove: () => { if (slash.index !== idx) { slash.index = idx; renderSlashMenu(); } },
+        },
+        [el("span", { class: "slash-cmd" }, c.cmd), el("span", { class: "slash-desc" }, c.desc)],
+      ),
+    );
+  });
+}
+
+function closeSlashMenu() {
+  slash.open = false;
+  slash.items = [];
+  slash.index = 0;
+  const menu = $("slash-menu");
+  if (menu) { menu.hidden = true; menu.innerHTML = ""; }
+}
+
+function moveSlash(delta) {
+  if (!slash.open || !slash.items.length) return;
+  slash.index = (slash.index + delta + slash.items.length) % slash.items.length;
+  renderSlashMenu();
+}
+
+// Complete (don't send) the chosen command into the input, then close the menu so the
+// following keystrokes are treated as arguments. The trailing space stops it reopening.
+function acceptSlash(c) {
+  if (!c) return;
+  const input = $("prompt-input");
+  if (input) { input.value = c.cmd + " "; input.focus(); }
+  closeSlashMenu();
+}
+
+// Start a brand-new agent chat from the sidebar "+ New chat" button.
+function startNewCodeChat() {
+  newSession("New chat");
+  renderSidebarSessions();
+  renderChat();
+  switchView("chat");
+  renderContextMeter();
+  $("prompt-input")?.focus();
+}
+
+// Empty-state shown in the agent chat before the first message.
+function renderChatGreeting() {
+  return el("div", { class: "chat-greeting" }, [
+    el("div", { class: "chat-greeting-star" }, (() => {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("width", "30"); svg.setAttribute("height", "30");
+      svg.setAttribute("fill", "#d97757");
+      const p = document.createElementNS(ns, "path");
+      p.setAttribute("d", "M12 2 13.5 8.5 20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2z");
+      svg.appendChild(p);
+      return svg;
+    })()),
+    el("h1", { class: "chat-greeting-title" }, "Code with the agent"),
+    el("p", { class: "muted" }, "Full Claude Code tool set, backed by your local model. Ask it to read, edit, search, or run things — or type / for commands."),
+  ]);
+}
+
 // ---------------- wire-up ----------------
 
 function wireUp() {
@@ -2747,18 +2943,39 @@ function wireUp() {
     if (state.view === "pure-chat") sendPureChat(v);
     else sendPrompt(v);
   };
+  const promptEl = $("prompt-input");
   $("composer").addEventListener("submit", (e) => {
     e.preventDefault();
-    const v = $("prompt-input").value.trim();
+    if (state.busy) { stopTurn(); return; } // send button doubles as Stop mid-turn
+    const v = promptEl.value.trim();
     if (v) handleComposerSubmit(v);
   });
-  $("prompt-input").addEventListener("keydown", (e) => {
+  promptEl.addEventListener("input", updateSlashMenu);
+  promptEl.addEventListener("blur", () => setTimeout(closeSlashMenu, 120));
+  promptEl.addEventListener("keydown", (e) => {
+    // Slash-command menu navigation takes priority while it's open.
+    if (slash.open) {
+      if (e.key === "ArrowDown") { e.preventDefault(); moveSlash(1); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); moveSlash(-1); return; }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        acceptSlash(slash.items[slash.index]);
+        return;
+      }
+      if (e.key === "Escape") { e.preventDefault(); closeSlashMenu(); return; }
+    }
+    if (e.key === "Escape" && state.busy) { e.preventDefault(); stopTurn(); return; }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      const v = $("prompt-input").value.trim();
+      if (state.busy) return; // a turn is already running — wait or hit Stop
+      const v = promptEl.value.trim();
       if (v) handleComposerSubmit(v);
     }
   });
+
+  // Code tab: + New chat
+  const newCodeChatBtn = $("new-code-chat-btn");
+  if (newCodeChatBtn) newCodeChatBtn.addEventListener("click", startNewCodeChat);
 
   // (Pure-chat header was removed — model is selected via the bottom model picker;
   //  "Clear conversation" in the sidebar More menu clears pure-chat when active.)

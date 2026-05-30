@@ -7,6 +7,7 @@ const os = require('os');
 const fs = require('fs');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { spawn } = require('child_process');
 const pty = require('@homebridge/node-pty-prebuilt-multiarch');
 
 const PORT = process.env.PORT || 7878;
@@ -175,7 +176,7 @@ app.get('/api/models', async (req, res) => {
 
 // default working directory suggestion
 app.get('/api/defaults', (req, res) => {
-  res.json({ cwd: process.env.CLAUDE_CWD || process.cwd(), home: os.homedir() });
+  res.json({ cwd: activeCwd, home: os.homedir() });
 });
 
 // --- filesystem browsing for the folder picker (directories only) ---
@@ -364,6 +365,7 @@ app.post('/api/ollama/pull', async (req, res) => {
 // --- pure Ollama chat (server keeps the conversation; client sends one prompt) ---
 let chatModel = null;            // currently selected chat model
 let chatHistory = [];            // [{ role, content }]
+let activeCwd = process.env.CLAUDE_CWD || process.cwd(); // working dir new agents launch in
 
 // pick a sensible default model from what's installed (prefer a coder model)
 async function resolveDefaultModel() {
@@ -502,16 +504,302 @@ app.get('/api/info', async (req, res) => {
     provider: 'ollama',
     model: chatModel,
     baseUrl: OLLAMA_URL,
-    cwd: process.env.CLAUDE_CWD || process.cwd(),
+    cwd: activeCwd,
     contextWindow: 32768,
+    // The Code chat is backed by the real Claude Code CLI (launched through Ollama),
+    // so it has the full tool set and slash-command support.
+    chatMode: 'cli',
+    agent: 'claude-code',
   });
 });
 
-// pick the active model (the picker calls this; we use it as the chat model)
+// The Code chat always runs the bundled CLI; there is no lightweight fallback agent.
+// This endpoint exists so the mode button in the UI has something to talk to.
+app.post('/api/chat/mode', (req, res) => res.json({ ok: true, mode: 'cli', chatMode: 'cli' }));
+
+// pick the active model and/or working directory (the picker + folder popover call this)
 app.post('/api/config', (req, res) => {
   const model = req.body && req.body.model;
   if (model && typeof model === 'string') chatModel = model;
-  res.json({ ok: true, provider: 'ollama', model: chatModel, baseUrl: OLLAMA_URL });
+  const cwd = req.body && req.body.cwd;
+  if (cwd && typeof cwd === 'string') {
+    if (!fs.existsSync(cwd)) {
+      return res.status(400).json({ ok: false, error: `Folder not found: ${cwd}` });
+    }
+    activeCwd = cwd;
+  }
+  res.json({ ok: true, provider: 'ollama', model: chatModel, baseUrl: OLLAMA_URL, cwd: activeCwd });
+});
+
+// ===================================================================================
+// Claude Code CLI agent — a chat-styled wrapper around the real CLI.
+//
+// Each chat session owns one long-lived `claude` process launched through Ollama in
+// stream-json mode. We write user messages (and slash commands) to its stdin as JSON,
+// and translate its stdout event stream into the SSE protocol the chat UI already
+// speaks: meta / text / tool_use / tool_result / done / error. The process is kept
+// alive across turns so context and slash-command state persist like the real CLI.
+// ===================================================================================
+
+const cliSessions = new Map(); // sessionId -> { child, res, turnActive, ... }
+
+// `ollama launch claude` wires the local model into Claude Code; everything after the
+// `--` is forwarded to the claude CLI. bypassPermissions makes tools run without
+// prompts (a prompt is an effective block in headless mode), matching the Terminal
+// tab, which already launches with -y.
+//
+// Built as a single shell command line (rather than spawn's args array) so we don't
+// trip Node's DEP0190 warning about unescaped args under `shell: true`. This is safe:
+// `model` is the only interpolated value and callers validate it against
+// /^[\w.:\-\/]+$/ first, so it can carry no shell metacharacters.
+function cliAgentCommand(model) {
+  return [
+    'ollama', 'launch', 'claude', '-y', '--model', model, '--',
+    '-p',
+    '--input-format', 'stream-json',
+    '--output-format', 'stream-json',
+    '--verbose',
+    '--permission-mode', 'bypassPermissions',
+  ].join(' ');
+}
+
+function sseSend(res, event, data) {
+  if (!res) return;
+  try {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  } catch (_) { /* client went away */ }
+}
+
+function truncateStr(s, n) {
+  s = String(s == null ? '' : s);
+  return s.length <= n ? s : s.slice(0, n) + '…';
+}
+
+// Local models sometimes leak chat-template tokens (e.g. <|start_header_id|>assistant
+// <|end_header_id|>) into the text. Strip them so the bubble reads cleanly.
+function stripModelArtifacts(s) {
+  return String(s == null ? '' : s)
+    .replace(/<\|[^|>]*\|>/g, '')
+    .replace(/^\s*assistant\s*\n?/i, '')
+    .trim();
+}
+
+// A tool_result block's `content` may be a string, an array of text blocks, or richer
+// structured content — flatten it to something printable for the result card.
+function toolResultText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((c) => {
+      if (typeof c === 'string') return c;
+      if (c && c.type === 'text' && typeof c.text === 'string') return c.text;
+      try { return JSON.stringify(c); } catch (_) { return ''; }
+    }).join('\n');
+  }
+  if (content == null) return '';
+  try { return JSON.stringify(content, null, 2); } catch (_) { return String(content); }
+}
+
+function endTurn(sess) {
+  if (sess.res) { try { sess.res.end(); } catch (_) {} }
+  sess.res = null;
+  sess.turnActive = false;
+}
+
+// Translate one Claude stream-json event into the chat UI's SSE events.
+function routeCliEvent(sess, ev) {
+  const res = sess.res; // may be null if the client disconnected mid-turn
+  switch (ev && ev.type) {
+    case 'system':
+      if (ev.session_id) sess.claudeSessionId = ev.session_id;
+      break;
+
+    case 'assistant': {
+      const content = (ev.message && ev.message.content) || [];
+      for (const block of content) {
+        if (block.type === 'text' && typeof block.text === 'string') {
+          sess.assistantText += block.text;
+          // The UI's `text` handler replaces the assistant bubble with the cumulative
+          // text, so we always send the running total for this turn.
+          sseSend(res, 'text', { text: stripModelArtifacts(sess.assistantText) });
+        } else if (block.type === 'tool_use') {
+          sseSend(res, 'tool_use', { id: block.id, name: block.name, input: block.input || {} });
+        }
+      }
+      break;
+    }
+
+    case 'user': {
+      // Tool results arrive as a synthetic user message carrying tool_result blocks.
+      const content = (ev.message && ev.message.content) || [];
+      for (const block of content) {
+        if (block.type === 'tool_result') {
+          sseSend(res, 'tool_result', {
+            id: block.tool_use_id,
+            content: toolResultText(block.content),
+            isError: !!block.is_error,
+          });
+        }
+      }
+      break;
+    }
+
+    case 'result': {
+      if (ev.session_id) sess.claudeSessionId = ev.session_id;
+      const text = stripModelArtifacts(sess.assistantText) || stripModelArtifacts(ev.result || '');
+      const tokens = (ev.usage && (ev.usage.output_tokens || ev.usage.outputTokens)) || undefined;
+      if (ev.subtype && ev.subtype !== 'success' && ev.is_error) {
+        sseSend(res, 'error', { message: text || `Agent error (${ev.subtype})` });
+      } else {
+        sseSend(res, 'done', { text, tokens });
+      }
+      endTurn(sess);
+      break;
+    }
+  }
+}
+
+function handleCliStdout(sess, buf) {
+  sess.stdoutBuf += buf.toString('utf8');
+  let idx;
+  while ((idx = sess.stdoutBuf.indexOf('\n')) !== -1) {
+    const line = sess.stdoutBuf.slice(0, idx).trim();
+    sess.stdoutBuf = sess.stdoutBuf.slice(idx + 1);
+    if (!line) continue;
+    let ev;
+    try { ev = JSON.parse(line); } catch (_) { continue; }
+    routeCliEvent(sess, ev);
+  }
+}
+
+// Kill the whole child tree (ollama -> claude -> node) so no orphans linger.
+function killCliTree(child) {
+  if (!child || child.killed) return;
+  if (isWin) {
+    try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); } catch (_) {}
+  } else {
+    try { process.kill(-child.pid, 'SIGKILL'); } catch (_) { try { child.kill('SIGKILL'); } catch (_) {} }
+  }
+}
+
+function spawnCliSession(id, { model, cwd }) {
+  const child = spawn(cliAgentCommand(model), {
+    cwd,
+    env: process.env,
+    shell: true,            // resolve `ollama` on PATH (and .exe on Windows)
+    windowsHide: true,
+    detached: !isWin,       // own process group on POSIX so killCliTree can reap it
+  });
+
+  const sess = {
+    id, child, model, cwd,
+    claudeSessionId: null,
+    res: null,
+    turnActive: false,
+    assistantText: '',
+    stdoutBuf: '',
+    lastStderr: '',
+    exited: false,
+    createdAt: Date.now(),
+  };
+  cliSessions.set(id, sess);
+
+  child.stdout.on('data', (buf) => handleCliStdout(sess, buf));
+  child.stderr.on('data', (buf) => {
+    // Keep only the tail — useful for surfacing a startup failure to the client.
+    sess.lastStderr = (sess.lastStderr + buf.toString('utf8')).slice(-2000);
+  });
+  child.on('exit', (code) => {
+    sess.exited = true;
+    if (sess.turnActive) {
+      const why = sess.lastStderr ? ` ${truncateStr(sess.lastStderr.trim(), 400)}` : '';
+      sseSend(sess.res, 'error', { message: `Agent process exited (code ${code}).${why}` });
+      endTurn(sess);
+    }
+    cliSessions.delete(id);
+  });
+  child.on('error', (e) => {
+    sess.exited = true;
+    if (sess.turnActive) {
+      sseSend(sess.res, 'error', { message: `Failed to start agent: ${(e && e.message) || e}` });
+      endTurn(sess);
+    }
+    cliSessions.delete(id);
+  });
+
+  return sess;
+}
+
+// POST /api/chat — run one turn for a session and stream the result back as SSE.
+// Body: { prompt, sessionId, model?, cwd? }. The child persists across turns; model
+// and cwd are honoured only when the session is first created (like launching a shell).
+app.post('/api/chat', (req, res) => {
+  const body = req.body || {};
+  const prompt = body.prompt;
+  if (!prompt || typeof prompt !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Missing prompt' });
+  }
+
+  const sessionId = (typeof body.sessionId === 'string' && body.sessionId.trim()) || 'default';
+  const model = (typeof body.model === 'string' && body.model.trim()) || chatModel || 'qwen2.5-coder:7b';
+  if (!/^[\w.:\-\/]+$/.test(model)) {
+    return res.status(400).json({ ok: false, error: `Invalid model name: ${model}` });
+  }
+  let cwd = (typeof body.cwd === 'string' && body.cwd.trim()) || process.env.CLAUDE_CWD || process.cwd();
+  if (!cwd || !fs.existsSync(cwd)) cwd = os.homedir();
+
+  let sess = cliSessions.get(sessionId);
+  if (sess && sess.exited) { cliSessions.delete(sessionId); sess = null; }
+  if (!sess) {
+    try { sess = spawnCliSession(sessionId, { model, cwd }); }
+    catch (e) { return res.status(500).json({ ok: false, error: String((e && e.message) || e) }); }
+  }
+  if (sess.turnActive) {
+    return res.status(409).json({ ok: false, error: 'A turn is already running for this session.' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  sess.res = res;
+  sess.turnActive = true;
+  sess.assistantText = '';
+  sseSend(res, 'meta', { model: sess.model, cwd: sess.cwd, session: sess.id });
+
+  // If the client disconnects mid-turn, detach the response but leave the child
+  // running — the turn completes server-side and turnActive clears on its `result`.
+  res.on('close', () => { if (sess.res === res) sess.res = null; });
+
+  const msg = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } };
+  try {
+    sess.child.stdin.write(JSON.stringify(msg) + '\n');
+  } catch (e) {
+    sseSend(res, 'error', { message: `Could not send to agent: ${(e && e.message) || e}` });
+    endTurn(sess);
+  }
+});
+
+// Stop (and forget) a chat session's agent process. Used by the composer Stop button
+// and when the user deletes a chat from the sidebar. Note: this ends the live context;
+// the next message starts a fresh agent.
+app.post('/api/chat/:id/stop', (req, res) => {
+  const sess = cliSessions.get(req.params.id);
+  if (!sess) return res.json({ ok: true, stopped: false });
+  if (sess.turnActive) { sseSend(sess.res, 'error', { message: 'Stopped.' }); endTurn(sess); }
+  killCliTree(sess.child);
+  cliSessions.delete(sess.id);
+  res.json({ ok: true, stopped: true });
+});
+
+// Which chat sessions currently have a live agent (so the UI can show status).
+app.get('/api/chat/sessions', (req, res) => {
+  const items = [];
+  for (const s of cliSessions.values()) {
+    items.push({ id: s.id, model: s.model, cwd: s.cwd, busy: s.turnActive, createdAt: s.createdAt });
+  }
+  res.json({ ok: true, sessions: items });
 });
 
 const server = http.createServer(app);
