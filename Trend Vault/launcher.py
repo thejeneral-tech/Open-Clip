@@ -269,6 +269,204 @@ def resolve_aider() -> str | None:
     return None
 
 
+# ── Node.js Bundling ────────────────────────────────────────────────────────
+# On Windows, if npm is not available on PATH, the launcher can download and
+# bundle a prebuilt Node.js runtime into %LOCALAPPDATA%\trendvault\runtimes\node.
+# This allows offline/restricted environments to still use the Web App (npm start).
+_NODE_VERSION = 'v22.11.0'
+_NODE_DIR = os.path.join(
+    os.environ.get('LOCALAPPDATA', os.path.join(_HOME, 'AppData', 'Local')),
+    'trendvault', 'runtimes', 'node'
+)
+
+def _node_release_url() -> str | None:
+    """Build the nodejs.org download URL for the current Windows / arch."""
+    if platform.system() != 'Windows':
+        return None
+    mach = (platform.machine() or '').lower()
+    arch = {
+        'amd64': 'x64', 'x86_64': 'x64', 'x64': 'x64',
+        'arm64': 'arm64', 'aarch64': 'arm64',
+    }.get(mach)
+    if not arch:
+        return None
+    return f'https://nodejs.org/dist/{_NODE_VERSION}/node-{_NODE_VERSION}-win-{arch}.zip'
+
+def _node_bin_dir() -> str | None:
+    """Return the bin/ dir of the bundled Node install, or None."""
+    if not os.path.isdir(_NODE_DIR):
+        return None
+    try:
+        entries = sorted(os.listdir(_NODE_DIR), reverse=True)
+    except OSError:
+        return None
+    for name in entries:
+        full = os.path.join(_NODE_DIR, name)
+        if not (os.path.isdir(full) and name.startswith('node-')):
+            continue
+        if os.path.isfile(os.path.join(full, 'npm.cmd')):
+            return full
+    return None
+
+def _ensure_bundled_node_on_path() -> str | None:
+    """If a bundled Node install exists, prepend its directory to PATH. Returns the bin dir or None."""
+    bin_dir = _node_bin_dir()
+    if not bin_dir:
+        return None
+    cur = os.environ.get('PATH', '')
+    parts = cur.split(os.pathsep) if cur else []
+    if bin_dir not in parts:
+        os.environ['PATH'] = bin_dir + (os.pathsep + cur if cur else '')
+    return bin_dir
+
+def _download_node(log) -> str | None:
+    """Download Node.js binary zip and extract into _NODE_DIR. Returns the bin dir on success."""
+    import urllib.request, tempfile, zipfile
+    url = _node_release_url()
+    if not url:
+        log('No Node.js release for this Windows arch: ' + platform.machine(), RED)
+        return None
+    log('Downloading Node.js ' + _NODE_VERSION + ' from nodejs.org', ACCENT)
+    log('This may take 30-60 seconds (~25 MB)...', MUTED)
+    os.makedirs(_NODE_DIR, exist_ok=True)
+    archive = os.path.join(tempfile.gettempdir(), 'trend_vault_node_dl.zip')
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'TrendVaultLauncher/1.0'})
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            with open(archive, 'wb') as f:
+                shutil.copyfileobj(resp, f)
+    except Exception as e:
+        log('Node.js download failed: ' + str(e), RED)
+        return None
+    log('Download complete, extracting...', ACCENT)
+    try:
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(_NODE_DIR)
+    except Exception as e:
+        log('Node.js extract failed: ' + str(e), RED)
+        return None
+    finally:
+        try:
+            os.remove(archive)
+        except OSError:
+            pass
+    bin_dir = _node_bin_dir()
+    if not bin_dir:
+        log('Node.js archive extracted but bin dir not found inside ' + _NODE_DIR, RED)
+        return None
+    _ensure_bundled_node_on_path()
+    log('Node.js ' + _NODE_VERSION + ' installed to ' + _NODE_DIR, GREEN)
+    return bin_dir
+
+# Ensure bundled Node is on PATH if it exists (from previous auto-install)
+_ensure_bundled_node_on_path()
+
+
+def _resolve_host_python_for_fish() -> str | None:
+    """Find a compatible Python interpreter (3.10 or 3.11) for Fish Speech bootstrap.
+
+    Search order:
+      1. python3.11 / python3.10 (canonical names, preferred)
+      2. py.exe -3.11 / py.exe -3.10 (Windows Python launcher)
+      3. python3 / python (if version is compatible)
+
+    Returns the path/command to a usable interpreter, or None."""
+    # Try canonical names first
+    for pyname in ('python3.11', 'python3.10', 'python3', 'python'):
+        path = shutil.which(pyname)
+        if path:
+            try:
+                ver_out = subprocess.run(
+                    [path, '-c', 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")'],
+                    capture_output=True, text=True, timeout=4,
+                )
+                if ver_out.returncode == 0:
+                    ver = ver_out.stdout.strip()
+                    if ver in ('3.10', '3.11'):
+                        return path
+            except Exception:
+                pass
+
+    # Try Windows Python launcher (py.exe)
+    if shutil.which('py'):
+        for version in ('3.11', '3.10'):
+            try:
+                ver_out = subprocess.run(
+                    ['py', f'-{version}', '-c', 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")'],
+                    capture_output=True, text=True, timeout=4,
+                )
+                if ver_out.returncode == 0:
+                    ver = ver_out.stdout.strip()
+                    if ver == version:
+                        return f'py -{version}'
+            except Exception:
+                pass
+
+    return None
+
+
+def _missing_fish_s2_pro_deps_windows() -> list[tuple[str, str]]:
+    """Check for system dependencies needed by Fish Speech S2 Pro on Windows.
+
+    Returns a list of (dep_name, install_hint) tuples for any missing deps.
+    """
+    missing = []
+    if not shutil.which('git'):
+        missing.append((
+            'git',
+            'Download from https://git-scm.com or run: winget install Git.Git',
+        ))
+    if not _check_git_lfs():
+        missing.append((
+            'git-lfs',
+            'Download from https://git-lfs.github.com or run: winget install GitHub.GitLFS',
+        ))
+    if not (shutil.which('python') or shutil.which('python3')):
+        missing.append((
+            'python3',
+            'Download from https://python.org or run: winget install Python.Python.3.11',
+        ))
+    # Check if pip is available via `python -m pip`
+    py = shutil.which('python') or shutil.which('python3')
+    if py:
+        try:
+            r = subprocess.run(
+                [py, '-m', 'pip', '--version'],
+                capture_output=True, timeout=5,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+            pip_ok = (r.returncode == 0)
+        except Exception:
+            pip_ok = False
+    else:
+        pip_ok = False
+
+    if not pip_ok:
+        missing.append((
+            'pip',
+            'Run: python -m ensurepip --upgrade',
+        ))
+
+    return missing
+
+
+def _git_lfs_install_user() -> bool:
+    """Run `git lfs install --skip-repo` to enable LFS filters for this user.
+
+    Safe to call repeatedly — git-lfs treats this as idempotent. Returns
+    True on success. Failure is non-fatal; the clone may still succeed if
+    LFS was installed globally on a previous run."""
+    try:
+        r = subprocess.run(
+            ['git', 'lfs', 'install', '--skip-repo'],
+            capture_output=True, timeout=15,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def _find_pip_cmd() -> list[str] | None:
     """Return a command list that can run pip. Prefers `python -m pip`."""
     for py in ('python', 'python3', 'py'):
@@ -495,6 +693,27 @@ def kill_port(port: int):
     except Exception:
         pass
 
+def _kill_proc_tree(proc: subprocess.Popen):
+    """Terminate a process and its child tree gracefully, then force-kill if needed."""
+    if proc.poll() is not None:  # already dead
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        # Force kill with tree flag (/T) to terminate all spawned children (npm spawns node, etc.)
+        try:
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                capture_output=True, timeout=5,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
 def ts() -> str:
     return datetime.now().strftime('%H:%M:%S')
 
@@ -513,6 +732,7 @@ class TrendVaultLauncher(tk.Tk):
         self._lock  = threading.Lock()
         self._installing_ollama = False
         self._installing_aider  = False
+        self._installing_node   = False
         self._installing_fish_s2 = False
         # CLI runner state
         self._cli_proc: subprocess.Popen | None = None
@@ -523,6 +743,7 @@ class TrendVaultLauncher(tk.Tk):
 
         self._build_ui()
         self._poll()                                 # start status polling loop
+        self.after(400,  self._check_npm_on_start)      # Node.js availability
         self.after(800,  self._check_ollama_on_start)   # prompt to install if missing
         self.after(1200, self._check_aider_on_start)    # aider for the Code section
         self.after(1600, self._check_fish_s2_on_start)  # fish speech model check
@@ -807,6 +1028,54 @@ class TrendVaultLauncher(tk.Tk):
                 self._set_status('Ready')
                 self._log_line('--- End ---', ACCENT)
         threading.Thread(target=_do, daemon=True).start()
+
+    # ── Node.js dependency ────────────────────────────────────────────────────
+    def _check_npm_on_start(self):
+        """Runs ~400ms after the UI is built. Checks for npm on PATH."""
+        if shutil.which('npm'):
+            self._log_line('npm detected on PATH', GREEN)
+            return
+        if shutil.which('node'):
+            self._log_line('node detected on PATH (npm should be available)', GREEN)
+            return
+        if _node_bin_dir():
+            self._log_line('Bundled Node.js already installed at ' + _NODE_DIR, GREEN)
+            return
+        self._log_line('npm is not on PATH -- the Web App needs it to work', AMBER)
+        self._prompt_install_node()
+
+    def _prompt_install_node(self):
+        if self._installing_node:
+            self._log_line('Node.js install already in progress...', AMBER)
+            return
+        answer = messagebox.askyesno(
+            'Install Node.js?',
+            'npm is required for the Web App but was not found on this PC.\n\n'
+            'Download and bundle Node.js ' + _NODE_VERSION + ' (~25 MB) into\n'
+            '%LOCALAPPDATA%\\trendvault\\runtimes\\node?\n\n'
+            'This is optional — you can install Node.js manually if you prefer.',
+        )
+        if not answer:
+            self._log_line('Node.js install skipped by user', MUTED)
+            return
+        threading.Thread(target=self._install_node, daemon=True).start()
+
+    def _install_node(self):
+        """Download Node.js binary and extract to _NODE_DIR."""
+        self._installing_node = True
+        try:
+            self._log_line('--- Node.js Install ---', ACCENT)
+            self._set_status('Downloading Node.js...')
+            bin_dir = _download_node(self._log_line)
+            if bin_dir:
+                self._log_line('Node.js bundle ready. Restart launcher to use it.', GREEN)
+                self._log_line('(or manually run: SET PATH=' + bin_dir + ';%PATH%)', MUTED)
+            else:
+                self._log_line('Node.js download/extract failed. Retry with INSTALL button or install from nodejs.org', RED)
+        finally:
+            self._installing_node = False
+            self._set_status('Ready')
+            self._log_line('--- End ---', ACCENT)
 
     # ── Ollama dependency ─────────────────────────────────────────────────────
     def _check_ollama_on_start(self):
@@ -1180,12 +1449,15 @@ class TrendVaultLauncher(tk.Tk):
         try:
             env = {**os.environ, 'NODE_OPTIONS': '--max-old-space-size=8192'}
             env.update(svc.get('env', {}))
+            flags = 0
+            if sys.platform == 'win32':
+                flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
             proc = subprocess.Popen(
                 cmd, cwd=ROOT, env=env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 encoding='utf-8', errors='replace', bufsize=1,
                 shell=(sys.platform == 'win32'),
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
+                creationflags=flags,
             )
             with self._lock:
                 self._procs[key] = proc
@@ -1216,12 +1488,7 @@ class TrendVaultLauncher(tk.Tk):
         with self._lock:
             proc = self._procs.get(svc['key'])
         if proc:
-            try:
-                proc.terminate()
-                proc.wait(timeout=4)
-            except Exception:
-                try: proc.kill()
-                except Exception: pass
+            _kill_proc_tree(proc)
         kill_port(svc['port'])
         self._log_line(svc['name'] + ' stopped', MUTED)
 
@@ -1418,6 +1685,15 @@ class TrendVaultLauncher(tk.Tk):
         """Runs ~1.6 s after launch. Scans candidate paths, updates env, auto-starts server."""
         global FISH_S2_PRO_MODEL_PATH, _FISH_CMD
         self._log_line('─── Fish Speech S2 Pro ───────────────────────────', ACCENT)
+
+        # Check for system dependencies
+        missing_deps = _missing_fish_s2_pro_deps_windows()
+        if missing_deps:
+            self._log_line('⚠ System dependencies missing:', RED)
+            for dep_name, install_hint in missing_deps:
+                self._log_line(f'  ✗ {dep_name}: {install_hint}', AMBER)
+            self._log_line('Fish Speech may not install correctly until these are resolved.', AMBER)
+
         self._log_line('Checking model paths...', ACCENT)
         found_path = None
         for cpath in _fish_s2_pro_candidate_paths():
