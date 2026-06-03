@@ -150,7 +150,10 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\(r'C:\\\\Users\\\\Anton\\\\OneDrive\\\\Desktop\\\\Trend Vault Program\\\\local-tts-engine\\\\fish_speech_bridge.py', encoding='utf-8'\\).read\\(\\)\\); print\\('bridge syntax OK'\\)\")",
       "Bash(curl -s -X POST http://localhost:3001/api/trend-vault/improve-prompt -H \"Content-Type: application/json\" -d '{}')",
       "Bash(curl -s -X POST http://localhost:3001/api/trend-vault/generate-prompts -H \"Content-Type: application/json\" -d '{\"trendVaultSign\":\"Scorpio\",\"category\":\"general\",\"count\":4}' --max-time 15)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('ok:', d.get\\('ok'\\)\\); print\\('count:', len\\(d.get\\('prompts',[]\\)\\)\\); print\\('provider:', d.get\\('provider'\\)\\); [print\\(' ', i, repr\\(p[:60]\\)\\) for i,p in enumerate\\(d.get\\('prompts',[]\\)\\)]\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('ok:', d.get\\('ok'\\)\\); print\\('count:', len\\(d.get\\('prompts',[]\\)\\)\\); print\\('provider:', d.get\\('provider'\\)\\); [print\\(' ', i, repr\\(p[:60]\\)\\) for i,p in enumerate\\(d.get\\('prompts',[]\\)\\)]\")",
+      "Bash(python -m py_compile \"launcher.py\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

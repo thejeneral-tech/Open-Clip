@@ -96,6 +96,8 @@ header nav{margin-left:auto;display:flex;gap:10px}
 .btn-fav{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
 .btn-fav:hover{border-color:var(--gold);color:var(--gold2)}
 .btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(201,162,39,.1)}
+.btn-trash{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
+.btn-trash:hover{border-color:rgba(239,68,68,.5);color:#f87171;background:rgba(239,68,68,.1)}
 .btn-use{padding:7px 14px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:7px;color:#fff;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:all .15s}
 .btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,58,237,.4)}
 
@@ -143,9 +145,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .btn-clear-compare{padding:9px 14px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:.78rem;cursor:pointer;font-family:inherit}
 
 /* ── Voice Clone Tab ── */
+@keyframes clonePulse{0%,100%{opacity:1}50%{opacity:.35}}
 .clone-layout{display:flex;gap:24px;flex-wrap:wrap}
 .clone-panel{flex:1;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .clone-panel-title{font-size:.72rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6d4bd6,#a855f7);color:#fff;font-size:.72rem;font-weight:800;flex-shrink:0}
 .upload-drop{border:2px dashed var(--border2);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
 .upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(124,58,237,.05)}
 .upload-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -386,6 +390,12 @@ input:focus,textarea:focus,select:focus{
         <option value="name">Name A-Z</option>
       </select>
       <span class="count-badge" id="countBadge">33 voices</span>
+      <button id="vlHiddenBtn" onclick="vlToggleHiddenPanel()" title="Show removed voices you can restore"
+        style="background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:6px 11px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">🗑 Hidden (0)</button>
+    </div>
+    <div id="vlHiddenPanel" style="display:none;flex-direction:column;gap:6px;background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:10px;padding:10px;margin-bottom:14px">
+      <div style="font-size:.66rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;font-weight:700">Removed voices — click Restore to bring one back</div>
+      <div id="vlHiddenList" style="display:flex;flex-direction:column;gap:5px;max-height:260px;overflow-y:auto"></div>
     </div>
     <div id="voiceGrid"></div>
   </div>
@@ -504,71 +514,144 @@ input:focus,textarea:focus,select:focus{
     </div>
   </div>
 
-  <!-- CLONE TAB -->
+  <!-- CLONE TAB — Fish Speech S2 Pro styled, numbered-step flow -->
   <div class="tab-content" id="tab-clone">
-    <div class="section-head"><span class="section-head-icon">🧬</span><span class="section-head-label">Voice Cloning Lab</span></div>
-    <div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:16px;margin-bottom:24px;font-size:.78rem;line-height:1.7;color:var(--text2)">
-      <strong style="color:var(--purple2)">How it works:</strong> Upload reference audio samples (MP3/WAV). The system builds a voice database. Generation runs through the local <strong>Kokoro</strong> TTS engine to match the voice style. For deep cloning, install <strong>tortoise-tts</strong> locally.<br/>
-      <strong style="color:var(--gold2)">Auto-save:</strong> Your voice database auto-saves every 30 minutes. Last save: <span id="lastSaveTime">Never</span>
-    </div>
-    <div class="clone-layout">
-      <!-- Left: Create / Upload -->
-      <div class="clone-panel" style="max-width:380px">
-        <div class="clone-panel-title">📂 Create Voice Profile</div>
-        <div class="form-group">
-          <label class="form-label">Voice Name</label>
-          <input type="text" class="form-input" id="newVoiceName" placeholder="e.g. My Dark TikTok Voice"/>
+    <div style="max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:22px;padding-top:6px">
+
+      <!-- Title -->
+      <div style="text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#6ea8ff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.5px">Fish Speech S2 Pro</div>
+        <div style="font-size:.8rem;color:var(--muted);margin-top:4px">Upload a voice sample — the model will speak in that voice</div>
+      </div>
+
+      <!-- Connection status bar (mirrors the s2.cpp web UI) -->
+      <div id="cloneStatusBar" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:.78rem">
+        <span id="cloneDot" style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0;transition:background .4s"></span>
+        <span id="cloneStatusText" style="font-weight:600;color:var(--text2)">Connecting…</span>
+        <button id="cloneStatusReconnect" onclick="cloneReconnectRecover()" title="Re-check the Fish Speech server and recover the last job — never starts a new generation"
+          style="display:none;margin-left:auto;font-size:.7rem;padding:4px 11px;border-radius:8px;border:1px solid var(--border2);background:var(--surface3);color:var(--text2);cursor:pointer;font-family:inherit;font-weight:700">🔄 Reconnect</button>
+      </div>
+
+      <!-- STEP 1 — Upload Voice Sample -->
+      <div class="card" style="padding:22px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+          <span class="step-num">1</span>
+          <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">Upload Voice Sample</span>
         </div>
-        <div class="upload-drop" id="sampleDropzone" ondrop="handleSampleDrop(event)" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')">
-          <input type="file" accept="audio/*" multiple onchange="uploadSamples(this.files)"/>
-          <div class="ud-icon">🎤</div>
-          <div class="ud-text"><strong>Drop audio samples here</strong><br/>MP3, WAV, M4A — 3–10 samples = better results<br/><span style="font-size:.65rem;opacity:.7">Each sample should be 5–30 seconds of clear speech</span></div>
+
+        <div class="upload-drop" id="cloneDropzone"
+             ondrop="cloneHandleDrop(event)"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')">
+          <input type="file" accept=".wav,.mp3,.mp4,.flac,.m4a,.ogg,audio/*" onchange="cloneOnFilePick(this.files)"/>
+          <div class="ud-icon">🎙️</div>
+          <div class="ud-text">
+            <strong>Drop an audio file here, or click to browse</strong><br/>
+            <span style="font-size:.7rem">WAV · MP3 · MP4 · FLAC · 5–30 s of clear speech</span><br/>
+            <span id="cloneFileLabel" style="font-size:.68rem;color:var(--purple2);font-weight:600">No file selected</span>
+          </div>
         </div>
-        <div id="cloneStatus" class="status-box" style="margin-top:14px">Ready to create a voice profile. Add a name and upload samples.</div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <button id="cloneUploadBtn" onclick="cloneUploadConvert()" disabled
+            style="background:var(--surface3);border:1px solid var(--border2);color:var(--muted);border-radius:9px;padding:11px 18px;font-size:.78rem;font-weight:700;cursor:not-allowed;font-family:inherit;transition:all .15s;white-space:nowrap">
+            ↑ Upload &amp; Convert
+          </button>
+          <div id="cloneConvertInfo" style="display:none;flex:1;font-size:.72rem;color:#6ee7b7;font-weight:600"></div>
+        </div>
+
+        <!-- Existing reference voices (reuse without re-uploading) -->
+        <details style="margin-top:14px">
+          <summary style="font-size:.68rem;color:var(--muted);cursor:pointer;user-select:none;outline:none">or pick an existing reference voice ▾</summary>
+          <div id="cloneSourceList" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-top:10px">
+            <div style="font-size:.72rem;color:var(--muted);padding:6px 0">⏳ Loading…</div>
+          </div>
+        </details>
+
+        <div id="cloneSelectedBadge" style="display:none;margin-top:12px;padding:8px 11px;background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.3);border-radius:8px;font-size:.72rem;color:#c4b5fd">
+          🎙 Using reference voice: <strong id="cloneSelectedName">—</strong>
+        </div>
+
+        <!-- Transcript (optional — improves cloning accuracy; auto-filled from audio) -->
         <div style="margin-top:16px">
-          <div class="adv-title" style="margin-bottom:10px">🎛️ Voice Adjustment Prompt</div>
-          <textarea id="voicePrompt" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.78rem;padding:10px;resize:vertical;height:60px;outline:none" placeholder="Describe adjustments: 'make it deeper and slower', 'add slight reverb', 'more dramatic pauses'..."></textarea>
-        </div>
-
-        <!-- Visualization Sliders for cloning -->
-        <div style="margin-top:16px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
-          <div class="adv-title" style="margin-bottom:12px">📊 Replication Tuning</div>
-          <p style="font-size:.7rem;color:var(--muted);margin-bottom:14px;line-height:1.5">Visualize and adjust how your replica differs from the source. Default 50% = match source.</p>
-          <div id="cloneSliders" style="display:flex;flex-direction:column;gap:10px"></div>
-        </div>
-
-        <div style="margin-top:14px;display:flex;gap:8px">
-          <button class="btn-primary" onclick="saveVoiceProfile()" style="flex:1">💾 Save Profile</button>
+          <div style="font-size:.7rem;color:var(--text2);font-weight:700;margin-bottom:6px">
+            TRANSCRIPT <span style="color:#6ea8ff;font-weight:600">(optional — improves voice accuracy)</span>
+          </div>
+          <textarea id="cloneTranscript" rows="3"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:inherit;font-size:.8rem;padding:11px;resize:vertical;outline:none"
+            placeholder="Paste the words spoken in the voice sample (even a sentence or two helps the model match the voice more closely)&#10;Leave empty to clone from audio alone."></textarea>
+          <div id="cloneTranscribeStatus" style="font-size:.66rem;color:var(--muted);margin-top:4px;min-height:14px"></div>
         </div>
       </div>
 
-      <!-- Right: Voice Database -->
-      <div class="clone-panel" style="flex:1">
-        <div class="clone-panel-title">🗄️ Voice Database <span id="voiceDbCount" style="font-size:.65rem;color:var(--muted);font-weight:400;margin-left:6px">0 profiles</span></div>
-        <div id="voiceDb" class="voice-db-list">
-          <div class="empty">No voice profiles yet. Create one →</div>
+      <!-- STEP 2 — Enter Text -->
+      <div class="card" style="padding:22px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px">
+          <span class="step-num">2</span>
+          <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">Enter Text</span>
         </div>
 
-        <!-- Generate with cloned voice -->
-        <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
-          <div class="clone-panel-title">🎙️ Generate with Cloned Voice</div>
-          <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Select Profile</label>
-            <select class="form-input" id="cloneVoiceSelect" style="cursor:pointer">
-              <option value="">— select a voice profile —</option>
-            </select>
+        <textarea id="cloneGenText" rows="4" oninput="cloneUpdateCharCount()"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:inherit;font-size:.85rem;padding:12px;resize:vertical;outline:none"
+          placeholder="Type the words you want spoken in the uploaded voice…&#10;Aim for at least 20 characters for best results."></textarea>
+        <div style="text-align:right;font-size:.66rem;color:var(--muted);margin-top:4px"><span id="cloneCharCount">0</span> characters</div>
+
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button id="cloneGenBtn" onclick="cloneGenerate()"
+            style="flex:1;background:linear-gradient(135deg,#6d4bd6,#a855f7);border:none;color:#fff;border-radius:9px;padding:12px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+            ▶ Generate Speech
+          </button>
+          <button id="cloneReconnectBtn" onclick="cloneReconnectRecover()" title="Re-check the Fish Speech server and recover your last job — never starts a new generation"
+            style="background:var(--surface3);border:1px solid var(--border2);color:var(--text2);border-radius:9px;padding:12px 16px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+            ⟳ Reconnect
+          </button>
+        </div>
+        <div id="cloneGenStatus" style="margin-top:10px;font-size:.72rem;color:var(--muted);min-height:16px"></div>
+
+        <!-- Live generation progress (real data from s2.cpp /progress) -->
+        <div id="cloneProgressWrap" style="display:none;margin-top:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span id="cloneProgressStage" style="font-size:.7rem;color:var(--text2)">Starting…</span>
+            <span id="cloneProgressPct" style="font-size:.7rem;color:var(--muted)">0%</span>
           </div>
-          <div class="form-group">
-            <label class="form-label">Text to Speak</label>
-            <textarea class="form-input" id="cloneGenText" style="height:80px;resize:vertical" placeholder="Enter the text you want spoken in this voice...">Some people disappear. Not because they stopped caring. But because caring became too loud.</textarea>
-          </div>
-          <button class="btn-primary" onclick="generateCloned()" id="cloneGenBtn">▶ Generate Audio</button>
-          <div id="cloneGenStatus" class="status-box" style="margin-top:10px;display:none"></div>
-          <div id="cloneGenAudio" style="margin-top:10px;display:none">
-            <audio id="clonedAudio" controls style="width:100%;height:34px;border-radius:8px"></audio>
+          <div style="height:6px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden">
+            <div id="cloneProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6d4bd6,#a855f7);border-radius:4px;transition:width .35s ease"></div>
           </div>
         </div>
       </div>
+
+      <!-- Preview + metadata pills + Download / Save (after generation) -->
+      <div id="clonePreviewCard" class="card" style="display:none;padding:22px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+          <span class="step-num">3</span>
+          <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">Output</span>
+        </div>
+        <audio id="cloneAudioEl" controls style="width:100%;height:36px;border-radius:8px;margin-bottom:12px"></audio>
+        <!-- Metadata pills (Time / Size / Voice / Transcript / Endpoint) -->
+        <div id="clonePills" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px"></div>
+        <div style="display:flex;gap:10px">
+          <button id="cloneDownloadBtn" onclick="cloneDownloadWav()"
+            style="flex:1;background:transparent;border:1px solid rgba(110,168,255,.55);color:#6ea8ff;border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+            ⬇ Download WAV
+          </button>
+          <button onclick="cloneSavePreset()"
+            style="flex:1;background:linear-gradient(135deg,rgba(201,162,39,.25),rgba(240,192,64,.35));border:1px solid rgba(240,192,64,.4);color:var(--gold2);border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
+            💾 Save as Preset
+          </button>
+        </div>
+      </div>
+
+      <!-- Saved presets -->
+      <div class="card" style="padding:22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">📦 Saved Presets</span>
+          <span id="clonePresetCount" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.25);color:#c4b5fd">0</span>
+        </div>
+        <div id="clonePresetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+          <div style="font-size:.72rem;color:var(--muted);grid-column:1/-1">No saved presets yet — generate audio and click Save.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -800,7 +883,6 @@ let compareSet  = new Set(); // max 2
 let currentTab  = 'browse';
 let activeCat   = 'all';
 let ppController = null;
-let voiceDatabase = [];
 
 // ═══════════════════════════════════════════════════════
 // INIT
@@ -810,10 +892,13 @@ async function init(){
   buildCatList();
   await loadPresets();
   updateFavCount();
-  await loadVoiceDb();
-  setupAutoSave();
+  if(typeof setupAutoSave==='function') setupAutoSave();   // optional — guarded so init never aborts
   initSliderTracks();
-  buildCloneSliders();
+  // Clone tab — load in background so it's ready when the user switches to it.
+  // NOTE: the Fish Speech connection manager is intentionally NOT started here.
+  // It only runs while the Voice Cloning tab is open (started in switchTab).
+  cloneRefreshSources().catch(()=>{});
+  cloneLoadPresets().catch(()=>{});
 }
 
 function updateFavCount(){
@@ -960,6 +1045,7 @@ function renderCard(p){
       <button class="btn-test${isActive&&document.getElementById('previewPanel')?.classList.contains('show')?' playing':''}" onclick="event.stopPropagation();quickTest('${p.id}')">▶ TEST</button>
       <button class="btn-compare${isCompare?' selected':''}" onclick="event.stopPropagation();toggleCompare('${p.id}')" title="Compare">⚖</button>
       <button class="btn-fav${isFav?' starred':''}" onclick="event.stopPropagation();toggleFav('${p.id}')" title="Favorite">★</button>
+      <button class="btn-trash" onclick="event.stopPropagation();vlTrashVoice('${p.id}','${(p.name||'').replace(/'/g,"\\'")}','${p.engine||'kokoro'}',${(p.custom===true||p.category==='custom')})" title="${(p.custom===true||p.category==='custom')?'Delete this custom voice':'Remove this voice (restorable)'}">🗑</button>
     </div>
   </div>`;
 }
@@ -1170,63 +1256,6 @@ function clearComparison(){
 }
 
 // ═══════════════════════════════════════════════════════
-// CLONE VISUALIZATION SLIDERS
-// ═══════════════════════════════════════════════════════
-const CLONE_SLIDERS = [
-  { id:'cl_pitch',       label:'Pitch',       hint:'lower ↔ higher' },
-  { id:'cl_speed',       label:'Speed',       hint:'slower ↔ faster' },
-  { id:'cl_tone',        label:'Tone',        hint:'soft ↔ sharp' },
-  { id:'cl_emotion',     label:'Emotion',     hint:'flat ↔ expressive' },
-  { id:'cl_stability',   label:'Stability',   hint:'varied ↔ steady' },
-  { id:'cl_clarity',     label:'Clarity',     hint:'soft ↔ crisp' },
-  { id:'cl_similarity',  label:'Similarity',  hint:'fresh ↔ exact match' },
-  { id:'cl_warmth',      label:'Warmth',      hint:'cool ↔ warm' },
-  { id:'cl_depth',       label:'Depth',       hint:'thin ↔ deep' },
-  { id:'cl_breathiness', label:'Breathiness', hint:'tight ↔ airy' },
-  { id:'cl_intensity',   label:'Intensity',   hint:'gentle ↔ powerful' },
-];
-
-function buildCloneSliders(){
-  const wrap = document.getElementById('cloneSliders');
-  if(!wrap) return;
-  wrap.innerHTML = CLONE_SLIDERS.map(s=>`
-    <div class="clone-slider">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
-        <span style="font-size:.75rem;font-weight:600;color:var(--text2)">${s.label}</span>
-        <span style="font-size:.6rem;color:var(--muted)">${s.hint}</span>
-        <span id="${s.id}_v" style="font-size:.7rem;font-weight:700;color:var(--purple2);min-width:36px;text-align:right">50%</span>
-      </div>
-      <input type="range" id="${s.id}" min="0" max="100" value="50" step="1"
-        oninput="onCloneSlider('${s.id}')"
-        style="width:100%;accent-color:var(--purple)"/>
-      <div class="clone-vis" id="${s.id}_vis" style="height:3px;background:linear-gradient(90deg,var(--purple) 50%,transparent 50%);border-radius:2px;margin-top:3px;transition:background .15s"></div>
-    </div>
-  `).join('');
-}
-
-function onCloneSlider(id){
-  const el  = document.getElementById(id);
-  const lbl = document.getElementById(id+'_v');
-  const vis = document.getElementById(id+'_vis');
-  if(!el) return;
-  const v = parseFloat(el.value);
-  if(lbl) lbl.textContent = v + '%';
-  // Visual bar fills from middle outward to show deviation from baseline (50%)
-  if(vis){
-    const offset = Math.abs(v - 50);
-    const dir = v > 50 ? 'right' : 'left';
-    if(v === 50){
-      vis.style.background = 'rgba(255,255,255,.1)';
-    } else {
-      const color = v > 50 ? 'var(--gold2)' : 'var(--purple2)';
-      vis.style.background = dir === 'right'
-        ? `linear-gradient(90deg, transparent 50%, ${color} 50%, ${color} ${50+offset}%, transparent ${50+offset}%)`
-        : `linear-gradient(90deg, transparent ${50-offset}%, ${color} ${50-offset}%, ${color} 50%, transparent 50%)`;
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════
 // FAVORITES
 // ═══════════════════════════════════════════════════════
 function toggleFav(id){
@@ -1269,6 +1298,8 @@ function switchTab(tab){
   if(tab==='presets')   renderCustomPresetsGrid();
   if(tab==='advanced')  populateAdvancedFromPreset();
   if(tab==='fish')      fishLabInit();
+  if(tab==='clone'){    cloneRefreshSources().catch(()=>{}); cloneLoadPresets().catch(()=>{}); cloneStartConnectionManager(); cloneUpdateCharCount(); }
+  else                  cloneStopConnectionManager();   // Fish Speech only runs on the Voice Cloning tab
 }
 
 // When switching to Advanced tab, populate sliders from the active preset's defaults
@@ -1622,156 +1653,859 @@ function resetSlidersToPreset(){
 }
 
 // ═══════════════════════════════════════════════════════
-// VOICE CLONE TAB
+// VOICE CLONE TAB — reworked
 // ═══════════════════════════════════════════════════════
-async function loadVoiceDb(){
+
+// State
+let _cloneSources   = [];   // [{ id, name, type, sampleCount?, sizeBytes?, displayPath }]
+let _cloneSourceId  = '';   // currently selected source id
+let _cloneLastUrl   = '';   // last generated audio URL
+let _cloneLastPath  = '';   // last generated audio server path
+let _clonePresets   = [];   // saved clone presets
+let _clonePickedFile = null; // staged upload file (dropzone)
+
+/** Load reference sources (profiles + C:\fish-speech files) and render picker */
+async function cloneRefreshSources(){
+  const list = document.getElementById('cloneSourceList');
+  if(list) list.innerHTML = '<div style="font-size:.72rem;color:var(--muted);padding:8px 0">⏳ Loading…</div>';
   try{
-    const r = await fetch(`${API_BASE}/api/voice-clone/list`);
+    const r = await fetch(`${API_BASE}/api/voice-clone/reference-sources`);
     const d = await r.json();
-    voiceDatabase = d.voices || [];
-    renderVoiceDb();
-  }catch{ voiceDatabase = []; renderVoiceDb(); }
+    _cloneSources = d.sources || [];
+    _renderCloneSources();
+  }catch(e){
+    if(list) list.innerHTML = `<div style="font-size:.7rem;color:var(--red)">${e.message}</div>`;
+  }
 }
 
-function renderVoiceDb(){
-  const container = document.getElementById('voiceDb');
-  const countEl   = document.getElementById('voiceDbCount');
-  const select    = document.getElementById('cloneVoiceSelect');
-  if(countEl) countEl.textContent = voiceDatabase.length+' profiles';
-  if(!voiceDatabase.length){
-    if(container) container.innerHTML='<div class="empty">No voice profiles yet. Create one on the left →</div>';
-    if(select) select.innerHTML='<option value="">— no profiles yet —</option>';
+function _renderCloneSources(){
+  const list = document.getElementById('cloneSourceList');
+  if(!list) return;
+  if(!_cloneSources.length){
+    list.innerHTML = '<div style="font-size:.72rem;color:var(--muted);padding:8px 0">No reference voices found. Upload a WAV/MP3 file to get started.</div>';
     return;
   }
-  if(container) container.innerHTML = voiceDatabase.map(v=>`
-    <div class="vdb-item" data-id="${v.id}" onclick="selectDbVoice('${v.id}')">
-      <div class="vdb-icon">🎤</div>
-      <div class="vdb-info">
-        <div class="vdb-name">${v.meta?.name||v.id}</div>
-        <div class="vdb-samples">${v.sampleCount} sample${v.sampleCount!==1?'s':''} • Created ${v.meta?.createdAt?new Date(v.meta.createdAt).toLocaleDateString():'unknown'}</div>
+  list.innerHTML = _cloneSources.map(s => {
+    const isSelected = s.id === _cloneSourceId;
+    const meta = s.type === 'profile'
+      ? `${s.sampleCount} sample${s.sampleCount!==1?'s':''}`
+      : (s.sizeBytes ? (s.sizeBytes/1024/1024).toFixed(1)+' MB' : '');
+    const typeTag = s.type === 'profile'
+      ? `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(124,58,237,.2);color:#c4b5fd;margin-left:4px">profile</span>`
+      : `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(0,180,120,.15);color:#6ee7b7;margin-left:4px">file</span>`;
+    return `<div onclick="cloneSelectSource('${s.id}')"
+      style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .12s;
+             background:${isSelected?'rgba(124,58,237,.18)':'rgba(255,255,255,.03)'};
+             border:1px solid ${isSelected?'rgba(124,58,237,.5)':'var(--border)'}">
+      <span style="font-size:1rem">${s.type==='profile'?'🎙️':'📁'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.78rem;font-weight:600;color:${isSelected?'#c4b5fd':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${s.name}${typeTag}
+        </div>
+        <div style="font-size:.62rem;color:var(--muted)">${meta}</div>
       </div>
-      <div class="vdb-actions">
-        <button class="btn-sm" onclick="event.stopPropagation();viewSamples('${v.id}')">📂 Samples</button>
-        <button class="btn-sm red" onclick="event.stopPropagation();deleteVoiceProfile('${v.id}')">🗑️</button>
-      </div>
-    </div>`).join('');
-  if(select) select.innerHTML = '<option value="">— select a voice profile —</option>'+
-    voiceDatabase.map(v=>`<option value="${v.id}">${v.meta?.name||v.id} (${v.sampleCount} samples)</option>`).join('');
+      ${s.type==='profile'?`<button onclick="event.stopPropagation();cloneDeleteProfile('${s.id}')"
+        style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);font-size:.58rem;cursor:pointer;padding:2px 6px;flex-shrink:0" title="Delete profile">🗑</button>`:''}
+    </div>`;
+  }).join('');
 }
 
-function selectDbVoice(id){
-  document.querySelectorAll('.vdb-item').forEach(el=>el.classList.toggle('active',el.dataset.id===id));
-  document.getElementById('cloneVoiceSelect').value = id;
-}
-
-async function saveVoiceProfile(){
-  const name = document.getElementById('newVoiceName')?.value?.trim();
-  if(!name){ showToast('Enter a voice name','error'); return; }
-  const status = document.getElementById('cloneStatus');
-  if(status) status.textContent = '⏳ Creating profile...';
-  // The ID is sanitized name
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,32);
-  // Hit upload endpoint with no files (creates the folder + meta)
-  const fd = new FormData();
-  fd.append('voiceId', id);
-  fd.append('name', name);
-  try{
-    const r = await fetch(`${API_BASE}/api/voice-clone/upload`,{method:'POST',body:fd});
-    const d = await r.json();
-    if(!r.ok) throw new Error(d.error||'Failed');
-    if(status){ status.className='status-box ok'; status.textContent='✅ Profile "'+name+'" created! Now upload audio samples.'; }
-    await loadVoiceDb();
-    showToast('Voice profile created','success');
-  }catch(e){
-    if(status){ status.className='status-box error'; status.textContent='❌ '+e.message; }
+function cloneSelectSource(id){
+  _cloneSourceId = id;
+  const src = _cloneSources.find(s=>s.id===id);
+  _renderCloneSources();
+  const badge = document.getElementById('cloneSelectedBadge');
+  const nameEl = document.getElementById('cloneSelectedName');
+  if(badge){ badge.style.display='block'; }
+  if(nameEl && src) nameEl.textContent = src.name;
+  // Load a stored transcript for this profile (if one was saved earlier)
+  const ta = document.getElementById('cloneTranscript');
+  if(ta && src && typeof src.transcript === 'string'){
+    if(src.transcript) ta.value = src.transcript;
   }
 }
 
-async function uploadSamples(files){
-  const name = document.getElementById('newVoiceName')?.value?.trim();
-  if(!name){ showToast('Enter a voice name first','error'); return; }
-  const status = document.getElementById('cloneStatus');
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,32);
-  if(status) status.textContent = `⏳ Uploading ${files.length} sample(s)...`;
+/** A file was chosen in the dropzone (click or drag) — stage it for upload */
+function cloneOnFilePick(files){
+  if(!files?.length) return;
+  _clonePickedFile = files[0];
+  const label = document.getElementById('cloneFileLabel');
+  const btn   = document.getElementById('cloneUploadBtn');
+  if(label) label.textContent = `📄 ${_clonePickedFile.name} (${(_clonePickedFile.size/1024/1024).toFixed(1)} MB)`;
+  if(btn){
+    btn.disabled = false;
+    btn.style.cursor = 'pointer';
+    btn.style.background = 'linear-gradient(135deg,#6d4bd6,#a855f7)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = 'transparent';
+  }
+}
+
+function cloneHandleDrop(e){
+  e.preventDefault();
+  document.getElementById('cloneDropzone')?.classList.remove('drag-over');
+  if(e.dataTransfer?.files?.length) cloneOnFilePick(e.dataTransfer.files);
+}
+
+/** Upload + convert the staged sample → creates a profile, then auto-transcribes */
+async function cloneUploadConvert(){
+  if(!_clonePickedFile){ showToast('Drop or choose an audio file first','error'); return; }
+  const baseName = _clonePickedFile.name.replace(/\.[^.]+$/,'').replace(/[-_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const name = window.prompt('Name this voice profile:', baseName);
+  if(!name?.trim()){ showToast('Upload cancelled — no name given','info'); return; }
+  const id = name.trim().toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,32);
+  const btn  = document.getElementById('cloneUploadBtn');
+  const info = document.getElementById('cloneConvertInfo');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Converting…'; }
+  if(info){ info.style.display='none'; }
   const fd = new FormData();
   fd.append('voiceId', id);
-  fd.append('name', name);
-  for(const f of files) fd.append('samples', f);
+  fd.append('name', name.trim());
+  fd.append('samples', _clonePickedFile);
   try{
     const r = await fetch(`${API_BASE}/api/voice-clone/upload`,{method:'POST',body:fd});
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'Upload failed');
-    if(status){ status.className='status-box ok'; status.textContent=`✅ Uploaded ${files.length} sample(s) to "${name}".`; }
-    await loadVoiceDb();
-    showToast('Samples uploaded','success');
+    // Show conversion feedback (matches s2.exe UI)
+    if(info && d.conversion?.ok){
+      info.style.display='block';
+      info.innerHTML = `✅ Converted: <strong>${d.conversion.sourceName}</strong> (${d.conversion.sampleRate} Hz · mono · loudnorm)`;
+    }
+    showToast(`✅ Voice sample "${name}" ready`, 'success');
+    _clonePickedFile = null;
+    const label = document.getElementById('cloneFileLabel');
+    if(label) label.textContent = 'No file selected';
+    await cloneRefreshSources();
+    cloneSelectSource(`profile:${id}`);
+    // Auto-transcribe ~80 words from the reference audio
+    cloneAutoTranscribe(id);
   }catch(e){
-    if(status){ status.className='status-box error'; status.textContent='❌ '+e.message; }
+    showToast('Upload failed: '+e.message,'error');
+  }finally{
+    if(btn){ btn.textContent='↑ Upload & Convert'; btn.disabled = !_clonePickedFile; }
   }
 }
 
-function handleSampleDrop(e){
-  e.preventDefault();
-  document.getElementById('sampleDropzone').classList.remove('drag-over');
-  uploadSamples(e.dataTransfer.files);
-}
-
-async function viewSamples(id){
+/** Auto-transcribe the reference audio (first ~80 words) and fill the transcript box */
+async function cloneAutoTranscribe(voiceId){
+  const ta     = document.getElementById('cloneTranscript');
+  const status = document.getElementById('cloneTranscribeStatus');
+  if(status) status.textContent = '⏳ Transcribing reference audio (≈80 words)…';
   try{
-    const r = await fetch(`${API_BASE}/api/voice-clone/${id}/samples`);
-    const d = await r.json();
-    const v = voiceDatabase.find(x=>x.id===id);
-    const name = v?.meta?.name||id;
-    if(!d.samples?.length){ showToast('No samples in '+name,'info'); return; }
-    showToast(`${d.samples.length} sample(s) in "${name}"`, 'info');
-  }catch(e){ showToast('Error: '+e.message,'error'); }
-}
-
-async function deleteVoiceProfile(id){
-  const v = voiceDatabase.find(x=>x.id===id);
-  if(!confirm(`Delete voice profile "${v?.meta?.name||id}"? This cannot be undone.`)) return;
-  try{
-    await fetch(`${API_BASE}/api/voice-clone/${id}`,{method:'DELETE'});
-    await loadVoiceDb();
-    showToast('Profile deleted','success');
-  }catch(e){ showToast('Error: '+e.message,'error'); }
-}
-
-async function generateCloned(){
-  const profileId = document.getElementById('cloneVoiceSelect')?.value;
-  const text      = document.getElementById('cloneGenText')?.value?.trim();
-  if(!profileId){ showToast('Select a voice profile','error'); return; }
-  if(!text){ showToast('Enter text to speak','error'); return; }
-  const btn    = document.getElementById('cloneGenBtn');
-  const status = document.getElementById('cloneGenStatus');
-  const wrap   = document.getElementById('cloneGenAudio');
-  btn.innerHTML='<span class="spinner"></span>Generating...'; btn.disabled=true;
-  status.style.display='block'; status.className='status-box';
-  status.textContent = '⏳ Generating audio...';
-  try{
-    const v = voiceDatabase.find(x=>x.id===profileId);
-    const prompt = document.getElementById('voicePrompt')?.value||'';
-    // Generate via the standard Kokoro pipeline
-    const r = await fetch(`${API_BASE}/api/trend-vault/generate-voice`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text,presetId:'velvet_static',preview:false})
+    const r = await fetch(`${API_BASE}/api/voice-clone/transcribe`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ voiceId, maxWords: 80 }),
     });
-    if(!r.ok) throw new Error('Generation failed');
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    status.className='status-box ok';
-    status.textContent='✅ Generated via Kokoro'+(prompt?'\nPrompt: '+prompt:'');
-    if(wrap){
-      wrap.style.display='block';
-      const audio = wrap.querySelector('audio') || wrap;
-      if(audio.tagName === 'AUDIO'){ audio.src = url; audio.play().catch(()=>{}); }
+    const d = await r.json();
+    if(!d.ok) throw new Error(d.error||'transcription failed');
+    if(d.transcript){
+      if(ta) ta.value = d.transcript;
+      if(status) status.textContent = `✅ Auto-filled ${d.transcript.split(/\s+/).length} words from the audio`;
+    }else{
+      if(status) status.textContent = d.note || 'No transcript produced — you can type one manually (optional).';
     }
   }catch(e){
-    status.className='status-box err';
-    status.textContent='❌ '+(e.message||e);
-  }finally{
-    btn.innerHTML='🎤 Generate'; btn.disabled=false;
+    if(status) status.textContent = '⚠ Could not transcribe — type a transcript manually (optional). '+(e.message||'');
   }
 }
+
+/** Live character counter for the text box (color-coded like the s2.cpp UI) */
+function cloneUpdateCharCount(){
+  const t = document.getElementById('cloneGenText')?.value||'';
+  const el = document.getElementById('cloneCharCount');
+  if(el){
+    el.textContent = t.length;
+    const wrap = el.parentElement;
+    if(wrap) wrap.style.color = t.length<10 ? '#ef4444' : t.length<20 ? '#f59e0b' : 'var(--muted)';
+  }
+}
+
+async function cloneDeleteProfile(sourceId){
+  const src = _cloneSources.find(s=>s.id===sourceId);
+  if(!confirm(`Delete voice profile "${src?.name||sourceId}"? This cannot be undone.`)) return;
+  const profileId = sourceId.replace(/^profile:/,'');
+  try{
+    await fetch(`${API_BASE}/api/voice-clone/${encodeURIComponent(profileId)}`,{method:'DELETE'});
+    if(_cloneSourceId===sourceId) _cloneSourceId='';
+    showToast('Profile deleted','success');
+    await cloneRefreshSources();
+  }catch(e){ showToast('Delete failed: '+e.message,'error'); }
+}
+
+/* =================================================================
+   Voice-clone generation — mirrors the standalone Fish Speech S2 Pro
+   web UI: connection status pill, live 6-stage progress, output pills,
+   Download WAV, and an auto-reconnect + resume system that survives a
+   page reload or dropped connection WITHOUT ever duplicating a job.
+
+   Backend (server.ts):
+     POST /api/voice-clone/jobs        → { jobId }   (returns instantly)
+     GET  /api/voice-clone/jobs/:id    → { status, stage, percent, audioUrl, … }
+     GET  /api/voice-clone/latest      → last completed output (manual recover)
+     GET  /api/fish-s2pro/check/server → { reachable }   (health)
+   ================================================================= */
+
+// ── Stage labels (match the s2.cpp pipeline stages) ──────────────────────────
+const CLONE_STAGE_LABELS = {
+  idle:'Idle', starting:'🚀 Starting Fish Speech…', queued:'⏳ Queued…',
+  encoding_reference:'🔊 Encoding voice reference…',
+  building_prompt:'📝 Building prompt…',
+  generating:'⚙️ Generating speech…',
+  decoding:'🎵 Decoding audio…',
+  finalizing:'📦 Encoding WAV…',
+  complete:'✅ Done', done:'✅ Done', error:'❌ Error', failed:'❌ Error',
+};
+function cloneStageLabel(stage, detail){
+  const base = CLONE_STAGE_LABELS[stage] || stage || '';
+  if(stage==='generating' && detail) return base+' ('+detail+')';
+  if(stage==='starting' && detail)   return base+' — '+detail;
+  return base;
+}
+// Monotonic display floor — the bar NEVER moves backwards within a single job.
+// The Fish server's /progress percent is non-monotonic (it dips to 0 between
+// sub-stages and at the start of each frame loop), which previously made the bar
+// sawtooth 5% → 47% → 5%. We clamp every update to the highest value seen so far.
+let _cloneShownPct = 0;
+function cloneResetProgress(){ _cloneShownPct = 0; }
+function cloneShowProgress(pct, stage, detail){
+  const wrap = document.getElementById('cloneProgressWrap');
+  const fill = document.getElementById('cloneProgressFill');
+  const stg  = document.getElementById('cloneProgressStage');
+  const pctEl= document.getElementById('cloneProgressPct');
+  const failed = stage==='failed' || stage==='error';
+  const done   = stage==='done' || stage==='complete' || pct>=100;
+  let shown;
+  if(done){ shown = 100; _cloneShownPct = 100; }
+  else if(failed){ shown = _cloneShownPct; }                       // hold position on failure
+  else { shown = Math.max(_cloneShownPct, Math.min(95, pct||0)); _cloneShownPct = shown; }
+  if(wrap) wrap.style.display='block';
+  if(fill){
+    fill.style.width = shown+'%';
+    fill.style.background = failed
+      ? 'linear-gradient(90deg,#ef4444,#f87171)'
+      : (done ? 'linear-gradient(90deg,#22c55e,#6ee7b7)' : 'linear-gradient(90deg,#6d4bd6,#a855f7)');
+  }
+  if(stg)  stg.textContent  = cloneStageLabel(stage, detail);
+  if(pctEl)pctEl.textContent= Math.round(shown)+'%';
+}
+function cloneHideProgress(){ const w=document.getElementById('cloneProgressWrap'); if(w) w.style.display='none'; }
+
+// Console activity log — accurately reflects what the model is actively doing.
+// Each "frame" is one autoregressive acoustic token the transformer produces.
+// Logs only on CHANGE (no per-poll spam).
+let _cloneLastLog = '';
+function cloneResetLog(){ _cloneLastLog = ''; }
+function cloneLogActivity(stage, percent, detail){
+  const key = stage + '|' + (detail||'');
+  if(key === _cloneLastLog) return;
+  _cloneLastLog = key;
+  const p = Math.round(percent||0);
+  switch(stage){
+    case 'queued':             console.log('[clone] ⏳ queued — waiting for the Fish server'); break;
+    case 'starting':           console.log('[clone] 🚀 starting Fish Speech — ' + (detail||'loading model')); break;
+    case 'encoding_reference': console.log(`[clone] 🔊 encoding voice reference (${p}%)`); break;
+    case 'building_prompt':    console.log(`[clone] 📝 building prompt${detail?' — '+detail:''} (${p}%)`); break;
+    case 'generating':         console.log(`[clone] ⚙️ generating speech tokens — ${detail||'frame …'} (${p}%)`); break;
+    case 'decoding':           console.log(`[clone] 🎵 decoding tokens → audio${detail?' — '+detail:''} (${p}%)`); break;
+    case 'finalizing':         console.log(`[clone] 📦 encoding WAV (${p}%)`); break;
+    case 'complete': case 'done': console.log('[clone] ✅ generation complete'); break;
+    case 'failed': case 'error':  console.log('[clone] ❌ generation failed — ' + (detail||'')); break;
+    default:                   console.log(`[clone] ${stage} ${detail||''} (${p}%)`);
+  }
+}
+
+// ── Connection status pill ───────────────────────────────────────────────────
+const CLONE_JOB_KEY    = 'cloneActiveJob';
+const CLONE_HEALTH_MS  = 3000;
+let   _cloneConnState  = 'offline';   // offline | connected | generating | reconnecting
+let   _cloneHealthTimer= null;
+let   _cloneTries      = 0;
+let   _cloneActiveJob  = null;
+let   _cloneBusy       = false;       // a generation/monitor is in flight
+let   _cloneRecovering = false;
+let   _cloneCurrentBlobUrl = '';      // object URL or /custom-audio URL for download
+
+function cloneSetConn(state, detail){
+  _cloneConnState = state;
+  const dot  = document.getElementById('cloneDot');
+  const txt  = document.getElementById('cloneStatusText');
+  const rcn  = document.getElementById('cloneStatusReconnect');
+  const map = {
+    connected:    ['#22c55e', 'Connected'],
+    generating:   ['#6ea8ff', 'Generating…'],
+    starting:     ['#a855f7', 'Starting Fish Speech…'],
+    reconnecting: ['#f59e0b', 'Reconnecting'+(detail?' ('+detail+')':'…')],
+    offline:      ['#ef4444', 'Server offline'],
+  };
+  const m = map[state] || map.offline;
+  if(dot){ dot.style.background = m[0]; dot.style.animation = (state==='generating'||state==='reconnecting'||state==='starting')?'clonePulse 1s infinite':''; }
+  if(txt) txt.textContent = m[1];
+  if(rcn) rcn.style.display = (state==='reconnecting'||state==='offline')?'inline-block':'none';
+}
+
+async function clonePingHealth(){
+  try{
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/check/server`,{cache:'no-store'});
+    if(!r.ok) return false;
+    const d = await r.json();
+    return !!d.reachable;
+  }catch(_){ return false; }
+}
+
+async function cloneHealthTick(){
+  if(_cloneReconnectBusy) return;   // a manual reconnect (with its own long wait) owns the status
+  const up = await clonePingHealth();
+  if(up){
+    _cloneTries = 0;
+    // Resume an unfinished job whenever we're connected and idle. This covers
+    // ALL re-entry paths: reconnect after a dropped connection, a page reload,
+    // and returning to the clone tab after leaving it (monitor was paused).
+    // Never duplicates: recoverJob asks the server and only re-attaches.
+    const job = _cloneActiveJob || cloneLoadJob();
+    if(cloneIsUnfinished(job) && !_cloneBusy && !_cloneRecovering){
+      cloneRecoverJob(job, true);
+      return;
+    }
+    if(!_cloneBusy && !_cloneRecovering) cloneSetConn('connected');
+  }else{
+    if(_cloneBusy || _cloneRecovering || cloneIsUnfinished(_cloneActiveJob)){
+      _cloneTries++;
+      cloneSetConn('reconnecting','attempt '+_cloneTries);
+    }else{
+      cloneSetConn('offline');
+    }
+  }
+}
+
+function cloneStartConnectionManager(){
+  if(_cloneHealthTimer) return;   // already running
+  const pending = cloneLoadJob();
+  if(cloneIsUnfinished(pending)) _cloneActiveJob = pending;
+  cloneHealthTick();
+  _cloneHealthTimer = setInterval(cloneHealthTick, CLONE_HEALTH_MS);
+}
+
+// Fish Speech only runs while the Voice Cloning tab is open. Leaving the tab
+// stops the health poll (and pauses any active monitor on its next tick); the
+// job stays persisted, so re-opening the tab auto-resumes it.
+function cloneStopConnectionManager(){
+  if(_cloneHealthTimer){ clearInterval(_cloneHealthTimer); _cloneHealthTimer=null; }
+}
+function cloneOnClonePanel(){ return currentTab === 'clone'; }
+
+// ── Job persistence (localStorage) ───────────────────────────────────────────
+function cloneSaveJob(j){ try{ localStorage.setItem(CLONE_JOB_KEY, JSON.stringify(j)); }catch(_){} }
+function cloneLoadJob(){ try{ const s=localStorage.getItem(CLONE_JOB_KEY); return s?JSON.parse(s):null; }catch(_){ return null; } }
+function cloneClearJob(){ try{ localStorage.removeItem(CLONE_JOB_KEY); }catch(_){} _cloneActiveJob=null; }
+function cloneIsUnfinished(j){ return !!j && (j.status==='queued'||j.status==='generating'); }
+
+// ── Validate that audio is actually playable before declaring success ────────
+function cloneValidateAndLoad(url){
+  return new Promise((resolve)=>{
+    const audio = document.getElementById('cloneAudioEl');
+    if(!audio || !url){ resolve(false); return; }
+    let settled=false;
+    const finish=(ok)=>{ if(settled) return; settled=true; clearTimeout(to);
+      audio.removeEventListener('loadeddata',onOk); audio.removeEventListener('canplay',onOk); audio.removeEventListener('error',onErr); resolve(ok); };
+    const onOk=()=>finish(true); const onErr=()=>finish(false);
+    audio.addEventListener('loadeddata',onOk); audio.addEventListener('canplay',onOk); audio.addEventListener('error',onErr);
+    audio.src=url; audio.load();
+    const to=setTimeout(()=>finish(false), 12000);
+  });
+}
+
+// ── Build a persisted job from the current UI state ──────────────────────────
+function cloneBuildJob(){
+  const id = Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const src = _cloneSources.find(s=>s.id===_cloneSourceId);
+  return {
+    jobId:      null,                         // server id, set after enqueue
+    localId:    id,
+    sourceId:   _cloneSourceId||'',
+    voiceName:  src?.name || (_cloneSourceId?_cloneSourceId:'base model'),
+    text:       document.getElementById('cloneGenText')?.value?.trim()||'',
+    transcript: document.getElementById('cloneTranscript')?.value?.trim()||'',
+    temperature:parseFloat(document.getElementById('cloneTemp')?.value||'70')/100,
+    status:     'queued',
+    startedAt:  Date.now(),
+    regenerated:false,
+  };
+}
+
+function cloneSetBusyUI(on){
+  const btn = document.getElementById('cloneGenBtn');
+  if(btn){ btn.disabled = on; btn.innerHTML = on ? '⏳ Generating…' : '▶ Generate Speech'; }
+}
+
+// ── Output pill helper ───────────────────────────────────────────────────────
+function clonePill(label,val){
+  return `<span style="background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:3px 11px;font-size:.66rem;color:var(--muted)">${label}: <strong style="color:var(--text2)">${val}</strong></span>`;
+}
+
+// ── Generate (button click) — ALWAYS a fresh generation from the beginning ────
+async function cloneGenerate(){
+  if(_cloneBusy){
+    showToast('A generation is already running — wait for it to finish, or press Reconnect to resume it','info');
+    return;
+  }
+  const text = document.getElementById('cloneGenText')?.value?.trim();
+  if(!text){ showToast('Enter text to speak','error'); return; }
+  cloneClearJob();            // drop any stale job so Generate never resumes an old one
+  cloneStartGeneration(cloneBuildJob());
+}
+
+async function cloneStartGeneration(job){
+  if(_cloneBusy) return;
+  _cloneBusy = true;
+  _cloneActiveJob = job;
+  job.status='queued'; cloneSaveJob(job);
+
+  const status = document.getElementById('cloneGenStatus');
+  cloneSetBusyUI(true);
+  cloneSetConn('generating');
+  if(status){ status.style.color=''; status.textContent = job.sourceId
+    ? `Generating with reference: ${job.voiceName}…`
+    : 'Generating with base model voice (no reference selected)…'; }
+  document.getElementById('clonePreviewCard').style.display='none';
+  cloneResetProgress();       // fresh generation → bar starts at 0
+  cloneResetLog();
+  console.log('[clone] ▶ NEW generation from the beginning — voice="'+(job.voiceName||'base model')+'", chars='+(job.text||'').length);
+  cloneShowProgress(2,'starting','');
+
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/jobs`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sourceId: job.sourceId||undefined, text: job.text,
+        temperature: job.temperature, promptText: job.transcript, voiceName: job.voiceName }),
+    });
+    const d = await r.json();
+    if(!d.ok || !d.jobId) throw new Error(d.error||'Could not enqueue generation');
+    job.jobId = d.jobId; job.status='generating'; cloneSaveJob(job);
+  }catch(e){
+    // Couldn't even enqueue → likely server down. Keep job pending; the health
+    // loop will reconnect and recover. Never silently lose it.
+    _cloneBusy=false;
+    job.status='generating'; cloneSaveJob(job);
+    cloneSetConn('reconnecting','attempt '+(++_cloneTries));
+    if(status){ status.style.color='#fbbf24'; status.textContent='⚠ Could not reach the server — reconnecting…'; }
+    return;
+  }
+  cloneMonitorJob(job);
+}
+
+// ── Poll a running job until it finishes (resilient to drops) ────────────────
+async function cloneMonitorJob(job){
+  _cloneBusy=true;
+  _cloneActiveJob=job;
+  cloneSetBusyUI(true);
+  cloneSetConn('generating');
+  const status = document.getElementById('cloneGenStatus');
+
+  const tick = async ()=>{
+    if(_cloneActiveJob !== job){ return; }   // superseded
+    // Fish Speech only runs while the clone tab is open. If the user navigated
+    // away, pause polling — the job keeps running server-side and is persisted,
+    // so re-opening the tab auto-resumes it (handled by the connection manager).
+    if(!cloneOnClonePanel()){
+      _cloneBusy=false;
+      job.status='generating'; cloneSaveJob(job);
+      console.log('[clone] ⏸ left the cloning tab — pausing progress polling (job keeps running on the server)');
+      return;
+    }
+    let st;
+    try{
+      const r = await fetch(`${API_BASE}/api/voice-clone/jobs/${encodeURIComponent(job.jobId)}`,{cache:'no-store'});
+      if(r.status===404){ st={status:'unknown'}; }
+      else { st = await r.json(); }
+    }catch(e){
+      // Connection dropped → hand back to the health loop; it will re-recover.
+      _cloneBusy=false;
+      cloneSetConn('reconnecting','attempt '+(++_cloneTries));
+      if(status){ status.style.color='#fbbf24'; status.textContent='⚠ Connection lost — reconnecting to your job (it keeps running on the server)…'; }
+      console.log('[clone] ⚠ connection lost — will reconnect to the running job (no restart)');
+      return;
+    }
+
+    if(st.status==='complete' && st.audioUrl){
+      cloneLogActivity('complete', 100, '');
+      await cloneFinalizeSuccess(job, st);
+      return;
+    }
+    if(st.status==='failed'){
+      _cloneBusy=false;
+      job.status='failed'; cloneSaveJob(job);
+      cloneLogActivity('failed', 0, st.error||'');
+      cloneFinishFailure(st.error||'generation failed on the server');
+      return;
+    }
+    if(st.status==='unknown'){
+      // Server restarted and lost the in-memory job → try the latest-output fallback.
+      _cloneBusy=false;
+      return cloneRecoverViaLatest(job, !job.regenerated);
+    }
+    // queued / generating → reflect live progress (monotonic) and keep watching.
+    const stage = (st.status==='queued') ? 'queued' : (st.stage||'generating');
+    cloneShowProgress(st.percent||0, stage, st.detail||'');
+    cloneLogActivity(stage, st.percent||0, st.detail||'');
+    cloneSetConn('generating');
+    setTimeout(tick, 1200);
+  };
+  tick();
+}
+
+// ── Finalize a completed job from a validated, playable output ───────────────
+async function cloneFinalizeSuccess(job, st){
+  const url = st.audioUrl;
+  const ok  = await cloneValidateAndLoad(url);
+  if(!ok){
+    _cloneBusy=false;
+    cloneFinishFailure('output is not a valid/playable audio file');
+    return;
+  }
+  _cloneBusy=false;
+  cloneSetBusyUI(false);          // re-enable the Generate button so a new run can start
+  job.status='done'; cloneSaveJob(job);
+  _cloneLastUrl  = url;
+  _cloneLastPath = st.audioPath||'';
+  _cloneCurrentBlobUrl = url;
+
+  cloneShowProgress(100,'done','');
+  const status = document.getElementById('cloneGenStatus');
+  const elapsed = st.generation_time || (job.startedAt ? ((Date.now()-job.startedAt)/1000).toFixed(1) : '—');
+  if(status){ status.style.color='#86efac'; status.textContent = `✅ Done in ${elapsed}s${st.refFile?' (with reference)':' (base model)'}`; }
+
+  // Build the output metadata pills (mirrors the s2.cpp UI).
+  const pills = document.getElementById('clonePills');
+  if(pills){
+    const kb = st.bytes ? (st.bytes/1024).toFixed(1)+' KB' : '—';
+    const tr = job.transcript ? job.transcript.slice(0,26)+(job.transcript.length>26?'…':'') : 'audio-only ICL';
+    pills.innerHTML =
+      clonePill('⏱ Time', elapsed+'s') +
+      clonePill('📦 Size', kb) +
+      clonePill('🎙 Voice', (job.voiceName||'base model')) +
+      clonePill('📝 Transcript', tr) +
+      clonePill('🔌 Endpoint', '/v1/tts');
+  }
+
+  const card = document.getElementById('clonePreviewCard');
+  const audio= document.getElementById('cloneAudioEl');
+  if(card) card.style.display='block';
+  if(audio) audio.play().catch(()=>{});
+  cloneSetConn('connected');
+  _cloneTries=0;
+  cloneClearJob();
+  card?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  setTimeout(cloneHideProgress, 1500);
+}
+
+function cloneFinishFailure(msg){
+  cloneShowProgress( parseFloat(document.getElementById('cloneProgressFill')?.style.width)||0, 'failed','');
+  const status = document.getElementById('cloneGenStatus');
+  if(status){ status.style.color='#fca5a5'; status.textContent='❌ '+(msg||'Voice generation failed.'); }
+  document.getElementById('clonePreviewCard').style.display='none';
+  cloneSetBusyUI(false);
+  showToast('Generation failed: '+(msg||''),'error');
+  if(_cloneConnState!=='offline') cloneSetConn('connected');
+  setTimeout(cloneHideProgress, 2500);
+}
+
+// ── Recovery after a reconnect: ask the server about the job, never duplicate ─
+async function cloneRecoverJob(job, allowRegen){
+  if(_cloneBusy || _cloneRecovering) return;
+  _cloneRecovering = true;
+  _cloneActiveJob = job;
+  _cloneTries = 0;
+  cloneSetBusyUI(true);
+  cloneSetConn('generating');
+  cloneShowProgress(8,'starting','checking job');
+  const status = document.getElementById('cloneGenStatus');
+  if(status){ status.style.color=''; status.textContent='🔄 Reconnected — checking your job on the server…'; }
+
+  if(!job.jobId){ _cloneRecovering=false; return cloneRecoverViaLatest(job, allowRegen); }
+
+  let st;
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-clone/jobs/${encodeURIComponent(job.jobId)}`,{cache:'no-store'});
+    st = r.status===404 ? {status:'unknown'} : await r.json();
+  }catch(e){
+    _cloneRecovering=false;
+    cloneSetConn('reconnecting','attempt '+(++_cloneTries));
+    return;
+  }
+
+  if(st.status==='complete' && st.audioUrl){
+    _cloneRecovering=false;
+    return cloneFinalizeSuccess(job, st);
+  }
+  if(st.status==='generating' || st.status==='queued'){
+    _cloneRecovering=false;
+    job.status='generating'; cloneSaveJob(job);
+    return cloneMonitorJob(job);          // reconnect to the SAME running job
+  }
+  if(st.status==='failed'){
+    _cloneRecovering=false;
+    if(allowRegen && !job.regenerated){
+      job.regenerated=true; cloneSaveJob(job);
+      return cloneStartGeneration(job);   // regenerate at most once
+    }
+    job.status='failed'; cloneSaveJob(job);
+    cloneFinishFailure(st.error||'generation failed on the server');
+    return;
+  }
+  // unknown → server lost the job; fall back to the latest completed output.
+  _cloneRecovering=false;
+  return cloneRecoverViaLatest(job, allowRegen);
+}
+
+// Last-resort recovery: relink the most recent completed output, else regen once.
+async function cloneRecoverViaLatest(job, allowRegen){
+  const status = document.getElementById('cloneGenStatus');
+  let latest=null;
+  try{ const r=await fetch(`${API_BASE}/api/voice-clone/latest`,{cache:'no-store'}); latest=await r.json(); }catch(_){}
+  if(latest && latest.exists && latest.bytes>44){
+    const ok = await cloneValidateAndLoad(latest.audioUrl);
+    if(ok){
+      _cloneLastUrl=latest.audioUrl; _cloneCurrentBlobUrl=latest.audioUrl;
+      cloneShowProgress(100,'done','');
+      document.getElementById('clonePreviewCard').style.display='block';
+      const pills=document.getElementById('clonePills');
+      if(pills) pills.innerHTML = clonePill('📦 Size',(latest.bytes/1024).toFixed(1)+' KB')+clonePill('🔌 Source','recovered');
+      if(status){ status.style.color='#86efac'; status.textContent='✅ Recovered the last finished audio.'; }
+      cloneSetBusyUI(false); cloneSetConn('connected'); cloneClearJob();
+      setTimeout(cloneHideProgress,1500);
+      return;
+    }
+  }
+  if(allowRegen && job && !job.regenerated){
+    job.regenerated=true; cloneSaveJob(job);
+    return cloneStartGeneration(job);
+  }
+  cloneSetBusyUI(false);
+  job && (job.status='failed', cloneSaveJob(job));
+  if(status){ status.style.color=''; status.textContent='Fish Speech connected. No finished audio to recover — press Generate to create one.'; }
+  cloneSetConn('connected');
+}
+
+// ── Download the generated WAV ───────────────────────────────────────────────
+async function cloneDownloadWav(){
+  if(!_cloneCurrentBlobUrl){ showToast('Generate audio first','error'); return; }
+  try{
+    const a=document.createElement('a');
+    a.href=_cloneCurrentBlobUrl;
+    a.download='cloned-'+new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')+'.wav';
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ showToast('Download failed: '+e.message,'error'); }
+}
+
+// ── Manual Reconnect — recover/relink only, NEVER starts a new generation ────
+let _cloneReconnectBusy=false;
+async function cloneReconnectRecover(){
+  if(_cloneBusy){ showToast('A generation is currently running','info'); return; }
+  if(_cloneReconnectBusy) return;
+  _cloneReconnectBusy=true;
+  const status=document.getElementById('cloneGenStatus');
+
+  try{
+    // 1) Already up?
+    cloneSetConn('reconnecting','manual');
+    if(status){ status.style.color=''; status.textContent='Checking Fish Speech server…'; }
+    let up = await clonePingHealth();
+
+    // 2) Offline → START it (the reconnect route spawns s2.exe) and wait through the
+    //    cold model load. Loading the 2.6 GB transformer on CPU can take ~1 minute,
+    //    so we poll up to 2 minutes with live feedback instead of dead-ending.
+    if(!up){
+      cloneSetConn('starting');
+      console.log('[clone] 🚀 Fish Speech offline — starting it (cold model load)…');
+      if(status){ status.style.color=''; status.textContent='🚀 Starting Fish Speech — loading model (this can take up to ~1 minute)…'; }
+      try{ await fetch(`${API_BASE}/api/fish-s2pro/reconnect`,{method:'POST'}); }catch(_){}
+      const start = Date.now(), deadline = start + 120000;
+      while(Date.now() < deadline){
+        await new Promise(r=>setTimeout(r,2500));
+        up = await clonePingHealth();
+        if(up) break;
+        const secs = Math.round((Date.now()-start)/1000);
+        if(status) status.textContent = `🚀 Starting Fish Speech — loading model… (${secs}s)`;
+      }
+    }
+
+    if(!up){
+      cloneSetConn('offline');
+      console.log('[clone] ❌ Fish Speech did not come online within 2 minutes');
+      if(status){ status.style.color='#fca5a5'; status.textContent='Fish Speech could not start. Check that C:\\fish-speech has the GGUF models, then press Reconnect.'; }
+      return;
+    }
+
+    cloneSetConn('connected');
+    console.log('[clone] ✅ Fish Speech online');
+    await cloneRefreshSources().catch(()=>{});
+
+    // 3) Resume an unfinished job WHERE IT LEFT OFF — never regenerate.
+    //    First try the locally-tracked job (this browser), then ask the SERVER
+    //    for the active job (covers cleared cache / different tab / fresh load).
+    const tracked = _cloneActiveJob || cloneLoadJob();
+    if(cloneIsUnfinished(tracked) && !_cloneRecovering){
+      _cloneReconnectBusy=false;            // release before handing off to recovery
+      return cloneRecoverJob(tracked, false);
+    }
+
+    // No local job → ask the backend for the active/most-recent job.
+    let active=null;
+    try{ const ar=await fetch(`${API_BASE}/api/voice-clone/jobs/active`,{cache:'no-store'}); active=await ar.json(); }catch(_){}
+    if(active && active.jobId){
+      const job = cloneResumeFromServerJob(active);
+      console.log('[Voice Clone] reconnect — found server job', active.jobId, 'status', active.status);
+      if(active.status==='complete' && active.audioUrl){
+        _cloneReconnectBusy=false;
+        return cloneFinalizeSuccess(job, active);                 // show audio + Save as Preset
+      }
+      if(active.status==='generating' || active.status==='queued'){
+        if(status){ status.style.color=''; status.textContent='🔄 Reconnected — your generation is still running…'; }
+        _cloneReconnectBusy=false;
+        return cloneMonitorJob(job);                              // continue polling the SAME job
+      }
+      if(active.status==='failed'){
+        _cloneReconnectBusy=false;
+        cloneFinishFailure(active.error||'generation failed on the server');   // shows Retry via Generate
+        return;
+      }
+    }
+    if(status){ status.style.color='#86efac'; status.textContent='Fish Speech connected — ready to generate.'; }
+  } finally {
+    _cloneReconnectBusy=false;
+  }
+}
+
+// Build a local job object from a server job payload so the monitor/finalizer
+// can resume it after a disconnect even with no localStorage record.
+function cloneResumeFromServerJob(p){
+  const job = {
+    jobId:      p.jobId,
+    localId:    p.jobId,
+    sourceId:   p.sourceId || '',
+    voiceName:  p.voiceName || 'base model',
+    text:       '',
+    transcript: p.transcript || '',
+    temperature:0.3,
+    status:     (p.status==='complete' ? 'done' : p.status),
+    startedAt:  Date.now(),
+    regenerated:false,
+  };
+  _cloneActiveJob = job; cloneSaveJob(job);
+  return job;
+}
+
+/** Save the last generated audio as a named clone preset */
+async function cloneSavePreset(){
+  if(!_cloneLastUrl){ showToast('Generate audio first','error'); return; }
+  const name = window.prompt('Preset name (e.g. "Dark Narrator Clone"):','');
+  if(!name?.trim()) return;
+  const src   = _cloneSources.find(s=>s.id===_cloneSourceId);
+  const text  = document.getElementById('cloneGenText')?.value?.trim()||'';
+  const speed = parseFloat(document.getElementById('cloneSpeed')?.value||'100') / 100;
+  const temp  = parseFloat(document.getElementById('cloneTemp')?.value||'30') / 100;
+  const pitch = parseInt(document.getElementById('clonePitch')?.value||'0', 10);
+  // Full, reusable preset record (server resolves referenceWavPath from sourceId).
+  const preset = {
+    name:               name.trim(),
+    icon:               '🎤',
+    engine:             'fish-speech-gguf',
+    profile:            src?.name || (_cloneSourceId || 'base model'),
+    sourceId:           _cloneSourceId || '',
+    generatedAudioPath: _cloneLastPath || '',
+    generatedAudioUrl:  _cloneLastUrl  || '',
+    transcript:         document.getElementById('cloneTranscript')?.value?.trim()||'',
+    sampleText:         text.slice(0,200),
+    settings:           { speed, temperature: temp, pitch },
+  };
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-presets`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(preset),
+    });
+    const d = await r.json();
+    if(!r.ok || !d.ok) throw new Error(d.error||'Save failed');
+    console.log('[Voice Clone] preset saved:', d.preset?.name, '→', d.preset?.id);
+    showToast(`✅ Preset "${name.trim()}" saved — now selectable in Voice Presets`,'success');
+    await cloneLoadPresets();
+  }catch(e){ showToast('Save failed: '+e.message,'error'); }
+}
+
+/** Load saved clone presets and render the grid */
+async function cloneLoadPresets(){
+  try{
+    const r = await fetch(`${API_BASE}/api/voice-presets`);
+    const d = await r.json();
+    _clonePresets = d.presets || [];
+    console.log('[Preset] loaded', _clonePresets.length, 'voice preset(s) from shared store');
+    _renderClonePresets();
+  }catch(e){ console.warn('Could not load voice presets:', e.message); }
+}
+
+function _renderClonePresets(){
+  const grid    = document.getElementById('clonePresetGrid');
+  const countEl = document.getElementById('clonePresetCount');
+  if(countEl) countEl.textContent = _clonePresets.length;
+  if(!grid) return;
+  if(!_clonePresets.length){
+    grid.innerHTML = '<div style="font-size:.72rem;color:var(--muted);grid-column:1/-1">No saved presets yet — generate audio and click Save.</div>';
+    return;
+  }
+  grid.innerHTML = _clonePresets.map(p => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s"
+         onmouseover="this.style.borderColor='rgba(124,58,237,.45)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <span style="font-size:1.4rem">${p.icon||'🎤'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.8rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          <div style="font-size:.62rem;color:var(--muted);margin-top:2px">${p.profile||p.sourceName||'base model'} · ${p.settings?.speed?.toFixed?.(2)||'1.00'}x · <span style="color:#6ee7b7">fish-gguf</span></div>
+        </div>
+      </div>
+      ${p.sampleText ? `<div style="font-size:.62rem;color:var(--muted);font-style:italic;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">"${p.sampleText}"</div>` : ''}
+      ${(p.generatedAudioUrl||p.sampleAudioUrl) ? `<audio src="${p.generatedAudioUrl||p.sampleAudioUrl}" controls style="width:100%;height:28px;border-radius:6px"></audio>` : ''}
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button onclick="cloneUsePreset('${p.id}')"
+          style="flex:1;background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.28);color:var(--gold2);border-radius:6px;padding:5px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">
+          USE IN STUDIO
+        </button>
+        <button onclick="cloneDeletePreset('${p.id}')"
+          style="background:rgba(229,57,57,.1);border:1px solid rgba(229,57,57,.25);color:#f87171;border-radius:6px;padding:5px 8px;font-size:.65rem;cursor:pointer;font-family:inherit">
+          🗑
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+function cloneUsePreset(id){
+  const p = _clonePresets.find(x=>x.id===id);
+  if(!p) return;
+  // Hand off to the Studio (/trend-vault) using the SAME keys it reads at startup
+  // (selectedVoicePreset / selectedVoiceAdv). The preset already lives in the
+  // shared voice-presets store, so the Studio finds it in its voice grid by id
+  // and selectPreset() applies the engine + cloned reference automatically.
+  try{
+    localStorage.setItem('selectedVoicePreset', id);
+    const s = p.settings || {};
+    localStorage.setItem('selectedVoiceAdv', JSON.stringify({
+      speed: s.speed, temperature: s.temperature, pitch: s.pitch,
+    }));
+    console.log('[Preset] applied (Use in Studio):', p.name, '→', id);
+    showToast(`🎤 "${p.name}" sent to Studio — opening…`,'success');
+    setTimeout(()=>{ window.location.href = '/trend-vault'; }, 500);
+  }catch(e){ showToast('Could not store preset: '+e.message,'error'); }
+}
+
+async function cloneDeletePreset(id){
+  const p = _clonePresets.find(x=>x.id===id);
+  if(!confirm(`Delete preset "${p?.name||id}"?`)) return;
+  try{
+    await fetch(`${API_BASE}/api/voice-presets/${encodeURIComponent(id)}`,{method:'DELETE'});
+    console.log('[Preset] deleted:', id, '(removed from shared store — gone everywhere)');
+    showToast('Preset deleted','success');
+    await cloneLoadPresets();
+  }catch(e){ showToast('Delete failed: '+e.message,'error'); }
+}
+
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let _toastTimer = null;
@@ -1784,8 +2518,120 @@ function showToast(msg, type = 'info'){
   _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+// ── Voice removal (trash can) + Undo + Hidden panel ─────────────────────────
+// Custom voices are HARD-deleted; built-in Kokoro/Fish voices are SOFT-hidden
+// via the server overlay (always restorable from the 🗑 Hidden panel).
+async function vlTrashVoice(id, name, engine, isCustom){
+  try{
+    const cached = allPresets.find(p => p.id === id) || null;
+    if(isCustom){
+      const r = await fetch(`${API_BASE}/api/custom-presets/${encodeURIComponent(id)}`, { method:'DELETE' });
+      if(!r.ok) throw new Error(`server ${r.status}`);
+    } else {
+      const r = await fetch(`${API_BASE}/api/voices/hide`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
+      });
+      if(!r.ok) throw new Error(`server ${r.status}`);
+    }
+    await loadPresets();
+    vlRefreshHiddenCount();
+    if(document.getElementById('vlHiddenPanel')?.style.display !== 'none') vlRenderHidden();
+    vlShowUndoToast(`🗑 Removed “${name}”`, async () => {
+      if(isCustom){
+        if(cached) await fetch(`${API_BASE}/api/custom-presets`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cached)
+        });
+      } else {
+        await fetch(`${API_BASE}/api/voices/unhide`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
+        });
+      }
+      await loadPresets();
+      vlRefreshHiddenCount();
+      if(document.getElementById('vlHiddenPanel')?.style.display !== 'none') vlRenderHidden();
+      showToast(`↩ Restored “${name}”`, 'success');
+    });
+  }catch(e){ console.error('[vlTrashVoice]', e); showToast('Failed to remove voice: '+(e.message||'unknown'), 'error'); }
+}
+window.vlTrashVoice = vlTrashVoice;
+
+let _vlUndoTimer = null;
+function vlShowUndoToast(msg, onUndo){
+  let el = document.getElementById('vlUndoToast');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'vlUndoToast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:99999;'+
+      'background:#15161d;border:1px solid var(--border,#23252f);color:#e8e8f0;border-radius:10px;'+
+      'padding:10px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:.74rem';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span></span><button style="background:rgba(201,162,39,.18);border:1px solid rgba(240,192,64,.4);color:#f0c040;border-radius:7px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer">↩ Undo</button>`;
+  el.querySelector('span').textContent = msg;
+  el.style.display = 'flex';
+  const hide = () => { el.style.display = 'none'; };
+  el.querySelector('button').onclick = async () => { hide(); if(_vlUndoTimer) clearTimeout(_vlUndoTimer); try{ await onUndo(); }catch(e){ showToast('Undo failed: '+(e?.message||e),'error'); } };
+  if(_vlUndoTimer) clearTimeout(_vlUndoTimer);
+  _vlUndoTimer = setTimeout(hide, 8000);
+}
+
+async function vlRefreshHiddenCount(){
+  try{
+    const r = await fetch(`${API_BASE}/api/voices/hidden`);
+    const d = r.ok ? await r.json() : { voices: [] };
+    const btn = document.getElementById('vlHiddenBtn');
+    if(btn) btn.textContent = `🗑 Hidden (${(d.voices||[]).length})`;
+  }catch(e){ /* non-fatal */ }
+}
+window.vlRefreshHiddenCount = vlRefreshHiddenCount;
+
+async function vlToggleHiddenPanel(){
+  const panel = document.getElementById('vlHiddenPanel');
+  if(!panel) return;
+  const show = panel.style.display === 'none';
+  panel.style.display = show ? 'flex' : 'none';
+  if(show) await vlRenderHidden();
+}
+window.vlToggleHiddenPanel = vlToggleHiddenPanel;
+
+async function vlRenderHidden(){
+  const list = document.getElementById('vlHiddenList');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:.68rem;color:var(--muted)">Loading…</div>';
+  try{
+    const r = await fetch(`${API_BASE}/api/voices/hidden`);
+    const d = r.ok ? await r.json() : { voices: [] };
+    const voices = d.voices || [];
+    if(!voices.length){ list.innerHTML = '<div style="font-size:.68rem;color:var(--muted)">No removed voices. Trash a voice to see it here.</div>'; return; }
+    list.innerHTML = voices.map(v => {
+      const safe = (v.name||v.id||'').replace(/'/g,"\\'");
+      const eng = v.engine === 'fish-speech-s2-pro' ? 'FISH' : v.engine === 'elevenlabs' ? 'API' : 'KOKORO';
+      return `<div style="display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:7px 10px">
+        <span style="font-size:1.1rem">${v.icon||'🔇'}</span>
+        <div style="flex:1;min-width:0"><div style="font-size:.74rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.name||v.id}</div><div style="font-size:.58rem;color:var(--muted)">${eng}</div></div>
+        <button onclick="vlRestoreHidden('${v.id}','${safe}')" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;border-radius:7px;padding:5px 11px;font-size:.68rem;font-weight:800;cursor:pointer">↩ Restore</button>
+      </div>`;
+    }).join('');
+  }catch(e){ list.innerHTML = '<div style="font-size:.68rem;color:#fca5a5">Failed to load hidden voices.</div>'; }
+}
+window.vlRenderHidden = vlRenderHidden;
+
+async function vlRestoreHidden(id, name){
+  try{
+    const r = await fetch(`${API_BASE}/api/voices/unhide`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id })
+    });
+    if(!r.ok) throw new Error(`server ${r.status}`);
+    await loadPresets();
+    vlRefreshHiddenCount();
+    vlRenderHidden();
+    showToast(`↩ Restored “${name}”`, 'success');
+  }catch(e){ showToast('Restore failed: '+(e?.message||e), 'error'); }
+}
+window.vlRestoreHidden = vlRestoreHidden;
+
 // ── Bootstrap ────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => { init().catch(console.error); });
+document.addEventListener('DOMContentLoaded', () => { init().catch(console.error); vlRefreshHiddenCount(); });
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2015,6 +2861,67 @@ function renderFishLabConfig(d) {
     `<div>🌐 Server:  <span style="color:var(--text2)">${escapeHtml(d.serverUrl || '—')}</span></div>`,
     d.workingEndpoint ? `<div>🔗 Endpoint: <span style="color:#86efac">${escapeHtml(d.workingEndpoint)}</span></div>` : '',
   ].join('');
+}
+
+// ── Reconnect button (⟳ Reconnect in the Clone tab) ──────────────────────────
+// Probes port 8080 first; if already alive → adopts and arms watchdog.
+// If dark → spawns the GGUF binary and waits up to 10 s.
+// Streams step-by-step output into cloneGenStatus so the user can see exactly
+// what's happening while the server connects.
+async function fishLabReconnect() {
+  const btn    = document.getElementById('cloneReconnectBtn');
+  const status = document.getElementById('cloneGenStatus');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Connecting…'; }
+
+  const steps = [
+    '🔍 Probing port 8080…',
+    '📡 Checking server health…',
+    '🐟 Waiting for Fish Speech…',
+  ];
+  let stepIdx = 0;
+  if (status) status.textContent = steps[0];
+
+  const ticker = setInterval(() => {
+    stepIdx = (stepIdx + 1) % steps.length;
+    if (status) status.textContent = steps[stepIdx];
+  }, 900);
+
+  try {
+    const r = await fetch(`${API_BASE}/api/fish-s2pro/reconnect`, { method: 'POST' });
+    clearInterval(ticker);
+    const d = await r.json().catch(() => ({}));
+
+    if (d.ok) {
+      if (status) {
+        status.style.color = '#86efac';
+        status.textContent = d.message || '✅ Reconnected';
+      }
+      showToast(d.message || '✅ Fish Speech reconnected', 'success');
+      // Refresh sources so any newly-registered reference files appear.
+      await cloneRefreshSources().catch(() => {});
+      // Refresh the Fish Lab status panel if it's open.
+      if (typeof fishLabRefreshStatus === 'function') fishLabRefreshStatus();
+    } else {
+      if (status) {
+        status.style.color = '#fca5a5';
+        status.textContent = d.message || '❌ Could not reach Fish Speech server';
+      }
+      if (d.detail) console.warn('[fish:reconnect]', d.detail);
+      showToast(d.message || 'Reconnect failed', 'error');
+    }
+  } catch (e) {
+    clearInterval(ticker);
+    const msg = e?.message || String(e);
+    if (status) { status.style.color = '#fca5a5'; status.textContent = '❌ ' + msg; }
+    showToast('Reconnect error: ' + msg, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Reconnect'; }
+    // Fade status back to muted colour after 4 s.
+    setTimeout(() => {
+      if (status) status.style.color = '';
+    }, 4000);
+  }
 }
 
 // ── Start Fish Speech ─────────────────────────────────────────────────────────
