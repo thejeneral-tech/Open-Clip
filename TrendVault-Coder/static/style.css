@@ -35732,17 +35732,17 @@ body.theme-frosted .modal {
   .doc-email-richbody.doc-font-m { font-size: 16px !important; }
 }
 
-/* ── Agent working-directory bar (full-width strip at the top of the chat) ── */
+/* ── Agent working-directory bar (row right above the message composer) ───── */
 .agent-wd-strip {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  padding: 7px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--fg) 2.5%, transparent);
-  position: relative;
-  z-index: 3;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 800px;        /* matches .chat-input-bar so chips align with it */
+  margin: 0 auto 8px;
+  padding: 0 12px;         /* matches the composer's horizontal padding */
   overflow-x: auto;
   scrollbar-width: none;
 }

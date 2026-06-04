@@ -512,13 +512,14 @@ function _openWorkingDirEditor(bar) {
 }
 
 async function _mountWorkingDirBar(retries = 0) {
-  // Mount a full-width strip at the very top of the chat area (right under
-  // the chat title bar) so the agent's working directory is always visible.
+  // Mount the working-directory bar right above the message composer
+  // ("Message TrendVault AI …"). It's a sibling directly before
+  // .chat-input-bar and shares the composer's width/centering so the chips
+  // line up with the input in every layout state.
   if (document.getElementById('agent-wd-bar')) return;
-  const topBar = document.querySelector('.chat-top-bar');
-  const container = document.getElementById('chat-container');
-  if (!topBar && !container) {
-    if (retries < 20) setTimeout(() => _mountWorkingDirBar(retries + 1), 250);
+  const inputBar = document.querySelector('.chat-input-bar');
+  if (!inputBar || !inputBar.parentNode) {
+    if (retries < 30) setTimeout(() => _mountWorkingDirBar(retries + 1), 250);
     return;
   }
   const strip = document.createElement('div');
@@ -530,8 +531,7 @@ async function _mountWorkingDirBar(retries = 0) {
   bar.innerHTML = `<span class="agent-wd-chip">working dir…</span>`;
   bar.addEventListener('click', () => _openWorkingDirEditor(bar));
   strip.appendChild(bar);
-  if (topBar && topBar.parentNode) topBar.insertAdjacentElement('afterend', strip);
-  else container.insertBefore(strip, container.firstChild);
+  inputBar.insertAdjacentElement('beforebegin', strip);
   _renderWdBar(bar, await _fetchWorkingDir());
 }
 
