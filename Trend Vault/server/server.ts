@@ -54,6 +54,13 @@ import {
   checkFishRuntime,
   checkFishVenv,
   checkFishServerStatus,
+  // ── GGUF / s2.cpp runtime surface ──────────────────────────────────────
+  resolveFishGgufConfig,
+  isGgufBackend,
+  startFishServerGguf,
+  probeFishOnBoot,
+  resolveFishUpstreamUrl,
+  resolveFishPublicUrl,
 } from '../scripts/tts/fishSpeechS2Pro';
 import { aiComplete, parseAIJson } from '../scripts/ai-completion';
 import { AssemblyAI } from 'assemblyai';
@@ -117,6 +124,239 @@ app.use('/trend-vault-clips',   express.static(TREND_VAULT_OUT));
 // preview (and for any other consumer that needs the canonical timing).
 app.use('/custom-audio', express.static(path.join(ROOT, 'public', 'custom-audio')));
 app.use('/captions',     express.static(path.join(ROOT, 'public', 'captions')));
+// Permanent home for cloned/generated Fish Speech voices (reusable presets).
+app.use('/generated-voices', express.static(path.join(ROOT, 'data', 'generated-voices')));
+// Cached short voice previews (Preview Voice / per-voice TEST buttons).
+app.use('/previews', express.static(path.join(ROOT, 'public', 'previews')));
+
+// ── Fish Speech same-origin proxy (3001 → real Fish upstream, 8080) ──────────
+// Makes the web server (3001) THE Fish Speech entry point. The UI/status/CHECK/
+// TEST all address http://127.0.0.1:3001 while the real s2.cpp process keeps
+// running on 8080 (FISH_UPSTREAM_URL). Raw node:http — no undici stale-socket
+// "fetch failed", no hidden 300s headers timeout on long generations.
+function _fishProxy(method: 'GET' | 'POST', pathSuffix: string, bodyObj: unknown,
+  timeoutMs = 1_800_000): Promise<{ status: number; buffer: Buffer; contentType: string; error?: string }> {
+  return new Promise(async (resolve) => {
+    try {
+      const upstream = resolveFishUpstreamUrl().replace(/\/$/, '');
+      const u = new URL(upstream + pathSuffix);
+      const mod = u.protocol === 'https:' ? await import('node:https') : await import('node:http');
+      const payload = method === 'POST' ? Buffer.from(JSON.stringify(bodyObj ?? {})) : null;
+      const headers: Record<string, string | number> = { 'Accept': 'audio/wav, audio/mpeg, application/json, */*' };
+      if (payload) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = payload.length; }
+      headers['Connection'] = 'close';
+      const req = mod.request({ hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: u.pathname + u.search, method, headers }, (r) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => resolve({ status: r.statusCode || 0, buffer: Buffer.concat(chunks),
+          contentType: String(r.headers['content-type'] || 'application/octet-stream') }));
+      });
+      req.setTimeout(timeoutMs, () => req.destroy(new Error(`Fish upstream timed out (no data for ${Math.round(timeoutMs / 1000)}s)`)));
+      req.on('error', (e: Error) => resolve({ status: 0, buffer: Buffer.alloc(0), contentType: '', error: e.message }));
+      if (payload) req.write(payload);
+      req.end();
+    } catch (e) {
+      resolve({ status: 0, buffer: Buffer.alloc(0), contentType: '', error: (e as Error).message });
+    }
+  });
+}
+
+// GET http://127.0.0.1:3001/health  → Fish upstream /health
+app.get('/health', async (_req, res) => {
+  const r = await _fishProxy('GET', '/health', null, 5_000);
+  if (r.error || r.status === 0) { res.status(503).json({ ok: false, status: 'offline', error: r.error || 'Fish upstream unreachable', upstream: resolveFishUpstreamUrl() }); return; }
+  res.status(r.status).type(r.contentType || 'text/plain').send(r.buffer);
+});
+
+// POST http://127.0.0.1:3001/v1/tts  → Fish upstream /v1/tts
+app.post('/v1/tts', async (req, res) => {
+  const r = await _fishProxy('POST', '/v1/tts', req.body);
+  if (r.error || r.status === 0) { res.status(502).json({ error: `Fish upstream error: ${r.error || 'no response'}` }); return; }
+  res.status(r.status).type(r.contentType).send(r.buffer);
+});
+
+// POST http://127.0.0.1:3001/v1/audio/speech  → Fish upstream /v1/audio/speech
+app.post('/v1/audio/speech', async (req, res) => {
+  const r = await _fishProxy('POST', '/v1/audio/speech', req.body);
+  if (r.error || r.status === 0) { res.status(502).json({ error: `Fish upstream error: ${r.error || 'no response'}` }); return; }
+  res.status(r.status).type(r.contentType).send(r.buffer);
+});
+
+// POST /api/fish-s2pro/test — the 🧪 TEST button. Runs a small real generation
+// through the 3001 entry point, trying /v1/tts then /v1/audio/speech, saving the
+// audio so the UI can play it. Returns which endpoint worked or the exact error.
+app.post('/api/fish-s2pro/test', express.json(), async (_req, res) => {
+  const publicUrl = resolveFishPublicUrl();
+  let status = await checkFishServerStatus();
+  if (!status.reachable) {
+    try { await startFishServerGguf(); } catch { /* best effort */ }
+    status = await waitForFishServerReachable(120_000);
+  }
+  if (!status.reachable) {
+    res.json({ ok: false, error: 'Fish Speech not reachable — start the server, then press TEST.', publicUrl });
+    return;
+  }
+  const text = 'Fish Speech test. One, two, three.';
+  const attempts: Array<{ ep: string; body: Record<string, unknown> }> = [
+    { ep: '/v1/tts',          body: { text, format: 'wav', temperature: 0.3, top_p: 0.8, top_k: 20 } },
+    { ep: '/v1/audio/speech', body: { input: text, model: 's2-pro', voice: 'default', response_format: 'wav' } },
+  ];
+  const errors: string[] = [];
+  for (const a of attempts) {
+    const r = await _fishProxy('POST', a.ep, a.body, 300_000);
+    if (!r.error && r.status >= 200 && r.status < 300 && r.buffer.length > 256) {
+      const outFile = `fish_test_${Date.now()}.wav`;
+      const dir = path.join(ROOT, 'public', 'custom-audio');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, outFile), r.buffer);
+      console.log(`[Fish TEST] OK via ${a.ep} — ${r.buffer.length} bytes`);
+      res.json({ ok: true, audioUrl: `/custom-audio/${outFile}`, endpoint: a.ep, bytes: r.buffer.length, publicUrl });
+      return;
+    }
+    errors.push(`${a.ep}: ${r.error || ('HTTP ' + r.status + (r.buffer.length ? '' : ' / empty'))}`);
+  }
+  console.error('[Fish TEST] all endpoints failed:', errors.join(' | '));
+  res.json({ ok: false, error: `TTS test failed — ${errors.join(' | ')}`, publicUrl });
+});
+
+// ── Voice preview cache ──────────────────────────────────────────────────────
+// A SHORT, cached preview clip per voice — used by the "▶ Preview Voice" button
+// and every per-voice "▶ TEST" button. Generated ONCE with a fixed sentence,
+// saved to public/previews/voices/, and reused next time. Completely separate
+// from full-script generation (/api/trend-vault/generate-voice).
+const PREVIEW_DIR        = path.join(ROOT, 'public', 'previews', 'voices');
+const PREVIEW_INDEX_FILE = path.join(ROOT, 'data', 'voice-preview-index.json');
+const PREVIEW_TEXT       = 'This is a quick voice preview for TrendVault. Use this voice if it matches the style of your video.';
+const _previewInFlight   = new Map<string, Promise<Record<string, unknown>>>();
+
+function _slugVoice(s: string): string {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'voice';
+}
+function readPreviewIndex(): Record<string, { previewAudioPath: string; previewCreatedAt: string; previewStatus: string; engine?: string }> {
+  try { if (fs.existsSync(PREVIEW_INDEX_FILE)) return JSON.parse(fs.readFileSync(PREVIEW_INDEX_FILE, 'utf8')) || {}; } catch { /* ignore */ }
+  return {};
+}
+function writePreviewIndex(idx: Record<string, unknown>) {
+  try { fs.mkdirSync(path.dirname(PREVIEW_INDEX_FILE), { recursive: true }); fs.writeFileSync(PREVIEW_INDEX_FILE, JSON.stringify(idx, null, 2), 'utf8'); } catch { /* ignore */ }
+}
+// Record the preview reference both in the index and (for cloned voices) on the
+// voice-presets.json record itself.
+function _recordPreview(voiceId: string, url: string, status: string, engine?: string) {
+  const idx = readPreviewIndex();
+  idx[voiceId] = { previewAudioPath: url, previewCreatedAt: new Date().toISOString(), previewStatus: status, engine };
+  writePreviewIndex(idx);
+  if (voiceId.startsWith('clone_')) {
+    try {
+      const presets = readVoicePresets();
+      const i = presets.findIndex(p => p.id === voiceId);
+      if (i >= 0) {
+        presets[i].previewAudioPath = url;
+        presets[i].previewCreatedAt = idx[voiceId].previewCreatedAt;
+        presets[i].previewStatus    = status;
+        writeVoicePresets(presets);
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+// Resolve the on-disk preview path for a voice, if one already exists.
+function _findExistingPreview(voiceId: string): { file: string; url: string } | null {
+  const slug = _slugVoice(voiceId);
+  for (const ext of ['wav', 'mp3']) {
+    const file = `voice-preview-${slug}.${ext}`;
+    const fp = path.join(PREVIEW_DIR, file);
+    if (fs.existsSync(fp) && fs.statSync(fp).size > 256) return { file, url: `/previews/voices/${file}` };
+  }
+  return null;
+}
+
+// Generate ONE short preview for a voice and save it. Routes Fish vs Kokoro.
+async function _generateVoicePreview(opts: { voiceId: string; engine?: string; fishVoice?: string }):
+  Promise<{ ok: boolean; url?: string; bytes?: number; error?: string }> {
+  const { voiceId, engine, fishVoice } = opts;
+  fs.mkdirSync(PREVIEW_DIR, { recursive: true });
+  const slug = _slugVoice(voiceId);
+  const isFish = isFishEngine(voiceId, engine) || voiceId.startsWith('fish_') || voiceId.startsWith('clone_');
+
+  if (isFish) {
+    let st = await checkFishServerStatus();
+    if (!st.reachable) { try { await startFishServerGguf(); } catch { /* best effort */ } st = await waitForFishServerReachable(120_000); }
+    if (!st.reachable) return { ok: false, error: 'Fish Speech server unreachable' };
+    let promptAudioPath: string | undefined;
+    let fv = fishVoice;
+    if (voiceId.startsWith('clone_')) {
+      const preset = readVoicePresets().find(p => p.id === voiceId);
+      promptAudioPath = preset?.referenceWavPath || resolveCloneRefFile(preset?.sourceId);
+      fv = fv || voiceId;
+      if (!promptAudioPath) return { ok: false, error: 'cloned voice has no reference audio' };
+    } else {
+      const fp = findFishPreset(voiceId);
+      fv = fishVoice || fp?.voiceId || 'fish_default';
+    }
+    const r = await previewFishVoice({
+      text: PREVIEW_TEXT, voiceId: fv || 'fish_default', speed: 1.0, temperature: 0.3, pitch: 0,
+      ...(promptAudioPath ? { promptAudioPath } : {}),
+    });
+    if (!r.ok || !r.buffer || r.buffer.length < 256) return { ok: false, error: r.error || 'Fish returned empty audio' };
+    const file = `voice-preview-${slug}.wav`;
+    fs.writeFileSync(path.join(PREVIEW_DIR, file), r.buffer);
+    return { ok: true, url: `/previews/voices/${file}`, bytes: r.buffer.length };
+  }
+
+  // Kokoro
+  try {
+    const { buffer, mimeType } = await generateVoice({ text: PREVIEW_TEXT, presetId: voiceId, preview: true });
+    if (!buffer || buffer.length < 256) return { ok: false, error: 'Kokoro returned empty audio' };
+    const ext = (mimeType || '').includes('wav') ? 'wav' : 'mp3';
+    const file = `voice-preview-${slug}.${ext}`;
+    fs.writeFileSync(path.join(PREVIEW_DIR, file), buffer);
+    return { ok: true, url: `/previews/voices/${file}`, bytes: buffer.length };
+  } catch (e) {
+    return { ok: false, error: 'Kokoro: ' + (e as Error).message };
+  }
+}
+
+// GET /api/voice-preview-cache/:voiceId — is there a cached preview already?
+app.get('/api/voice-preview-cache/:voiceId', (req, res) => {
+  const existing = _findExistingPreview(req.params.voiceId);
+  if (existing) res.json({ ok: true, exists: true, audioUrl: existing.url });
+  else res.json({ ok: true, exists: false });
+});
+
+// POST /api/voice-preview-cache — return the cached preview, or generate+save it
+// once. Body: { voiceId, engine?, fishVoice?, rebuild? }.
+app.post('/api/voice-preview-cache', express.json(), async (req, res) => {
+  const { voiceId, engine, fishVoice, rebuild } = req.body as
+    { voiceId?: string; engine?: string; fishVoice?: string; rebuild?: boolean };
+  if (!voiceId) { res.status(400).json({ ok: false, error: 'voiceId required' }); return; }
+  const slug = _slugVoice(voiceId);
+
+  // Cache hit (unless rebuilding).
+  if (!rebuild) {
+    const existing = _findExistingPreview(voiceId);
+    if (existing) { console.log(`[Preview] cache HIT for ${voiceId} → ${existing.url}`); res.json({ ok: true, audioUrl: existing.url, cached: true, voiceId }); return; }
+  } else {
+    // Rebuild: delete any existing preview files first.
+    for (const ext of ['wav', 'mp3']) { const fp = path.join(PREVIEW_DIR, `voice-preview-${slug}.${ext}`); try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch { /* ignore */ } }
+    console.log(`[Preview] rebuild requested for ${voiceId}`);
+  }
+
+  // Coalesce concurrent requests for the same voice.
+  if (_previewInFlight.has(slug)) { console.log(`[Preview] joining in-flight generation for ${voiceId}`); res.json(await _previewInFlight.get(slug)); return; }
+
+  const job = (async (): Promise<Record<string, unknown>> => {
+    console.log(`[Preview] No preview found — generating preview for ${voiceId}…`);
+    const r = await _generateVoicePreview({ voiceId, engine, fishVoice });
+    if (!r.ok) { _recordPreview(voiceId, '', 'failed', engine); console.error(`[Preview] failed for ${voiceId}: ${r.error}`); return { ok: false, error: r.error, voiceId }; }
+    _recordPreview(voiceId, r.url!, 'ready', engine);
+    console.log(`[Preview] saved to: ${path.join(PREVIEW_DIR, path.basename(r.url!))}`);
+    return { ok: true, audioUrl: r.url, cached: false, voiceId, bytes: r.bytes };
+  })();
+  _previewInFlight.set(slug, job);
+  try { const result = await job; if (!result.ok) res.status(502).json(result); else res.json(result); }
+  finally { _previewInFlight.delete(slug); }
+});
 
 function safeName(original: string): string {
   return original.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
@@ -1744,12 +1984,15 @@ app.get('/api/fish-s2pro/status', async (_req, res) => {
 // test) and returns the step-by-step result. Replaces the old "just check
 // if URL is reachable" path that produced the unhelpful generic error.
 app.post('/api/fish-s2pro/start', async (_req, res) => {
+  // CPU-only inference can take 10+ minutes for the test generation step.
+  res.setTimeout(900_000);
   const prep = await prepareFishEngine();
   res.json({ ok: prep.ready, ...prep });
 });
 
 // ── Fish Speech S2 Pro: rebuild venv + deps (model untouched) ───────────
 app.post('/api/fish-s2pro/repair', async (_req, res) => {
+  res.setTimeout(900_000);
   const r = await repairFishEngine();
   res.json(r);
 });
@@ -1765,13 +2008,13 @@ app.post('/api/fish-s2pro/server/stop', (_req, res) => {
 
 // ── Fish Speech S2 Pro: endpoint discovery + test generation ────────────
 app.post('/api/fish-s2pro/detect-endpoint', async (_req, res) => {
+  res.setTimeout(900_000);
   const r = await detectFishEndpoint();
   res.json({ ok: !!r.endpoint, ...r });
 });
-app.post('/api/fish-s2pro/test', async (_req, res) => {
-  const r = await testFishGeneration();
-  res.json(r);
-});
+// NOTE: the 🧪 TEST endpoint (/api/fish-s2pro/test) is defined earlier, near the
+// Fish proxy routes — it runs a real generation through the 3001 entry point with
+// /v1/tts → /v1/audio/speech fallback and saves playable audio.
 
 // ── Fish Speech S2 Pro: model path override ("Choose Existing Model Folder") ─
 app.post('/api/fish-s2pro/set-model-path', express.json(), (req, res) => {
@@ -1782,6 +2025,40 @@ app.post('/api/fish-s2pro/set-model-path', express.json(), (req, res) => {
     res.json({ ok: true, modelDir: cfg.modelPath });
   } catch (e) {
     res.status(400).json({ ok: false, error: (e as Error).message });
+  }
+});
+
+// ── Fish Speech S2 Pro: reconnect ────────────────────────────────────────
+// Called by the "⟳ Reconnect" button.  Probes port 8080 first — if the server
+// is already running (started externally or by the launcher) it adopts it and
+// arms the watchdog.  If the port is dark it tries to spawn the GGUF binary,
+// waits up to 10 s for it to answer, then returns the final status.
+app.post('/api/fish-s2pro/reconnect', async (_req, res) => {
+  res.setTimeout(30_000);
+  // 1. Probe the port — adopt if already alive.
+  await probeFishOnBoot();
+  let status = await checkFishServerStatus();
+  if (status.reachable) {
+    res.json({ ok: true, adopted: true, reachable: true, url: status.url,
+               message: `✅ Reconnected — Fish Speech is live at ${status.url}` });
+    return;
+  }
+  // 2. Not reachable — try spawning.
+  const info = await startFishServerGguf();
+  // Give it up to 10 s to become reachable.
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    status = await checkFishServerStatus();
+    if (status.reachable) break;
+    await new Promise(r => setTimeout(r, 800));
+  }
+  if (status.reachable) {
+    res.json({ ok: true, adopted: false, reachable: true, url: status.url,
+               message: `✅ Fish Speech started — live at ${status.url}` });
+  } else {
+    res.json({ ok: false, reachable: false, url: status.url,
+               message: `❌ Fish Speech not reachable at ${status.url}. Is the binary at the correct path?`,
+               detail: info.stderrTail?.slice(-300) || '' });
   }
 });
 
@@ -1841,6 +2118,141 @@ app.post('/api/fish-s2pro/preview', express.json(), async (req, res) => {
   res.setHeader('X-TTS-Engine', 'fish-speech-s2-pro');
   res.send(r.buffer);
 });
+
+// ── Fish Speech GGUF bridge: one stable local endpoint ───────────────────────
+//
+// POST /api/fish-gguf/tts  → returns raw WAV audio bytes.
+//
+// This is the single, stable endpoint the rest of the app can call. It maps a
+// simple request onto whatever route the compiled s2.cpp server actually
+// exposes (/v1/tts, /synthesize, …), so callers never have to care which one
+// works. s2.cpp only honours: text (required), prompt_audio_path / prompt_text
+// (voice cloning), temperature, top_p, top_k, format. Anything else is ignored.
+app.post('/api/fish-gguf/tts', express.json({ limit: '2mb' }), async (req, res) => {
+  res.setTimeout(900_000);
+  const b = (req.body || {}) as {
+    text?: string; input?: string;
+    prompt_audio_path?: string; prompt_text?: string;
+    temperature?: number; top_p?: number; top_k?: number;
+    format?: string;
+  };
+  const text = (b.text || b.input || '').trim();
+  if (!text) { res.status(400).json({ ok: false, error: 'text required' }); return; }
+
+  const g = resolveFishGgufConfig();
+  if (!isGgufBackend()) {
+    res.status(503).json({
+      ok: false,
+      error: `Fish Speech GGUF runtime not found at ${g.binary}. Run install_fish_gguf_runtime.py or set FISH_GGUF_ROOT.`,
+    });
+    return;
+  }
+
+  // Make sure the server is up. The bridge may START it (that's just running
+  // the already-prepared server) but never installs/repairs anything.
+  let status = await checkFishServerStatus();
+  if (!status.reachable) {
+    await startFishServerGguf();
+    status = await waitForFishServerReachable(8_000);
+  }
+  if (!status.reachable) {
+    res.status(503).json({ ok: false, error: `Fish Speech server not reachable at ${g.serverUrl} — click Start Fish Speech.` });
+    return;
+  }
+
+  // GGUF always exposes /v1/tts — skip the slow endpoint-discovery probe.
+  const route = '/v1/tts';
+
+  const ggufBody: Record<string, unknown> = {
+    text,
+    format:      b.format || 'wav',
+    temperature: b.temperature ?? 0.3,
+    top_p:       b.top_p ?? 0.8,
+    top_k:       b.top_k ?? 20,
+  };
+  if (b.prompt_audio_path) ggufBody.prompt_audio_path = b.prompt_audio_path;
+  if (b.prompt_text)       ggufBody.prompt_text       = b.prompt_text;
+
+  // ── Live progress streaming → launcher console ─────────────────────────
+  // s2.cpp exposes GET /progress while a /v1/tts request is in-flight.
+  // We poll it every 500 ms and log any state change so the launcher
+  // console shows real-time generation progress even when the process
+  // was adopted (started externally) and its stdout is not piped here.
+  const progressBase = g.serverUrl.replace(/\/$/, '');
+  let _lastStage = '';
+  let _lastPct   = -1;
+  console.log(`[fish:gen] ▶ starting — ${text.length} chars`);
+  const _progressTimer = setInterval(async () => {
+    try {
+      const pr = await fetch(`${progressBase}/progress`, { signal: AbortSignal.timeout(900) });
+      if (!pr.ok) return;
+      const p = await pr.json() as { stage?: string; percent?: number; detail?: string; busy?: boolean };
+      if (!p.busy) return;
+      const stage = (p.stage ?? 'processing').trim();
+      const pct   = Math.round(p.percent ?? 0);
+      const detail = p.detail ? ` · ${p.detail}` : '';
+      if (stage !== _lastStage || pct !== _lastPct) {
+        console.log(`[fish:gen] ${stage}${detail}  ${pct}%`);
+        _lastStage = stage;
+        _lastPct   = pct;
+      }
+    } catch { /* server busy — ignore */ }
+  }, 500);
+
+  try {
+    const upstream = await fetch(g.serverUrl + route, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'audio/wav, audio/mpeg, */*' },
+      body:    JSON.stringify(ggufBody),
+      signal:  AbortSignal.timeout(900_000),
+    });
+    clearInterval(_progressTimer);
+    if (!upstream.ok) {
+      res.status(502).json({ ok: false, error: `s2.cpp server returned HTTP ${upstream.status} at ${route}` });
+      return;
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (buf.length < 256) {
+      res.status(502).json({ ok: false, error: `s2.cpp returned only ${buf.length} bytes from ${route}` });
+      return;
+    }
+    console.log(`[fish:gen] ✓ done — ${(buf.length / 1024).toFixed(1)} KB`);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('X-TTS-Engine', 'fish-speech-s2-pro-gguf');
+    res.setHeader('X-Fish-Route', route);
+    res.send(buf);
+  } catch (e) {
+    clearInterval(_progressTimer);
+    res.status(502).json({ ok: false, error: `s2.cpp bridge request failed: ${(e as Error).message}` });
+  }
+});
+
+// ── Fish Speech: live generation progress proxy ──────────────────────────────
+// s2.cpp exposes GET /progress → { stage, percent, detail, busy }. We proxy it
+// (same-origin) so the Voice Cloning tab can show a real progress bar while a
+// blocking /v1/tts request is in flight. Never throws — returns idle on error.
+app.get('/api/fish-gguf/progress', async (_req, res) => {
+  const base = (resolveFishGgufConfig().serverUrl || 'http://127.0.0.1:8080').replace(/\/$/, '');
+  try {
+    const r = await fetch(base + '/progress', { signal: AbortSignal.timeout(2_000) });
+    if (!r.ok) { res.json({ stage: 'idle', percent: 0, detail: '', busy: false }); return; }
+    const p = await r.json();
+    res.json({ stage: p.stage ?? 'idle', percent: p.percent ?? 0, detail: p.detail ?? '', busy: !!p.busy });
+  } catch {
+    res.json({ stage: 'idle', percent: 0, detail: '', busy: false });
+  }
+});
+
+// Small helper: poll /health until reachable or timeout.
+async function waitForFishServerReachable(maxMs: number) {
+  const t0 = Date.now();
+  let s = await checkFishServerStatus();
+  while (!s.reachable && Date.now() - t0 < maxMs) {
+    await new Promise(r => setTimeout(r, 500));
+    s = await checkFishServerStatus();
+  }
+  return s;
+}
 
 // ── Fish Speech: async job queue ─────────────────────────────────────────────
 //
@@ -1990,6 +2402,74 @@ function writeCustomPresets(arr: unknown[]) {
   fs.writeFileSync(CUSTOM_PRESETS_FILE, JSON.stringify(arr, null, 2), 'utf8');
 }
 
+// ── Hidden voices overlay ───────────────────────────────────────────────────
+// Built-in Kokoro/Fish voices live in source files (voicePresets.json,
+// fishSpeechS2Pro.ts) and must NOT be edited to "delete" a voice. Instead we
+// keep a soft-delete overlay: a list of voice IDs to hide from the merged
+// voice list. Hiding is fully reversible (unhide), so built-in voices can
+// always be restored from the UI's Hidden/Trash panel. (Custom voices are
+// hard-deleted via DELETE /api/custom-presets/:id instead.)
+const HIDDEN_VOICES_FILE = path.join(ROOT, 'data', 'hidden-voices.json');
+function readHiddenVoiceIds(): string[] {
+  if (!fs.existsSync(HIDDEN_VOICES_FILE)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(HIDDEN_VOICES_FILE, 'utf8'));
+    return Array.isArray(data) ? data.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+function writeHiddenVoiceIds(ids: string[]): void {
+  const dir = path.dirname(HIDDEN_VOICES_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(HIDDEN_VOICES_FILE, JSON.stringify([...new Set(ids)], null, 2), 'utf8');
+}
+
+/**
+ * Build the full merged voice-card list (custom + built-in Kokoro + Fish +
+ * optional ElevenLabs) BEFORE the hidden-overlay filter is applied. Used by
+ * both the public list (which filters hidden out) and the Hidden/Trash panel
+ * (which returns only the hidden ones).
+ */
+function buildAllVoiceCards(): Array<Record<string, unknown>> {
+  const custom = readCustomPresets() as Array<Record<string, unknown>>;
+  const tagKokoro = (p: Record<string, unknown>) => ({ engine: 'kokoro', ...p });
+
+  const fishCards = FISH_VOICE_PRESETS.map(p => ({
+    id:          p.id,
+    name:        p.name,
+    icon:        p.icon,
+    description: p.description,
+    engine:      p.engine,           // 'fish-speech-s2-pro'
+    fishVoice:   p.voiceId,          // server-side reference id
+    defaults:    p.defaults,
+    fishDefaults: p.fishDefaults,
+    eq:          'clear',
+    reverb:      false,
+    robot:       false,
+    category:    p.category,
+    tags:        p.tags,
+    exampleLine: p.exampleLine,
+  }));
+
+  const elevenLabsCards = process.env.ELEVENLABS_API_KEY ? [{
+    id:          'elevenlabs_default',
+    name:        'ElevenLabs Default',
+    icon:        '☁️',
+    description: 'Cloud • Multilingual • ElevenLabs API',
+    engine:      'elevenlabs',
+    defaults:    { pitch: 0, rate: 0, speed: 1.0, volume: 0, intensity: 20 },
+    eq: 'clear', reverb: false, robot: false,
+    category: 'cloud', tags: ['cloud', 'elevenlabs'],
+  }] : [];
+
+  return [
+    ...cloneVoiceCards(),   // saved cloned voices — reusable for future TTS
+    ...custom.map(tagKokoro),
+    ...VOICE_PRESETS.map(p => tagKokoro(p as unknown as Record<string, unknown>)),
+    ...fishCards,
+    ...elevenLabsCards,
+  ];
+}
+
 app.get('/api/custom-presets', (_req, res) => {
   res.json({ presets: readCustomPresets() });
 });
@@ -2045,54 +2525,86 @@ app.delete('/api/custom-presets/:id', (req, res) => {
 // Existing Kokoro/custom presets that lack the `engine` field are tagged
 // 'kokoro' on the fly so the UI never has to guess.
 app.get('/api/trend-vault/voice-presets', (_req, res) => {
-  const custom = readCustomPresets() as Array<Record<string, unknown>>;
-  const tagKokoro = (p: Record<string, unknown>) => ({ engine: 'kokoro', ...p });
+  const hidden = new Set(readHiddenVoiceIds());
+  // Soft-deleted (hidden) built-in voices are filtered out here so they
+  // disappear from every voice picker but can be restored later.
+  const presets = buildAllVoiceCards().filter(p => !hidden.has(String(p.id)));
+  res.json({ presets });
+});
 
-  // Fish S2 Pro presets — shape mirrors Kokoro presets plus a fishDefaults
-  // block the UI uses to seed the Fish sliders when a Fish card is picked.
-  const fishCards = FISH_VOICE_PRESETS.map(p => ({
-    id:          p.id,
-    name:        p.name,
-    icon:        p.icon,
-    description: p.description,
-    engine:      p.engine,           // 'fish-speech-s2-pro'
-    fishVoice:   p.voiceId,          // server-side reference id
-    defaults:    p.defaults,
-    fishDefaults: p.fishDefaults,
-    eq:          'clear',
-    reverb:      false,
-    robot:       false,
-    category:    p.category,
-    tags:        p.tags,
-    exampleLine: p.exampleLine,
-  }));
+// ── Hidden voices: soft-delete overlay for built-in Kokoro/Fish voices ──────
+// POST /api/voices/hide   { id }  → hide a voice (reversible)
+// POST /api/voices/unhide { id }  → restore a hidden voice
+// GET  /api/voices/hidden         → full objects for every currently-hidden
+//                                   voice (powers the UI's 🗑 Hidden panel)
+app.post('/api/voices/hide', express.json(), (req, res) => {
+  const id = (req.body?.id as string || '').trim();
+  if (!id) { res.status(400).json({ ok: false, error: 'id required' }); return; }
+  const ids = readHiddenVoiceIds();
+  if (!ids.includes(id)) ids.push(id);
+  writeHiddenVoiceIds(ids);
+  res.json({ ok: true, hidden: ids });
+});
 
-  // ElevenLabs placeholder — only surfaced when an API key is configured,
-  // so the engine picker can show it without breaking the existing flow.
-  const elevenLabsCards = process.env.ELEVENLABS_API_KEY ? [{
-    id:          'elevenlabs_default',
-    name:        'ElevenLabs Default',
-    icon:        '☁️',
-    description: 'Cloud • Multilingual • ElevenLabs API',
-    engine:      'elevenlabs',
-    defaults:    { pitch: 0, rate: 0, speed: 1.0, volume: 0, intensity: 20 },
-    eq: 'clear', reverb: false, robot: false,
-    category: 'cloud', tags: ['cloud', 'elevenlabs'],
-  }] : [];
+app.post('/api/voices/unhide', express.json(), (req, res) => {
+  const id = (req.body?.id as string || '').trim();
+  if (!id) { res.status(400).json({ ok: false, error: 'id required' }); return; }
+  const ids = readHiddenVoiceIds().filter(x => x !== id);
+  writeHiddenVoiceIds(ids);
+  res.json({ ok: true, hidden: ids });
+});
 
-  res.json({
-    presets: [
-      ...custom.map(tagKokoro),
-      ...VOICE_PRESETS.map(p => tagKokoro(p as unknown as Record<string, unknown>)),
-      ...fishCards,
-      ...elevenLabsCards,
-    ],
-  });
+app.get('/api/voices/hidden', (_req, res) => {
+  const hidden = new Set(readHiddenVoiceIds());
+  // Resolve IDs → full voice cards so the Trash panel can show name + icon.
+  // (IDs with no matching card — e.g. a voice removed from source — are still
+  // returned as minimal stubs so the user can un-hide them.)
+  const all = buildAllVoiceCards();
+  const byId = new Map(all.map(p => [String(p.id), p]));
+  const voices = [...hidden].map(id => byId.get(id) || { id, name: id, icon: '🔇', engine: 'unknown', description: '(hidden voice)' });
+  res.json({ ok: true, voices });
 });
 
 // ── Voice cloning: sample upload + storage ────────────────────────────────────
 const VOICE_SAMPLES_DIR = path.join(ROOT, 'voice-samples');
 if (!fs.existsSync(VOICE_SAMPLES_DIR)) fs.mkdirSync(VOICE_SAMPLES_DIR, { recursive: true });
+
+// Locate the bundled ffmpeg binary (used to convert reference audio to the
+// format s2.cpp expects: 44.1 kHz mono, loudness-normalised).
+function _bundledFfmpeg(): string | null {
+  const candidates = [
+    path.join(ROOT, 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe'),
+    path.join(ROOT, 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffmpeg.exe'),
+    path.join(ROOT, 'node_modules', '@ffmpeg-installer', 'linux-x64', 'ffmpeg'),
+  ];
+  for (const c of candidates) { if (fs.existsSync(c)) return c; }
+  return null;
+}
+
+// Convert reference audio → 44.1 kHz mono WAV with loudnorm. Returns true on success.
+async function _convertReferenceAudio(input: string, output: string): Promise<boolean> {
+  const ff = _bundledFfmpeg();
+  if (!ff) return false;
+  const { execFile } = await import('child_process');
+  return new Promise<boolean>((resolve) => {
+    execFile(ff, ['-y', '-i', input, '-ar', '44100', '-ac', '1', '-af', 'loudnorm', output],
+      { timeout: 60_000 }, (err) => resolve(!err && fs.existsSync(output)));
+  });
+}
+
+// Transcribe the first N words of an audio file via AssemblyAI (best-effort).
+async function _transcribeFirstWords(audioPath: string, maxWords = 80): Promise<string> {
+  const key = process.env.ASSEMBLYAI_API_KEY;
+  if (!key || !fs.existsSync(audioPath)) return '';
+  try {
+    const aai = new AssemblyAI({ apiKey: key });
+    const t = await aai.transcripts.transcribe({ audio: audioPath });
+    if (t.status === 'completed' && t.text) {
+      return t.text.split(/\s+/).slice(0, maxWords).join(' ');
+    }
+  } catch { /* best-effort — return empty so cloning still works from audio alone */ }
+  return '';
+}
 
 const sampleUpload = multer({
   storage: multer.diskStorage({
@@ -2122,18 +2634,63 @@ app.get('/api/voice-clone/list', (_req, res) => {
   res.json({ voices });
 });
 
-app.post('/api/voice-clone/upload', sampleUpload.array('samples', 20), (req, res) => {
+app.post('/api/voice-clone/upload', sampleUpload.array('samples', 20), async (req, res) => {
   const files = req.files as Express.Multer.File[];
   if (!files?.length) { res.status(400).json({ error: 'No files.' }); return; }
-  const voiceId = (req.body as { voiceId?: string }).voiceId || 'default';
-  const name    = (req.body as { name?: string }).name || voiceId;
-  const metaFile = path.join(VOICE_SAMPLES_DIR, voiceId, 'meta.json');
+  const voiceId  = (req.body as { voiceId?: string }).voiceId || 'default';
+  const name     = (req.body as { name?: string }).name || voiceId;
+  const voiceDir = path.join(VOICE_SAMPLES_DIR, voiceId);
+  const metaFile = path.join(voiceDir, 'meta.json');
   let meta: Record<string, unknown> = {};
   try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch { /* new */ }
   meta.name = name; meta.updatedAt = new Date().toISOString();
   if (!meta.createdAt) meta.createdAt = meta.updatedAt;
+
+  // Convert the first uploaded sample → 44.1 kHz mono loudnorm WAV (reference.wav).
+  // s2.cpp clones best from a clean, normalised mono clip at the codec sample rate.
+  let conversion: { ok: boolean; sampleRate: number; channels: number; normalized: boolean; sourceName: string } | null = null;
+  const first = files[0];
+  try {
+    const refOut = path.join(voiceDir, 'reference.wav');
+    const ok = await _convertReferenceAudio(first.path, refOut);
+    if (ok) {
+      meta.referenceFile = 'reference.wav';
+      conversion = { ok: true, sampleRate: 44100, channels: 1, normalized: true, sourceName: first.originalname };
+    }
+  } catch { /* conversion optional — original file still works */ }
+
   fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
-  res.json({ ok: true, voiceId, filesAdded: files.length });
+  res.json({ ok: true, voiceId, filesAdded: files.length, conversion });
+});
+
+// ── Voice Clone: transcribe a profile's reference audio (first ~80 words) ─────
+// Auto-fills the optional "transcript" field that improves cloning accuracy.
+app.post('/api/voice-clone/transcribe', express.json(), async (req, res) => {
+  res.setTimeout(120_000);
+  const { voiceId, maxWords } = req.body as { voiceId?: string; maxWords?: number };
+  if (!voiceId) { res.status(400).json({ ok: false, error: 'voiceId required' }); return; }
+  const voiceDir = path.join(VOICE_SAMPLES_DIR, path.basename(voiceId));
+  if (!fs.existsSync(voiceDir)) { res.status(404).json({ ok: false, error: 'profile not found' }); return; }
+  // Prefer the converted reference.wav, else the first sample.
+  let audioPath = path.join(voiceDir, 'reference.wav');
+  if (!fs.existsSync(audioPath)) {
+    const samples = fs.readdirSync(voiceDir).filter(f => /\.(wav|mp3|m4a|ogg)$/i.test(f));
+    if (!samples.length) { res.status(404).json({ ok: false, error: 'no audio in profile' }); return; }
+    audioPath = path.join(voiceDir, samples[0]);
+  }
+  if (!process.env.ASSEMBLYAI_API_KEY) {
+    res.json({ ok: true, transcript: '', note: 'ASSEMBLYAI_API_KEY not set — skipped' });
+    return;
+  }
+  const transcript = await _transcribeFirstWords(audioPath, maxWords ?? 80);
+  // Persist into meta so we don't re-transcribe on every visit
+  try {
+    const metaFile = path.join(voiceDir, 'meta.json');
+    const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+    meta.transcript = transcript;
+    fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
+  } catch { /* ignore */ }
+  res.json({ ok: true, transcript });
 });
 
 app.delete('/api/voice-clone/:voiceId', (req, res) => {
@@ -2156,6 +2713,496 @@ app.get('/api/voice-clone/:voiceId/samples', (req, res) => {
 
 // Serve voice sample files for playback
 app.use('/voice-samples', express.static(VOICE_SAMPLES_DIR));
+
+// ── Voice Clone: list all available reference audio sources ──────────────────
+// Returns two groups:
+//   • "profile" — folders inside voice-samples/ (user uploaded)
+//   • "file"    — .wav/.mp3 files found directly in FISH_GGUF_ROOT (C:\fish-speech)
+app.get('/api/voice-clone/reference-sources', (_req, res) => {
+  type Src = { id: string; name: string; type: 'profile' | 'file'; sampleCount?: number; sizeBytes?: number; displayPath: string; transcript?: string };
+  const sources: Src[] = [];
+
+  // 1 — User voice profiles from voice-samples/<id>/
+  if (fs.existsSync(VOICE_SAMPLES_DIR)) {
+    for (const d of fs.readdirSync(VOICE_SAMPLES_DIR, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      const vDir = path.join(VOICE_SAMPLES_DIR, d.name);
+      const metaFile = path.join(vDir, 'meta.json');
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch { /* new profile */ }
+      const samples = fs.readdirSync(vDir).filter(f => /\.(mp3|wav|m4a|ogg)$/i.test(f));
+      if (!samples.length) continue;
+      sources.push({
+        id: `profile:${d.name}`,
+        name: (meta.name as string) || d.name,
+        type: 'profile',
+        sampleCount: samples.length,
+        displayPath: path.join('voice-samples', d.name),
+        transcript: (meta.transcript as string) || '',
+      });
+    }
+  }
+
+  // 2 — WAV/MP3 files in FISH_GGUF_ROOT (default C:\fish-speech)
+  const ggufRoot = (process.env.FISH_GGUF_ROOT || (process.platform === 'win32' ? 'C:\\fish-speech' : '/shared/fish-speech')).trim();
+  // Skip known output/temp file patterns
+  const OUTPUT_PAT = /^(job_|last_output|test[-_]|final-clone-test|ref-test-output|d[0-9a-f]{30,})/i;
+  if (fs.existsSync(ggufRoot)) {
+    for (const f of fs.readdirSync(ggufRoot)) {
+      if (!/\.(wav|mp3)$/i.test(f)) continue;
+      if (OUTPUT_PAT.test(f)) continue;
+      let sizeBytes = 0;
+      try { sizeBytes = fs.statSync(path.join(ggufRoot, f)).size; } catch { /* ignore */ }
+      sources.push({
+        id: `file:${f}`,
+        name: f.replace(/\.(wav|mp3)$/i, '').replace(/[-_]/g, ' '),
+        type: 'file',
+        sizeBytes,
+        displayPath: path.join(ggufRoot, f),
+      });
+    }
+  }
+
+  res.json({ sources });
+});
+
+// ── Voice Clone: generate with Fish GGUF + optional reference audio ───────────
+// sourceId: "profile:<id>"  → picks first sample from voice-samples/<id>/
+//           "file:<name>"   → uses file directly from FISH_GGUF_ROOT
+//           (empty)         → no reference (base model voice)
+// ── Voice-clone generation: shared core ──────────────────────────────────────
+// Used by BOTH the blocking route (/api/voice-clone/generate) and the async job
+// queue (/api/voice-clone/jobs). Keeping one implementation guarantees the two
+// paths behave identically.
+interface CloneGenOpts {
+  sourceId?:    string;
+  text:         string;
+  temperature?: number;
+  promptText?:  string;
+  profileName?: string;   // used only to build a descriptive output filename
+}
+interface CloneGenResult {
+  ok:         boolean;
+  audioUrl?:  string;
+  audioPath?: string;
+  bytes?:     number;
+  refFile?:   string | null;
+  error?:     string;
+  status?:    number;   // suggested HTTP status when ok=false
+}
+
+// Resolve the reference WAV/audio path for a given source id (profile: or file:).
+function resolveCloneRefFile(sourceId?: string): string | undefined {
+  if (!sourceId) return undefined;
+  if (sourceId.startsWith('profile:')) {
+    const profileId = sourceId.slice('profile:'.length);
+    const vDir = path.join(VOICE_SAMPLES_DIR, path.basename(profileId));
+    if (fs.existsSync(vDir)) {
+      // Prefer the converted reference.wav; else first raw sample.
+      const refWav = path.join(vDir, 'reference.wav');
+      if (fs.existsSync(refWav)) return refWav;
+      const samples = fs.readdirSync(vDir).filter(f => /\.(wav|mp3|m4a|ogg)$/i.test(f));
+      if (samples.length) return path.join(vDir, samples[0]);
+    }
+  } else if (sourceId.startsWith('file:')) {
+    const fname = sourceId.slice('file:'.length);
+    const ggufRoot = (process.env.FISH_GGUF_ROOT || (process.platform === 'win32' ? 'C:\\fish-speech' : '/shared/fish-speech')).trim();
+    const candidate = path.join(ggufRoot, path.basename(fname));
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+// POST JSON to the Fish server and collect the (possibly large, slow) binary
+// response using raw node:http — no undici headersTimeout. `timeoutMs` is a
+// socket-INACTIVITY guard: it only fires if the server sends nothing for that
+// long (Fish is silent during generation, so this must exceed max gen time).
+function fishHttpPostJson(
+  urlStr: string, bodyObj: unknown, timeoutMs = 1_800_000,
+): Promise<{ ok: boolean; status: number; buffer: Buffer; error?: string }> {
+  return new Promise(async (resolve) => {
+    try {
+      const http = await import('node:http');
+      const u = new URL(urlStr);
+      const payload = Buffer.from(JSON.stringify(bodyObj));
+      const req = http.request({
+        hostname: u.hostname,
+        port:     u.port || 80,
+        path:     u.pathname + u.search,
+        method:   'POST',
+        headers: {
+          'Content-Type':   'application/json',
+          'Accept':         'audio/wav, audio/mpeg, */*',
+          'Authorization':  'Bearer local',
+          'Content-Length': payload.length,
+        },
+      }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          const status = res.statusCode || 0;
+          resolve({ ok: status >= 200 && status < 300, status, buffer: Buffer.concat(chunks) });
+        });
+      });
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`Fish request timed out (no data for ${Math.round(timeoutMs / 1000)}s)`));
+      });
+      req.on('error', (e: Error) => resolve({ ok: false, status: 0, buffer: Buffer.alloc(0), error: e.message }));
+      req.write(payload);
+      req.end();
+    } catch (e) {
+      resolve({ ok: false, status: 0, buffer: Buffer.alloc(0), error: (e as Error).message });
+    }
+  });
+}
+
+async function runCloneGeneration(opts: CloneGenOpts): Promise<CloneGenResult> {
+  const text = (opts.text || '').trim();
+  if (!text) return { ok: false, error: 'text required', status: 400 };
+
+  const refFile = resolveCloneRefFile(opts.sourceId);
+
+  // Ensure the Fish server is up.
+  const g = resolveFishGgufConfig();
+  if (!isGgufBackend()) {
+    return { ok: false, error: 'Fish Speech GGUF runtime not found. Run install_fish_gguf_runtime.py.', status: 503 };
+  }
+  let fishStatus = await checkFishServerStatus();
+  if (!fishStatus.reachable) {
+    // Cold start: loading the 2.6 GB transformer GGUF on CPU can take 30-60s+.
+    // The old 8s wait failed every cold start ("server offline"). This runs inside
+    // the async clone job, so a long wait is safe — the client keeps polling and
+    // sees a "loading model" stage until Fish is up.
+    console.log('[clone] Fish server offline — starting it and waiting for model load…');
+    await startFishServerGguf();
+    fishStatus = await waitForFishServerReachable(180_000);   // up to 3 min for cold model load
+  }
+  if (!fishStatus.reachable) {
+    return { ok: false, error: 'Fish Speech server could not start (model still loading or model files missing). Check that C:\\fish-speech has the GGUF models, then try again.', status: 503 };
+  }
+
+  const fishBody: Record<string, unknown> = {
+    text,
+    format: 'wav',
+    temperature: opts.temperature ?? 0.7,
+    top_p: 0.8,
+    top_k: 20,
+  };
+  if (refFile) { fishBody.prompt_audio_path = refFile; console.log('[Fish Speech] reference voice active:', refFile); }
+  else { console.log('[Fish Speech] no reference — using base model voice'); }
+  if (opts.promptText?.trim()) fishBody.prompt_text = opts.promptText.trim();
+
+  try {
+    console.log('[Fish Speech] generation still running (this can take several minutes on CPU)…');
+    // IMPORTANT: use a raw node:http request, NOT fetch(). Node's fetch (undici)
+    // enforces a hidden ~300s headersTimeout, and Fish sends NO HTTP response
+    // until the ENTIRE WAV is generated — so any generation over ~5 minutes aborts
+    // with the dreaded "fetch failed" even though Fish actually finishes. The raw
+    // request below has no header/body timeout (only a 30-min inactivity guard).
+    const upstream = await fishHttpPostJson(g.serverUrl + '/v1/tts', fishBody, 1_800_000);
+    if (!upstream.ok) return { ok: false, error: upstream.error || `Fish server returned HTTP ${upstream.status}`, status: 502 };
+    const buf = upstream.buffer;
+    if (buf.length < 256) return { ok: false, error: `Fish server returned too few bytes (${buf.length})`, status: 502 };
+
+    // Persist output to a PERMANENT folder with a descriptive, unique name —
+    // fish_YYYYMMDD_HHMMSS_profile.wav. Never rely on the s2.cpp last_output.wav,
+    // which the next generation overwrites.
+    const d = new Date();
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    const profSlug = (opts.profileName || 'base').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'base';
+    const outFile  = `fish_${stamp}_${profSlug}.wav`;
+    const genDir   = path.join(ROOT, 'data', 'generated-voices');
+    fs.mkdirSync(genDir, { recursive: true });
+    const outPath  = path.join(genDir, outFile);
+    fs.writeFileSync(outPath, buf);
+    console.log('[Fish Speech] output saved to:', outPath);
+    return { ok: true, audioUrl: `/generated-voices/${outFile}`, audioPath: outPath, refFile: refFile || null, bytes: buf.length };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message, status: 502 };
+  }
+}
+
+// Blocking generation — kept for callers that want the audio in one round-trip.
+app.post('/api/voice-clone/generate', express.json(), async (req, res) => {
+  res.setTimeout(900_000);
+  const { sourceId, text, temperature, promptText } = req.body as {
+    sourceId?: string; text?: string; temperature?: number; promptText?: string;
+  };
+  const result = await runCloneGeneration({ sourceId, text: text || '', temperature, promptText });
+  if (!result.ok) { res.status(result.status || 502).json({ ok: false, error: result.error }); return; }
+  res.json({ ok: true, audioUrl: result.audioUrl, audioPath: result.audioPath, refFile: result.refFile, bytes: result.bytes });
+});
+
+// ── Voice-clone async job queue ──────────────────────────────────────────────
+// Enables the clone tab's auto-reconnect/resume system: the client gets a jobId
+// instantly, persists it, and polls — so a page reload or dropped connection
+// during a multi-minute CPU generation recovers the SAME job (never duplicates).
+interface CloneJobRecord {
+  id:               string;
+  status:           'queued' | 'generating' | 'complete' | 'failed';
+  audioUrl?:        string;
+  audioPath?:       string;
+  bytes?:           number;
+  refFile?:         string | null;
+  voiceName?:       string;
+  transcript?:      string;
+  sourceId?:        string;
+  error?:           string;
+  created_at:       number;
+  finished_at?:     number;
+  generation_time?: number;
+}
+const _cloneJobStore = new Map<string, CloneJobRecord>();
+let _lastCompletedCloneJob: CloneJobRecord | null = null;
+let _activeCloneJobId: string | null = null;   // the most recent queued/generating job
+
+// GC clone jobs older than 60 minutes.
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, job] of _cloneJobStore) {
+    if (job.created_at < cutoff) _cloneJobStore.delete(id);
+  }
+}, 5 * 60 * 1000).unref();
+
+// POST /api/voice-clone/jobs — enqueue; returns jobId immediately.
+app.post('/api/voice-clone/jobs', express.json(), (req, res) => {
+  const { sourceId, text, temperature, promptText, voiceName } = req.body as {
+    sourceId?: string; text?: string; temperature?: number; promptText?: string; voiceName?: string;
+  };
+  if (!text?.trim()) { res.status(400).json({ ok: false, error: 'text required' }); return; }
+
+  const jobId = `clone_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job: CloneJobRecord = {
+    id:         jobId,
+    status:     'queued',
+    created_at: Date.now(),
+    voiceName:  voiceName || '',
+    transcript: promptText || '',
+    sourceId:   sourceId || '',
+  };
+  _cloneJobStore.set(jobId, job);
+  _activeCloneJobId = jobId;
+
+  // Acknowledge instantly; generate in the background.
+  res.json({ ok: true, jobId });
+
+  (async () => {
+    const t0 = Date.now();
+    job.status = 'generating';
+    console.log(`[Voice Clone] job started — id=${jobId} voice="${voiceName || 'base model'}" ref=${sourceId || '(base model)'} chars=${text.trim().length}`);
+    const result = await runCloneGeneration({ sourceId, text, temperature, promptText, profileName: voiceName });
+    if (result.ok) {
+      job.status          = 'complete';
+      job.audioUrl        = result.audioUrl;
+      job.audioPath       = result.audioPath;
+      job.bytes           = result.bytes;
+      job.refFile         = result.refFile;
+      job.finished_at     = Date.now();
+      job.generation_time = +((Date.now() - t0) / 1000).toFixed(1);
+      _lastCompletedCloneJob = job;
+      if (_activeCloneJobId === jobId) _activeCloneJobId = null;
+      console.log(`[Voice Clone] job completed — id=${jobId} ${result.bytes} bytes in ${job.generation_time}s → ${result.audioPath}`);
+    } else {
+      job.status      = 'failed';
+      job.error       = result.error;
+      job.finished_at = Date.now();
+      if (_activeCloneJobId === jobId) _activeCloneJobId = null;
+      console.error(`[Voice Clone] job failed — id=${jobId}: ${result.error}`);
+    }
+  })();
+});
+
+// Serialize a job for the client, attaching the Fish server's live stage/percent
+// while it is generating (so a resumed UI shows real progress). Shared by the
+// /jobs/:jobId and /jobs/active endpoints.
+async function serializeCloneJob(job: CloneJobRecord) {
+  let stage   = job.status === 'generating' ? 'generating' : job.status;
+  let percent = job.status === 'complete' ? 100 : 0;
+  let detail  = '';
+  if (job.status === 'generating') {
+    // If Fish isn't answering yet, it's still booting / loading the model —
+    // report that accurately instead of pretending it's already generating.
+    try {
+      const base = (resolveFishGgufConfig().serverUrl || 'http://127.0.0.1:8080').replace(/\/$/, '');
+      const r = await fetch(base + '/progress', { signal: AbortSignal.timeout(1_500) });
+      if (r.ok) { const p = await r.json(); stage = p.stage ?? 'generating'; percent = p.percent ?? 0; detail = p.detail ?? ''; }
+      else { stage = 'starting'; detail = 'loading model'; }
+    } catch { stage = 'starting'; detail = 'loading model'; }
+  }
+  return {
+    ok: true, jobId: job.id, status: job.status, stage, percent, detail,
+    audioUrl: job.audioUrl, audioPath: job.audioPath, bytes: job.bytes, refFile: job.refFile,
+    voiceName: job.voiceName, transcript: job.transcript, sourceId: job.sourceId,
+    generation_time: job.generation_time, error: job.error,
+  };
+}
+
+// GET /api/voice-clone/jobs/active — the currently running job (or the most recent
+// one). Lets the Reconnect button re-attach to an in-flight generation even when
+// the browser lost its localStorage jobId (e.g. a different device / cleared cache).
+app.get('/api/voice-clone/jobs/active', async (_req, res) => {
+  let job: CloneJobRecord | undefined =
+    (_activeCloneJobId && _cloneJobStore.get(_activeCloneJobId)) || undefined;
+  // Fall back to the newest unfinished job, else the newest job overall.
+  if (!job) {
+    const jobs = [..._cloneJobStore.values()].sort((a, b) => b.created_at - a.created_at);
+    job = jobs.find(j => j.status === 'queued' || j.status === 'generating') || jobs[0];
+  }
+  if (!job) { res.json({ ok: true, active: false }); return; }
+  const payload = await serializeCloneJob(job);
+  res.json({ ...payload, active: job.status === 'queued' || job.status === 'generating' });
+});
+
+// GET /api/voice-clone/jobs/:jobId — poll a job's status (merges live /progress).
+app.get('/api/voice-clone/jobs/:jobId', async (req, res) => {
+  const job = _cloneJobStore.get(req.params.jobId);
+  if (!job) {
+    // 404 → the client treats this as "unknown" (server restarted / 60-min TTL).
+    res.status(404).json({ ok: false, status: 'unknown', error: 'Job not found (expired or server restarted)' });
+    return;
+  }
+  res.json(await serializeCloneJob(job));
+});
+
+// GET /api/voice-clone/latest — most recent completed output (manual recovery).
+app.get('/api/voice-clone/latest', (_req, res) => {
+  const j = _lastCompletedCloneJob;
+  if (j && j.audioPath && fs.existsSync(j.audioPath)) {
+    const sz = fs.statSync(j.audioPath).size;
+    res.json({ ok: true, exists: true, audioUrl: j.audioUrl, bytes: sz, jobId: j.id, voiceName: j.voiceName, transcript: j.transcript });
+  } else {
+    res.json({ ok: true, exists: false });
+  }
+});
+
+// ── Fish clone presets — data/fish-voice-presets.json ─────────────────────────
+const FISH_CLONE_PRESETS_FILE = path.join(ROOT, 'data', 'fish-voice-presets.json');
+function _readClonePresets(): Record<string, unknown>[] {
+  if (!fs.existsSync(FISH_CLONE_PRESETS_FILE)) return [];
+  try { return JSON.parse(fs.readFileSync(FISH_CLONE_PRESETS_FILE, 'utf8')); } catch { return []; }
+}
+function _writeClonePresets(arr: Record<string, unknown>[]) {
+  fs.mkdirSync(path.dirname(FISH_CLONE_PRESETS_FILE), { recursive: true });
+  fs.writeFileSync(FISH_CLONE_PRESETS_FILE, JSON.stringify(arr, null, 2), 'utf8');
+}
+
+app.get('/api/fish-clone-presets', (_req, res) => {
+  res.json({ presets: _readClonePresets() });
+});
+
+app.post('/api/fish-clone-presets', express.json(), (req, res) => {
+  const p = req.body as Record<string, unknown>;
+  if (!p?.name) { res.status(400).json({ error: 'name required' }); return; }
+  const presets = _readClonePresets();
+  const id = (p.id as string) || `clone_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const preset: Record<string, unknown> = { ...p, id, createdAt: p.createdAt || new Date().toISOString() };
+  const idx = presets.findIndex(x => x.id === id);
+  if (idx >= 0) presets[idx] = preset; else presets.unshift(preset);
+  _writeClonePresets(presets);
+  res.json({ ok: true, preset });
+});
+
+app.delete('/api/fish-clone-presets/:id', (req, res) => {
+  _writeClonePresets(_readClonePresets().filter(p => p.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+// ── Reusable voice presets — data/voice-presets.json ──────────────────────────
+// The canonical store for cloned Fish Speech GGUF voices. Each preset is a
+// complete, persistent record that ALSO surfaces in the studio voice grid
+// (buildAllVoiceCards) so it can be reused for future TTS projects.
+interface VoicePreset {
+  id:                 string;
+  name:               string;
+  icon?:              string;
+  engine:             'fish-speech-gguf';
+  profile?:           string;   // reference/profile voice name used
+  sourceId?:          string;   // profile:<id> or file:<name>
+  referenceWavPath?:  string;   // absolute path to the reference WAV (voice cloned from)
+  generatedAudioPath?:string;   // absolute path to the generated sample WAV
+  generatedAudioUrl?: string;   // browser URL for the generated sample
+  transcript?:        string;   // prompt/transcript text used
+  sampleText?:        string;   // the text that was spoken in the sample
+  settings?:          { speed?: number; temperature?: number; pitch?: number };
+  createdAt:          string;
+  previewAudioPath?:  string;   // cached short preview clip
+  previewCreatedAt?:  string;
+  previewStatus?:     string;   // 'ready' | 'failed'
+}
+const VOICE_PRESETS_FILE = path.join(ROOT, 'data', 'voice-presets.json');
+function readVoicePresets(): VoicePreset[] {
+  if (!fs.existsSync(VOICE_PRESETS_FILE)) return [];
+  try { const a = JSON.parse(fs.readFileSync(VOICE_PRESETS_FILE, 'utf8')); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+function writeVoicePresets(arr: VoicePreset[]) {
+  fs.mkdirSync(path.dirname(VOICE_PRESETS_FILE), { recursive: true });
+  fs.writeFileSync(VOICE_PRESETS_FILE, JSON.stringify(arr, null, 2), 'utf8');
+}
+
+app.get('/api/voice-presets', (_req, res) => {
+  res.json({ ok: true, presets: readVoicePresets() });
+});
+
+app.post('/api/voice-presets', express.json(), (req, res) => {
+  const b = req.body as Partial<VoicePreset> & { sourceId?: string; voiceName?: string };
+  if (!b?.name) { res.status(400).json({ ok: false, error: 'name required' }); return; }
+  const presets = readVoicePresets();
+  const id = b.id || `clone_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Resolve the absolute reference WAV from the sourceId so the preset is
+  // self-contained and reusable even after a restart.
+  const referenceWavPath = b.referenceWavPath || resolveCloneRefFile(b.sourceId) || '';
+  const preset: VoicePreset = {
+    id,
+    name:               String(b.name),
+    icon:               b.icon || '🎤',
+    engine:             'fish-speech-gguf',
+    profile:            b.profile || b.voiceName || '',
+    sourceId:           b.sourceId || '',
+    referenceWavPath,
+    generatedAudioPath: b.generatedAudioPath || '',
+    generatedAudioUrl:  b.generatedAudioUrl || '',
+    transcript:         b.transcript || '',
+    sampleText:         b.sampleText || '',
+    settings:           b.settings || { speed: 1.0, temperature: 0.3, pitch: 0 },
+    createdAt:          b.createdAt || new Date().toISOString(),
+  };
+  const idx = presets.findIndex(p => p.id === id);
+  if (idx >= 0) presets[idx] = preset; else presets.unshift(preset);
+  writeVoicePresets(presets);
+  console.log(`[Voice Clone] preset saved: "${preset.name}" (id=${id}, engine=fish-speech-gguf, ref=${referenceWavPath || '(none)'})`);
+  res.json({ ok: true, preset });
+});
+
+app.delete('/api/voice-presets/:id', (req, res) => {
+  writeVoicePresets(readVoicePresets().filter(p => p.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+// Build studio voice cards from saved cloned voice presets so they appear in the
+// main voice picker and are selectable for future TTS. Mapped to the engine the
+// studio understands ('fish-speech-s2-pro') while carrying the reference WAV.
+function cloneVoiceCards(): Array<Record<string, unknown>> {
+  return readVoicePresets().map(p => ({
+    id:                   p.id,
+    name:                 p.name,
+    icon:                 p.icon || '🎤',
+    description:          `Cloned voice • Fish Speech GGUF${p.profile ? ' • ' + p.profile : ''}`,
+    engine:              'fish-speech-s2-pro',
+    isClone:              true,
+    voiceId:              (p.sourceId || '').replace(/^profile:/, '').replace(/^file:/, '') || p.id,
+    fishVoice:            p.referenceWavPath || '',
+    clonePromptAudioPath: p.referenceWavPath || '',
+    clonePromptText:      p.transcript || '',
+    generatedAudioUrl:    p.generatedAudioUrl || '',
+    defaults:    { pitch: p.settings?.pitch ?? 0, rate: 0, speed: p.settings?.speed ?? 1.0, volume: 0, intensity: 30 },
+    fishDefaults:{ speed: p.settings?.speed ?? 1.0, temperature: p.settings?.temperature ?? 0.3, pitchSemitones: p.settings?.pitch ?? 0 },
+    eq: 'clear', reverb: false, robot: false,
+    category: 'cloned', tags: ['cloned', 'fish'],
+    exampleLine: p.sampleText || '',
+  }));
+}
 
 // ── Generate voice with presets + sliders ─────────────────────────────────────
 // ── Export current trend-vault project to a CapCutAPI draft ───────────────────────
@@ -2360,13 +3407,13 @@ app.post('/api/trend-vault/generate-voice', async (req, res) => {
     text, presetId, pitch, rate, speed, volume, intensity, preview, engine,
     throatDepth, ancientRasp, royalPace, chamberSpace,
     // Fish-specific knobs (only consumed when the preset is a Fish preset)
-    fishVoice, fishSpeed, fishTemp, fishPitch,
+    fishVoice, fishSpeed, fishTemp, fishPitch, fishPromptAudioPath,
   } = req.body as {
     text: string; presetId: string; pitch?: number; rate?: number;
     speed?: number; volume?: number; intensity?: number; preview?: boolean;
     engine?: 'auto' | 'local' | 'edge' | 'kokoro' | 'fish-speech-s2-pro' | 'elevenlabs';
     throatDepth?: number; ancientRasp?: number; royalPace?: number; chamberSpace?: number;
-    fishVoice?: string; fishSpeed?: number; fishTemp?: number; fishPitch?: number;
+    fishVoice?: string; fishSpeed?: number; fishTemp?: number; fishPitch?: number; fishPromptAudioPath?: string;
   };
   if (!text || !presetId) { res.status(400).json({ error: 'text and presetId required' }); return; }
 
@@ -2377,12 +3424,17 @@ app.post('/api/trend-vault/generate-voice', async (req, res) => {
     // Anything else falls through to the existing Kokoro generateVoice.
     if (isFishEngine(presetId, engine)) {
       const fp = findFishPreset(presetId);
+      // A cloned voice supplies a reference WAV (prompt_audio_path); built-in Fish
+      // voices don't — so this only changes behavior for cloned presets.
+      const refClone = (fishPromptAudioPath && fishPromptAudioPath.trim()) ? fishPromptAudioPath.trim() : undefined;
+      if (refClone) console.log('[Voice] generate-voice using cloned reference:', refClone);
       const r = await previewFishVoice({
         text: sanitizeFishProsodyTags(text),
         voiceId:     fishVoice ?? fp?.voiceId ?? presetId,
         speed:       fishSpeed ?? fp?.fishDefaults.speed       ?? 1.0,
         temperature: fishTemp  ?? fp?.fishDefaults.temperature ?? 0.7,
         pitch:       fishPitch ?? fp?.fishDefaults.pitchSemitones ?? 0,
+        promptAudioPath: refClone,
       });
       if (!r.ok || !r.buffer) { res.status(503).json({ error: r.error || 'Fish generation failed' }); return; }
       res.setHeader('Content-Type', r.mimeType);
@@ -2427,7 +3479,7 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
       // Engine selector + Fish-specific knobs.
       engine?: string;
       fishVoice?: string; fishSpeed?: number; fishTemp?: number; fishPitch?: number;
-      fishNormalize?: boolean;
+      fishNormalize?: boolean; fishPromptAudioPath?: string;
     };
   };
   if (!Array.isArray(scriptLines) || scriptLines.length === 0) {
@@ -2457,12 +3509,15 @@ app.post('/api/trend-vault/voice-preview', async (req, res) => {
     if (useFish) {
       const fp = findFishPreset(presetId);
       console.log('[VOICE-PREVIEW] routing to Fish Speech S2 Pro for preset', presetId);
+      const refClone = (voice.fishPromptAudioPath && voice.fishPromptAudioPath.trim()) ? voice.fishPromptAudioPath.trim() : undefined;
+      if (refClone) console.log('[Voice] voice-preview using cloned reference:', refClone);
       const r = await previewFishVoice({
         text:        sanitizeFishProsodyTags(fullText),
         voiceId:     voice.fishVoice ?? fp?.voiceId ?? presetId,
         speed:       voice.fishSpeed ?? fp?.fishDefaults.speed       ?? 1.0,
         temperature: voice.fishTemp  ?? fp?.fishDefaults.temperature ?? 0.7,
         pitch:       voice.fishPitch ?? fp?.fishDefaults.pitchSemitones ?? 0,
+        promptAudioPath: refClone,
       });
       if (!r.ok || !r.buffer) throw new Error(r.error || 'Fish Speech preview failed');
       buffer = r.buffer;
@@ -4358,4 +5413,8 @@ app.get('/api/health', async (_req, res) => {
 // ── HTTP server startup ──────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Trend Vault server listening on http://localhost:${PORT}`);
+  // Reconnect to any Fish Speech server that is already running (e.g. started
+  // via start-server.bat or left over from a previous Node.js session).
+  // Arms the crash-restart watchdog automatically if Fish is found reachable.
+  probeFishOnBoot().catch(() => {});
 });

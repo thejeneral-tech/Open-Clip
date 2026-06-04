@@ -1,0 +1,26 @@
+{
+  "fish_default": {
+    "previewAudioPath": "/previews/voices/voice-preview-fish-default.wav",
+    "previewCreatedAt": "2026-06-02T06:25:20.337Z",
+    "previewStatus": "ready",
+    "engine": "fish-speech-s2-pro"
+  },
+  "clone_1780376080067_o62o1s": {
+    "previewAudioPath": "/previews/voices/voice-preview-clone-1780376080067-o62o1s.wav",
+    "previewCreatedAt": "2026-06-02T07:06:34.040Z",
+    "previewStatus": "ready",
+    "engine": "fish-speech-s2-pro"
+  },
+  "fish_tiktok_male_natural": {
+    "previewAudioPath": "/previews/voices/voice-preview-fish-tiktok-male-natural.wav",
+    "previewCreatedAt": "2026-06-02T07:15:20.968Z",
+    "previewStatus": "ready",
+    "engine": "fish-speech-s2-pro"
+  },
+  "clone_1780421364993_xv1459": {
+    "previewAudioPath": "/previews/voices/voice-preview-clone-1780421364993-xv1459.wav",
+    "previewCreatedAt": "2026-06-02T17:54:56.225Z",
+    "previewStatus": "ready",
+    "engine": "fish-speech-s2-pro"
+  }
+}

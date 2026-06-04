@@ -216,8 +216,58 @@ def _resolve_host_python_for_fish() -> str | None:
     return None
 
 
+# ── GGUF backend (s2 binary) ─────────────────────────────────────────────────
+# Fast compiled s2.cpp backend, preferred when present (mirrors launcher.py).
+# A native `s2` binary plus GGUF model files live under FISH_GGUF_ROOT
+# (default /shared/fish-speech; override with the FISH_GGUF_ROOT env var).
+_FISH_GGUF_ROOT      = os.environ.get('FISH_GGUF_ROOT') or '/shared/fish-speech'
+_FISH_GGUF_BINDIR    = os.path.join(_FISH_GGUF_ROOT, 'build', 's2.cpp', 'cmake-build')
+_FISH_GGUF_BINARY    = os.path.join(_FISH_GGUF_BINDIR, 's2')
+_FISH_GGUF_MODELDIR  = os.path.join(_FISH_GGUF_ROOT, 'models', 's2-pro-gguf')
+_FISH_GGUF_TOKENIZER = os.path.join(_FISH_GGUF_ROOT, 'tokenizer.json')
+
+
+def _resolve_gguf_codec() -> str:
+    """Return the path to the codec GGUF: prefer q4_k_m, fall back to f16."""
+    q4  = os.path.join(_FISH_GGUF_MODELDIR, 's2-pro-q4_k_m-codec-only.gguf')
+    f16 = os.path.join(_FISH_GGUF_MODELDIR, 's2-pro-f16-codec-only.gguf')
+    return q4 if os.path.isfile(q4) else f16
+
+
+def _gguf_backend_ok() -> bool:
+    """True when every GGUF file the s2 binary needs is present on disk."""
+    transformer = os.path.join(_FISH_GGUF_MODELDIR, 's2-pro-q4_k_m-transformer-only.gguf')
+    return (os.path.isfile(_FISH_GGUF_BINARY)
+            and os.path.isfile(transformer)
+            and os.path.isfile(_FISH_GGUF_TOKENIZER)
+            and os.path.isfile(_resolve_gguf_codec()))
+
+
+def _gguf_fish_cmd() -> list[str]:
+    """Build the argv that launches the s2.cpp GGUF server on port 8080."""
+    transformer = os.path.join(_FISH_GGUF_MODELDIR, 's2-pro-q4_k_m-transformer-only.gguf')
+    return [_FISH_GGUF_BINARY,
+            '--model',        transformer,
+            '--model-codec',  _resolve_gguf_codec(),
+            '--tokenizer',    _FISH_GGUF_TOKENIZER,
+            '--port',         '8080',
+            '--host',         '127.0.0.1',
+            '--threads',      '4',
+            '--vulkan',       '-1',
+            '--codec-vulkan', '-1']
+
+
+# Export FISH_GGUF_ROOT so child services (and the Node server) resolve the
+# same backend location we do.
+os.environ.setdefault('FISH_GGUF_ROOT', _FISH_GGUF_ROOT)
+
 # Build the launcher card's start command.
-if os.path.isfile(_FISH_SERVER_PY):
+# Priority: fast GGUF s2 binary > fish_speech_server.py > venv api_server >
+#           shell helper > bare python3.
+if _gguf_backend_ok():
+    # Strategy 0 — the compiled s2.cpp GGUF backend (no venv required).
+    _FISH_CMD = _gguf_fish_cmd()
+elif os.path.isfile(_FISH_SERVER_PY):
     # Strategy 1 — the cross-platform fish_speech_server.py launcher.
     # Prefer the venv python if it exists (faster — skips host Python probe).
     # Otherwise pick the best host Python (3.10/3.11) we can find.
@@ -649,6 +699,10 @@ SERVICES = [
         'cmd':  _FISH_CMD,
         'url':  None,
         'needs_npm': False,
+        # Inject the GGUF binary dir into the loader path so the s2 binary can
+        # find its shared libraries when the GGUF backend is in use (harmless
+        # for the Python launcher path — a missing dir is simply ignored).
+        'env':  {'LD_LIBRARY_PATH': _FISH_GGUF_BINDIR + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')},
         'http_health': fish_speech_http_ok,
     },
     {
@@ -1431,6 +1485,15 @@ class TrendVaultLauncher(tk.Tk):
                 self._log_line('Ollama is not installed -- skipping', RED)
                 return
             cmd = [ollama_bin, 'serve']
+        if key == 'fish_speech' and _gguf_backend_ok():
+            # Fast GGUF backend selected — validate the binary + model files,
+            # then launch with the freshest resolved command. When the GGUF
+            # backend is absent we fall through to the Python launcher path,
+            # which bootstraps its own runtime, so it skips this hard preflight.
+            if not self._fish_preflight():
+                self._set_status('Ready')
+                return
+            cmd = _FISH_CMD
         self._log_line('Starting ' + svc['name'] + '...', TEXT)
         self._set_status('Starting ' + svc['name'] + '...')
         try:
@@ -1446,6 +1509,9 @@ class TrendVaultLauncher(tk.Tk):
             )
             with self._lock:
                 self._procs[key] = proc
+            if key == 'fish_speech':
+                # Model load + bind takes time on CPU — announce when it's live.
+                threading.Thread(target=self._fish_wait_online, daemon=True).start()
             for raw in proc.stdout:
                 line = raw.rstrip()
                 if line:
@@ -1470,6 +1536,56 @@ class TrendVaultLauncher(tk.Tk):
                 self._procs.pop(key, None)
             self._set_status('Ready')
 
+    def _fish_preflight(self) -> bool:
+        """Validate the GGUF/s2.cpp backend before starting Fish Speech.
+
+        Only meaningful when the GGUF backend is selected; the Python launcher
+        path handles its own setup. Logs each check and returns True only when
+        the binary, model, codec and tokenizer all exist."""
+        # 1 — compiled s2.cpp binary
+        if not os.path.isfile(_FISH_GGUF_BINARY):
+            self._log_line('[Fish Speech] ERROR: binary not found at ' + _FISH_GGUF_BINARY, RED)
+            self._log_line('[Fish Speech] Build s2.cpp or set FISH_GGUF_ROOT, then retry.', RED)
+            return False
+        self._log_line('[Fish Speech] binary found', GREEN)
+
+        # 2 — transformer / model GGUF
+        transformer = os.path.join(_FISH_GGUF_MODELDIR, 's2-pro-q4_k_m-transformer-only.gguf')
+        if not os.path.isfile(transformer):
+            self._log_line('[Fish Speech] ERROR: model GGUF not found at ' + transformer, RED)
+            return False
+        self._log_line('[Fish Speech] model found', GREEN)
+
+        # 3 — codec GGUF (q4_k_m preferred, f16 fallback)
+        codec = _resolve_gguf_codec()
+        if not os.path.isfile(codec):
+            self._log_line('[Fish Speech] ERROR: codec GGUF not found in ' + _FISH_GGUF_MODELDIR, RED)
+            self._log_line('[Fish Speech] Expected s2-pro-q4_k_m-codec-only.gguf or s2-pro-f16-codec-only.gguf', RED)
+            return False
+        self._log_line('[Fish Speech] codec found', GREEN)
+
+        # 4 — tokenizer (required by the s2 binary)
+        if not os.path.isfile(_FISH_GGUF_TOKENIZER):
+            self._log_line('[Fish Speech] ERROR: tokenizer.json not found at ' + _FISH_GGUF_TOKENIZER, RED)
+            return False
+
+        self._log_line('[Fish Speech] starting on port 8080', ACCENT)
+        return True
+
+    def _fish_wait_online(self):
+        """Poll the Fish Speech /health endpoint until it answers, then log online.
+        Model load + bind can take 10-60 s on CPU, so we wait up to ~120 s."""
+        for _ in range(120):
+            time.sleep(1)
+            with self._lock:
+                alive = self._procs.get('fish_speech') is not None
+            if not alive:
+                return  # process exited or was stopped before coming online
+            ok, _info = fish_speech_http_ok(timeout=2.0)
+            if ok:
+                self._log_line('[Fish Speech] server online', GREEN)
+                return
+
     def _kill(self, svc: dict):
         self._log_line('Stopping ' + svc['name'] + '...', AMBER)
         with self._lock:
@@ -1493,7 +1609,7 @@ class TrendVaultLauncher(tk.Tk):
     # _ensure_fish_s2_pro     ← actual git clone / resume logic (daemon thread).
     def _check_fish_s2_on_start(self):
         """Search all candidate paths for the model; update global if found."""
-        global FISH_S2_PRO_MODEL_PATH
+        global FISH_S2_PRO_MODEL_PATH, _FISH_CMD
         self._log_line('Checking Fish Speech S2 Pro model paths...', ACCENT)
 
         # Walk every candidate and report what we find.
@@ -1517,8 +1633,43 @@ class TrendVaultLauncher(tk.Tk):
             # Persist the discovered path so next launch finds it immediately.
             if _fish_s2_pro_config_load() != found_path:
                 _fish_s2_pro_config_save(found_path)
+
+            # Rebuild the start command now that the model is located —
+            # prefer the fast GGUF binary, else the Python launcher.
+            if _gguf_backend_ok():
+                self._log_line('● Using GGUF backend: ' + _FISH_GGUF_BINARY, GREEN)
+                _FISH_CMD[:] = _gguf_fish_cmd()
+            elif os.path.isfile(_FISH_SERVER_PY):
+                _py = _FISH_VENV_PY if os.path.isfile(_FISH_VENV_PY) else (
+                    _resolve_host_python_for_fish() or 'python3')
+                _FISH_CMD[:] = [_py, _FISH_SERVER_PY]
+            # Keep the service card's command in sync with the rebuilt _FISH_CMD.
+            for svc in SERVICES:
+                if svc['key'] == 'fish_speech':
+                    svc['cmd'] = _FISH_CMD[:]
+
             self._log_line('Fish Speech S2 Pro ready.', GREEN)
             self._log_line('Using existing model at ' + found_path, GREEN)
+
+            # Auto-start the server if it isn't already up. We only auto-start
+            # the fast GGUF backend; the Python launcher can trigger a lengthy
+            # first-run clone + venv build, so we leave that to an explicit
+            # Start click (mirrors the effective Windows behaviour, where the
+            # GGUF preflight gates auto-start).
+            ok, _ = fish_speech_http_ok(timeout=1.5)
+            if ok:
+                self._log_line(
+                    '● Fish server: already running at '
+                    + (os.environ.get('FISH_TTS_URL') or 'http://127.0.0.1:8080'),
+                    GREEN,
+                )
+            elif _gguf_backend_ok():
+                self._log_line('● Fish server: not running — auto-starting (GGUF backend)…', ACCENT)
+                self.after(500, lambda: self._auto_start_fish())
+            else:
+                self._log_line(
+                    'Press Start on the Fish Speech S2 Pro card to launch the server.', MUTED,
+                )
             return
 
         # Path 2 — interrupted git clone sitting in the default cache dir.
@@ -1558,6 +1709,18 @@ class TrendVaultLauncher(tk.Tk):
             )
             return
         threading.Thread(target=self._ensure_fish_s2_pro, daemon=True).start()
+
+    def _auto_start_fish(self):
+        """Auto-start the Fish Speech server if the model is present and the
+        server is not already responding. Triggered shortly after the model is
+        discovered at launch (GGUF backend only)."""
+        ok, _ = fish_speech_http_ok(timeout=1.0)
+        if ok:
+            self._log_line('● Fish server: already up — skipping auto-start', GREEN)
+            return
+        if self._cards.get('fish_speech'):
+            self._log_line('Auto-starting Fish Speech S2 Pro server…', ACCENT)
+            self._start_one('fish_speech')
 
     def _choose_fish_s2_folder(self):
         """Open a folder-picker so the user can select an existing S2 Pro model folder.
@@ -2017,6 +2180,36 @@ class TrendVaultLauncher(tk.Tk):
                 self._cli_proc = None
                 self._set_cli_busy(False)
         threading.Thread(target=_run, daemon=True).start()
+
+    # ── CLI history navigation (Up / Down arrows) ─────────────────────────────
+    def _history_prev(self):
+        """Step backward through CLI history (Up arrow)."""
+        hist = getattr(self, '_cli_history', [])
+        if not hist:
+            return
+        if self._cli_history_idx == -1:
+            # Save whatever is currently typed so we can restore it on Down.
+            self._cli_draft = self._prompt_var.get()
+            self._cli_history_idx = len(hist) - 1
+        elif self._cli_history_idx > 0:
+            self._cli_history_idx -= 1
+        self._prompt_var.set(hist[self._cli_history_idx])
+        # Move cursor to end of entry.
+        self._prompt_entry.icursor('end')
+
+    def _history_next(self):
+        """Step forward through CLI history (Down arrow)."""
+        hist = getattr(self, '_cli_history', [])
+        if self._cli_history_idx == -1:
+            return
+        if self._cli_history_idx < len(hist) - 1:
+            self._cli_history_idx += 1
+            self._prompt_var.set(hist[self._cli_history_idx])
+        else:
+            # Back past the end — restore whatever the user was typing.
+            self._cli_history_idx = -1
+            self._prompt_var.set(getattr(self, '_cli_draft', ''))
+        self._prompt_entry.icursor('end')
 
     def _stop_cli(self):
         proc = getattr(self, '_cli_proc', None)

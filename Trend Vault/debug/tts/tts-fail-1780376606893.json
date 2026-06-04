@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-02T05:03:26.893Z",
+  "presetId": "custom_1778298364023_acg7t",
+  "presetName": "Tiktok male monetone",
+  "presetEdgeId": "en-US-AndrewNeural",
+  "chunkCount": 1,
+  "chunkPreviews": [
+    "Best web software we have ever made good work brother lets go and make the rest."
+  ],
+  "engineLadder": [
+    "Selected (Tiktok male monetone -> en-US-AndrewNeural)",
+    "Default Kokoro male (am_adam)",
+    "Default Kokoro female (af_bella)",
+    "Alt Kokoro male (am_michael)"
+  ],
+  "reasons": [
+    "Selected (Tiktok male monetone -> en-US-AndrewNeural) failed real synthesis test: test audio duration 0.00s (< 0.5s)",
+    "Default Kokoro male (am_adam) failed real synthesis test: test audio duration 0.00s (< 0.5s)",
+    "Default Kokoro female (af_bella) failed real synthesis test: test audio duration 0.00s (< 0.5s)",
+    "Alt Kokoro male (am_michael) failed real synthesis test: test audio duration 0.00s (< 0.5s)"
+  ]
+}

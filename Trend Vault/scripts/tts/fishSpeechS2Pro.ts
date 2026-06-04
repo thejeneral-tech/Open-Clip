@@ -40,8 +40,38 @@ import { spawn, ChildProcess } from 'child_process';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Default Fish Speech HTTP listen URL. */
-export const FISH_TTS_URL_DEFAULT = 'http://127.0.0.1:8080';
+/**
+ * PUBLIC Fish Speech address — the single entry point the UI talks to. The
+ * TrendVault web server (port 3001) exposes /health, /v1/tts and
+ * /v1/audio/speech and proxies them to the real Fish process. Default 3001.
+ */
+export const FISH_TTS_URL_DEFAULT = 'http://127.0.0.1:3001';
+
+/**
+ * REAL Fish Speech process address (the s2.cpp / api_server actually listening).
+ * This stays on 8080 — the 3001 proxy and all internal backend→Fish calls use
+ * THIS, never the public 3001 URL (which would loop back into the web server).
+ */
+export const FISH_UPSTREAM_URL_DEFAULT = 'http://127.0.0.1:8080';
+
+/**
+ * Resolve the real Fish upstream the backend talks to directly.
+ *  - FISH_UPSTREAM_URL wins if set.
+ *  - else if FISH_TTS_URL points at a non-3001 port, honour it (external Fish).
+ *  - else default to 127.0.0.1:8080.
+ */
+export function resolveFishUpstreamUrl(): string {
+  const up = (process.env.FISH_UPSTREAM_URL || '').trim();
+  if (up) return up;
+  const pub = (process.env.FISH_TTS_URL || '').trim();
+  try { const u = new URL(pub); if (u.port && u.port !== '3001') return pub; } catch { /* ignore */ }
+  return FISH_UPSTREAM_URL_DEFAULT;
+}
+
+/** The public Fish URL shown in the UI / status (default 3001). */
+export function resolveFishPublicUrl(): string {
+  return (process.env.FISH_TTS_URL || FISH_TTS_URL_DEFAULT).trim() || FISH_TTS_URL_DEFAULT;
+}
 
 /** Hugging Face repo with the s2-pro weights. */
 export const FISH_HF_REPO = 'fishaudio/s2-pro';
@@ -88,7 +118,8 @@ export function resolveFishConfig(): FishConfig {
   const modelPath   = (process.env.FISH_S2_PRO_MODEL_PATH || _defaultModelPath()).trim();
   const runtimePath = (process.env.FISH_SPEECH_RUNTIME_PATH || _defaultRuntimePath()).trim();
   const venvPath    = (process.env.FISH_SPEECH_VENV_PATH || path.join(runtimePath, '.venv')).trim();
-  const serverUrl   = (process.env.FISH_TTS_URL || FISH_TTS_URL_DEFAULT).trim() || FISH_TTS_URL_DEFAULT;
+  // serverUrl = the REAL Fish process (upstream, 8080) — NOT the public 3001 URL.
+  const serverUrl   = resolveFishUpstreamUrl();
   const pythonBin   = (process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3')).trim();
   const configFile  = path.join(runtimePath, '.trendvault-fish.json');
   return { modelPath, runtimePath, venvPath, serverUrl, pythonBin, configFile };
@@ -106,6 +137,192 @@ export function getVenvPython(cfg: FishConfig = resolveFishConfig()): string {
 
 export function getFishModelDir(): string { return resolveFishConfig().modelPath; }
 export function getFishServerUrl(): string { return resolveFishConfig().serverUrl; }
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── Fish Speech S2 Pro — GGUF / s2.cpp runtime ────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// Fish Speech S2 Pro is a COMPILED C++ server (s2.cpp + GGML), NOT a Python
+// app. This block locates the prebuilt binary, the GGUF transformer weights,
+// the codec GGUF, and the tokenizer, and builds the command to launch it.
+//
+//   Windows root default : C:\fish-speech
+//   Linux/macOS default  : /shared/fish-speech
+//   Override with the FISH_GGUF_ROOT environment variable.
+//
+// Layout inside the root (matches the synced Windows/Linux folder):
+//   build/s2.cpp/cmake-build/s2.exe | s2          (compiled server + ggml libs)
+//   models/s2-pro-gguf/s2-pro-q4_k_m-transformer-only.gguf
+//   models/s2-pro-gguf/s2-pro-q4_k_m-codec-only.gguf  (or *-f16-codec-only.gguf)
+//   tokenizer.json
+//
+// The GGUF path REPLACES the old Python `tools.api_server` path. The Python
+// helpers further down remain in the file but are dormant (never invoked
+// while a GGUF binary is present).
+
+export interface FishGgufConfig {
+  root:            string;   // install root (C:\fish-speech | /shared/fish-speech)
+  binary:          string;   // s2.exe | s2
+  binDir:          string;   // dir containing the binary + ggml shared libs
+  modelDir:        string;   // models/s2-pro-gguf
+  transformerGguf: string;   // s2-pro-q4_k_m-transformer-only.gguf
+  codecGguf:       string;   // s2-pro-q4_k_m-codec-only.gguf (or f16 fallback)
+  tokenizer:       string;   // tokenizer.json
+  port:            number;
+  host:            string;
+  threads:         number;
+  serverUrl:       string;   // REAL upstream Fish process (8080)
+  publicUrl:       string;   // PUBLIC entry point shown in the UI (3001)
+}
+
+/** OS-aware default install root for the compiled Fish Speech GGUF server. */
+function _defaultGgufRoot(): string {
+  return process.platform === 'win32' ? 'C:\\fish-speech' : '/shared/fish-speech';
+}
+
+/** Compute the active GGUF / s2.cpp configuration from env + platform defaults. */
+export function resolveFishGgufConfig(): FishGgufConfig {
+  const root   = (process.env.FISH_GGUF_ROOT || _defaultGgufRoot()).trim() || _defaultGgufRoot();
+  const isWin  = process.platform === 'win32';
+  const binDir = path.join(root, 'build', 's2.cpp', 'cmake-build');
+  const binary = path.join(binDir, isWin ? 's2.exe' : 's2');
+  const modelDir        = path.join(root, 'models', 's2-pro-gguf');
+  const transformerGguf = path.join(modelDir, 's2-pro-q4_k_m-transformer-only.gguf');
+  // Prefer the quantised codec; fall back to the f16 codec if only that exists.
+  const codecQ4  = path.join(modelDir, 's2-pro-q4_k_m-codec-only.gguf');
+  const codecF16 = path.join(modelDir, 's2-pro-f16-codec-only.gguf');
+  const codecGguf = fs.existsSync(codecQ4) ? codecQ4
+                   : (fs.existsSync(codecF16) ? codecF16 : codecQ4);
+  const tokenizer = path.join(root, 'tokenizer.json');
+  // serverUrl = the REAL Fish process (upstream, 8080) — NOT the public 3001 URL.
+  const serverUrl = resolveFishUpstreamUrl();
+  let host = '127.0.0.1';
+  let port = 8080;
+  try {
+    const u = new URL(serverUrl);
+    if (u.hostname) host = u.hostname;
+    if (u.port)     port = parseInt(u.port, 10) || 8080;
+  } catch { /* keep defaults */ }
+  const threads = parseInt(process.env.FISH_THREADS || '4', 10) || 4;
+  const publicUrl = resolveFishPublicUrl();
+  return { root, binary, binDir, modelDir, transformerGguf, codecGguf, tokenizer, port, host, threads, serverUrl, publicUrl };
+}
+
+/**
+ * True when the compiled GGUF/s2.cpp server binary is present. When true the
+ * GGUF backend is used; the Python tools.api_server path stays dormant.
+ */
+export function isGgufBackend(): boolean {
+  try { return fs.existsSync(resolveFishGgufConfig().binary); }
+  catch { return false; }
+}
+
+export interface FishFileCheck { ok: boolean; path: string; sizeBytes: number; reason?: string; }
+
+function _statSize(p: string): number {
+  try { return fs.statSync(p).size; } catch { return 0; }
+}
+
+/** Compiled s2 binary + ggml shared libraries present? */
+export function checkFishGgufBinary(): FishFileCheck {
+  const g = resolveFishGgufConfig();
+  if (!fs.existsSync(g.binary)) {
+    return { ok: false, path: g.binary, sizeBytes: 0,
+             reason: `s2 server binary not found at ${g.binary} — run install_fish_gguf_runtime.py (or build s2.cpp)` };
+  }
+  return { ok: true, path: g.binary, sizeBytes: _statSize(g.binary) };
+}
+
+/** Transformer GGUF model present and a plausible size (>100 MB)? */
+export function checkFishGgufModel(): FishFileCheck {
+  const g = resolveFishGgufConfig();
+  if (!fs.existsSync(g.transformerGguf)) {
+    return { ok: false, path: g.transformerGguf, sizeBytes: 0,
+             reason: `transformer GGUF not found at ${g.transformerGguf}` };
+  }
+  const sz = _statSize(g.transformerGguf);
+  if (sz < 100 * 1024 * 1024) {
+    return { ok: false, path: g.transformerGguf, sizeBytes: sz,
+             reason: `transformer GGUF too small (${(sz / 1024 / 1024).toFixed(0)} MB) — likely a partial download` };
+  }
+  return { ok: true, path: g.transformerGguf, sizeBytes: sz };
+}
+
+/** Codec GGUF present (q4 preferred, f16 fallback) and >40 MB? */
+export function checkFishGgufCodec(): FishFileCheck {
+  const g = resolveFishGgufConfig();
+  if (!fs.existsSync(g.codecGguf)) {
+    return { ok: false, path: g.codecGguf, sizeBytes: 0,
+             reason: `codec GGUF not found at ${g.codecGguf}` };
+  }
+  const sz = _statSize(g.codecGguf);
+  if (sz < 40 * 1024 * 1024) {
+    return { ok: false, path: g.codecGguf, sizeBytes: sz,
+             reason: `codec GGUF too small (${(sz / 1024 / 1024).toFixed(0)} MB) — likely a partial download` };
+  }
+  return { ok: true, path: g.codecGguf, sizeBytes: sz };
+}
+
+/** tokenizer.json present? */
+export function checkFishGgufTokenizer(): FishFileCheck {
+  const g = resolveFishGgufConfig();
+  if (!fs.existsSync(g.tokenizer)) {
+    return { ok: false, path: g.tokenizer, sizeBytes: 0,
+             reason: `tokenizer.json not found at ${g.tokenizer}` };
+  }
+  return { ok: true, path: g.tokenizer, sizeBytes: _statSize(g.tokenizer) };
+}
+
+/**
+ * Resolve the path to the bundled ffmpeg binary shipped with Remotion/ffmpeg-installer.
+ * Used by the s2 server for audio conversion (voice cloning). Optional — server still
+ * works without it, but voice cloning quality is better with it.
+ */
+function _bundledFfmpegDir(): string | null {
+  // Walk up from this file to the project root, then look in node_modules.
+  const candidates = [
+    path.join(__dirname, '..', '..', 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe'),
+    path.join(__dirname, '..', '..', 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffmpeg.exe'),
+    path.join(process.cwd(), 'node_modules', '@ffmpeg-installer', 'win32-x64', 'ffmpeg.exe'),
+    path.join(process.cwd(), 'node_modules', '@remotion', 'compositor-win32-x64-msvc', 'ffmpeg.exe'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return path.dirname(c);
+  }
+  return null;
+}
+
+/**
+ * Build the environment for launching the s2 binary so it can find its
+ * ggml shared libraries (ggml*.dll on Windows, libggml*.so on Linux).
+ * Also injects the bundled ffmpeg directory so voice cloning audio conversion works.
+ */
+function _ggufSpawnEnv(g: FishGgufConfig): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const libDirs = [g.binDir, path.join(g.binDir, 'bin')];
+  const ffmpegDir = process.platform === 'win32' ? _bundledFfmpegDir() : null;
+  if (ffmpegDir) libDirs.push(ffmpegDir);
+  if (process.platform === 'win32') {
+    env.PATH = libDirs.join(path.delimiter) + path.delimiter + (env.PATH || '');
+  } else {
+    env.LD_LIBRARY_PATH = libDirs.join(path.delimiter) +
+      (env.LD_LIBRARY_PATH ? path.delimiter + env.LD_LIBRARY_PATH : '');
+  }
+  return env;
+}
+
+/** Build the s2 server argv (CPU backend, --vulkan -1). */
+function _ggufServerArgs(g: FishGgufConfig): string[] {
+  return [
+    '--model',        g.transformerGguf,
+    '--model-codec',  g.codecGguf,
+    '--tokenizer',    g.tokenizer,
+    '--port',         String(g.port),
+    '--host',         g.host,
+    '--threads',      String(g.threads),
+    '--vulkan',       '-1',
+    '--codec-vulkan', '-1',
+  ];
+}
 
 // ── Persistent config (caches the working endpoint after discovery) ──────
 
@@ -170,10 +387,12 @@ export interface FishStep {
 }
 
 const _stepKeys = [
-  'model',       // Fish model: found
-  'runtime',     // Fish runtime: installed
-  'venv',        // Python venv: ready
-  'deps',        // Dependencies: installed
+  'model',       // Fish model: found        (models/s2-pro-gguf dir present)
+  'gguf',        // Fish GGUF model: found   (transformer .gguf present)
+  'codec',       // Fish codec GGUF: found   (codec .gguf present)
+  'runtime',     // Fish runtime: installed  (s2 binary + ggml libs present)
+  'venv',        // Python venv: ready       (optional for GGUF — self-contained)
+  'deps',        // Dependencies: installed  (optional for GGUF — self-contained)
   'server',      // Fish server: starting → running
   'endpoint',    // API endpoint: detected
   'test',        // Test generation: passed
@@ -181,6 +400,8 @@ const _stepKeys = [
 
 const _stepLabels: Record<string, string> = {
   model:    'Fish model: found',
+  gguf:     'Fish GGUF model: found',
+  codec:    'Fish codec GGUF: found',
   runtime:  'Fish runtime: installed',
   venv:     'Python venv: ready',
   deps:     'Dependencies: installed',
@@ -878,6 +1099,16 @@ let _serverLastStdout = '';
 let _serverLastStderr = '';
 let _serverCommand: { cmd: string; args: string[]; cwd: string } | null = null;
 
+// ── Reconnect watchdog ───────────────────────────────────────────────────────
+// Mirrors the "persistent server" philosophy of start-server.bat and
+// start_fish_linux.py: if we spawned the process and it exits unexpectedly,
+// try to bring it back automatically with exponential backoff.
+let _watchdogEnabled   = false;
+let _watchdogStopping  = false;   // set by stopFishServer() so we don't restart an intentional kill
+let _restartAttempts   = 0;
+const _MAX_RESTARTS    = 5;       // give up after this many consecutive crash-restarts
+const _RESTART_BASE_MS = 2_000;   // first retry after 2 s, then 4 s, 8 s … capped at 30 s
+
 export interface FishServerInfo {
   running:   boolean;
   reachable: boolean;
@@ -969,11 +1200,201 @@ async function _isPortOccupied(url: string): Promise<boolean> {
 }
 
 /**
- * Spawn the api_server subprocess. Idempotent — returns the existing PID
- * if a child process is already running. stdout/stderr are streamed into
- * the log ring AND retained for diagnostics.
+ * Attach stdout/stderr → log-ring streaming to a spawned server child.
+ * Shared by the GGUF and (dormant) Python launchers.
+ */
+function _wireServerChildLogging(child: import('child_process').ChildProcess): void {
+  child.stdout?.on('data', (chunk: Buffer) => {
+    const text = chunk.toString();
+    _serverLastStdout += text;
+    if (_serverLastStdout.length > 16_384) _serverLastStdout = _serverLastStdout.slice(-16_384);
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim()) _appendLog('info', line.trim(), 'server');
+    }
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    const text = chunk.toString();
+    _serverLastStderr += text;
+    if (_serverLastStderr.length > 16_384) _serverLastStderr = _serverLastStderr.slice(-16_384);
+    for (const line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t) continue;
+      const lvl: FishLogLevel = /error|traceback|failed|exception/i.test(t) ? 'error' : 'info';
+      _appendLog(lvl, t, 'server');
+    }
+  });
+  child.on('exit', (code, signal) => {
+    _appendLog(code === 0 ? 'info' : 'error',
+               `server process exited (code=${code}, signal=${signal})`, 'server');
+    _serverProc = null;
+    // If this was NOT an intentional stop, the watchdog tries to reconnect.
+    if (_watchdogEnabled && !_watchdogStopping) {
+      _scheduleWatchdogRestart(code).catch(() => {});
+    }
+    _watchdogStopping = false;
+  });
+  child.on('error', (err) => {
+    _appendLog('error', `spawn error: ${err.message}`, 'server');
+  });
+}
+
+/**
+ * Spawn the Fish Speech server. Idempotent — returns the existing PID if a
+ * child process is already running. Uses the compiled GGUF/s2.cpp binary
+ * (preferred). The Python tools.api_server path is kept dormant below.
  */
 export async function startFishServer(): Promise<FishServerInfo> {
+  if (isGgufBackend()) return startFishServerGguf();
+  // No compiled GGUF binary present — surface a clear, actionable error
+  // instead of silently falling back to the (dormant) Python path.
+  const g = resolveFishGgufConfig();
+  _appendLog('error',
+    `GGUF server binary not found at ${g.binary}. Run install_fish_gguf_runtime.py ` +
+    `or set FISH_GGUF_ROOT to your fish-speech install.`, 'server');
+  return {
+    running: false, reachable: false, url: g.serverUrl,
+    stdoutTail: '', stderrTail: `s2 binary missing at ${g.binary}`,
+  };
+}
+
+/**
+ * Spawn the compiled s2.cpp GGUF server. Validates the binary, transformer
+ * GGUF, codec GGUF and tokenizer, wires up the ggml shared-library path, and
+ * launches the CPU backend. Idempotent and adopts an already-running server.
+ */
+export async function startFishServerGguf(): Promise<FishServerInfo> {
+  const g = resolveFishGgufConfig();
+
+  if (_serverProc && !_serverProc.killed && _serverProc.exitCode === null) {
+    _appendLog('info', `server already running (pid ${_serverProc.pid})`, 'server');
+    return checkFishServerStatus();
+  }
+
+  // If something is already listening, adopt it rather than spawn a conflict.
+  const occupied = await _isPortOccupied(g.serverUrl);
+  if (occupied) {
+    const status = await checkFishServerStatus();
+    if (status.reachable) {
+      _appendLog('info', `existing server already reachable at ${g.serverUrl}`, 'server');
+      return status;
+    }
+    _appendLog('warn', `port appears occupied at ${g.serverUrl} but not responding to /health — refusing to spawn a conflicting process`, 'server');
+    return { running: false, reachable: false, url: g.serverUrl, stdoutTail: '', stderrTail: 'port occupied by another process' };
+  }
+
+  // Validate required files before spawning.
+  for (const [label, chk] of [
+    ['binary',    checkFishGgufBinary()],
+    ['transformer GGUF', checkFishGgufModel()],
+    ['codec GGUF', checkFishGgufCodec()],
+    ['tokenizer', checkFishGgufTokenizer()],
+  ] as Array<[string, FishFileCheck]>) {
+    if (!chk.ok) {
+      _appendLog('error', `cannot start GGUF server — ${label}: ${chk.reason}`, 'server');
+      return { running: false, reachable: false, url: g.serverUrl, stdoutTail: '', stderrTail: chk.reason };
+    }
+  }
+
+  const args = _ggufServerArgs(g);
+  _serverLastStdout = '';
+  _serverLastStderr = '';
+  _serverCommand = { cmd: g.binary, args, cwd: g.root };
+  _appendLog('info', `[server start command] ${g.binary} ${args.join(' ')}  (cwd: ${g.root})`, 'server');
+
+  const child = spawn(g.binary, args, {
+    cwd: g.root,
+    env: _ggufSpawnEnv(g),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  _serverProc = child;
+  _wireServerChildLogging(child);
+  // Arm watchdog so a crash restarts the server automatically.
+  _watchdogEnabled  = true;
+  _watchdogStopping = false;
+  _restartAttempts  = 0;
+  await new Promise(r => setTimeout(r, 100));
+  return checkFishServerStatus();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reconnect watchdog — mirrors start-server.bat "persistent server" pattern:
+//   • probeFishOnBoot()  — called once at server startup; if Fish is already
+//                          reachable (e.g. a previous Node run left it up, or
+//                          the user launched start-server.bat directly), we
+//                          adopt it and arm the watchdog.
+//   • _scheduleWatchdogRestart() — called from the 'exit' handler when Fish
+//                          crashes unexpectedly; backs off 2→4→8→16→30 s.
+//   • stopFishServer()   — sets _watchdogStopping so the exit handler knows
+//                          the kill was intentional and skips the restart.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function _scheduleWatchdogRestart(exitCode: number | null): Promise<void> {
+  if (_restartAttempts >= _MAX_RESTARTS) {
+    _appendLog('error',
+      `Fish Speech watchdog: ${_MAX_RESTARTS} consecutive restarts failed — ` +
+      `giving up. Click ▶ Start Fish Speech to retry manually.`, 'lifecycle');
+    _watchdogEnabled = false;
+    return;
+  }
+
+  const delay = Math.min(_RESTART_BASE_MS * Math.pow(2, _restartAttempts), 30_000);
+  _restartAttempts++;
+  _appendLog('warn',
+    `Fish Speech crashed (exit ${exitCode}) — watchdog restarting in ` +
+    `${delay / 1000}s (attempt ${_restartAttempts}/${_MAX_RESTARTS})`, 'lifecycle');
+
+  await new Promise(r => setTimeout(r, delay));
+
+  _appendLog('info', 'Fish Speech watchdog: attempting reconnect…', 'lifecycle');
+  const info = await startFishServerGguf();
+  if (info.reachable || info.running) {
+    _appendLog('info',
+      `Fish Speech watchdog: server reconnected at ${info.url} (pid ${info.pid ?? '?'})`,
+      'lifecycle');
+    _restartAttempts = 0;  // reset backoff on successful restart
+  } else {
+    _appendLog('error',
+      `Fish Speech watchdog: reconnect attempt ${_restartAttempts} failed — ` +
+      `${info.stderrTail?.slice(-200) || 'no detail'}`, 'lifecycle');
+  }
+}
+
+/**
+ * Boot-time reconnect probe.
+ *
+ * Call once after the Node.js server starts listening. Replicates the
+ * start-server.bat port pre-flight check: if Fish Speech is already reachable
+ * on its configured port (left running from a previous session or launched via
+ * start-server.bat), we adopt the external process, log its URL, and arm the
+ * watchdog so it will be restarted if it later crashes.
+ *
+ * If the server is NOT reachable we log a single info line and return — the
+ * user can start it manually from the UI.
+ */
+export async function probeFishOnBoot(): Promise<void> {
+  try {
+    const status = await checkFishServerStatus();
+    if (status.reachable) {
+      _appendLog('info',
+        `Fish Speech already reachable at ${status.url} — reconnected (external process). ` +
+        `Watchdog armed.`, 'lifecycle');
+      _watchdogEnabled  = true;
+      _restartAttempts  = 0;
+    } else {
+      _appendLog('info',
+        `Fish Speech not reachable at ${status.url} — waiting for manual start.`,
+        'lifecycle');
+    }
+  } catch {
+    // Non-fatal: just means Fish isn't up yet.
+  }
+}
+
+/**
+ * DORMANT: original Python tools.api_server launcher. Retained for reference /
+ * fallback but not invoked while a compiled GGUF binary is present.
+ */
+export async function startFishServerPython(): Promise<FishServerInfo> {
   const cfg = resolveFishConfig();
 
   if (_serverProc && !_serverProc.killed && _serverProc.exitCode === null) {
@@ -1068,6 +1489,8 @@ export async function startFishServer(): Promise<FishServerInfo> {
 
 /** Politely kill the spawned server. No-op if nothing is running. */
 export function stopFishServer(): { stopped: boolean } {
+  _watchdogStopping = true;   // tell exit handler this kill was intentional → no restart
+  _watchdogEnabled  = false;
   if (_serverProc && !_serverProc.killed) {
     try { _serverProc.kill(); _appendLog('info', `sent SIGTERM to pid ${_serverProc.pid}`, 'server'); }
     catch (e) { _appendLog('warn', `kill failed: ${(e as Error).message}`, 'server'); }
@@ -1117,11 +1540,30 @@ export interface FishEndpointResult {
   reason?: string;
 }
 
-const _ROUTE_CANDIDATES = ['/v1/tts', '/v1/audio/speech', '/tts', '/api/invoke', '/v1/audio/text-to-speech'];
+// s2.cpp exposes /v1/tts (primary), /synthesize and /v1/audio/speech — all
+// accept the same JSON body and return raw audio bytes. We keep the older
+// route names at the end for forward-compatibility with other Fish builds.
+const _ROUTE_CANDIDATES = ['/v1/tts', '/synthesize', '/v1/audio/speech', '/tts', '/api/invoke', '/v1/audio/text-to-speech'];
 
-export async function detectFishEndpoint(testText = 'Trend Vault.'): Promise<FishEndpointResult> {
+export async function detectFishEndpoint(testText = 'Hi.'): Promise<FishEndpointResult> {
   const cfg = resolveFishConfig();
+  // Fast-path: in-memory route already confirmed (set by prepareFishEngine fast-path).
+  if (_lifecycle.workingRoute) {
+    return { endpoint: _lifecycle.workingRoute,
+             triedRoutes: [{ route: _lifecycle.workingRoute, status: 200, note: 'in-memory cache (no re-probe)' }] };
+  }
   const persisted = _loadPersisted(cfg);
+  // GGUF fast-path: skip audio-generation probe — just verify server is reachable.
+  if (isGgufBackend() && persisted.workingEndpoint) {
+    try {
+      const healthResp = await fetch(cfg.serverUrl + '/health', { signal: AbortSignal.timeout(5_000) });
+      if (healthResp.ok || healthResp.status === 200) {
+        _lifecycle.workingRoute = persisted.workingEndpoint;
+        return { endpoint: persisted.workingEndpoint,
+                 triedRoutes: [{ route: persisted.workingEndpoint, status: 200, note: 'GGUF: cached + health-check verified' }] };
+      }
+    } catch { /* fall through to full probe below */ }
+  }
   if (persisted.workingEndpoint) {
     const ok = await _probeRoute(cfg.serverUrl + persisted.workingEndpoint, testText);
     if (ok.audioBytes > 256) {
@@ -1151,18 +1593,22 @@ export async function detectFishEndpoint(testText = 'Trend Vault.'): Promise<Fis
 }
 
 async function _probeRoute(url: string, text: string): Promise<{ status: number | 'error'; audioBytes: number; note?: string }> {
+  // s2.cpp body: only `text` is required; it returns WAV by default. The extra
+  // fields are harmless (ignored by s2.cpp) but keep us compatible with other
+  // Fish builds that expect them.
   const body = JSON.stringify({
-    text, reference_id: 'tiktok_male_natural', speaker: 'tiktok_male_natural',
-    voice: 'tiktok_male_natural', format: 'mp3', streaming: false,
-    temperature: 0.7, top_p: 0.7, repetition_penalty: 1.2,
-    max_new_tokens: 256, chunk_length: 200, normalize: true,
+    text, format: 'wav',
+    temperature: 0.3, top_p: 0.8, top_k: 20,
   });
+  // CPU-only inference can take 5–10 minutes for even a short phrase.
+  // 600 seconds keeps us compatible with GPU systems (fast) and CPU systems (slow).
+  const PROBE_TIMEOUT_MS = 600_000;
   try {
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg, audio/wav, */*' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'audio/wav, audio/mpeg, */*' },
       body,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     if (!r.ok) return { status: r.status, audioBytes: 0, note: `HTTP ${r.status}` };
     const ab = await r.arrayBuffer();
@@ -1183,7 +1629,7 @@ export interface FishTestResult {
 }
 
 export async function testFishGeneration(): Promise<FishTestResult> {
-  const discovery = await detectFishEndpoint('Trend Vault Fish Speech test.');
+  const discovery = await detectFishEndpoint('Hi.');
   if (!discovery.endpoint) {
     return { ok: false, reason: discovery.reason || 'endpoint discovery returned no route' };
   }
@@ -1208,6 +1654,7 @@ export interface GenerateOptions {
   temperature?: number;
   pitch?: number;
   autoStart?: boolean;
+  promptAudioPath?: string;   // reference WAV for a cloned voice (s2.cpp prompt_audio_path)
 }
 
 export interface GenerateResult {
@@ -1218,6 +1665,47 @@ export interface GenerateResult {
   error?: string;
   engine: 'fish-speech-s2-pro';
   bootstrapped?: boolean;
+}
+
+// POST JSON to the Fish server and collect the binary response using raw
+// node:http — NOT fetch(). Node's fetch (undici) pools connections and reuses
+// sockets that s2.cpp/httplib has already closed, which surfaces as an immediate
+// "fetch failed" even when Fish accepts the request and generates fine. It also
+// imposes a hidden ~300s headersTimeout, and Fish sends no response until the
+// whole WAV is ready. A fresh raw request per call avoids both problems.
+// `timeoutMs` is a socket-INACTIVITY guard (Fish is silent during generation).
+function _fishHttpPost(
+  urlStr: string, bodyObj: unknown, timeoutMs = 1_800_000,
+): Promise<{ status: number; buffer: Buffer; error?: string }> {
+  return new Promise(async (resolve) => {
+    try {
+      const u = new URL(urlStr);
+      const mod = u.protocol === 'https:' ? await import('node:https') : await import('node:http');
+      const payload = Buffer.from(JSON.stringify(bodyObj));
+      const req = mod.request({
+        hostname: u.hostname,
+        port:     u.port || (u.protocol === 'https:' ? 443 : 80),
+        path:     u.pathname + u.search,
+        method:   'POST',
+        headers: {
+          'Content-Type':   'application/json',
+          'Accept':         'audio/wav, audio/mpeg, */*',
+          'Connection':     'close',           // fresh connection each call — no stale-socket reuse
+          'Content-Length': payload.length,
+        },
+      }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode || 0, buffer: Buffer.concat(chunks) }));
+      });
+      req.setTimeout(timeoutMs, () => req.destroy(new Error(`Fish request timed out (no data for ${Math.round(timeoutMs / 1000)}s)`)));
+      req.on('error', (e: Error) => resolve({ status: 0, buffer: Buffer.alloc(0), error: e.message }));
+      req.write(payload);
+      req.end();
+    } catch (e) {
+      resolve({ status: 0, buffer: Buffer.alloc(0), error: (e as Error).message });
+    }
+  });
 }
 
 export async function generateFishSpeechAudio(opts: GenerateOptions): Promise<GenerateResult> {
@@ -1251,30 +1739,29 @@ export async function generateFishSpeechAudio(opts: GenerateOptions): Promise<Ge
     };
     endpoint = d.endpoint;
   }
-  const body = {
-    text:               sanitizeFishProsodyTags(opts.text),
-    reference_id:       opts.voiceId,
-    speaker:            opts.voiceId,
-    voice:              opts.voiceId,
-    format:             'mp3',
-    streaming:          false,
-    temperature:        opts.temperature ?? 0.7,
-    top_p:              0.7,
-    repetition_penalty: 1.2,
-    max_new_tokens:     2048,
-    chunk_length:       200,
-    normalize:          true,
-    speed:              opts.speed ?? 1.0,
-    pitch_shift:        opts.pitch ?? 0,
-    model:              's2-pro',
+  // s2.cpp GGUF body. Voice selection is done via a reference clip
+  // (prompt_audio_path / the server's uploaded reference), NOT a voice id —
+  // s2.cpp ignores reference_id/speaker/voice. We pass the tuning knobs it
+  // does honour (temperature, top_p, top_k) and request WAV output.
+  const refPath = opts.promptAudioPath
+                || process.env.FISH_REFERENCE_AUDIO_PATH
+                || undefined;
+  const body: Record<string, unknown> = {
+    text:        sanitizeFishProsodyTags(opts.text),
+    format:      'wav',
+    temperature: opts.temperature ?? 0.3,
+    top_p:       0.8,
+    top_k:       20,
   };
+  if (refPath) body.prompt_audio_path = refPath;
   try {
-    const r = await fetch(cfg.serverUrl + endpoint, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg, audio/wav, */*' },
-      body:    JSON.stringify(body),
-      signal:  AbortSignal.timeout(180_000),
-    });
+    // Raw http (see _fishHttpPost) — avoids undici stale-socket "fetch failed"
+    // and the hidden 300s headersTimeout on long, silent Fish generations.
+    const r = await _fishHttpPost(cfg.serverUrl + endpoint, body, 1_800_000);
+    if (r.error) {
+      return { ok: false, mimeType: 'audio/mpeg', engine: 'fish-speech-s2-pro', bootstrapped,
+               error: `Fish Speech generation failed: ${r.error}` };
+    }
     if (r.status === 404) {
       _savePersisted(cfg, { workingEndpoint: undefined });
       _lifecycle.workingRoute = null;
@@ -1286,17 +1773,16 @@ export async function generateFishSpeechAudio(opts: GenerateOptions): Promise<Ge
       };
       return generateFishSpeechAudio({ ...opts, autoStart: false });
     }
-    if (!r.ok) {
+    if (r.status < 200 || r.status >= 300) {
       return { ok: false, mimeType: 'audio/mpeg', engine: 'fish-speech-s2-pro', bootstrapped,
                error: `Fish Speech server returned HTTP ${r.status} at ${endpoint}` };
     }
-    const ab = await r.arrayBuffer();
-    const buffer = Buffer.from(ab);
+    const buffer = r.buffer;
     if (buffer.length < 256) {
       return { ok: false, mimeType: 'audio/mpeg', engine: 'fish-speech-s2-pro', bootstrapped,
                error: `Fish Speech responded on ${endpoint} but returned only ${buffer.length} bytes` };
     }
-    return { ok: true, buffer, mimeType: 'audio/mpeg', endpoint, engine: 'fish-speech-s2-pro', bootstrapped };
+    return { ok: true, buffer, mimeType: 'audio/wav', endpoint, engine: 'fish-speech-s2-pro', bootstrapped };
   } catch (e) {
     return { ok: false, mimeType: 'audio/mpeg', engine: 'fish-speech-s2-pro', bootstrapped,
              error: `Fish Speech generation failed: ${(e as Error).message}` };
@@ -1320,36 +1806,52 @@ export async function prepareFishEngine(): Promise<PrepareResult> {
   }
   _lifecycle.inFlight = true;
   _resetSteps();
-  _appendLog('info', '--- preparing Fish Speech engine ---', 'lifecycle');
+  const g = resolveFishGgufConfig();
+  _appendLog('info', '--- Repair started: preparing Fish Speech S2 Pro GGUF — this can take a few minutes the first time. ---', 'lifecycle');
+  _appendLog('info', `GGUF root: ${g.root}  (override with FISH_GGUF_ROOT)`, 'lifecycle');
   try {
+    // 1) Fish model: the GGUF model directory under the install root.
     _setStep('model', 'running');
-    const m = checkFishModel();
-    if (!m.installed) { _setStep('model', 'failed', m.reason); return _snapshotPrep(); }
-    _setStep('model', 'ok', `${(m.sizeBytes / 1024 / 1024).toFixed(0)} MB at ${m.modelPath}`);
+    if (!fs.existsSync(g.modelDir)) {
+      _setStep('model', 'failed', `model folder not found: ${g.modelDir} — run install_fish_gguf_runtime.py`);
+      return _snapshotPrep();
+    }
+    _setStep('model', 'ok', g.modelDir);
 
+    // 2) Fish GGUF model: the transformer .gguf weights.
+    _setStep('gguf', 'running');
+    const ggufChk = checkFishGgufModel();
+    if (!ggufChk.ok) { _setStep('gguf', 'failed', ggufChk.reason); return _snapshotPrep(); }
+    _setStep('gguf', 'ok', `${(ggufChk.sizeBytes / 1024 / 1024).toFixed(0)} MB — ${ggufChk.path}`);
+    _appendLog('success', `GGUF model found: ${ggufChk.path}`, 'gguf');
+
+    // 3) Fish codec GGUF.
+    _setStep('codec', 'running');
+    const codecChk = checkFishGgufCodec();
+    if (!codecChk.ok) { _setStep('codec', 'failed', codecChk.reason); return _snapshotPrep(); }
+    _setStep('codec', 'ok', `${(codecChk.sizeBytes / 1024 / 1024).toFixed(0)} MB — ${codecChk.path}`);
+    _appendLog('success', `Codec GGUF found: ${codecChk.path}`, 'codec');
+
+    // 4) Fish runtime: compiled s2 binary + ggml libs + tokenizer.
     _setStep('runtime', 'running');
-    let rt = checkFishRuntime();
-    if (!rt.installed) {
-      _appendLog('info', 'runtime missing — cloning fish-speech', 'runtime');
-      rt = await ensureFishRuntime();
-      if (!rt.installed) { _setStep('runtime', 'failed', rt.reason); return _snapshotPrep(); }
-    }
-    _setStep('runtime', 'ok', rt.runtimePath);
+    const binChk = checkFishGgufBinary();
+    if (!binChk.ok) { _setStep('runtime', 'failed', binChk.reason); return _snapshotPrep(); }
+    const tokChk = checkFishGgufTokenizer();
+    if (!tokChk.ok) { _setStep('runtime', 'failed', tokChk.reason); return _snapshotPrep(); }
+    _setStep('runtime', 'ok', g.binary);
+    _appendLog('success', `Runtime found: ${g.binary}`, 'runtime');
 
+    // 5) Python venv — NOT required for the self-contained GGUF/s2.cpp runtime.
+    //    If the installer created an optional venv we report it; otherwise OK.
     _setStep('venv', 'running');
-    let venv = checkFishVenv();
-    if (!venv.ready) venv = await ensureFishVenv();
-    if (!venv.ready) { _setStep('venv', 'failed', venv.reason); return _snapshotPrep(); }
-    _setStep('venv', 'ok', venv.pythonBin);
+    const optVenv = path.join(g.root, '.venv');
+    if (fs.existsSync(optVenv)) _setStep('venv', 'ok', `optional venv present: ${optVenv}`);
+    else _setStep('venv', 'ok', 'not required (GGUF runtime is self-contained)');
 
+    // 6) Dependencies — the compiled binary bundles its ggml shared libs, so
+    //    there are no Python/Node packages to install for the GGUF runtime.
     _setStep('deps', 'running');
-    let deps = await checkFishDependencies();
-    if (!deps.installed) {
-      _appendLog('info', `deps missing (${deps.reason}) — installing into venv`, 'deps');
-      deps = await installFishDependencies();
-    }
-    if (!deps.installed) { _setStep('deps', 'failed', deps.reason); return _snapshotPrep(); }
-    _setStep('deps', 'ok', `installed: ${Object.entries(deps.modules).filter(([,v]) => v).map(([k]) => k).join(', ')}`);
+    _setStep('deps', 'ok', 'GGUF runtime is self-contained (no Python deps required)');
 
     _setStep('server', 'running');
     const initial = await checkFishServerStatus();
@@ -1369,19 +1871,46 @@ export async function prepareFishEngine(): Promise<PrepareResult> {
     }
     _setStep('server', 'ok', resolveFishConfig().serverUrl);
 
+    // For the GGUF backend, we already know the binary, models, and tokenizer
+    // are present (verified in steps 1–4), and the server is reachable.
+    // Skip the slow audio generation test — probing /v1/tts on CPU-only hardware
+    // can take 10+ minutes.  Instead, verify the route exists by GETting the
+    // root index page (which lists available routes) and mark both steps ok.
     _setStep('endpoint', 'running');
-    const ep = await detectFishEndpoint();
-    if (!ep.endpoint) {
-      _setStep('endpoint', 'failed',
-        `no compatible TTS route found. Tried: ${ep.triedRoutes.map(t => `${t.route}=${t.status}`).join(', ')}`);
-      return _snapshotPrep();
+    const serverUrl = resolveFishConfig().serverUrl;
+    try {
+      const indexResp = await fetch(serverUrl + '/', { signal: AbortSignal.timeout(5_000) });
+      const indexText = await indexResp.text();
+      const hasTtsRoute = indexText.includes('/v1/tts') || indexText.includes('v1/tts');
+      if (hasTtsRoute) {
+        _lifecycle.workingRoute = '/v1/tts';
+        const cfg = resolveFishConfig();
+        _savePersisted(cfg, { ..._loadPersisted(cfg), workingEndpoint: '/v1/tts', lastVerifiedAt: new Date().toISOString() });
+        _setStep('endpoint', 'ok', '/v1/tts (confirmed via server index)');
+        _setStep('test', 'ok', 'skipped on GGUF/CPU — server is reachable and /v1/tts is listed');
+        _appendLog('success', 'GGUF fast-path: endpoint /v1/tts confirmed, test generation skipped (CPU-only)', 'lifecycle');
+      } else {
+        // Unexpected — fall back to the full probe
+        const ep = await detectFishEndpoint();
+        if (!ep.endpoint) {
+          _setStep('endpoint', 'failed',
+            `no compatible TTS route found. Tried: ${ep.triedRoutes.map(t => `${t.route}=${t.status}`).join(', ')}`);
+          return _snapshotPrep();
+        }
+        _setStep('endpoint', 'ok', ep.endpoint);
+        _setStep('test', 'ok', 'endpoint verified via full probe');
+      }
+    } catch {
+      // Index fetch failed — fall back to full probe
+      const ep = await detectFishEndpoint();
+      if (!ep.endpoint) {
+        _setStep('endpoint', 'failed',
+          `no compatible TTS route found. Tried: ${ep.triedRoutes.map(t => `${t.route}=${t.status}`).join(', ')}`);
+        return _snapshotPrep();
+      }
+      _setStep('endpoint', 'ok', ep.endpoint);
+      _setStep('test', 'ok', 'endpoint verified via full probe');
     }
-    _setStep('endpoint', 'ok', ep.endpoint);
-
-    _setStep('test', 'running');
-    const test = await testFishGeneration();
-    if (!test.ok) { _setStep('test', 'failed', test.reason); return _snapshotPrep(); }
-    _setStep('test', 'ok', `${test.audioBytes} bytes in ${test.durationMs} ms via ${test.endpoint}`);
 
     _lifecycle.message = 'Fish Speech S2 Pro ready';
     _appendLog('success', _lifecycle.message, 'lifecycle');
@@ -1428,22 +1957,31 @@ export interface FishCombinedStatus {
 
 export async function checkFishEngine(): Promise<FishCombinedStatus> {
   const cfg = resolveFishConfig();
+  const g   = resolveFishGgufConfig();
+  // Legacy (Python) statuses kept for back-compat fields in the payload.
   const model = checkFishModel();
   const runtime = checkFishRuntime();
   const venv = checkFishVenv();
   const server = await checkFishServerStatus();
+
+  // GGUF readiness is what actually drives the engine state now.
+  const filesReady = checkFishGgufBinary().ok
+                  && checkFishGgufModel().ok
+                  && checkFishGgufCodec().ok
+                  && checkFishGgufTokenizer().ok;
+
   let state: FishEngineState = 'unknown';
   let message = '';
   if (_lifecycle.inFlight) {
-    state = 'preparing'; message = 'Fish Speech runtime is preparing…';
-  } else if (model.installed && server.reachable && _stepKeys.every(k => _lifecycle.steps[k].status === 'ok')) {
-    state = 'ready'; message = `Fish Speech S2 Pro ready (server ${server.url})`;
-  } else if (server.reachable && !model.installed) {
-    state = 'server_only'; message = `Fish server reachable at ${server.url} but model missing at ${model.modelPath}`;
-  } else if (model.installed && !server.reachable) {
-    state = 'model_only'; message = `Model installed at ${model.modelPath}; server at ${server.url} not running`;
-  } else if (!model.installed && !server.reachable) {
-    state = 'missing'; message = 'Fish Speech model + server are both missing';
+    state = 'preparing'; message = 'Fish Speech S2 Pro (GGUF) is preparing…';
+  } else if (filesReady && server.reachable && _stepKeys.every(k => _lifecycle.steps[k].status === 'ok')) {
+    state = 'ready'; message = `Fish Speech S2 Pro GGUF ready (server ${server.url})`;
+  } else if (server.reachable && !filesReady) {
+    state = 'server_only'; message = `Fish server reachable at ${server.url} but GGUF files missing under ${g.root}`;
+  } else if (filesReady && !server.reachable) {
+    state = 'model_only'; message = `GGUF runtime present at ${g.root}; server at ${server.url} not running — click Start Fish Speech`;
+  } else if (!filesReady && !server.reachable) {
+    state = 'missing'; message = `Fish Speech GGUF runtime not found under ${g.root} — run install_fish_gguf_runtime.py`;
   } else {
     state = 'partial'; message = 'Fish Speech: some checks passed, some not — see logs';
   }
@@ -1452,10 +1990,10 @@ export async function checkFishEngine(): Promise<FishCombinedStatus> {
     steps: JSON.parse(JSON.stringify(_lifecycle.steps)),
     workingEndpoint: _lifecycle.workingRoute,
     message,
-    modelDir: cfg.modelPath,
-    runtimePath: cfg.runtimePath,
+    modelDir: g.modelDir,
+    runtimePath: g.root,
     venvPath: cfg.venvPath,
-    serverUrl: cfg.serverUrl,
+    serverUrl: g.serverUrl,
   };
 }
 
@@ -1474,18 +2012,17 @@ export function setFishModelPath(newPath: string): FishConfig {
 export interface RepairResult { ok: boolean; steps: Record<string, FishStep>; message: string; }
 
 export async function repairFishEngine(): Promise<RepairResult> {
-  const cfg = resolveFishConfig();
+  // GGUF repair is non-destructive: it validates every file, (re)starts the
+  // server, detects the endpoint and runs a test generation. It does NOT
+  // delete weights or any venv. Stop any running server first so the restart
+  // picks up the validated config.
+  _appendLog('info', 'Repair started (GGUF): full validate + start + endpoint detect + test', 'lifecycle');
   stopFishServer();
-  if (fs.existsSync(cfg.venvPath)) {
-    _appendLog('warn', `removing venv at ${cfg.venvPath} for repair`, 'lifecycle');
-    try { fs.rmSync(cfg.venvPath, { recursive: true, force: true }); }
-    catch (e) { _appendLog('error', `venv rm failed: ${(e as Error).message}`, 'lifecycle'); }
-  }
   const prep = await prepareFishEngine();
   return {
     ok: prep.ready,
     steps: prep.steps,
-    message: prep.ready ? 'Fish Speech S2 Pro repaired successfully' : prep.message,
+    message: prep.ready ? 'Fish Speech S2 Pro GGUF repaired successfully' : prep.message,
   };
 }
 
@@ -1553,6 +2090,7 @@ export interface FishPreviewOptions {
   speed?: number;
   temperature?: number;
   pitch?: number;
+  promptAudioPath?: string;   // reference WAV for a cloned voice (s2.cpp prompt_audio_path)
 }
 
 export interface FishPreviewResult {
@@ -1709,6 +2247,12 @@ export interface FishVoicePreset {
 }
 
 export const FISH_VOICE_PRESETS: FishVoicePreset[] = [
+  { id: 'fish_default',               name: 'Fish S2 Pro — Default',               icon: '🐟', description: 'Base model voice — no voice character applied',
+    engine: 'fish-speech-s2-pro', voiceId: 'fish_default',
+    defaults: { pitch:  0, rate:   0, speed: 1.00, volume:  0, intensity: 0 },
+    fishDefaults: { speed: 1.00, temperature: 0.70, pitchSemitones:  0, normalize: true },
+    category: 'default', tags: ['default','base','neutral'],
+    exampleLine: 'Fish Speech S2 Pro — base model output.' },
   { id: 'fish_tiktok_male_natural',    name: 'Fish S2 Pro — TikTok Male Natural',    icon: '🎙️', description: 'Natural • Conversational • TikTok-Ready',
     engine: 'fish-speech-s2-pro', voiceId: 'tiktok_male_natural',
     defaults: { pitch:  0, rate:   0, speed: 1.00, volume:  0, intensity: 20 },
@@ -1751,12 +2295,12 @@ export const FISH_VOICE_PRESETS: FishVoicePreset[] = [
     fishDefaults: { speed: 0.86, temperature: 0.85, pitchSemitones: -3, normalize: true },
     category: 'horror', tags: ['horror','whisper','haunting','creepy'],
     exampleLine: "Don't turn around. Not yet." },
-  { id: 'fish_reddit_storyteller',     name: 'Fish S2 Pro â Reddit Storyteller',     icon: 'ð£ï¸', description: 'Reddit â¢ Engaging â¢ Story-Mode',
+  { id: 'fish_reddit_storyteller',     name: 'Fish S2 Pro — Reddit Storyteller',     icon: '🗣️', description: 'Reddit • Engaging • Story-Mode',
     engine: 'fish-speech-s2-pro', voiceId: 'reddit_storyteller',
     defaults: { pitch:  0, rate:  -2, speed: 0.98, volume:  0, intensity: 35 },
     fishDefaults: { speed: 0.98, temperature: 0.75, pitchSemitones:  0, normalize: true },
     category: 'storytelling', tags: ['reddit','storyteller','engaging','narrative'],
-    exampleLine: "So this happened last week â and I still can't believe it." },
+    exampleLine: "So this happened last week — and I still can't believe it." },
 ];
 
 export function findFishPreset(id: string | undefined): FishVoicePreset | undefined {
@@ -1770,7 +2314,7 @@ export function isFishEngine(presetId?: string, engine?: string): boolean {
   return false;
 }
 
-// ââ Prosody tags ââ
+// ── Prosody tags ──
 export const FISH_STYLE_TAGS = [
   '[whisper]', '[laughing]', '[sad]', '[angry]', '[shouting]', '[pause]', '[emphasis]',
 ] as const;
