@@ -110,6 +110,13 @@ DEFAULT_SETTINGS = {
     # entry is an absolute path. Sensitive subpaths (.ssh, .gnupg, shell
     # rc files, SSH key files) are always blocked regardless of roots.
     "tool_path_extra_roots": [],
+    # The agent's working directory. Relative file paths the agent creates
+    # resolve under this folder, bash/python tool calls run with it as their
+    # cwd, and it is added to the read/write allowlist. Empty = fall back to
+    # the project data/ workspace. Sensitive subpaths (.ssh, .gnupg, etc.)
+    # stay blocked regardless. Set it from the working-directory chip in the
+    # assistant chat header.
+    "agent_working_dir": "",
     "task_endpoint_id": "",
     "task_model": "",
     "default_endpoint_id": "",

@@ -7,7 +7,11 @@ check-in"). Everything about it is user-editable: name, personality, model,
 enabled tools, timezone, and the three check-in times/prompts/enabled flags.
 """
 
+import asyncio
 import json
+import os
+import shutil
+import subprocess
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from core.database import SessionLocal, CrewMember, ScheduledTask
+from core.middleware import require_admin
 from src.auth_helpers import get_current_user
 from src.task_scheduler import compute_next_run
 
@@ -39,7 +44,76 @@ class AssistantSettingsUpdate(BaseModel):
     check_ins: Optional[list[CheckInUpdate]] = None
 
 
+class WorkingDirUpdate(BaseModel):
+    # Empty / null clears the override and falls back to the data/ workspace.
+    path: Optional[str] = None
+
+
 _EMAIL_TOOLS = {"send_email", "reply_to_email"}
+
+
+def _git_info(path: str) -> dict:
+    """Best-effort git branch + linked-worktree detection for a directory.
+
+    Used only to decorate the working-directory chip in the UI; every failure
+    degrades to "not a git repo" rather than raising.
+    """
+    info = {"is_git": False, "branch": None, "is_worktree": False}
+    if not path or not os.path.isdir(path) or not shutil.which("git"):
+        return info
+
+    def _git(*args: str) -> Optional[str]:
+        try:
+            r = subprocess.run(
+                ["git", "-C", path, *args],
+                capture_output=True, text=True, timeout=3,
+            )
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    if _git("rev-parse", "--is-inside-work-tree") != "true":
+        return info
+    info["is_git"] = True
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    info["branch"] = branch if branch and branch != "HEAD" else None
+    # A linked worktree's per-worktree git dir differs from the common dir.
+    git_dir = _git("rev-parse", "--git-dir")
+    common_dir = _git("rev-parse", "--git-common-dir")
+    if git_dir and common_dir:
+        try:
+            g = os.path.realpath(os.path.join(path, git_dir))
+            c = os.path.realpath(os.path.join(path, common_dir))
+            info["is_worktree"] = g != c
+        except OSError:
+            pass
+    return info
+
+
+def _working_dir_payload() -> dict:
+    """Assemble the working-directory chip metadata (path + git state)."""
+    from src.settings import get_setting
+    from src.constants import DATA_DIR
+    raw = (get_setting("agent_working_dir") or "").strip()
+    is_default = not raw
+    try:
+        effective = os.path.realpath(os.path.expanduser(raw)) if raw else os.path.realpath(DATA_DIR)
+    except OSError:
+        effective = raw or DATA_DIR
+    exists = os.path.isdir(effective)
+    git = _git_info(effective) if exists else {"is_git": False, "branch": None, "is_worktree": False}
+    name = os.path.basename(effective.rstrip(os.sep)) or effective
+    return {
+        "location": "Local",
+        "path": effective,
+        "configured_path": raw,
+        "name": name,
+        "exists": exists,
+        "is_default": is_default,
+        "is_git": git["is_git"],
+        "git_branch": git["branch"],
+        "is_worktree": git["is_worktree"],
+    }
 
 
 def _crew_to_dict(c: CrewMember) -> dict:
@@ -321,5 +395,42 @@ def setup_assistant_routes(task_scheduler) -> APIRouter:
         except Exception:
             zones = ["UTC"]
         return {"timezones": zones}
+
+    @router.get("/working-dir")
+    async def get_working_dir(request: Request):
+        """Return the agent's working directory + git state for the header chip.
+
+        Readable by any authenticated user (the chip is informational); only
+        admins can change it, since the file/shell tools it scopes are
+        admin-only.
+        """
+        _owner(request)
+        return await asyncio.to_thread(_working_dir_payload)
+
+    @router.post("/working-dir")
+    async def set_working_dir(payload: WorkingDirUpdate, request: Request):
+        """Set (or clear) the agent's working directory.
+
+        Admin-only: this is the scope for the bash/python/write_file tools.
+        An empty path clears the override and falls back to the data/ workspace.
+        """
+        require_admin(request)
+        raw = (payload.path or "").strip()
+        if raw:
+            try:
+                expanded = os.path.realpath(os.path.expanduser(raw))
+            except OSError:
+                raise HTTPException(status_code=400, detail="Invalid path")
+            if not os.path.isdir(expanded):
+                raise HTTPException(status_code=400, detail=f"Not a directory: {expanded}")
+            store = expanded
+        else:
+            store = ""  # clear -> back to the default data/ workspace
+
+        from src.settings import load_settings, save_settings
+        settings = load_settings()
+        settings["agent_working_dir"] = store
+        save_settings(settings)
+        return await asyncio.to_thread(_working_dir_payload)
 
     return router

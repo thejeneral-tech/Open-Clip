@@ -417,6 +417,112 @@ export async function openAssistantSettings() {
 // Activity / Settings tabs inside the Tasks modal (see tasks.js). The
 // exports below are still used by tasks.js to surface those views.
 
+// ── Agent working-directory chip (assistant chat header) ───────────────────
+
+function _wdIcon(name) {
+  const p = {
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    folder:  '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    branch:  '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 3.5-3.5 3-8 4"/>',
+    layers:  '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+  }[name] || '';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
+
+async function _fetchWorkingDir() {
+  try { return await _fetchJSON(`${API}/working-dir`); } catch { return null; }
+}
+
+function _renderWdBar(bar, wd) {
+  bar._wd = wd;
+  if (!wd) { bar.innerHTML = `<span class="agent-wd-chip">working dir</span>`; return; }
+  const chips = [];
+  chips.push(`<span class="agent-wd-chip">${_wdIcon('monitor')}${_esc(wd.location || 'Local')}</span>`);
+  const missing = wd.exists ? '' : ' agent-wd-missing';
+  const label = wd.is_default ? `${_esc(wd.name)} · default` : _esc(wd.name);
+  chips.push(`<span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span>`);
+  if (wd.is_git && wd.git_branch) {
+    chips.push(`<span class="agent-wd-chip agent-wd-branch">${_wdIcon('branch')}${_esc(wd.git_branch)}</span>`);
+  }
+  if (wd.is_worktree) {
+    chips.push(`<span class="agent-wd-chip agent-wd-flag">${_wdIcon('layers')}worktree</span>`);
+  }
+  bar.innerHTML = chips.join('');
+}
+
+function _openWorkingDirEditor(bar) {
+  document.querySelector('.agent-wd-editor')?.remove();
+  const wd = bar._wd || {};
+  const pop = document.createElement('div');
+  pop.className = 'agent-wd-editor';
+  pop.innerHTML = `
+    <div class="agent-wd-editor-title">Agent working directory</div>
+    <div class="agent-wd-editor-help">The agent creates files and runs shell commands here. Leave blank to use the default <code>data/</code> workspace. Use an absolute path.</div>
+    <input type="text" class="agent-wd-editor-input" spellcheck="false" autocomplete="off"
+           placeholder="C:\\path\\to\\project   or   /home/you/project"
+           value="${_esc(wd.configured_path || '')}" />
+    <div class="agent-wd-editor-status"></div>
+    <div class="agent-wd-editor-actions">
+      <button type="button" class="cal-btn agent-wd-reset">Reset to default</button>
+      <span style="flex:1"></span>
+      <button type="button" class="cal-btn agent-wd-cancel">Cancel</button>
+      <button type="button" class="cal-btn cal-btn-primary agent-wd-save">Set</button>
+    </div>`;
+  document.body.appendChild(pop);
+  const r = bar.getBoundingClientRect();
+  const w = pop.offsetWidth || 460;
+  pop.style.top = `${Math.round(r.bottom + 6 + window.scrollY)}px`;
+  pop.style.left = `${Math.round(Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - w - 8)))}px`;
+
+  const input = pop.querySelector('.agent-wd-editor-input');
+  const statusEl = pop.querySelector('.agent-wd-editor-status');
+  input.focus(); input.select();
+
+  const close = () => { document.removeEventListener('mousedown', onDoc, true); pop.remove(); };
+  const onDoc = (e) => { if (!pop.contains(e.target) && !bar.contains(e.target)) close(); };
+  document.addEventListener('mousedown', onDoc, true);
+
+  const save = async (path) => {
+    statusEl.textContent = 'Saving…';
+    try {
+      const res = await fetch(`${API}/working-dir`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      if (res.status === 403) { statusEl.textContent = 'Admin only — ask an admin to change this.'; return; }
+      if (!res.ok) {
+        let msg = `Error ${res.status}`;
+        try { const j = await res.json(); if (j.detail) msg = j.detail; } catch {}
+        statusEl.textContent = msg; return;
+      }
+      _renderWdBar(bar, await res.json());
+      uiModule.showToast('Working directory updated');
+      close();
+    } catch { statusEl.textContent = 'Save failed'; }
+  };
+
+  pop.querySelector('.agent-wd-cancel').addEventListener('click', close);
+  pop.querySelector('.agent-wd-save').addEventListener('click', () => save(input.value.trim()));
+  pop.querySelector('.agent-wd-reset').addEventListener('click', () => save(''));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); save(input.value.trim()); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+}
+
+async function _ensureWorkingDirChip(headerRight) {
+  if (!headerRight || headerRight.querySelector('#agent-wd-bar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'agent-wd-bar';
+  bar.className = 'agent-wd-bar';
+  bar.title = 'Agent working directory — where it creates files and runs commands. Click to change.';
+  bar.innerHTML = `<span class="agent-wd-chip">working dir…</span>`;
+  bar.addEventListener('click', () => _openWorkingDirEditor(bar));
+  headerRight.insertBefore(bar, headerRight.firstChild);
+  _renderWdBar(bar, await _fetchWorkingDir());
+}
+
 // ── Chat-header affordances when the assistant session is active ───────────
 
 async function _ensureHeaderAffordances(sessionId) {
@@ -437,6 +543,7 @@ async function _ensureHeaderAffordances(sessionId) {
   gear.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   gear.addEventListener('click', openAssistantSettings);
   headerRight.appendChild(gear);
+  _ensureWorkingDirChip(headerRight);
 }
 
 // Run a short polling check after session loads so we can add the gear button

@@ -73,6 +73,29 @@ def _is_sensitive_path(resolved: str) -> bool:
     return False
 
 
+def get_agent_working_dir() -> Optional[str]:
+    """Return the agent's configured working directory (realpath) when it is
+    set and points at an existing directory, else None.
+
+    This is the agent's primary workspace: relative file paths it supplies
+    resolve under here, bash/python tool calls run with it as their cwd, and
+    it is added to the read/write allowlist. Empty/invalid falls back to the
+    project ``data/`` workspace so the agent never operates with no scope.
+    """
+    try:
+        from src.settings import get_setting
+        raw = get_setting("agent_working_dir")
+    except Exception:
+        raw = None
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        resolved = os.path.realpath(os.path.expanduser(raw.strip()))
+    except OSError:
+        return None
+    return resolved if os.path.isdir(resolved) else None
+
+
 def _tool_path_roots() -> list[str]:
     """Return the list of directory roots that read_file / write_file
     may touch. Default: project data/ + system temp dirs. Extra roots
@@ -80,7 +103,12 @@ def _tool_path_roots() -> list[str]:
     """
     roots: list[str] = []
 
-    # Project data directory — the agent's primary workspace.
+    # The agent's working directory is its primary root when configured.
+    wd = get_agent_working_dir()
+    if wd:
+        roots.append(wd)
+
+    # Project data directory — the agent's workspace fallback.
     from src.constants import DATA_DIR
     roots.append(DATA_DIR)
 
@@ -137,6 +165,13 @@ def _resolve_tool_path(raw_path: str) -> str:
     if raw_path is None or not str(raw_path).strip():
         raise ValueError("path is required")
     expanded = os.path.expanduser(str(raw_path).strip())
+    # Relative paths resolve under the agent's working directory (its
+    # workspace), so e.g. ``write_file notes.md`` lands in the chosen folder
+    # instead of wherever the server process happens to be running.
+    if not os.path.isabs(expanded):
+        from src.constants import DATA_DIR
+        base = get_agent_working_dir() or DATA_DIR
+        expanded = os.path.join(base, expanded)
     resolved = os.path.realpath(expanded)
 
     if _is_sensitive_path(resolved):
@@ -462,6 +497,10 @@ async def _direct_fallback(
         "COLUMNS": "120",
         "LINES": "40",
     }
+    # Agent bash/python tool calls run inside the configured working directory
+    # (or the server process cwd when unset), so shell + file work is scoped
+    # to one folder rather than the whole machine by default.
+    _work_cwd = get_agent_working_dir()
 
     try:
         if tool == "bash":
@@ -470,6 +509,7 @@ async def _direct_fallback(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=_subproc_env,
+                cwd=_work_cwd,
             )
             stdout, stderr, rc, timed_out = await _run_subprocess_streaming(
                 proc,
@@ -496,6 +536,7 @@ async def _direct_fallback(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=_subproc_env,
+                cwd=_work_cwd,
             )
             stdout, stderr, rc, timed_out = await _run_subprocess_streaming(
                 proc,

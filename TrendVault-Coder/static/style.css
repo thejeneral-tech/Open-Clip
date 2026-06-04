@@ -35731,3 +35731,73 @@ body.theme-frosted .modal {
      is already ≥16px and never zoomed — leave it so we don't shrink it. */
   .doc-email-richbody.doc-font-m { font-size: 16px !important; }
 }
+
+/* ── Agent working-directory chip bar (assistant chat header) ──────────────── */
+.agent-wd-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  margin: 0 10px 0 2px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.agent-wd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  color: var(--fg);
+  white-space: nowrap;
+  transition: border-color .12s ease, background .12s ease;
+}
+.agent-wd-chip svg { width: 12px; height: 12px; opacity: .6; flex: none; }
+.agent-wd-chip .agent-wd-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.agent-wd-chip.agent-wd-branch { color: var(--accent); }
+.agent-wd-chip.agent-wd-branch svg { opacity: .85; }
+.agent-wd-chip.agent-wd-flag { opacity: .72; }
+.agent-wd-bar:hover .agent-wd-chip { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.agent-wd-chip.agent-wd-missing {
+  color: var(--red, #ff5d5d);
+  border-color: color-mix(in srgb, var(--red, #ff5d5d) 55%, transparent);
+}
+
+/* Click-to-edit popover for the working directory */
+.agent-wd-editor {
+  position: absolute;
+  z-index: 4000;
+  width: 460px;
+  max-width: 92vw;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+.agent-wd-editor-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.agent-wd-editor-help { font-size: 11px; opacity: .6; margin-bottom: 10px; line-height: 1.5; }
+.agent-wd-editor-help code {
+  font-size: 10px; padding: 1px 4px; border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.agent-wd-editor-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, Consolas, "SF Mono", monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  color: var(--fg);
+}
+.agent-wd-editor-input:focus { outline: none; border-color: var(--accent); }
+.agent-wd-editor-status { min-height: 15px; font-size: 11px; color: var(--red, #ff7a7a); margin: 7px 2px 0; }
+.agent-wd-editor-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
