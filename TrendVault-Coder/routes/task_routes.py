@@ -442,62 +442,9 @@ def setup_task_routes(task_scheduler) -> APIRouter:
         finally:
             db.close()
 
-        cache_tables = {
-            "summarize_emails": ("email_summaries",),
-            "draft_email_replies": ("email_ai_replies",),
-            "extract_email_events": ("email_calendar_extractions",),
-            "learn_sender_signatures": ("sender_signatures",),
-            "check_email_urgency": ("email_tags", "email_urgency_alerts"),
-        }
-        tables = cache_tables.get(action)
-        if not tables:
-            raise HTTPException(400, "This task has no clearable cache")
-
-        import sqlite3
-        from pathlib import Path
-        from routes.email_helpers import SCHEDULED_DB
-
-        cleared = {}
-        conn = sqlite3.connect(SCHEDULED_DB)
-        try:
-            for table in tables:
-                try:
-                    if table == "email_tags" and user:
-                        before = conn.execute(
-                            "SELECT COUNT(*) FROM email_tags WHERE owner = ? OR owner = ''",
-                            (user,),
-                        ).fetchone()[0]
-                        conn.execute("DELETE FROM email_tags WHERE owner = ? OR owner = ''", (user,))
-                    else:
-                        before = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-                        conn.execute(f"DELETE FROM {table}")
-                    cleared[table] = int(before or 0)
-                except sqlite3.OperationalError:
-                    cleared[table] = 0
-            conn.commit()
-        finally:
-            conn.close()
-
-        removed_files = 0
-        if action == "check_email_urgency":
-            cache_dir = Path("data/email_urgency_cache")
-            if cache_dir.exists():
-                for child in cache_dir.glob("*.json"):
-                    try:
-                        child.unlink()
-                        removed_files += 1
-                    except Exception:
-                        pass
-            owner_slug = "".join(c if (c.isalnum() or c in "-_.@") else "_" for c in (user or "default"))
-            for state_path in [Path(f"data/email_urgency_state_{owner_slug}.json")]:
-                try:
-                    if state_path.exists():
-                        state_path.unlink()
-                        removed_files += 1
-                except Exception:
-                    pass
-
-        return {"ok": True, "action": action, "cleared": cleared, "files": removed_files}
+        # Email task caches were removed along with the email feature;
+        # no task type currently exposes a clearable cache.
+        raise HTTPException(400, "This task has no clearable cache")
 
     @router.get("/{task_id}")
     async def get_task(request: Request, task_id: str):

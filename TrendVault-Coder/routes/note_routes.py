@@ -160,7 +160,7 @@ async def dispatch_reminder(
                 # Treat those as browser-only dedupe so email reminders can be
                 # retried by the backend scanner after a failed frontend path.
                 should_skip = last_dt >= _dt.now(_tz.utc) - _td(minutes=25)
-                if should_skip and channel in ("email", "ntfy"):
+                if should_skip and channel == "ntfy":
                     should_skip = last_channel == channel
                 if should_skip:
                     return {
@@ -264,101 +264,6 @@ async def dispatch_reminder(
                 synthesis = _SYNTH_FAILED_TAG
 
     email_sent = False
-    email_error = ""
-    if channel == "email":
-        try:
-            from routes.email_routes import _get_email_config
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            from datetime import datetime as _dt
-            # `reminder_email_account_id` lets the user pick WHICH email
-            # account to send reminders from (when they have several
-            # configured in Integrations). Falls back to the default
-            # account when no explicit choice is saved.
-            _acc_id = (settings.get("reminder_email_account_id") or "").strip() or None
-            cfg = _get_email_config(account_id=_acc_id, owner=owner or "")
-            if not (cfg.get("smtp_host") and cfg.get("smtp_user") and cfg.get("smtp_password")):
-                try:
-                    from core.database import SessionLocal as _SL, EmailAccount as _EA
-                    from sqlalchemy import and_, or_
-                    db = _SL()
-                    try:
-                        q = db.query(_EA).filter(_EA.enabled == True)  # noqa: E712
-                        if owner:
-                            unowned = or_(_EA.owner == None, _EA.owner == "")  # noqa: E711
-                            same_mailbox = or_(_EA.imap_user == owner, _EA.from_address == owner)
-                            q = q.filter(or_(_EA.owner == owner, and_(unowned, same_mailbox)))
-                        for row in q.order_by(_EA.is_default.desc(), _EA.created_at.asc()).all():
-                            trial = _get_email_config(account_id=row.id, owner=owner or "")
-                            if trial.get("smtp_host") and trial.get("smtp_user") and trial.get("smtp_password"):
-                                cfg = trial
-                                break
-                    finally:
-                        db.close()
-                except Exception as _fallback_error:
-                    logger.debug(f"Reminder SMTP fallback lookup failed: {_fallback_error}")
-            from_addr = (cfg.get("from_address") or cfg.get("smtp_user") or "").strip()
-            recipient = (settings.get("reminder_email_to") or "").strip() or from_addr
-            # Loud diagnostic so we can see WHY a reminder didn't send (the
-            # previous "silently no-op when cfg has no smtp_host" was invisible).
-            logger.info(
-                f"dispatch_reminder[email] note_id={note_id} owner={owner!r} "
-                f"smtp_host={cfg.get('smtp_host')!r} smtp_user={cfg.get('smtp_user')!r} "
-                f"from={from_addr!r} recipient={recipient!r} "
-                f"account_name={cfg.get('account_name')!r}"
-            )
-            missing = []
-            if not cfg.get("smtp_host"):
-                missing.append("SMTP host")
-            if not cfg.get("smtp_user"):
-                missing.append("SMTP user")
-            if not cfg.get("smtp_password"):
-                missing.append("SMTP password")
-            if not from_addr:
-                missing.append("from address")
-            if not recipient:
-                missing.append("recipient")
-            if missing:
-                email_error = "Missing " + ", ".join(missing)
-                logger.warning(
-                    "Reminder email not sent for note_id=%s account=%r: %s",
-                    note_id, cfg.get("account_name"), email_error,
-                )
-            else:
-                msg = MIMEMultipart("alternative")
-                msg["From"] = from_addr
-                msg["To"] = recipient
-                _t = title or 'Note'
-                _t = _t[len('Reminder:'):].strip() if _t.lower().startswith('reminder:') else _t
-                msg["Subject"] = f"Reminder (TrendVault AI): {_t}"
-                msg["Date"] = _dt.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
-                msg["X-TrendVault-AI-Origin"] = "trendvault-ai-ui"
-                msg["X-TrendVault-AI-Kind"] = "reminder"
-                msg["X-TrendVault-AI-Ref"] = str(note_id)
-                # Body shape: synthesis (warm sentence) → blank line → bold
-                # title header → note details. The title was previously only
-                # in the subject line, so the email read like a faceless
-                # to-do list with no anchor to which note triggered it.
-                _body_chunks = []
-                if synthesis:
-                    _body_chunks.append(synthesis)
-                if _t:
-                    _body_chunks.append(_t)
-                if note_body:
-                    _body_chunks.append(note_body)
-                plain = "\n\n".join(_body_chunks) if _body_chunks else title
-                msg.attach(MIMEText(plain, "plain", "utf-8"))
-
-                def _smtp_send():
-                    from routes.email_helpers import _send_smtp_message
-                    _send_smtp_message(cfg, from_addr, [recipient], msg.as_string())
-
-                import asyncio as _aio
-                await _aio.to_thread(_smtp_send)
-                email_sent = True
-        except Exception as e:
-            email_error = str(e) or e.__class__.__name__
-            logger.warning(f"Reminder email send failed: {e}")
 
     ntfy_sent = False
     ntfy_error = ""

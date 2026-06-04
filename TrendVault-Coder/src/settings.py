@@ -142,20 +142,9 @@ DEFAULT_SETTINGS = {
     # library can grow beyond this; cleanup/retirement is an explicit review flow.
     "skill_max_injected": 3,
     # Reminders
-    "reminder_channel": "browser",   # "browser" | "email" | "ntfy"
+    "reminder_channel": "browser",   # "browser" | "ntfy"
     "reminder_llm_synthesis": False,
     "reminder_ntfy_topic": "Reminders",
-    "reminder_email_to": "",
-    # Email triage scanner rules. Running/paused state and schedule live in
-    # Tasks via the built-in `check_email_urgency` task.
-    "urgent_email_prompt": (
-        "Flag as urgent: explicit deadlines, time-sensitive requests, "
-        "work-blocking issues, messages from people I report to, or anything "
-        "where a delayed reply costs money/trust. Someone waiting outside, "
-        "at the door, locked out, or unable to get in is urgent now. "
-        "Newsletters, marketing, automated digests, and FYI-only updates are "
-        "NOT urgent."
-    ),
     # Keyboard shortcuts (action: key combination)
     "keybinds": {
         "search": "ctrl+k",

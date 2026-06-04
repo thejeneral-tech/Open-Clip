@@ -744,8 +744,7 @@ async def execute_tool_block(
         do_list_downloads, do_cancel_download, do_search_hf_models, do_list_cached_models,
         do_list_serve_presets, do_serve_preset, do_adopt_served_model,
         do_list_cookbook_servers,
-        do_edit_image, do_trigger_research, do_manage_research, do_resolve_contact,
-        do_manage_contact,
+        do_edit_image, do_trigger_research, do_manage_research,
         do_vault_search, do_vault_get, do_vault_unlock,
         do_app_api,
     )
@@ -766,12 +765,12 @@ async def execute_tool_block(
                     "error": (
                         f"You wrote a JSON object inside a ```{tool}``` block, but that's not a tool call.\n"
                         "To call a tool, use the tool name as the fence tag, e.g.\n"
-                        "```resolve_contact\n"
-                        "{\"name\": \"...\"}\n"
+                        "```web_search\n"
+                        "{\"queries\": [\"...\"]}\n"
                         "```\n"
                         "or\n"
-                        "```send_email\n"
-                        "{\"to\": \"...\", \"subject\": \"...\", \"body\": \"...\"}\n"
+                        "```manage_notes\n"
+                        "{\"action\": \"add\", \"text\": \"...\"}\n"
                         "```"
                     ),
                     "exit_code": 1,
@@ -941,12 +940,6 @@ async def execute_tool_block(
     elif tool == "manage_research":
         desc = "manage_research"
         result = await do_manage_research(content, owner=owner)
-    elif tool == "resolve_contact":
-        desc = "resolve_contact"
-        result = await do_resolve_contact(content, owner=owner)
-    elif tool == "manage_contact":
-        desc = "manage_contact"
-        result = await do_manage_contact(content, owner=owner)
     elif tool == "vault_search":
         desc = "vault_search"
         result = await do_vault_search(content, owner=owner)

@@ -691,19 +691,11 @@ logger.info("Webhook & API token routes initialized")
 from routes.note_routes import setup_note_routes
 app.include_router(setup_note_routes(task_scheduler))
 
-# Email
-from routes.email_routes import setup_email_routes
-email_router = setup_email_routes()
-app.include_router(email_router)
-
 # Codex integration — HTTP surface for the Codex plugin/MCP bridge. Reuses
-# api_token scopes (todos:read|write, email:read|draft|send) so external
-# Codex sessions can only touch the data the user explicitly allowed. Mounted
-# AFTER email so the codex_routes can borrow the email router for shared
-# search/threading helpers.
+# api_token scopes (todos:read|write, memory, calendar, documents) so external
+# Codex sessions can only touch the data the user explicitly allowed.
 from routes.codex_routes import setup_codex_routes, setup_claude_routes
 app.include_router(setup_codex_routes(
-    email_router=email_router,
     memory_router=memory_router,
     calendar_router=calendar_router,
     document_router=document_router,
@@ -712,10 +704,6 @@ app.include_router(setup_claude_routes())
 
 from routes.vault_routes import setup_vault_routes
 app.include_router(setup_vault_routes())
-
-# Contacts (CardDAV)
-from routes.contacts_routes import setup_contacts_routes
-app.include_router(setup_contacts_routes())
 
 from companion import setup_companion_routes
 app.include_router(setup_companion_routes())
@@ -754,10 +742,6 @@ async def serve_calendar(request: Request):
 # bookmarks render with tool-specific icons.
 @app.get("/cookbook")
 async def serve_cookbook(request: Request):
-    return await serve_index(request)
-
-@app.get("/email")
-async def serve_email(request: Request):
     return await serve_index(request)
 
 @app.get("/memory")
