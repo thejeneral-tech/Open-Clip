@@ -35860,6 +35860,7 @@ body.theme-frosted .modal {
 }
 .agent-wd-menu-add { opacity: .85; }
 .agent-wd-menu-add svg { opacity: .55; }
+.agent-wd-menu-missing .agent-wd-menu-name { color: var(--red, #ff5d5d); opacity: .85; }
 
 /* Click-to-edit popover for the working directory */
 .agent-wd-editor {

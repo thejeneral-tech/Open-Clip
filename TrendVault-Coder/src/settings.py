@@ -117,6 +117,9 @@ DEFAULT_SETTINGS = {
     # stay blocked regardless. Set it from the working-directory chip in the
     # assistant chat header.
     "agent_working_dir": "",
+    # Recently-used agent working directories (most-recent first), shown in the
+    # folder-picker dropdown. Absolute paths; capped.
+    "agent_working_dir_recent": [],
     "task_endpoint_id": "",
     "task_model": "",
     "default_endpoint_id": "",

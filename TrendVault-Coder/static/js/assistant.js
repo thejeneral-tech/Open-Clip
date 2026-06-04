@@ -552,6 +552,65 @@ function _openWorkingDirEditor(bar) {
   });
 }
 
+// Recent-folder dropdown (the folder chip) — pick a recent working directory
+// or open the editor to enter a new path. Opens upward from the folder chip.
+function _openRecentMenu(bar) {
+  document.querySelector('.agent-wd-menu')?.remove();
+  const anchor = bar.querySelector('.agent-wd-path') || bar;
+  const wd = bar._wd || {};
+  const recent = Array.isArray(wd.recent) ? wd.recent : [];
+  const rows = recent.map((r) => `
+    <button type="button" class="agent-wd-menu-item${r.is_active ? ' is-active' : ''}${r.exists ? '' : ' agent-wd-menu-missing'}"
+            data-act="pick" data-path="${_esc(r.path)}" title="${_esc(r.path)}">
+      <span class="agent-wd-menu-name">${_esc(r.name)}</span>
+      <span class="agent-wd-menu-spacer"></span>
+      <span class="agent-wd-menu-check">${_wdIcon('check')}</span>
+    </button>`).join('');
+  const menu = document.createElement('div');
+  menu.className = 'agent-wd-menu';
+  menu.innerHTML = `
+    <div class="agent-wd-menu-label">Recent</div>
+    ${rows || '<div class="agent-wd-menu-sub" style="padding:2px 10px 8px 10px;">No recent folders yet.</div>'}
+    <div class="agent-wd-menu-sep"></div>
+    <button type="button" class="agent-wd-menu-item agent-wd-menu-add" data-act="open">
+      <span class="agent-wd-menu-name">Open folder…</span>
+    </button>`;
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const left = Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - mw - 8));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(r.top + window.scrollY - mh - 6)}px`;
+  const close = () => { document.removeEventListener('mousedown', onDoc, true); menu.remove(); };
+  const onDoc = (e) => { if (!menu.contains(e.target) && !anchor.contains(e.target)) close(); };
+  document.addEventListener('mousedown', onDoc, true);
+  menu.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    if (el.dataset.act === 'open') { close(); _openWorkingDirEditor(bar); return; }
+    if (el.dataset.act === 'pick') {
+      const path = el.dataset.path;
+      close();
+      if ((bar._wd || {}).path === path) return;  // already active
+      try {
+        const res = await fetch(`${API}/working-dir`, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        });
+        if (res.status === 403) { uiModule.showToast('Admin only — ask an admin to change this.'); return; }
+        if (!res.ok) {
+          let m = `Error ${res.status}`;
+          try { const j = await res.json(); if (j.detail) m = j.detail; } catch {}
+          uiModule.showToast(m); return;
+        }
+        _renderWdBar(bar, await res.json());
+        uiModule.showToast('Working directory updated');
+      } catch { uiModule.showToast('Could not switch folder'); }
+    }
+  });
+}
+
 async function _mountWorkingDirBar(retries = 0) {
   // Mount the working-directory bar right above the message composer
   // ("Message TrendVault AI …"). It's a sibling directly before
@@ -572,7 +631,7 @@ async function _mountWorkingDirBar(retries = 0) {
   bar.innerHTML = `<button type="button" class="agent-wd-loc">${_wdIcon('monitor')}<span>Local</span>${_wdIcon('chevron')}</button>`;
   bar.addEventListener('click', (e) => {
     if (e.target.closest('.agent-wd-loc')) _openLocationMenu(bar);
-    else if (e.target.closest('.agent-wd-path')) _openWorkingDirEditor(bar);
+    else if (e.target.closest('.agent-wd-path')) _openRecentMenu(bar);
   });
   strip.appendChild(bar);
   inputBar.insertAdjacentElement('beforebegin', strip);

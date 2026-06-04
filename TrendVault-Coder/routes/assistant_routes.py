@@ -103,6 +103,28 @@ def _working_dir_payload() -> dict:
     exists = os.path.isdir(effective)
     git = _git_info(effective) if exists else {"is_git": False, "branch": None, "is_worktree": False}
     name = os.path.basename(effective.rstrip(os.sep)) or effective
+
+    # Recent working directories (active first) for the folder-picker dropdown.
+    recent = []
+    seen = set()
+    stored = get_setting("agent_working_dir_recent") or []
+    for p in [effective] + [r for r in stored if isinstance(r, str) and r.strip()]:
+        try:
+            rp = os.path.realpath(os.path.expanduser(p))
+        except OSError:
+            continue
+        if rp in seen:
+            continue
+        seen.add(rp)
+        recent.append({
+            "path": rp,
+            "name": os.path.basename(rp.rstrip(os.sep)) or rp,
+            "is_active": rp == effective,
+            "exists": os.path.isdir(rp),
+        })
+        if len(recent) >= 10:
+            break
+
     return {
         "location": "Local",
         "path": effective,
@@ -113,6 +135,7 @@ def _working_dir_payload() -> dict:
         "is_git": git["is_git"],
         "git_branch": git["branch"],
         "is_worktree": git["is_worktree"],
+        "recent": recent,
     }
 
 
@@ -428,8 +451,21 @@ def setup_assistant_routes(task_scheduler) -> APIRouter:
             store = ""  # clear -> back to the default data/ workspace
 
         from src.settings import load_settings, save_settings
+        from src.constants import DATA_DIR
         settings = load_settings()
         settings["agent_working_dir"] = store
+        # Track recent working dirs (store the effective absolute path, deduped).
+        eff = store or os.path.realpath(DATA_DIR)
+        recent = [eff]
+        for r in (settings.get("agent_working_dir_recent") or []):
+            if not isinstance(r, str):
+                continue
+            try:
+                if os.path.realpath(os.path.expanduser(r)) != os.path.realpath(eff):
+                    recent.append(r)
+            except OSError:
+                continue
+        settings["agent_working_dir_recent"] = recent[:10]
         save_settings(settings)
         return await asyncio.to_thread(_working_dir_payload)
 
