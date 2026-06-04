@@ -1032,14 +1032,6 @@ class TaskScheduler:
     # a check-in source. Add new patterns here to support new integrations —
     # no code changes needed elsewhere.
     CHECKIN_MCP_PATTERNS = [
-        {"detect": "list_emails",   "section": "Email",    "tool": "list_emails",
-         "args": {"mailbox": "INBOX", "limit": 10, "unread_only": True},
-         "label_from_identity": True,
-         "formatter": "_format_email_output"},
-        {"detect": "search_emails", "section": "Email",    "tool": "search_emails",
-         "args": {"query": "is:unread", "limit": 10},
-         "label_from_identity": True,
-         "formatter": "_format_email_output"},
         {"detect": "get_feed",      "section": "RSS",      "tool": "get_feed",
          "args": {},
          "label_from_identity": False},
@@ -2194,8 +2186,6 @@ class TaskScheduler:
                 greeting=None,
                 enabled_tools=json.dumps([
                     "manage_calendar", "manage_notes", "manage_tasks", "manage_memory",
-                    "list_email_accounts", "list_emails", "read_email", "send_email", "reply_to_email", "archive_email",
-                    "mark_email_read", "delete_email", "resolve_contact",
                     "search_chats", "web_search", "web_fetch", "read_file",
                     "create_document", "update_document", "edit_document",
                     "generate_image", "trigger_research",
