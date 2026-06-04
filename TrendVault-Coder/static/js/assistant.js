@@ -511,15 +511,27 @@ function _openWorkingDirEditor(bar) {
   });
 }
 
-async function _ensureWorkingDirChip(headerRight) {
-  if (!headerRight || headerRight.querySelector('#agent-wd-bar')) return;
+async function _mountWorkingDirBar(retries = 0) {
+  // Mount a full-width strip at the very top of the chat area (right under
+  // the chat title bar) so the agent's working directory is always visible.
+  if (document.getElementById('agent-wd-bar')) return;
+  const topBar = document.querySelector('.chat-top-bar');
+  const container = document.getElementById('chat-container');
+  if (!topBar && !container) {
+    if (retries < 20) setTimeout(() => _mountWorkingDirBar(retries + 1), 250);
+    return;
+  }
+  const strip = document.createElement('div');
+  strip.className = 'agent-wd-strip';
   const bar = document.createElement('div');
   bar.id = 'agent-wd-bar';
   bar.className = 'agent-wd-bar';
   bar.title = 'Agent working directory — where it creates files and runs commands. Click to change.';
   bar.innerHTML = `<span class="agent-wd-chip">working dir…</span>`;
   bar.addEventListener('click', () => _openWorkingDirEditor(bar));
-  headerRight.insertBefore(bar, headerRight.firstChild);
+  strip.appendChild(bar);
+  if (topBar && topBar.parentNode) topBar.insertAdjacentElement('afterend', strip);
+  else container.insertBefore(strip, container.firstChild);
   _renderWdBar(bar, await _fetchWorkingDir());
 }
 
@@ -543,7 +555,6 @@ async function _ensureHeaderAffordances(sessionId) {
   gear.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   gear.addEventListener('click', openAssistantSettings);
   headerRight.appendChild(gear);
-  _ensureWorkingDirChip(headerRight);
 }
 
 // Run a short polling check after session loads so we can add the gear button
@@ -566,6 +577,7 @@ function _watchForAssistantActivation() {
 
 function _boot() {
   _watchForAssistantActivation();
+  _mountWorkingDirBar();
 }
 
 if (document.readyState === 'loading') {
