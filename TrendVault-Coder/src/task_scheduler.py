@@ -1505,44 +1505,10 @@ class TaskScheduler:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", target))
 
     async def _deliver_via_email(self, output: str, task, result: str):
-        """Send task output through the app's configured SMTP account.
-
-        Supported output_target values:
-        - email / email:self: send to the account's From address
-        - email:name@example.com or raw name@example.com: send there
-        """
-        from email.message import EmailMessage
-
-        target = (output or "").strip()
-        explicit = ""
-        if target.startswith("email:"):
-            explicit = target.split(":", 1)[1].strip()
-        elif "@" in target:
-            explicit = target
-
-        try:
-            from routes.email_routes import _resolve_send_config
-            from routes.email_helpers import _send_smtp_message
-
-            cfg = _resolve_send_config(owner=task.owner or "")
-            to_addr = explicit or cfg.get("from_address") or cfg.get("smtp_user") or ""
-            if not to_addr:
-                raise RuntimeError("No email recipient resolved for task output")
-
-            from_addr = cfg.get("from_address") or cfg.get("smtp_user") or to_addr
-            msg = EmailMessage()
-            msg["From"] = from_addr
-            msg["To"] = to_addr
-            msg["Subject"] = f"[Task] {task.name}"
-            msg["X-TrendVault-AI-Origin"] = "trendvault-ai-ui"
-            msg["X-TrendVault-AI-Kind"] = "task"
-            msg["X-TrendVault-AI-Ref"] = str(task.id)
-            msg.set_content(result or "")
-            _send_smtp_message(cfg, from_addr, [to_addr], msg.as_string(), timeout=30)
-            logger.info("Task %s emailed result to %s (%sb)", task.id, to_addr, len(result or ""))
-        except Exception as e:
-            logger.error("Task %s email delivery failed: %s", task.id, e, exc_info=True)
-            raise
+        """Email delivery of task output was removed along with the email feature."""
+        raise RuntimeError(
+            "Email delivery is no longer available — choose a different output target."
+        )
 
     async def _run_agent_loop(self, endpoint_url: str, model: str, task, session_id: str,
                               system_prompt: str | None = None,
@@ -1827,18 +1793,9 @@ class TaskScheduler:
             logger.warning(f"Task {task.id}: MCP manager not available for delivery")
             return
 
-        # Resolve recipient — prefer the configured email From (the established
-        # "email yourself" pattern from daily_brief), fall back to task.owner.
-        # `_get_email_config()` is the single source of truth that handles both
-        # the legacy `email_from` setting and the per-account DB rows.
+        # Resolve recipient from the task owner (if it's an email address).
         recipient = None
-        try:
-            from routes.email_helpers import _get_email_config
-            cfg = _get_email_config() or {}
-            recipient = cfg.get("from_address") or None
-        except Exception as _e:
-            logger.debug(f"_deliver_via_mcp: email config lookup failed: {_e}")
-        if not recipient and task.owner and "@" in str(task.owner):
+        if task.owner and "@" in str(task.owner):
             recipient = task.owner
 
         args = {

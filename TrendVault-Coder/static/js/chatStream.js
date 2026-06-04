@@ -182,13 +182,6 @@ export function handleUIControl(uiData) {
         if (btn) btn.click();
       }
 
-    } else if (uiEvent === 'open_email_reply' || uiData.ui_event === 'open_email_reply') {
-      import('./emailInbox.js').then(function(mod) {
-        var fn = mod.openReplyDraft || (mod.default && mod.default.openReplyDraft);
-        if (fn) fn(uiData.uid, uiData.folder || 'INBOX', uiData.mode || 'reply');
-      }).catch(function(e) {
-        console.warn('open_email_reply failed:', e);
-      });
     }
   } catch(e) {
     console.warn('ui_control handler error:', e);
