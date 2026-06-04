@@ -35752,7 +35752,7 @@ body.theme-frosted .modal {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  cursor: pointer;
+  cursor: default;
   margin: 0;
   -webkit-user-select: none;
   user-select: none;
@@ -35776,11 +35776,90 @@ body.theme-frosted .modal {
 .agent-wd-chip.agent-wd-branch { color: var(--accent); }
 .agent-wd-chip.agent-wd-branch svg { opacity: .85; }
 .agent-wd-chip.agent-wd-flag { opacity: .72; }
-.agent-wd-bar:hover .agent-wd-chip { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
+.agent-wd-path:hover .agent-wd-chip { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
 .agent-wd-chip.agent-wd-missing {
   color: var(--red, #ff5d5d);
   border-color: color-mix(in srgb, var(--red, #ff5d5d) 55%, transparent);
 }
+
+/* "Local" button — its own dropdown trigger (environment/location picker) */
+.agent-wd-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s ease, background .12s ease;
+}
+.agent-wd-loc svg { width: 12px; height: 12px; opacity: .75; flex: none; }
+.agent-wd-loc svg:last-child { width: 11px; height: 11px; opacity: .5; margin-left: -1px; }
+.agent-wd-loc:hover { border-color: var(--accent); background: color-mix(in srgb, var(--fg) 13%, transparent); }
+
+/* Path group (folder · branch · worktree) — click to change the directory */
+.agent-wd-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Location dropdown menu (opens upward from the Local button) */
+.agent-wd-menu {
+  position: absolute;
+  z-index: 4001;
+  min-width: 248px;
+  max-width: 92vw;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, .5);
+}
+.agent-wd-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+.agent-wd-menu-item svg { width: 15px; height: 15px; opacity: .8; flex: none; }
+.agent-wd-menu-item:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.agent-wd-menu-name { font-weight: 500; }
+.agent-wd-menu-spacer { flex: 1; }
+.agent-wd-menu-check { display: inline-flex; color: var(--accent); opacity: 0; }
+.agent-wd-menu-item.is-active .agent-wd-menu-check { opacity: 1; }
+.agent-wd-menu-gear { display: inline-flex; padding: 3px; border-radius: 5px; opacity: .5; }
+.agent-wd-menu-gear:hover { opacity: 1; background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.agent-wd-menu-sub { font-size: 11px; opacity: .45; padding: 0 10px 6px 35px; margin-top: -3px; }
+.agent-wd-menu-sep { height: 1px; background: var(--border); margin: 5px 6px; opacity: .7; }
+.agent-wd-menu-label {
+  font-size: 10.5px; opacity: .45; padding: 3px 10px 5px;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.agent-wd-menu-add { opacity: .85; }
+.agent-wd-menu-add svg { opacity: .55; }
 
 /* Click-to-edit popover for the working directory */
 .agent-wd-editor {

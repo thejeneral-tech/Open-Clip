@@ -425,6 +425,11 @@ function _wdIcon(name) {
     folder:  '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     branch:  '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 3.5-3.5 3-8 4"/>',
     layers:  '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+    chevron: '<path d="M6 15l6-6 6 6"/>',
+    check:   '<path d="M20 6 9 17l-5-5"/>',
+    gear:    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    plus:    '<path d="M12 5v14M5 12h14"/>',
+    ssh:     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3M13 15h5"/>',
   }[name] || '';
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
@@ -435,19 +440,54 @@ async function _fetchWorkingDir() {
 
 function _renderWdBar(bar, wd) {
   bar._wd = wd;
-  if (!wd) { bar.innerHTML = `<span class="agent-wd-chip">working dir</span>`; return; }
-  const chips = [];
-  chips.push(`<span class="agent-wd-chip">${_wdIcon('monitor')}${_esc(wd.location || 'Local')}</span>`);
+  const locName = _esc((wd && wd.location) || 'Local');
+  const locBtn = `<button type="button" class="agent-wd-loc" title="Choose where the agent runs">${_wdIcon('monitor')}<span>${locName}</span>${_wdIcon('chevron')}</button>`;
+  if (!wd) { bar.innerHTML = locBtn; return; }
   const missing = wd.exists ? '' : ' agent-wd-missing';
   const label = wd.is_default ? `${_esc(wd.name)} · default` : _esc(wd.name);
-  chips.push(`<span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span>`);
-  if (wd.is_git && wd.git_branch) {
-    chips.push(`<span class="agent-wd-chip agent-wd-branch">${_wdIcon('branch')}${_esc(wd.git_branch)}</span>`);
-  }
-  if (wd.is_worktree) {
-    chips.push(`<span class="agent-wd-chip agent-wd-flag">${_wdIcon('layers')}worktree</span>`);
-  }
-  bar.innerHTML = chips.join('');
+  const chips = [`<span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span>`];
+  if (wd.is_git && wd.git_branch) chips.push(`<span class="agent-wd-chip agent-wd-branch">${_wdIcon('branch')}${_esc(wd.git_branch)}</span>`);
+  if (wd.is_worktree) chips.push(`<span class="agent-wd-chip agent-wd-flag">${_wdIcon('layers')}worktree</span>`);
+  bar.innerHTML = locBtn + `<button type="button" class="agent-wd-path" title="Change the working directory">${chips.join('')}</button>`;
+}
+
+// Location dropdown (the "Local" button) — modelled on an environment picker.
+// Local is the real, working environment; SSH/remote are not wired yet.
+function _openLocationMenu(bar) {
+  document.querySelector('.agent-wd-menu')?.remove();
+  const locBtn = bar.querySelector('.agent-wd-loc');
+  if (!locBtn) return;
+  const menu = document.createElement('div');
+  menu.className = 'agent-wd-menu';
+  menu.innerHTML = `
+    <button type="button" class="agent-wd-menu-item is-active" data-act="local">
+      ${_wdIcon('monitor')}<span class="agent-wd-menu-name">Local</span>
+      <span class="agent-wd-menu-spacer"></span>
+      <span class="agent-wd-menu-check">${_wdIcon('check')}</span>
+      <span class="agent-wd-menu-gear" data-act="settings" title="Set working directory">${_wdIcon('gear')}</span>
+    </button>
+    <div class="agent-wd-menu-sub">Runs on this machine</div>
+    <div class="agent-wd-menu-sep"></div>
+    <div class="agent-wd-menu-label">SSH</div>
+    <button type="button" class="agent-wd-menu-item agent-wd-menu-add" data-act="add-ssh">
+      ${_wdIcon('plus')}<span class="agent-wd-menu-name">Add SSH host…</span>
+    </button>`;
+  document.body.appendChild(menu);
+  // Opens upward — the bar sits just above the composer at the bottom.
+  const r = locBtn.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const left = Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - mw - 8));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(r.top + window.scrollY - mh - 6)}px`;
+  const close = () => { document.removeEventListener('mousedown', onDoc, true); menu.remove(); };
+  const onDoc = (e) => { if (!menu.contains(e.target) && !locBtn.contains(e.target)) close(); };
+  document.addEventListener('mousedown', onDoc, true);
+  menu.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'settings') { close(); _openWorkingDirEditor(bar); }
+    else if (act === 'add-ssh') { close(); uiModule.showToast('Remote / SSH execution isn’t available yet — the agent runs on this machine.'); }
+    else { close(); }
+  });
 }
 
 function _openWorkingDirEditor(bar) {
@@ -471,7 +511,8 @@ function _openWorkingDirEditor(bar) {
   document.body.appendChild(pop);
   const r = bar.getBoundingClientRect();
   const w = pop.offsetWidth || 460;
-  pop.style.top = `${Math.round(r.bottom + 6 + window.scrollY)}px`;
+  const ph = pop.offsetHeight || 150;
+  pop.style.top = `${Math.round(r.top + window.scrollY - ph - 6)}px`;  // open upward
   pop.style.left = `${Math.round(Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - w - 8)))}px`;
 
   const input = pop.querySelector('.agent-wd-editor-input');
@@ -528,8 +569,11 @@ async function _mountWorkingDirBar(retries = 0) {
   bar.id = 'agent-wd-bar';
   bar.className = 'agent-wd-bar';
   bar.title = 'Agent working directory — where it creates files and runs commands. Click to change.';
-  bar.innerHTML = `<span class="agent-wd-chip">working dir…</span>`;
-  bar.addEventListener('click', () => _openWorkingDirEditor(bar));
+  bar.innerHTML = `<button type="button" class="agent-wd-loc">${_wdIcon('monitor')}<span>Local</span>${_wdIcon('chevron')}</button>`;
+  bar.addEventListener('click', (e) => {
+    if (e.target.closest('.agent-wd-loc')) _openLocationMenu(bar);
+    else if (e.target.closest('.agent-wd-path')) _openWorkingDirEditor(bar);
+  });
   strip.appendChild(bar);
   inputBar.insertAdjacentElement('beforebegin', strip);
   _renderWdBar(bar, await _fetchWorkingDir());
