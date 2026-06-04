@@ -14,8 +14,8 @@ def _load_cli(monkeypatch):
     db.SessionLocal = MagicMock()
     db.McpServer = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db)
-    path = ROOT / "scripts" / "odysseus-mcp"
-    loader = importlib.machinery.SourceFileLoader("odysseus_mcp_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-mcp"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_mcp_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

@@ -16,8 +16,8 @@ def _load_cli(monkeypatch):
     db_stub.Note = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db_stub)
 
-    path = ROOT / "scripts" / "odysseus-notes"
-    loader = importlib.machinery.SourceFileLoader("odysseus_notes_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-notes"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_notes_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

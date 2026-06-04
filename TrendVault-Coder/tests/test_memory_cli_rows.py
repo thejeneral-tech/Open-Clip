@@ -13,8 +13,8 @@ def _load_cli(monkeypatch):
     svc = types.ModuleType("services.memory.memory")
     svc.MemoryManager = MagicMock()
     monkeypatch.setitem(sys.modules, "services.memory.memory", svc)
-    path = ROOT / "scripts" / "odysseus-memory"
-    loader = importlib.machinery.SourceFileLoader("odysseus_memory_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-memory"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_memory_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

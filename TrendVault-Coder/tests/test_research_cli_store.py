@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_cli():
-    path = ROOT / "scripts" / "odysseus-research"
-    loader = importlib.machinery.SourceFileLoader("odysseus_research_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-research"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_research_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

@@ -170,12 +170,12 @@ def test_create_token_attributes_owner_hashes_secret_and_returns_raw_once(monkey
     create_token = _get_handler(mod, "POST", "/tokens")
     resp = create_token(request=req, name="my-token")
 
-    expected_raw = "ody_" + fake_suffix
+    expected_raw = "tva_" + fake_suffix
     expected_prefix = expected_raw[:8]
     expected_id = fake_uuid_str[:8]
 
     assert resp["token"] == expected_raw
-    assert resp["token"].startswith("ody_")
+    assert resp["token"].startswith("tva_")
     assert resp["token_prefix"] == expected_prefix
     assert resp["id"] == expected_id
     assert resp["owner"] == "alice"
@@ -205,7 +205,7 @@ def test_list_tokens_returns_safe_display_fields_only(monkeypatch, token_routes_
         id="tok001",
         name="Production",
         owner="alice",
-        token_prefix="ody_prod",
+        token_prefix="tva_prod",
         token_hash="$2b$12$SHOULDNEVERAPPEAR",
         scopes="chat,research",
         is_active=True,
@@ -217,7 +217,7 @@ def test_list_tokens_returns_safe_display_fields_only(monkeypatch, token_routes_
         id="tok002",
         name="Empty scopes",
         owner="bob",
-        token_prefix="ody_empt",
+        token_prefix="tva_empt",
         token_hash="$2b$12$ALSONEVERSHOWN",
         scopes="",
         is_active=False,

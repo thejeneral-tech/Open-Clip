@@ -3,8 +3,8 @@
 
 // ── Key constants ──
 export const KEYS = {
-  THEME: 'odysseus-theme',
-  TOGGLES: 'odysseus-toggles',
+  THEME: 'trendvault-ai-theme',
+  TOGGLES: 'trendvault-ai-toggles',
   SIDEBAR_COLLAPSED: 'sidebar-collapsed',
   SIDEBAR_WIDTH: 'sidebar-width',
   SIDEBAR_SIDE: 'sidebar-side',
@@ -13,17 +13,17 @@ export const KEYS = {
   COMPARE_CHAT: 'compare-continue-chat',
   COMPARE_BLIND: 'compare-blind',
   COMPARE_RANDOM: 'compare-randomize',
-  MODELS_EXPANDED: 'odysseus-model-expanded',
-  MODEL_ENDPOINTS: 'odysseus-model-endpoints',
-  MODEL_SELECTED: 'odysseus-selected-model',
-  SORT_ORDER: 'odysseus-sessions-sort',
-  CHAT_SEARCH_SCOPE: 'odysseus-search-scope',
-  INCOGNITO: 'odysseus-incognito',
-  RAG_ACTIVE: 'odysseus-rag-active',
-  MCP_ACTIVE: 'odysseus-mcp-active',
+  MODELS_EXPANDED: 'trendvault-ai-model-expanded',
+  MODEL_ENDPOINTS: 'trendvault-ai-model-endpoints',
+  MODEL_SELECTED: 'trendvault-ai-selected-model',
+  SORT_ORDER: 'trendvault-ai-sessions-sort',
+  CHAT_SEARCH_SCOPE: 'trendvault-ai-search-scope',
+  INCOGNITO: 'trendvault-ai-incognito',
+  RAG_ACTIVE: 'trendvault-ai-rag-active',
+  MCP_ACTIVE: 'trendvault-ai-mcp-active',
   SECTION_ORDER: 'sidebar-section-order',
   ADMIN_LAST_TAB: 'admin-last-tab',
-  DENSITY: 'odysseus-density'
+  DENSITY: 'trendvault-ai-density'
 };
 
 /**

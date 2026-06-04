@@ -13,8 +13,8 @@ def _load_cli(monkeypatch):
     svc = types.ModuleType("services.memory.skills")
     svc.SkillsManager = MagicMock()
     monkeypatch.setitem(sys.modules, "services.memory.skills", svc)
-    path = ROOT / "scripts" / "odysseus-skills"
-    loader = importlib.machinery.SourceFileLoader("odysseus_skills_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-skills"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_skills_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

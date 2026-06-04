@@ -1534,9 +1534,9 @@ class TaskScheduler:
             msg["From"] = from_addr
             msg["To"] = to_addr
             msg["Subject"] = f"[Task] {task.name}"
-            msg["X-Odysseus-Origin"] = "odysseus-ui"
-            msg["X-Odysseus-Kind"] = "task"
-            msg["X-Odysseus-Ref"] = str(task.id)
+            msg["X-TrendVault-AI-Origin"] = "trendvault-ai-ui"
+            msg["X-TrendVault-AI-Kind"] = "task"
+            msg["X-TrendVault-AI-Ref"] = str(task.id)
             msg.set_content(result or "")
             _send_smtp_message(cfg, from_addr, [to_addr], msg.as_string(), timeout=30)
             logger.info("Task %s emailed result to %s (%sb)", task.id, to_addr, len(result or ""))
@@ -1845,9 +1845,9 @@ class TaskScheduler:
             "subject": f"[Task] {task.name}",
             "body": result,
             "headers": {
-                "X-Odysseus-Origin": "odysseus-ui",
-                "X-Odysseus-Kind": "task",
-                "X-Odysseus-Ref": str(task.id),
+                "X-TrendVault-AI-Origin": "trendvault-ai-ui",
+                "X-TrendVault-AI-Kind": "task",
+                "X-TrendVault-AI-Ref": str(task.id),
             },
         }
         if recipient:

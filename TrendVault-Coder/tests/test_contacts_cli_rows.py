@@ -15,8 +15,8 @@ def _load_cli(monkeypatch):
     routes._fetch_contacts = MagicMock()
     routes._create_contact = MagicMock()
     monkeypatch.setitem(sys.modules, "routes.contacts_routes", routes)
-    path = ROOT / "scripts" / "odysseus-contacts"
-    loader = importlib.machinery.SourceFileLoader("odysseus_contacts_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-contacts"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_contacts_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

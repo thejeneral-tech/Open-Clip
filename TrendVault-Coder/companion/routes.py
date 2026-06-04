@@ -4,7 +4,7 @@ A thin, additive layer so a LAN client (e.g. a phone) can discover what a server
 offers and pair to it, without duplicating any LLM logic.
 
 Auth is enforced globally by AuthMiddleware (app.py), so reaching a handler here
-means the caller is authenticated by either a cookie session or a Bearer `ody_`
+means the caller is authenticated by either a cookie session or a Bearer `tva_`
 API token. The read endpoints (ping/info/models) accept either; the pairing
 endpoints are admin-cookie only.
 
@@ -76,7 +76,7 @@ def setup_companion_routes() -> APIRouter:
         from core.constants import APP_VERSION
         return {
             "ok": True,
-            "name": "odysseus",
+            "name": "trendvault-ai",
             "version": APP_VERSION,
             "auth": "token" if getattr(request.state, "api_token", False) else "session",
         }
@@ -87,7 +87,7 @@ def setup_companion_routes() -> APIRouter:
         identity (the token's owner for bearer callers)."""
         from core.constants import APP_VERSION
         return {
-            "name": "odysseus",
+            "name": "trendvault-ai",
             "version": APP_VERSION,
             "owner": token_owner(request),
             "capabilities": {"chat": True, "streaming": True},
@@ -227,7 +227,7 @@ def setup_companion_routes() -> APIRouter:
   <div class="row"><strong>Port:</strong> <code>{html.escape(str(port))}</code></div>
   <div class="row"><strong>Token:</strong> <code>{html.escape(raw_token)}</code></div>
   <div class="row"><strong>Payload:</strong> <code>{html.escape(payload_json)}</code></div>
-  <p class="warn">Shown once. This grants chat access to your Odysseus; revoke it
+  <p class="warn">Shown once. This grants chat access to your TrendVault AI; revoke it
   in Settings &rarr; API tokens (id <code>{html.escape(token_id)}</code>). The
   device must be on the same network, and the server must bind to your LAN.</p>
 </div></body></html>"""

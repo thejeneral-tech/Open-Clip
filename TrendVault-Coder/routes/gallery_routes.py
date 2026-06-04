@@ -21,8 +21,8 @@ from routes.gallery_helpers import (
 
 logger = logging.getLogger(__name__)
 
-GALLERY_UPLOAD_MAX_BYTES = int(os.getenv("ODYSSEUS_GALLERY_UPLOAD_MAX_BYTES", str(100 * 1024 * 1024)))
-GALLERY_TRANSFORM_UPLOAD_MAX_BYTES = int(os.getenv("ODYSSEUS_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES", str(25 * 1024 * 1024)))
+GALLERY_UPLOAD_MAX_BYTES = int(os.getenv("TRENDVAULT_AI_GALLERY_UPLOAD_MAX_BYTES", str(100 * 1024 * 1024)))
+GALLERY_TRANSFORM_UPLOAD_MAX_BYTES = int(os.getenv("TRENDVAULT_AI_GALLERY_TRANSFORM_UPLOAD_MAX_BYTES", str(25 * 1024 * 1024)))
 
 
 def _sanitize_gallery_filename(filename: str) -> str:

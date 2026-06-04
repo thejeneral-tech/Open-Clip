@@ -16,8 +16,8 @@ def _load_cli(monkeypatch):
     db.CalendarCal = MagicMock()
     db.CalendarEvent = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db)
-    path = ROOT / "scripts" / "odysseus-calendar"
-    loader = importlib.machinery.SourceFileLoader("odysseus_calendar_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-calendar"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_calendar_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

@@ -1,5 +1,5 @@
 /* ============================================ */
-/* Odysseus UI — Consolidated Stylesheet        */
+/* TrendVault AI UI — Consolidated Stylesheet        */
 /* ============================================ */
 
 
@@ -5498,15 +5498,15 @@ body.bg-pattern-sparkles {
     /* (legacy toolbar-toggle styles removed — now using .vis-* classes) */
 
     /* Demo highlight pulse */
-    .odysseus-highlight {
+    .trendvault-ai-highlight {
       outline: 2px solid var(--accent, var(--red)) !important;
       outline-offset: 1px;
       box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, var(--red)) 18%, transparent);
-      animation: ody-pulse 1.5s ease-in-out infinite;
+      animation: tva-pulse 1.5s ease-in-out infinite;
       z-index: 100;
       position: relative;
     }
-    @keyframes ody-pulse {
+    @keyframes tva-pulse {
       0%, 100% { outline-color: var(--accent, var(--red)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, var(--red)) 18%, transparent); }
       50%       { outline-color: color-mix(in srgb, var(--accent, var(--red)) 40%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent, var(--red)) 8%, transparent); }
     }
@@ -5519,7 +5519,7 @@ body.bg-pattern-sparkles {
       border: 3px solid var(--accent, var(--red));
       border-radius: 10px;
       z-index: 10000;
-      animation: ody-breathe 1.4s ease-in-out infinite;
+      animation: tva-breathe 1.4s ease-in-out infinite;
       opacity: 0;
       transform: scale(0.94);
       transition: opacity 0.35s ease-out, transform 0.35s ease-out;
@@ -5528,7 +5528,7 @@ body.bg-pattern-sparkles {
       opacity: 1;
       transform: scale(1);
     }
-    @keyframes ody-breathe {
+    @keyframes tva-breathe {
       0%, 100% {
         box-shadow: 0 0 0 3px  color-mix(in srgb, var(--accent, var(--red)) 55%, transparent),
                     0 0 22px 4px color-mix(in srgb, var(--accent, var(--red)) 40%, transparent);
@@ -5626,7 +5626,7 @@ body.bg-pattern-sparkles {
     @media (prefers-reduced-motion: reduce) {
       .th-cursor, .th-modal-group, .th-zone { animation: none !important; }
     }
-    .odysseus-hl-label {
+    .trendvault-ai-hl-label {
       position: absolute;
       top: -22px;
       left: 8px;
@@ -21271,7 +21271,7 @@ body.gallery-selecting .gallery-dl-btn,
 
 /* Welcome name — left-to-right wipe with a touch of horizontal stretch.
    Fires on initial render via the .welcome-name rule; restarts on Nobody⇄
-   Odysseus toggle via JS reflow trick. */
+   TrendVault AI toggle via JS reflow trick. */
 .welcome-name {
   transform-origin: left center;
   animation: welcome-name-reveal 0.55s cubic-bezier(0.34, 1.32, 0.55, 1) both;

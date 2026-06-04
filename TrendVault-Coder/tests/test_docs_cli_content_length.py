@@ -15,8 +15,8 @@ def _load_cli(monkeypatch):
     db.Document = MagicMock()
     db.DocumentVersion = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db)
-    path = ROOT / "scripts" / "odysseus-docs"
-    loader = importlib.machinery.SourceFileLoader("odysseus_docs_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-docs"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_docs_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

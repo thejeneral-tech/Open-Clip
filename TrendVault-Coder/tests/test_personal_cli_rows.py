@@ -13,8 +13,8 @@ def _load_cli(monkeypatch):
     personal_docs = types.ModuleType("src.personal_docs")
     personal_docs.PersonalDocsManager = MagicMock()
     monkeypatch.setitem(sys.modules, "src.personal_docs", personal_docs)
-    path = ROOT / "scripts" / "odysseus-personal"
-    loader = importlib.machinery.SourceFileLoader("odysseus_personal_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-personal"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_personal_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

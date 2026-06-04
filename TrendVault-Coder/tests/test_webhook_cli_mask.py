@@ -14,8 +14,8 @@ def _load_cli(monkeypatch):
     db.SessionLocal = MagicMock()
     db.ScheduledTask = MagicMock()
     monkeypatch.setitem(sys.modules, "core.database", db)
-    path = ROOT / "scripts" / "odysseus-webhook"
-    loader = importlib.machinery.SourceFileLoader("odysseus_webhook_cli", str(path))
+    path = ROOT / "scripts" / "trendvault-ai-webhook"
+    loader = importlib.machinery.SourceFileLoader("trendvault_ai_webhook_cli", str(path))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)

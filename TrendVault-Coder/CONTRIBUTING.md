@@ -1,4 +1,4 @@
-# Contributing to Odysseus
+# Contributing to TrendVault AI
 
 Thanks for helping. The project is moving quickly, so the best contributions are focused, easy to review, and easy to test.
 
@@ -14,8 +14,8 @@ Thanks for helping. The project is moving quickly, so the best contributions are
 Docker is the recommended path for normal testing:
 
 ```bash
-git clone https://github.com/pewdiepie-archdaemon/odysseus.git
-cd odysseus
+git clone https://github.com/thejeneral-tech/TrendVault-Program.git
+cd TrendVault-Program
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -46,7 +46,7 @@ For Docker-related changes:
 ```bash
 docker compose config
 docker compose up -d --build
-docker compose logs --tail=120 odysseus
+docker compose logs --tail=120 trendvault-ai
 ```
 
 Mention what you ran in the pull request description. If you could not run a check, say so.
@@ -67,7 +67,7 @@ Please keep PRs small. Large PRs that mix unrelated cleanup, formatting, refacto
 
 ## Style and visual changes
 
-Odysseus has an intentional visual style. PRs that ignore it will be closed without merge, no matter how correct the underlying code is.
+TrendVault AI has an intentional visual style. PRs that ignore it will be closed without merge, no matter how correct the underlying code is.
 
 Before submitting any change that affects what the app looks like — buttons, icons, fonts, colors, spacing, layout, CSS, HTML, SVG, or any `static/js/` module that draws to the DOM — please:
 
