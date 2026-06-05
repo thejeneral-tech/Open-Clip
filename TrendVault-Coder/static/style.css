@@ -35984,6 +35984,30 @@ body.theme-frosted .modal {
 }
 .agent-wd-gitnew-go:hover { border-color: var(--accent); }
 
+/* "Add a directory the AI can access" button + menu */
+.agent-wd-add {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 7px; flex: none;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent); color: var(--fg);
+  cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease;
+}
+.agent-wd-add svg { width: 14px; height: 14px; opacity: .8; flex: none; }
+.agent-wd-add:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.agent-wd-rootsmenu { min-width: 264px; }
+.agent-wd-root-fixed { cursor: default; }
+.agent-wd-root-fixed:hover { background: none; }
+.agent-wd-root-tag {
+  margin-left: auto; font-size: 10px; opacity: .45;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.agent-wd-root-x {
+  display: inline-flex; padding: 3px; border: 0; border-radius: 5px;
+  background: none; color: var(--fg); opacity: .45; cursor: pointer; flex: none;
+}
+.agent-wd-root-x svg { width: 13px; height: 13px; }
+.agent-wd-root-x:hover { opacity: 1; color: var(--red, #ff5d5d); background: color-mix(in srgb, var(--red, #ff5d5d) 14%, transparent); }
+
 /* Click-to-edit popover for the working directory */
 .agent-wd-editor {
   position: absolute;

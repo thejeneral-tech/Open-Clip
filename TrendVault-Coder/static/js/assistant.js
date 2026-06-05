@@ -432,6 +432,7 @@ function _wdIcon(name) {
     ssh:     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3M13 15h5"/>',
     home:    '<path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/>',
     close:   '<path d="M18 6 6 18M6 6l12 12"/>',
+    folderplus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11.5v5M9.5 14h5"/>',
   }[name] || '';
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
@@ -453,7 +454,8 @@ function _renderWdBar(bar, wd) {
     const wt = wd.is_worktree ? `<span class="agent-wd-git-wt" title="Linked worktree">${_wdIcon('layers')}</span>` : '';
     gitBtn = `<button type="button" class="agent-wd-git" title="Branch &amp; worktrees — switch branch or working tree">${_wdIcon('branch')}<span>${_esc(wd.git_branch)}</span>${wt}${_wdIcon('chevron')}</button>`;
   }
-  bar.innerHTML = locBtn + pathBtn + gitBtn;
+  const addBtn = `<button type="button" class="agent-wd-add" title="Add a directory the AI can access">${_wdIcon('folderplus')}</button>`;
+  bar.innerHTML = locBtn + pathBtn + gitBtn + addBtn;
 }
 
 // Location dropdown (the "Local" button) — modelled on an environment picker.
@@ -579,14 +581,16 @@ function _setWorkingDir(bar, path, done) {
 
 // Folder browser modal — "Open folder…" opens this. Navigates the host
 // filesystem (admin-only listing endpoint) and sets the chosen directory.
-function _openFolderPicker(bar) {
+function _openFolderPicker(bar, opts = {}) {
+  const isAdd = opts.mode === 'add-root';
+  const fpTitle = isAdd ? 'Add a directory the AI can access' : 'Pick default working directory';
   document.querySelector('.agent-fp-overlay')?.remove();
   const overlay = document.createElement('div');
   overlay.className = 'agent-fp-overlay';
   overlay.innerHTML = `
-    <div class="agent-fp" role="dialog" aria-modal="true" aria-label="Pick default working directory">
+    <div class="agent-fp" role="dialog" aria-modal="true" aria-label="${_esc(fpTitle)}">
       <div class="agent-fp-head">
-        <h4>Pick default working directory</h4>
+        <h4>${_esc(fpTitle)}</h4>
         <button type="button" class="agent-fp-x" data-act="close" title="Close">${_wdIcon('close')}</button>
       </div>
       <div class="agent-fp-nav">
@@ -600,7 +604,7 @@ function _openFolderPicker(bar) {
       <div class="agent-fp-list"><div class="agent-fp-msg">Loading…</div></div>
       <div class="agent-fp-foot">
         <button type="button" class="cal-btn" data-act="close">Cancel</button>
-        <button type="button" class="cal-btn cal-btn-primary" data-act="use">Use as default directory</button>
+        <button type="button" class="cal-btn cal-btn-primary" data-act="use">${isAdd ? 'Add directory' : 'Use as default directory'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -644,7 +648,22 @@ function _openFolderPicker(bar) {
     else if (act === 'home') load(home || '');
     else if (act === 'go') load(inputEl.value.trim());
     else if (act === 'into') load(el.dataset.path);
-    else if (act === 'use') _setWorkingDir(bar, inputEl.value.trim(), close);
+    else if (act === 'use') {
+      if (isAdd) {
+        const path = inputEl.value.trim();
+        if (!path) return;
+        fetch(`${API}/roots`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) })
+          .then(async (res) => {
+            if (res.status === 403) { uiModule.showToast('Admin only — ask an admin to change this.'); return; }
+            if (!res.ok) { let m = `Error ${res.status}`; try { const j = await res.json(); if (j.detail) m = j.detail; } catch {} uiModule.showToast(m); return; }
+            uiModule.showToast('Directory added');
+            close();
+            if (opts.onDone) opts.onDone();
+          }).catch(() => uiModule.showToast('Could not add directory'));
+      } else {
+        _setWorkingDir(bar, inputEl.value.trim(), close);
+      }
+    }
   });
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); load(inputEl.value.trim()); } });
   function onKey(e) { if (e.key === 'Escape') close(); }
@@ -822,6 +841,76 @@ function _gitNewWorktreePrompt(menu, bar, close, place) {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); create(); } });
 }
 
+// "Directories the AI can access" menu (the + button) — the working dir plus
+// the extra roots the agent's file tools may touch. Add new ones or remove.
+async function _openRootsMenu(bar) {
+  document.querySelector('.agent-wd-menu')?.remove();
+  const anchor = bar.querySelector('.agent-wd-add');
+  if (!anchor) return;
+  const menu = document.createElement('div');
+  menu.className = 'agent-wd-menu agent-wd-rootsmenu';
+  menu.innerHTML = '<div class="agent-wd-menu-sub" style="padding:9px 12px;">Loading…</div>';
+  document.body.appendChild(menu);
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(r.right + window.scrollX - mw, window.innerWidth - mw - 8)))}px`;
+    menu.style.top = `${Math.round(r.top + window.scrollY - mh - 6)}px`;
+  };
+  place();
+  const close = () => { document.removeEventListener('mousedown', onDoc, true); menu.remove(); };
+  const onDoc = (e) => { if (!menu.contains(e.target) && !anchor.contains(e.target)) close(); };
+  document.addEventListener('mousedown', onDoc, true);
+
+  const render = (data) => {
+    const wd = data && data.working_dir;
+    const wdRow = wd ? `<div class="agent-wd-menu-item agent-wd-root-fixed" title="${_esc(wd.path)}">
+        ${_wdIcon('folder')}<span class="agent-wd-menu-name">${_esc(wd.name)}</span>
+        <span class="agent-wd-root-tag">working dir</span>
+       </div>` : '';
+    const extras = ((data && data.extra) || []).map((r) =>
+      `<div class="agent-wd-menu-item agent-wd-root-row${r.exists ? '' : ' agent-wd-menu-missing'}" title="${_esc(r.path)}">
+        ${_wdIcon('folder')}<span class="agent-wd-menu-name">${_esc(r.name)}</span>
+        <span class="agent-wd-menu-spacer"></span>
+        <button type="button" class="agent-wd-root-x" data-act="remove" data-path="${_esc(r.path)}" title="Remove access">${_wdIcon('close')}</button>
+       </div>`).join('');
+    menu.innerHTML = `
+      <div class="agent-wd-menu-label">Directories the AI can access</div>
+      ${wdRow}${extras}
+      <button type="button" class="agent-wd-menu-item agent-wd-menu-add" data-act="add">${_wdIcon('folderplus')}<span class="agent-wd-menu-name">Add a directory…</span></button>`;
+    place();
+  };
+
+  menu.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    if (el.dataset.act === 'add') {
+      close();
+      _openFolderPicker(bar, { mode: 'add-root', onDone: () => _openRootsMenu(bar) });
+    } else if (el.dataset.act === 'remove') {
+      try {
+        const res = await fetch(`${API}/roots/remove`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: el.dataset.path }) });
+        if (res.status === 403) { uiModule.showToast('Admin only — ask an admin to change this.'); return; }
+        if (!res.ok) { uiModule.showToast(`Error ${res.status}`); return; }
+        render(await res.json());
+        uiModule.showToast('Removed');
+      } catch { uiModule.showToast('Could not remove'); }
+    }
+  });
+
+  try {
+    const res = await fetch(`${API}/roots`, { credentials: 'same-origin' });
+    if (!res.ok) {
+      let m = `Error ${res.status}`;
+      try { const j = await res.json(); if (j.detail) m = j.detail; } catch {}
+      menu.innerHTML = `<div class="agent-wd-menu-sub agent-fp-err" style="padding:9px 12px;">${_esc(m)}</div>`; place(); return;
+    }
+    render(await res.json());
+  } catch (err) {
+    menu.innerHTML = `<div class="agent-wd-menu-sub agent-fp-err" style="padding:9px 12px;">Couldn't load: ${_esc((err && err.message) || 'network error')}</div>`; place();
+  }
+}
+
 async function _mountWorkingDirBar(retries = 0) {
   // Mount the working-directory bar right above the message composer
   // ("Message TrendVault AI …"). It's a sibling directly before
@@ -842,6 +931,7 @@ async function _mountWorkingDirBar(retries = 0) {
   bar.innerHTML = `<button type="button" class="agent-wd-loc">${_wdIcon('monitor')}<span>Local</span>${_wdIcon('chevron')}</button>`;
   bar.addEventListener('click', (e) => {
     if (e.target.closest('.agent-wd-loc')) _openLocationMenu(bar);
+    else if (e.target.closest('.agent-wd-add')) _openRootsMenu(bar);
     else if (e.target.closest('.agent-wd-git')) _openGitMenu(bar);
     else if (e.target.closest('.agent-wd-path')) _openRecentMenu(bar);
   });

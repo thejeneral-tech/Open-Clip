@@ -53,6 +53,10 @@ class GitBranchRequest(BaseModel):
     branch: Optional[str] = None
 
 
+class RootPathRequest(BaseModel):
+    path: Optional[str] = None
+
+
 _EMAIL_TOOLS = {"send_email", "reply_to_email"}
 
 
@@ -280,6 +284,33 @@ def _git_state_payload() -> dict:
         best["is_current"] = True
     info["worktrees"] = worktrees
     return info
+
+
+def _roots_payload() -> dict:
+    """Directories the agent's file tools may access: the working dir plus the
+    user-added extra roots (the ``tool_path_extra_roots`` allowlist)."""
+    from src.settings import get_setting
+    from src.tool_execution import get_agent_working_dir
+    from src.constants import DATA_DIR
+    wd = get_agent_working_dir() or os.path.realpath(DATA_DIR)
+    extra, seen = [], set()
+    for p in (get_setting("tool_path_extra_roots") or []):
+        if not isinstance(p, str) or not p.strip():
+            continue
+        try:
+            rp = os.path.realpath(os.path.expanduser(p))
+        except OSError:
+            continue
+        if rp in seen:
+            continue
+        seen.add(rp)
+        extra.append({"path": rp, "name": os.path.basename(rp.rstrip(os.sep)) or rp,
+                      "exists": os.path.isdir(rp)})
+    return {
+        "working_dir": {"path": wd, "name": os.path.basename(wd.rstrip(os.sep)) or wd,
+                        "exists": os.path.isdir(wd)},
+        "extra": extra,
+    }
 
 
 def setup_assistant_routes(task_scheduler) -> APIRouter:
@@ -631,5 +662,63 @@ def setup_assistant_routes(task_scheduler) -> APIRouter:
             if code2 != 0:
                 raise HTTPException(status_code=400, detail=err or err2 or out or "worktree add failed")
         return {"path": os.path.realpath(path), "branch": branch}
+
+    @router.get("/roots")
+    async def get_roots(request: Request):
+        """List the directories the AI can access (working dir + extra roots)."""
+        _owner(request)
+        return await asyncio.to_thread(_roots_payload)
+
+    @router.post("/roots")
+    async def add_root(payload: RootPathRequest, request: Request):
+        """Add an existing directory to the agent's accessible roots (admin-only).
+
+        These extend what the file tools (read_file / write_file) may touch
+        beyond the working directory. Sensitive subpaths stay blocked.
+        """
+        require_admin(request)
+        raw = (payload.path or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="A directory path is required")
+        try:
+            rp = os.path.realpath(os.path.expanduser(raw))
+        except OSError:
+            raise HTTPException(status_code=400, detail="Invalid path")
+        if not os.path.isdir(rp):
+            raise HTTPException(status_code=400, detail=f"Not a directory: {rp}")
+        from src.settings import load_settings, save_settings
+        settings = load_settings()
+        roots = [r for r in (settings.get("tool_path_extra_roots") or []) if isinstance(r, str)]
+        existing = {os.path.realpath(os.path.expanduser(r)) for r in roots}
+        if rp not in existing:
+            roots.append(rp)
+        settings["tool_path_extra_roots"] = roots[:50]
+        save_settings(settings)
+        return await asyncio.to_thread(_roots_payload)
+
+    @router.post("/roots/remove")
+    async def remove_root(payload: RootPathRequest, request: Request):
+        """Remove a directory from the agent's accessible roots (admin-only)."""
+        require_admin(request)
+        raw = (payload.path or "").strip()
+        try:
+            rp = os.path.realpath(os.path.expanduser(raw)) if raw else ""
+        except OSError:
+            rp = raw
+        from src.settings import load_settings, save_settings
+        settings = load_settings()
+        kept = []
+        for r in (settings.get("tool_path_extra_roots") or []):
+            if not isinstance(r, str):
+                continue
+            try:
+                if os.path.realpath(os.path.expanduser(r)) == rp:
+                    continue
+            except OSError:
+                pass
+            kept.append(r)
+        settings["tool_path_extra_roots"] = kept
+        save_settings(settings)
+        return await asyncio.to_thread(_roots_payload)
 
     return router
