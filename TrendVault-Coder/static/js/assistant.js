@@ -430,6 +430,8 @@ function _wdIcon(name) {
     gear:    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     plus:    '<path d="M12 5v14M5 12h14"/>',
     ssh:     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3M13 15h5"/>',
+    home:    '<path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/>',
+    close:   '<path d="M18 6 6 18M6 6l12 12"/>',
   }[name] || '';
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
@@ -552,6 +554,101 @@ function _openWorkingDirEditor(bar) {
   });
 }
 
+// POST a new working directory and re-render the bar. Returns true on success.
+function _setWorkingDir(bar, path, done) {
+  return fetch(`${API}/working-dir`, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  }).then(async (res) => {
+    if (res.status === 403) { uiModule.showToast('Admin only — ask an admin to change this.'); return false; }
+    if (!res.ok) {
+      let m = `Error ${res.status}`;
+      try { const j = await res.json(); if (j.detail) m = j.detail; } catch {}
+      uiModule.showToast(m); return false;
+    }
+    _renderWdBar(bar, await res.json());
+    uiModule.showToast('Working directory updated');
+    if (done) done();
+    return true;
+  }).catch(() => { uiModule.showToast('Could not set folder'); return false; });
+}
+
+// Folder browser modal — "Open folder…" opens this. Navigates the host
+// filesystem (admin-only listing endpoint) and sets the chosen directory.
+function _openFolderPicker(bar) {
+  document.querySelector('.agent-fp-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'agent-fp-overlay';
+  overlay.innerHTML = `
+    <div class="agent-fp" role="dialog" aria-modal="true" aria-label="Pick default working directory">
+      <div class="agent-fp-head">
+        <h4>Pick default working directory</h4>
+        <button type="button" class="agent-fp-x" data-act="close" title="Close">${_wdIcon('close')}</button>
+      </div>
+      <div class="agent-fp-nav">
+        <button type="button" class="agent-fp-row" data-act="up">${_wdIcon('chevron')}<span>Up</span></button>
+        <button type="button" class="agent-fp-row" data-act="home">${_wdIcon('home')}<span>Home</span></button>
+        <div class="agent-fp-go">
+          <input type="text" class="agent-fp-input" spellcheck="false" autocomplete="off" placeholder="Type or paste an absolute path…" />
+          <button type="button" class="agent-fp-gobtn" data-act="go">Go</button>
+        </div>
+      </div>
+      <div class="agent-fp-list"><div class="agent-fp-msg">Loading…</div></div>
+      <div class="agent-fp-foot">
+        <button type="button" class="cal-btn" data-act="close">Cancel</button>
+        <button type="button" class="cal-btn cal-btn-primary" data-act="use">Use as default directory</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const listEl = overlay.querySelector('.agent-fp-list');
+  const inputEl = overlay.querySelector('.agent-fp-input');
+  let home = '', parent = null;
+  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove(); };
+
+  async function load(path) {
+    listEl.innerHTML = '<div class="agent-fp-msg">Loading…</div>';
+    try {
+      const res = await fetch(`${API}/list-dir?path=${encodeURIComponent(path || '')}`, { credentials: 'same-origin' });
+      if (!res.ok) {
+        let d = `Error ${res.status}`;
+        try { const j = await res.json(); if (j.detail) d = j.detail; } catch {}
+        listEl.innerHTML = `<div class="agent-fp-msg agent-fp-err">Couldn't list: ${_esc(d)}</div>`;
+        return;
+      }
+      const data = await res.json();
+      home = data.home; parent = data.parent;
+      inputEl.value = data.path;
+      if (!data.entries || !data.entries.length) {
+        listEl.innerHTML = '<div class="agent-fp-msg">No sub-folders here.</div>';
+        return;
+      }
+      listEl.innerHTML = data.entries.map((e) =>
+        `<button type="button" class="agent-fp-item" data-act="into" data-path="${_esc(e.path)}" title="${_esc(e.path)}">${_wdIcon('folder')}<span>${_esc(e.name)}</span></button>`
+      ).join('');
+    } catch (err) {
+      listEl.innerHTML = `<div class="agent-fp-msg agent-fp-err">Couldn't list: ${_esc((err && err.message) || 'NetworkError when attempting to fetch resource.')}</div>`;
+    }
+  }
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { close(); return; }
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act;
+    if (act === 'close') close();
+    else if (act === 'up') load(parent || inputEl.value.trim());
+    else if (act === 'home') load(home || '');
+    else if (act === 'go') load(inputEl.value.trim());
+    else if (act === 'into') load(el.dataset.path);
+    else if (act === 'use') _setWorkingDir(bar, inputEl.value.trim(), close);
+  });
+  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); load(inputEl.value.trim()); } });
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  load((bar._wd && bar._wd.path) || '');
+}
+
 // Recent-folder dropdown (the folder chip) — pick a recent working directory
 // or open the editor to enter a new path. Opens upward from the folder chip.
 function _openRecentMenu(bar) {
@@ -587,7 +684,7 @@ function _openRecentMenu(bar) {
   menu.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-act]');
     if (!el) return;
-    if (el.dataset.act === 'open') { close(); _openWorkingDirEditor(bar); return; }
+    if (el.dataset.act === 'open') { close(); _openFolderPicker(bar); return; }
     if (el.dataset.act === 'pick') {
       const path = el.dataset.path;
       close();

@@ -173,6 +173,43 @@ def _task_to_checkin_dict(t: ScheduledTask) -> dict:
     }
 
 
+def _list_dir_payload(path: str) -> dict:
+    """List the sub-directories of `path` for the folder picker.
+
+    Directories only (it's a folder picker), dot-folders hidden, with the
+    parent + home for navigation. Raises HTTPException with a human message
+    on a bad/inaccessible path so the UI can show "Couldn't list: …".
+    """
+    home = os.path.expanduser("~")
+    raw = (path or "").strip()
+    try:
+        target = os.path.realpath(os.path.expanduser(raw)) if raw else home
+    except OSError:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not os.path.isdir(target):
+        raise HTTPException(status_code=400, detail=f"Not a directory: {target}")
+    parent = os.path.dirname(target.rstrip(os.sep)) or None
+    if parent == target:
+        parent = None  # filesystem root
+    entries = []
+    try:
+        with os.scandir(target) as it:
+            for e in it:
+                if e.name.startswith("."):
+                    continue
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        entries.append({"name": e.name, "path": os.path.join(target, e.name)})
+                except OSError:
+                    continue
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+    except OSError as ex:
+        raise HTTPException(status_code=400, detail=f"Cannot list: {ex}")
+    entries.sort(key=lambda x: x["name"].lower())
+    return {"path": target, "parent": parent, "home": home, "entries": entries[:1000]}
+
+
 def setup_assistant_routes(task_scheduler) -> APIRouter:
     router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -468,5 +505,14 @@ def setup_assistant_routes(task_scheduler) -> APIRouter:
         settings["agent_working_dir_recent"] = recent[:10]
         save_settings(settings)
         return await asyncio.to_thread(_working_dir_payload)
+
+    @router.get("/list-dir")
+    async def list_dir(request: Request, path: str = ""):
+        """List sub-directories of `path` for the working-dir folder picker.
+
+        Admin-only — it browses the host filesystem (directory names only).
+        """
+        require_admin(request)
+        return await asyncio.to_thread(_list_dir_payload, path)
 
     return router
