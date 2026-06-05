@@ -22,6 +22,7 @@ import censorModule from './js/censor.js';
 import galleryModule from './js/gallery.js';
 import tasksModule from './js/tasks.js';
 import calendarModule from './js/calendar.js';
+import automationMapModule from './js/automationMap.js';
 import notesModule from './js/notes.js';
 import adminModule from './js/admin.js';
 import settingsModule from './js/settings.js';
@@ -905,6 +906,19 @@ function initializeEventListeners() {
     });
   }
 
+  // Automation Map tool button
+  const toolAutomationBtn = el('tool-automation-btn');
+  if (toolAutomationBtn) {
+    toolAutomationBtn.addEventListener('click', async () => {
+      if (!automationMapModule) return;
+      const Modals = await import('./js/modalManager.js');
+      if (!Modals.toggle('automation-map-modal')) {
+        if (automationMapModule.isAutomationMapOpen()) automationMapModule.closeAutomationMap();
+        else automationMapModule.openAutomationMap();
+      }
+    });
+  }
+
   // Notes tool button
   const toolNotesBtn = el('tool-notes-btn');
   if (toolNotesBtn) {
@@ -1005,6 +1019,7 @@ function initializeEventListeners() {
       }
     },
     '/calendar': () => calendarModule && calendarModule.openCalendar(),
+    '/automation': () => automationMapModule && automationMapModule.openAutomationMap(),
     '/cookbook': () => document.getElementById('tool-cookbook-btn')?.click(),
     '/email':    () => {
       // Collapse the wide sidebar → icon rail (48px) so the user keeps
