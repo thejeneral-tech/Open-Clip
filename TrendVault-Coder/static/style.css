@@ -35933,6 +35933,45 @@ body.theme-frosted .modal {
   padding: 13px 18px; border-top: 1px solid var(--border);
 }
 
+/* Git branch / worktree button + dropdown */
+.agent-wd-git {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: inherit; font-size: 11px; line-height: 1;
+  padding: 4px 7px 4px 9px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  color: var(--accent); cursor: pointer; white-space: nowrap;
+  transition: border-color .12s ease, background .12s ease;
+}
+.agent-wd-git svg { width: 12px; height: 12px; flex: none; }
+.agent-wd-git > span { color: var(--accent); }
+.agent-wd-git svg:last-child { width: 11px; height: 11px; opacity: .5; margin-left: -1px; color: var(--fg); }
+.agent-wd-git:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.agent-wd-git-wt { display: inline-flex; color: var(--fg); opacity: .5; }
+.agent-wd-git-wt svg { width: 11px; height: 11px; }
+
+.agent-wd-gitmenu { min-width: 260px; }
+.agent-wd-gitscroll { max-height: 190px; overflow-y: auto; }
+.agent-wd-menu-wtbranch {
+  margin-left: auto; font-size: 10.5px; opacity: .55; color: var(--accent);
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-wd-menu-item.is-busy { opacity: .5; pointer-events: none; }
+.agent-wd-gitnew { display: flex; gap: 6px; padding: 6px 8px; }
+.agent-wd-gitnew-input {
+  flex: 1; min-width: 0; box-sizing: border-box;
+  font: inherit; font-size: 12px; padding: 6px 9px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: color-mix(in srgb, var(--fg) 4%, transparent); color: var(--fg);
+}
+.agent-wd-gitnew-input:focus { outline: none; border-color: var(--accent); }
+.agent-wd-gitnew-go {
+  font: inherit; font-size: 12px; padding: 0 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg);
+}
+.agent-wd-gitnew-go:hover { border-color: var(--accent); }
+
 /* Click-to-edit popover for the working directory */
 .agent-wd-editor {
   position: absolute;

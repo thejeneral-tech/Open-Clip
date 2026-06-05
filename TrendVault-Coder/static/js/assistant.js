@@ -447,10 +447,13 @@ function _renderWdBar(bar, wd) {
   if (!wd) { bar.innerHTML = locBtn; return; }
   const missing = wd.exists ? '' : ' agent-wd-missing';
   const label = wd.is_default ? `${_esc(wd.name)} · default` : _esc(wd.name);
-  const chips = [`<span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span>`];
-  if (wd.is_git && wd.git_branch) chips.push(`<span class="agent-wd-chip agent-wd-branch">${_wdIcon('branch')}${_esc(wd.git_branch)}</span>`);
-  if (wd.is_worktree) chips.push(`<span class="agent-wd-chip agent-wd-flag">${_wdIcon('layers')}worktree</span>`);
-  bar.innerHTML = locBtn + `<button type="button" class="agent-wd-path" title="Change the working directory">${chips.join('')}</button>`;
+  const pathBtn = `<button type="button" class="agent-wd-path" title="Change the working directory"><span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span></button>`;
+  let gitBtn = '';
+  if (wd.is_git && wd.git_branch) {
+    const wt = wd.is_worktree ? `<span class="agent-wd-git-wt" title="Linked worktree">${_wdIcon('layers')}</span>` : '';
+    gitBtn = `<button type="button" class="agent-wd-git" title="Branch &amp; worktrees — switch branch or working tree">${_wdIcon('branch')}<span>${_esc(wd.git_branch)}</span>${wt}${_wdIcon('chevron')}</button>`;
+  }
+  bar.innerHTML = locBtn + pathBtn + gitBtn;
 }
 
 // Location dropdown (the "Local" button) — modelled on an environment picker.
@@ -708,6 +711,117 @@ function _openRecentMenu(bar) {
   });
 }
 
+// Git branch / worktree dropdown (the branch button) — switch branch, switch
+// to a worktree, or create a new worktree and move the working dir into it.
+async function _openGitMenu(bar) {
+  document.querySelector('.agent-wd-menu')?.remove();
+  const anchor = bar.querySelector('.agent-wd-git');
+  if (!anchor) return;
+  const menu = document.createElement('div');
+  menu.className = 'agent-wd-menu agent-wd-gitmenu';
+  menu.innerHTML = '<div class="agent-wd-menu-sub" style="padding:9px 12px;">Loading…</div>';
+  document.body.appendChild(menu);
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - mw - 8)))}px`;
+    menu.style.top = `${Math.round(r.top + window.scrollY - mh - 6)}px`;
+  };
+  place();
+  const close = () => { document.removeEventListener('mousedown', onDoc, true); menu.remove(); };
+  const onDoc = (e) => { if (!menu.contains(e.target) && !anchor.contains(e.target)) close(); };
+  document.addEventListener('mousedown', onDoc, true);
+
+  const render = (data) => {
+    if (!data || !data.is_git) {
+      menu.innerHTML = '<div class="agent-wd-menu-sub" style="padding:9px 12px;">Not a git repository.</div>';
+      place(); return;
+    }
+    const branches = (data.branches || []).map((b) =>
+      `<button type="button" class="agent-wd-menu-item${b === data.branch ? ' is-active' : ''}" data-act="checkout" data-branch="${_esc(b)}">
+        ${_wdIcon('branch')}<span class="agent-wd-menu-name">${_esc(b)}</span>
+        <span class="agent-wd-menu-spacer"></span><span class="agent-wd-menu-check">${_wdIcon('check')}</span>
+       </button>`).join('');
+    const worktrees = (data.worktrees || []).map((w) =>
+      `<button type="button" class="agent-wd-menu-item${w.is_current ? ' is-active' : ''}" data-act="switch-wt" data-path="${_esc(w.path)}" title="${_esc(w.path)}">
+        ${_wdIcon('layers')}<span class="agent-wd-menu-name">${_esc(w.name)}</span>
+        <span class="agent-wd-menu-wtbranch">${_esc(w.branch || 'detached')}</span>
+        <span class="agent-wd-menu-check">${_wdIcon('check')}</span>
+       </button>`).join('');
+    menu.innerHTML = `
+      <div class="agent-wd-menu-label">Branches</div>
+      <div class="agent-wd-gitscroll">${branches || '<div class="agent-wd-menu-sub" style="padding:2px 12px 6px;">No local branches.</div>'}</div>
+      <div class="agent-wd-menu-sep"></div>
+      <div class="agent-wd-menu-label">Worktrees</div>
+      ${worktrees}
+      <button type="button" class="agent-wd-menu-item agent-wd-menu-add" data-act="new-wt">${_wdIcon('plus')}<span class="agent-wd-menu-name">New worktree…</span></button>`;
+    place();
+  };
+
+  menu.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act;
+    if (act === 'checkout') {
+      if (el.classList.contains('is-active')) return;
+      el.classList.add('is-busy');
+      try {
+        const res = await fetch(`${API}/git/checkout`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch: el.dataset.branch }) });
+        if (!res.ok) { let m = `Error ${res.status}`; try { const j = await res.json(); if (j.detail) m = j.detail; } catch {} uiModule.showToast(m); el.classList.remove('is-busy'); return; }
+        const data = await res.json();
+        _renderWdBar(bar, await _fetchWorkingDir());
+        render(data);
+        uiModule.showToast(`Switched to ${el.dataset.branch}`);
+      } catch { uiModule.showToast('Checkout failed'); el.classList.remove('is-busy'); }
+    } else if (act === 'switch-wt') {
+      if (el.classList.contains('is-active')) { close(); return; }
+      close();
+      _setWorkingDir(bar, el.dataset.path);
+    } else if (act === 'new-wt') {
+      _gitNewWorktreePrompt(menu, bar, close, place);
+    }
+  });
+
+  try {
+    const res = await fetch(`${API}/git`, { credentials: 'same-origin' });
+    if (!res.ok) {
+      let m = `Error ${res.status}`;
+      try { const j = await res.json(); if (j.detail) m = j.detail; } catch {}
+      menu.innerHTML = `<div class="agent-wd-menu-sub agent-fp-err" style="padding:9px 12px;">${_esc(m)}</div>`; place(); return;
+    }
+    render(await res.json());
+  } catch (err) {
+    menu.innerHTML = `<div class="agent-wd-menu-sub agent-fp-err" style="padding:9px 12px;">Couldn't load git: ${_esc((err && err.message) || 'network error')}</div>`; place();
+  }
+}
+
+function _gitNewWorktreePrompt(menu, bar, close, place) {
+  const wrap = document.createElement('div');
+  wrap.className = 'agent-wd-gitnew';
+  wrap.innerHTML = `<input type="text" class="agent-wd-gitnew-input" placeholder="new-branch-name" spellcheck="false" autocomplete="off" /><button type="button" class="agent-wd-gitnew-go">Create</button>`;
+  const addBtn = menu.querySelector('.agent-wd-menu-add');
+  if (addBtn) addBtn.replaceWith(wrap); else menu.appendChild(wrap);
+  if (place) place();
+  const input = wrap.querySelector('.agent-wd-gitnew-input');
+  const goBtn = wrap.querySelector('.agent-wd-gitnew-go');
+  input.focus();
+  const create = async () => {
+    const branch = input.value.trim();
+    if (!branch) return;
+    goBtn.textContent = '…'; goBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/git/worktree`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch }) });
+      if (!res.ok) { let m = `Error ${res.status}`; try { const j = await res.json(); if (j.detail) m = j.detail; } catch {} uiModule.showToast(m); goBtn.textContent = 'Create'; goBtn.disabled = false; return; }
+      const data = await res.json();
+      close();
+      _setWorkingDir(bar, data.path);
+      uiModule.showToast(`Created worktree on ${branch}`);
+    } catch { uiModule.showToast('Could not create worktree'); goBtn.textContent = 'Create'; goBtn.disabled = false; }
+  };
+  goBtn.addEventListener('click', create);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); create(); } });
+}
+
 async function _mountWorkingDirBar(retries = 0) {
   // Mount the working-directory bar right above the message composer
   // ("Message TrendVault AI …"). It's a sibling directly before
@@ -728,6 +842,7 @@ async function _mountWorkingDirBar(retries = 0) {
   bar.innerHTML = `<button type="button" class="agent-wd-loc">${_wdIcon('monitor')}<span>Local</span>${_wdIcon('chevron')}</button>`;
   bar.addEventListener('click', (e) => {
     if (e.target.closest('.agent-wd-loc')) _openLocationMenu(bar);
+    else if (e.target.closest('.agent-wd-git')) _openGitMenu(bar);
     else if (e.target.closest('.agent-wd-path')) _openRecentMenu(bar);
   });
   strip.appendChild(bar);

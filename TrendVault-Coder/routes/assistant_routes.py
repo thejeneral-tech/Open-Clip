@@ -49,6 +49,10 @@ class WorkingDirUpdate(BaseModel):
     path: Optional[str] = None
 
 
+class GitBranchRequest(BaseModel):
+    branch: Optional[str] = None
+
+
 _EMAIL_TOOLS = {"send_email", "reply_to_email"}
 
 
@@ -208,6 +212,74 @@ def _list_dir_payload(path: str) -> dict:
         raise HTTPException(status_code=400, detail=f"Cannot list: {ex}")
     entries.sort(key=lambda x: x["name"].lower())
     return {"path": target, "parent": parent, "home": home, "entries": entries[:1000]}
+
+
+def _git_run(cwd: str, *args: str, timeout: int = 15):
+    """Run a git command in cwd; return (returncode, stdout, stderr)."""
+    try:
+        r = subprocess.run(["git", "-C", cwd, *args],
+                           capture_output=True, text=True, timeout=timeout)
+        return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
+    except Exception as ex:
+        return 1, "", str(ex)
+
+
+def _agent_workdir() -> str:
+    from src.tool_execution import get_agent_working_dir
+    from src.constants import DATA_DIR
+    return get_agent_working_dir() or os.path.realpath(DATA_DIR)
+
+
+def _git_state_payload() -> dict:
+    """Branch + local-branch list + worktree list for the working dir's repo."""
+    wd = _agent_workdir()
+    info = {"is_git": False, "path": wd, "branch": None, "is_worktree": False,
+            "repo_root": None, "branches": [], "worktrees": []}
+    if not shutil.which("git") or not os.path.isdir(wd):
+        return info
+    code, out, _ = _git_run(wd, "rev-parse", "--is-inside-work-tree")
+    if code != 0 or out != "true":
+        return info
+    info["is_git"] = True
+    _, branch, _ = _git_run(wd, "rev-parse", "--abbrev-ref", "HEAD")
+    info["branch"] = branch if branch and branch != "HEAD" else None
+    _, root, _ = _git_run(wd, "rev-parse", "--show-toplevel")
+    info["repo_root"] = os.path.realpath(root) if root else None
+    info["is_worktree"] = _git_info(wd).get("is_worktree", False)
+    _, br, _ = _git_run(wd, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+    info["branches"] = [b for b in br.splitlines() if b][:300]
+    _, wt, _ = _git_run(wd, "worktree", "list", "--porcelain")
+    worktrees, cur = [], None
+    for line in wt.splitlines():
+        if line.startswith("worktree "):
+            if cur:
+                worktrees.append(cur)
+            cur = {"path": line[9:], "branch": None}
+        elif line.startswith("branch ") and cur is not None:
+            cur["branch"] = line[7:].replace("refs/heads/", "")
+        elif line.startswith("detached") and cur is not None:
+            cur["branch"] = None
+    if cur:
+        worktrees.append(cur)
+    # Mark the worktree that *contains* the working dir (longest path prefix),
+    # since the working dir may be a sub-folder of a worktree root.
+    wd_norm = wd.rstrip(os.sep)
+    best = None
+    for w in worktrees:
+        try:
+            w["path"] = os.path.realpath(w["path"])
+        except OSError:
+            pass
+        w["is_current"] = False
+        w["name"] = os.path.basename((w.get("path") or "").rstrip(os.sep)) or w.get("path") or "?"
+        p = (w.get("path") or "").rstrip(os.sep)
+        if p and (wd_norm == p or wd_norm.startswith(p + os.sep)):
+            if best is None or len(p) > len((best.get("path") or "").rstrip(os.sep)):
+                best = w
+    if best:
+        best["is_current"] = True
+    info["worktrees"] = worktrees
+    return info
 
 
 def setup_assistant_routes(task_scheduler) -> APIRouter:
@@ -514,5 +586,50 @@ def setup_assistant_routes(task_scheduler) -> APIRouter:
         """
         require_admin(request)
         return await asyncio.to_thread(_list_dir_payload, path)
+
+    @router.get("/git")
+    async def git_state(request: Request):
+        """Branch + worktree state for the working dir's git repo (read-only)."""
+        _owner(request)
+        return await asyncio.to_thread(_git_state_payload)
+
+    @router.post("/git/checkout")
+    async def git_checkout(payload: GitBranchRequest, request: Request):
+        """Switch the working dir's repo to an existing branch (admin-only)."""
+        require_admin(request)
+        branch = (payload.branch or "").strip()
+        if not branch or branch.startswith("-"):
+            raise HTTPException(status_code=400, detail="A branch name is required")
+        code, out, err = _git_run(_agent_workdir(), "checkout", branch, timeout=30)
+        if code != 0:
+            raise HTTPException(status_code=400, detail=err or out or "checkout failed")
+        return await asyncio.to_thread(_git_state_payload)
+
+    @router.post("/git/worktree")
+    async def git_worktree(payload: GitBranchRequest, request: Request):
+        """Create a new linked worktree on a new branch beside the repo (admin-only).
+
+        Returns the new worktree path; the client then points the working dir at it.
+        """
+        require_admin(request)
+        branch = (payload.branch or "").strip()
+        if not branch or branch.startswith("-"):
+            raise HTTPException(status_code=400, detail="A branch name is required")
+        wd = _agent_workdir()
+        code, root, _ = _git_run(wd, "rev-parse", "--show-toplevel")
+        if code != 0 or not root:
+            raise HTTPException(status_code=400, detail="Not a git repository")
+        root = os.path.realpath(root)
+        safe = "".join(c if (c.isalnum() or c in "-_.") else "-" for c in branch).strip("-") or "worktree"
+        path = os.path.join(os.path.dirname(root), f"{os.path.basename(root)}-{safe}")
+        if os.path.exists(path):
+            raise HTTPException(status_code=400, detail=f"Path already exists: {path}")
+        code, out, err = _git_run(wd, "worktree", "add", path, "-b", branch, timeout=60)
+        if code != 0:
+            # Branch may already exist — attach it to the new worktree instead.
+            code2, out2, err2 = _git_run(wd, "worktree", "add", path, branch, timeout=60)
+            if code2 != 0:
+                raise HTTPException(status_code=400, detail=err or err2 or out or "worktree add failed")
+        return {"path": os.path.realpath(path), "branch": branch}
 
     return router
