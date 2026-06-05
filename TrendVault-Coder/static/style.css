@@ -35734,7 +35734,7 @@ body.theme-frosted .modal {
 
 /* ── Agent working-directory bar (row right above the message composer) ───── */
 .agent-wd-strip {
-  display: flex;
+  display: none;           /* the agent workspace bar shows only in Code mode */
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
@@ -35747,6 +35747,10 @@ body.theme-frosted .modal {
   scrollbar-width: none;
 }
 .agent-wd-strip::-webkit-scrollbar { display: none; }
+body.code-mode .agent-wd-strip { display: flex; }
+/* "Code" sidebar tab active state */
+#sidebar-code-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#sidebar-code-btn.active .sidebar-action-icon { color: var(--accent); }
 .agent-wd-bar {
   display: inline-flex;
   align-items: center;

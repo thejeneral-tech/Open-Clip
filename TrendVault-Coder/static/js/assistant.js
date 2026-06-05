@@ -980,9 +980,39 @@ function _watchForAssistantActivation() {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
+// ── Code sidebar tab — the agent workspace, separate from chat ─────────────
+// Code mode reveals the working-directory bar (the agent's files/shell/git
+// controls) and switches to Agent mode. Normal chat hides the bar entirely.
+function _exitCodeMode() {
+  document.body.classList.remove('code-mode');
+  document.getElementById('sidebar-code-btn')?.classList.remove('active');
+}
+function _enterCodeMode() {
+  document.body.classList.add('code-mode');
+  document.getElementById('sidebar-code-btn')?.classList.add('active');
+  document.getElementById('mode-agent-btn')?.click();   // ensure Agent mode
+  _mountWorkingDirBar();
+}
+function _wireCodeTab(retries = 0) {
+  const btn = document.getElementById('sidebar-code-btn');
+  if (!btn) { if (retries < 30) setTimeout(() => _wireCodeTab(retries + 1), 250); return; }
+  if (btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener('click', () => {
+    if (document.body.classList.contains('code-mode')) _exitCodeMode();
+    else _enterCodeMode();
+  });
+  // Going back to plain chat leaves Code.
+  document.getElementById('mode-chat-btn')?.addEventListener('click', _exitCodeMode);
+  ['sidebar-new-chat-btn', 'sidebar-brand-btn', 'mobile-new-chat-btn'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('click', _exitCodeMode);
+  });
+}
+
 function _boot() {
   _watchForAssistantActivation();
   _mountWorkingDirBar();
+  _wireCodeTab();
 }
 
 if (document.readyState === 'loading') {
