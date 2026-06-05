@@ -35803,18 +35803,30 @@ body.theme-frosted .modal {
 .agent-wd-loc svg:last-child { width: 11px; height: 11px; opacity: .5; margin-left: -1px; }
 .agent-wd-loc:hover { border-color: var(--accent); background: color-mix(in srgb, var(--fg) 13%, transparent); }
 
-/* Path group (folder · branch · worktree) — click to change the directory */
+/* Folder / working-dir button — same pill size as Local + branch */
 .agent-wd-path {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font: inherit;
+  font-size: 11px;
+  line-height: 1;
   margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
+  padding: 4px 7px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  color: var(--fg);
   cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s ease, background .12s ease;
 }
+.agent-wd-path svg { width: 12px; height: 12px; opacity: .65; flex: none; }
+.agent-wd-path svg:last-child { width: 11px; height: 11px; opacity: .5; margin-left: -1px; }
+.agent-wd-path .agent-wd-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.agent-wd-path:hover { border-color: var(--accent); background: color-mix(in srgb, var(--fg) 13%, transparent); }
+.agent-wd-path.agent-wd-missing { color: var(--red, #ff5d5d); border-color: color-mix(in srgb, var(--red, #ff5d5d) 55%, transparent); }
+.agent-wd-path.agent-wd-missing svg:not(:last-child) { color: var(--red, #ff5d5d); }
 
 /* Location dropdown menu (opens upward from the Local button) */
 .agent-wd-menu {

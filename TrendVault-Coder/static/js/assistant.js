@@ -447,7 +447,7 @@ function _renderWdBar(bar, wd) {
   if (!wd) { bar.innerHTML = locBtn; return; }
   const missing = wd.exists ? '' : ' agent-wd-missing';
   const label = wd.is_default ? `${_esc(wd.name)} · default` : _esc(wd.name);
-  const pathBtn = `<button type="button" class="agent-wd-path" title="Change the working directory"><span class="agent-wd-chip agent-wd-folder${missing}">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span></span></button>`;
+  const pathBtn = `<button type="button" class="agent-wd-path${missing}" title="Change the working directory">${_wdIcon('folder')}<span class="agent-wd-name">${label}</span>${_wdIcon('chevron')}</button>`;
   let gitBtn = '';
   if (wd.is_git && wd.git_branch) {
     const wt = wd.is_worktree ? `<span class="agent-wd-git-wt" title="Linked worktree">${_wdIcon('layers')}</span>` : '';
