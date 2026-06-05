@@ -749,14 +749,34 @@ export function renderSessionList() {
   _renderRAF = requestAnimationFrame(_renderSessionListImpl);
 }
 
+// Code chats — agent-mode sessions get their own sidebar section, kept out of
+// the regular Chats list. Reuses createSessionItem so the rows behave the same.
+function _renderCodeSessions() {
+  const list = uiModule.el('code-session-list');
+  const section = uiModule.el('code-sessions-section');
+  if (!list) return;
+  const code = sessions.filter(s => s.mode === 'agent' && !s.archived
+    && !_isIncognitoSession(s.id)
+    && (s.name || '').trim() !== 'Nobody' && (s.name || '').trim() !== 'Incognito');
+  code.sort((a, b) => {
+    const av = a.last_message_at || a.updated_at || a.created_at || '';
+    const bv = b.last_message_at || b.updated_at || b.created_at || '';
+    return bv.localeCompare(av);
+  });
+  list.innerHTML = '';
+  code.forEach(s => list.appendChild(createSessionItem(s)));
+  if (section) section.style.display = code.length ? '' : 'none';
+}
+
 function _renderSessionListImpl() {
   _renderRAF = null;
+  _renderCodeSessions();
   const list = uiModule.el('session-list');
   if (!list) return;
 
   // Get saved order from localStorage
   const savedOrder = Storage.get('session-order');
-  let orderedSessions = sessions.filter(s => !s.archived && s.folder !== 'Assistant' && !_isIncognitoSession(s.id) && (s.name || '').trim() !== 'Nobody' && (s.name || '').trim() !== 'Incognito');
+  let orderedSessions = sessions.filter(s => !s.archived && s.folder !== 'Assistant' && !_isIncognitoSession(s.id) && (s.name || '').trim() !== 'Nobody' && (s.name || '').trim() !== 'Incognito' && s.mode !== 'agent');
 
   if (savedOrder) {
     try {
