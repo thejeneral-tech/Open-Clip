@@ -18,6 +18,7 @@
 
   var TABS = [
     { id: 'appearance', label: 'Appearance', icon: '<circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0 0 20 4 4 0 0 1 0-8 4 4 0 0 0 0-8"/>' },
+    { id: 'model', label: 'AI Model', icon: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>' },
     { id: 'account', label: 'Account', icon: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
     { id: 'about', label: 'About', icon: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>' },
   ];
@@ -88,6 +89,23 @@
       #stOverlay .st-about-row:first-of-type { border-top: none; }
       #stOverlay .st-about-row span { color: var(--muted, #6b8a94); }
       #stOverlay .st-about-row strong { color: var(--text, #9cdef2); font-weight: 600; }
+      #stOverlay .st-input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border, #355a66); background: var(--surface, #21252b); color: var(--text, #9cdef2); font-family: inherit; font-size: .78rem; box-sizing: border-box; }
+      #stOverlay .st-input:focus { outline: none; border-color: var(--accent, #e06c75); }
+      #stOverlay select.st-input { cursor: pointer; }
+      #stOverlay .st-seg { display: flex; gap: 6px; }
+      #stOverlay .st-seg-btn { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border, #355a66); background: transparent; color: var(--text2, #7fb8cc); font-family: inherit; font-size: .78rem; font-weight: 700; cursor: pointer; transition: all .14s; }
+      #stOverlay .st-seg-btn:hover { color: var(--text, #9cdef2); border-color: color-mix(in srgb, var(--accent, #e06c75) 50%, transparent); }
+      #stOverlay .st-seg-btn.active { color: var(--text, #9cdef2); border-color: var(--accent, #e06c75); background: rgba(var(--accent-rgb,224,108,117), .12); }
+      #stOverlay .st-row { display: flex; gap: 8px; align-items: center; }
+      #stOverlay .st-llm-status { font-size: .72rem; margin-top: 11px; color: var(--muted, #6b8a94); line-height: 1.5; }
+      #stOverlay .st-llm-status .ok { color: #86efac; font-weight: 700; }
+      #stOverlay .st-llm-status .bad { color: var(--red, #ff5b5b); font-weight: 700; }
+      #stOverlay .st-llm-status code { font-size: .9em; opacity: .85; }
+      #stOverlay .st-note { font-size: .68rem; color: #86efac; margin-top: 8px; min-height: 1em; }
+      #stOverlay .st-pull-prog { margin-top: 12px; }
+      #stOverlay .st-pull-bar { height: 8px; border-radius: 6px; background: var(--surface3, #1b1e24); border: 1px solid var(--border, #355a66); overflow: hidden; }
+      #stOverlay .st-pull-fill { height: 100%; width: 0; background: var(--accent, #e06c75); transition: width .2s; }
+      #stOverlay .st-pull-msg { font-size: .68rem; color: var(--muted, #6b8a94); margin-top: 6px; word-break: break-word; }
       @media (max-width: 560px) {
         #stOverlay .st-layout { flex-direction: column; }
         #stOverlay .st-rail { width: auto; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border, #355a66); }
@@ -120,6 +138,45 @@
           <div class="st-toggle-row" style="margin-top:0">
             <div><div class="st-tt">Collapse sidebar by default</div><div class="st-ts">Start with the navigation rail collapsed (toggle anytime with Ctrl+B)</div></div>
             <label class="st-switch"><input type="checkbox" id="stCollapse"><span class="st-slider"></span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-panel" data-panel="model">
+        <div class="st-card">
+          <h3>Backend</h3>
+          <div class="st-sub">Where local generation runs — no API key needed. Switch engines or point at a custom URL.</div>
+          <div class="st-seg" id="stLlmSeg">
+            <button class="st-seg-btn" data-url="http://localhost:11434/v1" type="button">Ollama</button>
+            <button class="st-seg-btn" data-url="http://localhost:8080/v1" type="button">llama.cpp</button>
+          </div>
+          <div class="st-row" style="margin-top:10px">
+            <input id="stLlmUrl" class="st-input" placeholder="http://localhost:11434/v1" spellcheck="false"/>
+            <button id="stLlmUrlSave" class="st-btn" type="button">Save</button>
+          </div>
+          <div class="st-llm-status" id="stLlmStatus">Checking…</div>
+        </div>
+
+        <div class="st-card">
+          <h3>Active model</h3>
+          <div class="st-sub">The model used for script &amp; idea generation.</div>
+          <div class="st-row">
+            <select id="stLlmModel" class="st-input" style="flex:1"></select>
+            <button id="stLlmModelUse" class="st-btn" type="button">Use</button>
+          </div>
+          <div class="st-note" id="stModelNote"></div>
+        </div>
+
+        <div class="st-card" id="stPullCard">
+          <h3>Pull a model</h3>
+          <div class="st-sub">Download a model into Ollama, e.g. <strong>llama3.1:8b</strong>, <strong>gemma2:9b</strong>, <strong>qwen2.5:7b</strong>. Browse at ollama.com/library.</div>
+          <div class="st-row">
+            <input id="stPullName" class="st-input" style="flex:1" placeholder="llama3.1:8b" spellcheck="false"/>
+            <button id="stPullBtn" class="st-btn" type="button">Pull</button>
+          </div>
+          <div class="st-pull-prog" id="stPullProg" hidden>
+            <div class="st-pull-bar"><div class="st-pull-fill" id="stPullFill"></div></div>
+            <div class="st-pull-msg" id="stPullMsg"></div>
           </div>
         </div>
       </div>
@@ -181,6 +238,7 @@
 
     wireDrag();
     wireActions();
+    wireModel();
     renderThemes();
     built = true;
   }
@@ -188,6 +246,7 @@
   function selectTab(id) {
     overlay.querySelectorAll('.st-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === id); });
     overlay.querySelectorAll('.st-panel').forEach(function (p) { p.classList.toggle('active', p.getAttribute('data-panel') === id); });
+    if (id === 'model') loadModel();
     if (id === 'account') loadAccount();
     if (id === 'about') loadAbout();
   }
@@ -285,6 +344,120 @@
     }
     var ct = $('stCurTheme');
     if (ct) ct.textContent = prettyTheme((window.TVATheme && window.TVATheme.get && window.TVATheme.get()) || '');
+  }
+
+  // ── AI Model tab ──────────────────────────────────────────────────────────
+  function fmtSize(bytes) {
+    if (bytes === null || bytes === undefined) return '';
+    var gb = bytes / 1e9;
+    if (gb >= 1) return gb.toFixed(1) + ' GB';
+    return Math.max(1, Math.round(bytes / 1e6)) + ' MB';
+  }
+
+  async function loadModel() {
+    var statusEl = $('stLlmStatus');
+    if (statusEl) statusEl.innerHTML = 'Checking…';
+    var d = null;
+    try { d = await (await fetch('/api/llm/status', { credentials: 'same-origin' })).json(); } catch (e) {}
+    if (!d) { if (statusEl) statusEl.innerHTML = '<span class="bad">● Error</span> — could not reach the server'; return; }
+
+    var seg = $('stLlmSeg');
+    if (seg) seg.querySelectorAll('.st-seg-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-url') === d.url); });
+    var urlInput = $('stLlmUrl');
+    if (urlInput && document.activeElement !== urlInput) urlInput.value = d.url || '';
+
+    if (statusEl) {
+      var n = d.models ? d.models.length : 0;
+      statusEl.innerHTML = d.reachable
+        ? '<span class="ok">● Online</span> · ' + (d.backend || 'local') + ' · ' + n + ' model' + (n === 1 ? '' : 's') + ' installed'
+        : '<span class="bad">● Offline</span> — start your local server (e.g. <code>ollama serve</code>)';
+    }
+
+    var sel = $('stLlmModel');
+    if (sel) {
+      var models = (d.models || []).slice();
+      var names = models.map(function (m) { return m.name; });
+      if (d.model && names.indexOf(d.model) === -1) models = [{ name: d.model, size: null }].concat(models);
+      sel.innerHTML = models.length
+        ? models.map(function (m) {
+            var lbl = m.name + (m.size ? '  (' + fmtSize(m.size) + ')' : '');
+            return '<option value="' + m.name + '"' + (m.name === d.model ? ' selected' : '') + '>' + lbl + '</option>';
+          }).join('')
+        : '<option value="">(no models installed)</option>';
+    }
+
+    var pullCard = $('stPullCard');
+    if (pullCard) pullCard.style.display = d.pullable ? '' : 'none';
+  }
+
+  function wireModel() {
+    var seg = $('stLlmSeg');
+    if (seg) seg.querySelectorAll('.st-seg-btn').forEach(function (b) {
+      b.addEventListener('click', function () { var inp = $('stLlmUrl'); if (inp) inp.value = b.getAttribute('data-url'); saveBackend(); });
+    });
+    var save = $('stLlmUrlSave'); if (save) save.addEventListener('click', saveBackend);
+    var use = $('stLlmModelUse'); if (use) use.addEventListener('click', useModel);
+    var pull = $('stPullBtn'); if (pull) pull.addEventListener('click', pullModel);
+    var pullName = $('stPullName'); if (pullName) pullName.addEventListener('keydown', function (e) { if (e.key === 'Enter') pullModel(); });
+  }
+
+  async function saveBackend() {
+    var inp = $('stLlmUrl'); if (!inp) return;
+    var url = inp.value.trim(); if (!url) return;
+    var statusEl = $('stLlmStatus'); if (statusEl) statusEl.innerHTML = 'Switching…';
+    try { await fetch('/api/llm/backend', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) }); } catch (e) {}
+    loadModel();
+  }
+
+  async function useModel() {
+    var sel = $('stLlmModel'); if (!sel) return;
+    var m = sel.value; if (!m) return;
+    var note = $('stModelNote'); if (note) note.textContent = 'Saving…';
+    try {
+      await fetch('/api/llm/select', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) });
+      if (note) note.textContent = '✓ Active model set to ' + m;
+    } catch (e) { if (note) note.textContent = 'Could not set model'; }
+  }
+
+  async function pullModel() {
+    var nameEl = $('stPullName'); if (!nameEl) return;
+    var name = nameEl.value.trim(); if (!name) return;
+    var prog = $('stPullProg'), fill = $('stPullFill'), msg = $('stPullMsg'), btn = $('stPullBtn');
+    if (prog) prog.hidden = false;
+    if (fill) fill.style.width = '0%';
+    if (msg) msg.textContent = 'Starting…';
+    if (btn) btn.disabled = true;
+    var ok = false;
+    try {
+      var resp = await fetch('/api/llm/pull', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: name }) });
+      if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+      var reader = resp.body.getReader(), dec = new TextDecoder(), buf = '';
+      while (true) {
+        var ch = await reader.read();
+        if (ch.done) break;
+        buf += dec.decode(ch.value, { stream: true });
+        var lines = buf.split('\n'); buf = lines.pop();
+        lines.forEach(function (line) {
+          if (!line.trim()) return;
+          var o; try { o = JSON.parse(line); } catch (e) { return; }
+          if (o.error) { if (msg) msg.textContent = '✗ ' + o.error; return; }
+          if (o.total && o.completed) {
+            var pct = Math.max(0, Math.min(100, Math.round(o.completed / o.total * 100)));
+            if (fill) fill.style.width = pct + '%';
+            if (msg) msg.textContent = (o.status || 'downloading') + ' — ' + pct + '%';
+          } else if (o.status) {
+            if (msg) msg.textContent = o.status;
+          }
+          if (o.status === 'success') { ok = true; if (fill) fill.style.width = '100%'; if (msg) msg.textContent = '✓ Pulled ' + name; }
+        });
+      }
+      if (ok) { nameEl.value = ''; loadModel(); }
+      else if (msg && msg.textContent.indexOf('✗') !== 0) { msg.textContent = '✓ Done'; loadModel(); }
+    } catch (e) {
+      if (msg) msg.textContent = '✗ Pull failed: ' + (e.message || e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function open(tab) {

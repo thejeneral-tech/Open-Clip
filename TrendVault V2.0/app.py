@@ -48,6 +48,12 @@ constants.ensure_dirs()
 async def _lifespan(app: FastAPI):
     # ── startup ──
     constants.ensure_dirs()
+    # Apply persisted local-LLM settings (model/backend) over the .env defaults.
+    try:
+        from services.llm import model_admin
+        model_admin.load_overrides()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("LLM settings load skipped: %s", e)
     try:
         from core.database import init_db
         init_db()
@@ -168,6 +174,7 @@ from services.media import get_media_service
 from services.render import get_render_service
 from services.script import get_script_service
 from services.tts import get_tts_service
+from routes.llm_routes import setup_llm_routes
 from routes.media_routes import setup_media_routes
 from routes.page_routes import setup_page_routes
 from routes.render_routes import setup_render_routes
@@ -179,6 +186,7 @@ app.include_router(setup_script_routes(get_script_service()))
 app.include_router(setup_voice_routes(get_tts_service()))
 app.include_router(setup_render_routes(get_render_service()))
 app.include_router(setup_media_routes(get_media_service()))
+app.include_router(setup_llm_routes())
 app.include_router(setup_auth_routes(auth_manager))
 
 

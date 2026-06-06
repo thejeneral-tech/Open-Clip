@@ -24,6 +24,7 @@ public/captions/
 public/previews/
 custom-audio/
 data/app.db
+data/llm-settings.json
 debug/
 
 # ── OS / build junk ──
