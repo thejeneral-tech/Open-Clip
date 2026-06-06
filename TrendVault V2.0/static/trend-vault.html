@@ -966,7 +966,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div id="categoryArea" style="display:none;margin-bottom:12px">
         <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
           <div style="font-size:.6rem;color:var(--muted);font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Categories</div>
-          <span class="haiku-badge">✦ Claude Haiku</span>
+          <span class="haiku-badge">✦ Local AI</span>
         </div>
         <div id="categoryLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:3px 0;align-items:center;gap:6px">
           <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating categories…
@@ -1002,7 +1002,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       </div>
       <div id="trendingTopicsHeader" style="display:none;align-items:center;gap:7px;margin-bottom:7px">
         <div style="font-size:.6rem;color:var(--muted);font-weight:700;letter-spacing:1.2px;text-transform:uppercase">Trending Topics</div>
-        <span class="haiku-badge">✦ Claude Haiku</span>
+        <span class="haiku-badge">✦ Local AI</span>
       </div>
       <div id="trendingTopicsLoading" style="display:none;font-size:.65rem;color:var(--muted);padding:3px 0;align-items:center;gap:6px">
         <span class="spinner" style="width:10px;height:10px;border-width:2px;display:inline-block"></span> Generating trending topics…
@@ -3845,7 +3845,7 @@ async function generateScript(){
   btn.innerHTML = '<span class="spinner"></span>Generating...';
   barBtn.innerHTML = '<span class="spinner"></span>Generating...';
   btn.disabled = barBtn.disabled = true;
-  document.getElementById('scriptStatus').textContent = '✨ Generating 1:30 script with Claude AI...';
+  document.getElementById('scriptStatus').textContent = '✨ Generating 1:30 script with local AI...';
 
   try{
     const r = await fetch(`${API_BASE}/api/trend-vault/generate-script`,{
@@ -3876,8 +3876,8 @@ async function generateScript(){
     const secs = String(dur%60).padStart(2,'0');
     const words = state.script.reduce((s,l)=>s+(l.text||'').split(/\s+/).filter(Boolean).length,0);
     const durLabel = `${mins}:${secs}`;
-    if(data.source==='claude' || data.source==='openai'){
-      const srcTag = data.source==='openai' ? ' (OpenAI)' : '';
+    if(data.source && data.source!=='fallback'){
+      const srcTag = data.source==='local' ? ' (Local)' : '';
       document.getElementById('scriptStatus').textContent =
         `✅ AI Generated${srcTag} • ${durLabel} • ${state.script.length} lines • ${words} words`;
       showToast('AI script generated!','success');
@@ -3945,7 +3945,7 @@ async function addScriptLine(){
         }));
         buildScriptLines();
         updatePreview();
-        const src = data.source==='claude'?'✨ AI lines added':'⚡ Lines added';
+        const src = (data.source && data.source!=='fallback')?'✨ AI lines added':'⚡ Lines added';
         showToast(src,'success');
         return;
       }
@@ -9062,7 +9062,7 @@ async function regenerateScript(){
     const regenMins = Math.floor(totalDur/60);
     const regenSecs = String(totalDur%60).padStart(2,'0');
     const isLocal = data.source === 'local';
-    const srcTag = data.source==='openai' ? ' (OpenAI)' : data.source==='anthropic' || data.source==='claude' ? ' (Claude)' : '';
+    const srcTag = isLocal ? ' (Local)' : '';
     document.getElementById('scriptStatus').textContent =
       `♻ Reframed${srcTag} • ${regenMins}:${regenSecs} • ${state.script.length} lines • ${regenWords} words`;
     if(data.warning && isLocal){

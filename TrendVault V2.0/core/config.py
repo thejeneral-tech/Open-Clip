@@ -1,7 +1,7 @@
 """Typed settings layer (pydantic-settings), mirroring TrendVault-Coder/src/config.py.
 
 Reads the same `.env` the Node app used. Field names map 1:1 to the env var
-names (case-insensitive), e.g. `anthropic_api_key` <- ANTHROPIC_API_KEY. Empty
+names (case-insensitive), e.g. `local_llm_url` <- LOCAL_LLM_URL. Empty
 values in `.env` (the file ships every key, some blank) are coalesced back to
 sensible defaults so a blank LOCAL_TTS_URL= doesn't override the real default.
 """
@@ -17,10 +17,12 @@ from core.constants import BASE_DIR
 
 
 class TVSettings(BaseSettings):
-    # AI / script generation
-    anthropic_api_key: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    ai_provider: str = "auto"               # auto | anthropic | openai
+    # AI / script generation — local model only (Ollama / llama.cpp).
+    # OpenAI-compatible /v1 endpoint, no API key required.
+    #   Ollama:    http://localhost:11434/v1   (default; `ollama pull llama3.1:8b`)
+    #   llama.cpp: http://localhost:8080/v1    (`llama-server -m model.gguf`)
+    local_llm_url: str = "http://localhost:11434/v1"
+    local_llm_model: str = "llama3.1:8b"
 
     # Caption alignment + stock media
     assemblyai_api_key: Optional[str] = None
@@ -56,13 +58,14 @@ class TVSettings(BaseSettings):
             self.local_tts_path = "/tts"
         if not (self.fish_tts_url or "").strip():
             self.fish_tts_url = "http://127.0.0.1:8080"
-        if not (self.ai_provider or "").strip():
-            self.ai_provider = "auto"
-        # Treat empty-string secrets as "unset" so `if config.anthropic_api_key`
+        if not (self.local_llm_url or "").strip():
+            self.local_llm_url = "http://localhost:11434/v1"
+        if not (self.local_llm_model or "").strip():
+            self.local_llm_model = "llama3.1:8b"
+        # Treat empty-string secrets as "unset" so `if config.assemblyai_api_key`
         # is a reliable presence check.
-        for k in ("anthropic_api_key", "openai_api_key", "assemblyai_api_key",
-                  "pexels_api_key", "jamendo_client_id", "huggingface_token",
-                  "render_worker_url"):
+        for k in ("assemblyai_api_key", "pexels_api_key",
+                  "jamendo_client_id", "huggingface_token", "render_worker_url"):
             if not (getattr(self, k) or "").strip():
                 setattr(self, k, None)
         return self

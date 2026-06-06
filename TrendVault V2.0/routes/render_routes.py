@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from core.config import config
 from core.constants import TREND_VAULT_OUT
 from core.sse import get_job_registry
-from lib import hashing
+from lib import hashing, local_llm
 from services.render.render_service import RenderService
 from services.tts import kokoro_client
 
@@ -156,15 +156,17 @@ def setup_render_routes(render_service: RenderService) -> APIRouter:
         local_tts = {"ok": reachable, "engine": "kokoro", "url": kokoro_client._base_url()}
         worker_url = (config.render_worker_url or "").strip()
         worker_online = (await asyncio.to_thread(_probe_worker, worker_url)) if worker_url else False
+        llm_reachable = await asyncio.to_thread(local_llm.probe_reachable)
         return {
             "localTts": local_tts,
             "capcut": {"ok": False, "url": os.getenv("CAPCUT_API_URL", "http://localhost:9001")},
             "workerOnline": worker_online, "workerUrl": worker_url,
-            "hasAnthropic": bool(config.anthropic_api_key),
-            "hasOpenai": bool(config.openai_api_key),
+            "localLlm": {"ok": llm_reachable, "url": config.local_llm_url,
+                         "model": config.local_llm_model},
+            "localLlmModel": config.local_llm_model,
+            "provider": "local",
             "hasAssemblyai": bool(config.assemblyai_api_key),
             "hasPexels": bool(config.pexels_api_key),
-            "aiProvider": config.ai_provider,
         }
 
     return router

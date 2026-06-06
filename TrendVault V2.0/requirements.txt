@@ -8,7 +8,6 @@ httpx
 pydantic>=2.0
 pydantic-settings>=2.0
 SQLAlchemy
-anthropic
 imageio-ffmpeg
 # Auth / login (ported from TrendVault-Coder): bcrypt password hashing,
 # pyotp TOTP 2FA, qrcode[pil] for the 2FA enrollment QR.

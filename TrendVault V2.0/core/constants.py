@@ -51,8 +51,8 @@ DB_PATH = os.path.join(DATA_DIR, "app.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///" + DB_PATH.replace("\\", "/"))
 
 # ── Models / pipeline ──
-ANTHROPIC_MODEL = "claude-sonnet-4-6"
-ANTHROPIC_HAIKU = "claude-haiku-4-5-20251001"
+# Script generation runs on a local LLM; see LOCAL_LLM_URL / LOCAL_LLM_MODEL in
+# core/config.py (override via .env).
 SCRIPT_TARGET_SECONDS = 90
 
 # Node render entrypoint (spawned via `npx tsx <RENDER_SCRIPT>` with cwd=ROOT)

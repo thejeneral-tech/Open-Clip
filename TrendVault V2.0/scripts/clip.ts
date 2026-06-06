@@ -46,17 +46,14 @@ async function main() {
   const transcript = await transcribeAudio(audioPath);
   console.log(`Transcript: ${transcript.words.length} words, ~${Math.round((transcript.words.at(-1)?.end ?? 0) / 60000)} min\n`);
 
-  // Step 3: Pick the best 10 clips (Claude if credits available, heuristic otherwise)
+  // Step 3: Pick the best 10 clips (local model if reachable, heuristic otherwise)
   let clips;
   try {
     clips = await chooseClips(transcript, 10);
   } catch (err: any) {
-    if (err.message?.includes('credit balance') || err.message?.includes('ANTHROPIC_API_KEY')) {
-      console.warn('Claude unavailable — using heuristic clip selector instead.');
-      clips = chooseClipsHeuristic(transcript, 10);
-    } else {
-      throw err;
-    }
+    console.warn('Local model unavailable — using heuristic clip selector instead.');
+    console.warn('  reason:', err?.message || err);
+    clips = chooseClipsHeuristic(transcript, 10);
   }
   console.log();
 

@@ -1,13 +1,10 @@
 /**
- * Multi-provider AI completion with automatic fallback.
+ * Local AI completion (Ollama / llama.cpp) — no API keys, no cloud.
  *
- * Provider preference (env: AI_PROVIDER):
- *   auto       — Anthropic first, fall back to OpenAI on failure (default)
- *   anthropic  — Anthropic only
- *   openai     — OpenAI only
- *
- * On Anthropic errors that signal billing/credit issues (HTTP 400/402/429,
- * "credit balance too low"), Auto mode silently retries with OpenAI.
+ * Talks to a local OpenAI-compatible /v1 endpoint. Configure via env:
+ *   LOCAL_LLM_URL    default http://localhost:11434/v1  (Ollama)
+ *                    llama.cpp: http://localhost:8080/v1
+ *   LOCAL_LLM_MODEL  default llama3.1:8b
  */
 
 export interface AICompletionRequest {
@@ -15,114 +12,62 @@ export interface AICompletionRequest {
   user: string;
   maxTokens?: number;
   temperature?: number;
-  /** Override the Anthropic model (e.g. 'claude-haiku-4-5-20251001' for fast/cheap calls) */
+  topP?: number;
+  /** Override the local model for this call (else LOCAL_LLM_MODEL). */
   model?: string;
 }
 
 export interface AICompletionResult {
   text: string;
-  provider: 'anthropic' | 'openai';
+  provider: 'local';
   warning?: string;
 }
 
-const ANTHROPIC_BILLING_REGEX = /credit\s*balance|billing|insufficient|quota|429|402|400.*invalid_request/i;
+const LOCAL_LLM_URL = (process.env.LOCAL_LLM_URL || 'http://localhost:11434/v1').replace(/\/+$/, '');
+const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'llama3.1:8b';
 
-async function callAnthropic(req: AICompletionRequest): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
-  const Anthropic = (await import('@anthropic-ai/sdk')).default;
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const messages = [{ role: 'user' as const, content: req.user }];
-  const response = await client.messages.create({
-    model: req.model ?? 'claude-sonnet-4-6',
-    max_tokens: req.maxTokens ?? 1024,
-    ...(req.system ? { system: req.system } : {}),
-    messages,
-  });
-  const block = response.content[0];
-  if (block.type !== 'text') throw new Error('Unexpected Anthropic response type');
-  return block.text;
-}
-
-async function callOpenAI(req: AICompletionRequest): Promise<string> {
-  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
+async function callLocal(req: AICompletionRequest): Promise<string> {
   const messages: Array<{ role: string; content: string }> = [];
   if (req.system) messages.push({ role: 'system', content: req.system });
   messages.push({ role: 'user', content: req.user });
 
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      max_tokens: req.maxTokens ?? 1024,
-      temperature: req.temperature ?? 0.8,
-      messages,
-    }),
-    signal: AbortSignal.timeout(45000),
-  });
+  let r: Response;
+  try {
+    r = await fetch(`${LOCAL_LLM_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: req.model ?? LOCAL_LLM_MODEL,
+        max_tokens: req.maxTokens ?? 1024,
+        temperature: req.temperature ?? 0.8,
+        ...(req.topP != null ? { top_p: req.topP } : {}),
+        messages,
+        stream: false,
+      }),
+      // Local CPU inference can be slow — allow up to 5 min per call.
+      signal: AbortSignal.timeout(300000),
+    });
+  } catch (e) {
+    throw new Error(
+      `Local LLM unreachable at ${LOCAL_LLM_URL} — is Ollama/llama.cpp running? ` +
+      `(${(e as Error)?.message || e})`
+    );
+  }
 
   if (!r.ok) {
     const errBody = await r.text().catch(() => '');
-    throw new Error(`OpenAI ${r.status}: ${errBody.slice(0, 200)}`);
+    throw new Error(`Local LLM ${r.status}: ${errBody.slice(0, 200)}`);
   }
 
   const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error('OpenAI returned empty response');
+  if (!text) throw new Error('Local LLM returned empty response');
   return text;
 }
 
 export async function aiComplete(req: AICompletionRequest): Promise<AICompletionResult> {
-  const provider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
-
-  if (provider === 'openai') {
-    const text = await callOpenAI(req);
-    return { text, provider: 'openai' };
-  }
-
-  if (provider === 'anthropic') {
-    const text = await callAnthropic(req);
-    return { text, provider: 'anthropic' };
-  }
-
-  // AUTO: Anthropic first, fall back to OpenAI
-  try {
-    const text = await callAnthropic(req);
-    return { text, provider: 'anthropic' };
-  } catch (anthErr) {
-    const msg = String((anthErr as Error)?.message || anthErr);
-    const isBilling = ANTHROPIC_BILLING_REGEX.test(msg);
-    const hasOpenAI = !!process.env.OPENAI_API_KEY;
-
-    if (!hasOpenAI) {
-      // No fallback available — re-throw original error
-      throw anthErr;
-    }
-
-    if (isBilling) {
-      console.warn('[AI] Anthropic billing issue — falling back to OpenAI:', msg.slice(0, 100));
-    } else {
-      console.warn('[AI] Anthropic error — falling back to OpenAI:', msg.slice(0, 100));
-    }
-
-    try {
-      const text = await callOpenAI(req);
-      return {
-        text,
-        provider: 'openai',
-        warning: isBilling
-          ? 'Anthropic credits exhausted — using OpenAI instead'
-          : 'Anthropic failed — using OpenAI instead',
-      };
-    } catch (openaiErr) {
-      // Both failed — throw a combined error
-      const oaiMsg = String((openaiErr as Error)?.message || openaiErr);
-      throw new Error(`Both AI providers failed. Anthropic: ${msg.slice(0, 100)}. OpenAI: ${oaiMsg.slice(0, 100)}`);
-    }
-  }
+  const text = await callLocal(req);
+  return { text, provider: 'local' };
 }
 
 /** Strip markdown code fences / preamble and parse JSON safely.

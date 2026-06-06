@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { aiComplete } from './ai-completion';
 import type { ClipSelection } from './types';
 import type { Transcript } from './transcribe';
 
@@ -9,9 +9,6 @@ export async function chooseClips(
   count = 10,
   outputDir = 'output'
 ): Promise<ClipSelection[]> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set in .env');
-
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   // Check cache
@@ -20,8 +17,6 @@ export async function chooseClips(
     console.log('Using cached clip selections:', cachePath);
     return JSON.parse(fs.readFileSync(cachePath, 'utf-8')) as ClipSelection[];
   }
-
-  const client = new Anthropic({ apiKey });
 
   // Build compact timestamped transcript — timestamp every 10th word to keep prompt manageable
   const lines: string[] = [];
@@ -64,20 +59,13 @@ JSON FORMAT:
   }
 ]`;
 
-  console.log('Asking Claude to pick the best clips...');
+  console.log('Asking the local model to pick the best clips...');
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const { text: responseText } = await aiComplete({ user: prompt, maxTokens: 4096 });
 
-  const content = message.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected response from Claude');
-
-  const jsonMatch = content.text.match(/\[[\s\S]*\]/);
+  const jsonMatch = responseText.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
-    throw new Error(`Could not parse JSON from Claude response:\n${content.text.slice(0, 500)}`);
+    throw new Error(`Could not parse JSON from model response:\n${responseText.slice(0, 500)}`);
   }
 
   const clips: ClipSelection[] = JSON.parse(jsonMatch[0]);

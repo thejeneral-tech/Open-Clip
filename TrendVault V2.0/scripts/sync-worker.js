@@ -8,7 +8,7 @@
 //
 // Usage:
 //   node scripts/sync-worker.js           (normal mode)
-//   node scripts/sync-worker.js --test    (test mode — no Claude needed)
+//   node scripts/sync-worker.js --test    (test mode — no LLM needed)
 // ============================================================
 
 'use strict';
@@ -426,7 +426,7 @@ async function handleRender(job) {
 async function handleScriptOnly(job) {
   let script;
   if (job.scriptLines && job.scriptLines.length > 0) {
-    log('INFO', `Using pre-written script lines (${job.scriptLines.length} lines) — skipping Claude`);
+    log('INFO', `Using pre-written script lines (${job.scriptLines.length} lines) — skipping the model`);
     const sign = job.script?.trendVaultSign || 'Unknown';
     script = {
       lines:         job.scriptLines,
@@ -612,9 +612,9 @@ async function runTestMode() {
     process.exit(1);
   }
 
-  // ── 3. Write test job to Drive requests (pre-written script, no Claude needed) ──
+  // ── 3. Write test job to Drive requests (pre-written script, no LLM needed) ──
   log('INFO', '');
-  log('INFO', '  Step 3 — Job lifecycle (script-only, no Claude)');
+  log('INFO', '  Step 3 — Job lifecycle (script-only, no LLM)');
 
   const jobId   = `test-${Date.now()}`;
   const jobFile = path.join(PATHS.driveRequests, `${jobId}.json`);
@@ -623,7 +623,7 @@ async function runTestMode() {
     type      : 'script-only',
     status    : 'pending',
     createdAt : new Date().toISOString(),
-    // pre-written scriptLines — bypasses Claude completely
+    // pre-written scriptLines — bypasses the model completely
     scriptLines: [
       { text: 'SYNC TEST — LINE ONE.',  type: 'hook',        durationSeconds: 5 },
       { text: 'SYNC TEST — LINE TWO.',  type: 'observation', durationSeconds: 5 },

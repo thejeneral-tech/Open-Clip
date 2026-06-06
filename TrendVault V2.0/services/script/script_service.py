@@ -1,7 +1,8 @@
 """Script generation service — port of the /api/trend-vault/generate-script handler.
 
-Resolves niche/subject, then: Anthropic (claude-sonnet-4-6) → on billing failure
-OpenAI (gpt-4o-mini) → template fallback. Blocking network I/O; call via
+Resolves niche/subject, then generates with a local LLM (Ollama / llama.cpp via
+the OpenAI-compatible /v1 endpoint). On any failure (server unreachable, bad
+JSON) it falls back to the built-in template. Blocking network I/O; call via
 asyncio.to_thread from the async route.
 """
 from __future__ import annotations
@@ -12,14 +13,10 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-import httpx
-
 from core.config import config
-from core.constants import ANTHROPIC_MODEL
+from lib import local_llm
 from lib.prompts_lib import append_recent_hook, build_prompts, uppercase_script_lines
 from lib.script_fallback import generate_fallback_script
-
-_BILLING_RE = re.compile(r"credit|billing|balance|quota|429|insufficient|402|400", re.I)
 
 
 class ScriptInputError(ValueError):
@@ -54,18 +51,12 @@ def _word_count(text: str) -> int:
     return len([w for w in (text or "").split() if w])
 
 
-def _generate_with_claude(niche: str, params: Dict[str, Any], tone: str) -> Dict[str, Any]:
-    import anthropic  # lazy so the module imports even before deps are installed
+def _generate_with_local(niche: str, params: Dict[str, Any], tone: str) -> Dict[str, Any]:
     prompts = build_prompts(params)
-    client = anthropic.Anthropic(api_key=config.anthropic_api_key)
-    resp = client.messages.create(
-        model=ANTHROPIC_MODEL, max_tokens=3500, temperature=1.0, top_p=0.95,
-        system=prompts["system"], messages=[{"role": "user", "content": prompts["user"]}],
+    text = local_llm.chat(
+        user=prompts["user"], system=prompts["system"],
+        max_tokens=3500, temperature=1.0, top_p=0.95,
     )
-    block = resp.content[0]
-    text = getattr(block, "text", None)
-    if text is None:
-        raise RuntimeError("Unexpected response type from Claude")
     parsed = parse_ai_json(text)
     parsed["trendVaultSign"] = niche
     parsed["topic"] = prompts["finalSubject"]
@@ -80,29 +71,6 @@ def _generate_with_claude(niche: str, params: Dict[str, Any], tone: str) -> Dict
     except Exception:
         pass
     return uppercase_script_lines(parsed)
-
-
-def _openai_chat(user: str, max_tokens: int = 3500, temperature: float = 0.8,
-                 system: Optional[str] = None) -> str:
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": user})
-    r = httpx.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {config.openai_api_key}"},
-        json={"model": "gpt-4o-mini", "max_tokens": max_tokens,
-              "temperature": temperature, "messages": messages},
-        timeout=45.0,
-    )
-    if r.status_code != 200:
-        raise RuntimeError(f"OpenAI {r.status_code}: {(r.text or '')[:200]}")
-    data = r.json()
-    text = (((data.get("choices") or [{}])[0]).get("message") or {}).get("content")
-    if not text:
-        raise RuntimeError("OpenAI returned empty response")
-    return text
 
 
 class ScriptService:
@@ -134,9 +102,6 @@ class ScriptService:
                 out["notice"] = notice
             return out
 
-        if not config.anthropic_api_key:
-            return fallback()
-
         params = {
             "niche": niche, "subject": subject, "category": category,
             "trendingTopic": trending, "prompt": final_prompt or final_subject,
@@ -144,38 +109,14 @@ class ScriptService:
             "randomSeed": random_seed, "randomAngle": random_angle,
         }
         try:
-            script = _generate_with_claude(niche, params, tone)
-            return {"ok": True, "script": script, "source": "claude"}
+            script = _generate_with_local(niche, params, tone)
+            return {"ok": True, "script": script, "source": "local"}
         except Exception as err:  # noqa: BLE001
-            msg = str(err)
-            is_billing = bool(_BILLING_RE.search(msg))
-            if config.openai_api_key and is_billing:
-                try:
-                    user = (
-                        "You are generating a 1 minute 30 second short-form video narration script.\n\n"
-                        f"Niche: {niche}\nCategory: {category or ''}\n"
-                        f"Trending Topic: {trending or ''}\nStory Prompt: {final_prompt or final_subject}\n"
-                        f"Emotional Tone: {tone or 'mysterious'}\nCreative Angle: {random_angle or 'hidden truth'}\n"
-                        f"Random Seed: {random_seed or int(time.time() * 1000)}\n\n"
-                        f"Final subject: \"{final_subject}\"\n"
-                        "You must stay locked to this subject. Do NOT write about love, relationships, "
-                        "heartbreak, or zodiac unless the Story Prompt explicitly asks for it.\n\n"
-                        "Write 18–24 lines, 200–230 words, targeting 90 seconds total duration.\n\n"
-                        "Return ONLY valid JSON:\n"
-                        "{\n  \"lines\": [\n    {\"text\": \"...\", \"type\": \"hook\", \"durationSeconds\": 3}\n  ],\n"
-                        "  \"totalDuration\": 90,\n  \"title\": \"Short memorable title\",\n"
-                        "  \"hook\": \"Opening line\",\n  \"estimatedWords\": 215\n}"
-                    )
-                    text = _openai_chat(user, max_tokens=3500)
-                    parsed = parse_ai_json(text)
-                    parsed = {**parsed, "trendVaultSign": niche, "topic": final_subject,
-                              "emotionalTone": tone}
-                    return {"ok": True, "script": parsed, "source": "openai",
-                            "notice": "Using OpenAI (Anthropic credits exhausted)."}
-                except Exception:
-                    pass
-            return fallback("Both AI providers unavailable — using built-in template."
-                            if is_billing else None)
+            print(f"[script] local generation failed "
+                  f"({type(err).__name__}): {str(err)[:200]}", flush=True)
+            return fallback("Local model unavailable or timed out — using built-in "
+                            "template. Check that Ollama/llama.cpp is running and the "
+                            "model is pulled.")
 
 
 _service: Optional[ScriptService] = None

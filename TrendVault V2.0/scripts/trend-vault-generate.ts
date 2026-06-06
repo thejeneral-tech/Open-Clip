@@ -1,9 +1,10 @@
 /**
  * Trend Vault Script Generator
- * Uses Claude to generate cinematic emotional storytelling scripts
+ * Uses a local LLM (Ollama / llama.cpp) to generate cinematic emotional
+ * storytelling scripts — no API keys.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { aiComplete } from './ai-completion';
 import {
   MOTIVATIONAL_SCRIPTS,
   getMotivationalScript,
@@ -264,22 +265,16 @@ Return ONLY valid JSON, no markdown, no extra text:
 
 Write all ${lineRange} lines. Hit ${wordMin}–${wordMax} words. Make every line specific to "${finalSubject}".`;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 3500,
-    temperature: 1.0,
-    top_p: 0.95,
+  const { text: responseText } = await aiComplete({
     system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+    user: userPrompt,
+    maxTokens: 3500,
+    temperature: 1.0,
+    topP: 0.95,
   });
 
-  const content = response.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
-
   // Extract JSON from response (handles markdown code blocks if present)
-  let jsonText = content.text.trim();
+  let jsonText = responseText.trim();
   const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch) jsonText = jsonMatch[1].trim();
 

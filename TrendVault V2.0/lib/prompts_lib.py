@@ -1,6 +1,6 @@
 """Script-generation prompt assembly — port of scripts/trend-vault-generate.ts.
 
-Builds the Claude system+user prompts for a 90-second narration, plus the shared
+Builds the local-model system+user prompts for a 90-second narration, plus the shared
 helpers (seedable RNG, diversity dials, recent-hook anti-repetition, UPPERCASE
 caption transform) used by both the AI path and the template fallback.
 """
@@ -106,7 +106,7 @@ def uppercase_script_lines(script: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_prompts(params: Dict[str, Any]) -> Dict[str, str]:
-    """Return {system, user, finalSubject} for the Claude call."""
+    """Return {system, user, finalSubject} for the local-model call."""
     niche = params.get("niche", "")
     subject = params.get("subject", "") or ""
     category = params.get("category", "") or ""

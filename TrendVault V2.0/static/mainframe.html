@@ -935,9 +935,9 @@ async function checkWorker(){
       addLog('warn','Render worker not reachable — run START_RENDER_WORKER.bat on home PC');
     }
 
-    // AI provider
-    if(d.aiProvider)document.getElementById('sysAi').textContent=d.aiProvider;
-    if(d.provider)document.getElementById('sysAi').textContent=d.provider;
+    // AI provider — local model
+    if(d.localLlmModel)document.getElementById('sysAi').textContent=d.localLlmModel;
+    else if(d.provider)document.getElementById('sysAi').textContent=d.provider;
   }catch(e){
     setDot(dot,'offline'); setDot(cDot,'offline');
     cSt.className='conn-status offline'; cSt.textContent='ERROR';
@@ -1063,8 +1063,7 @@ async function loadEnvStatus(){
     const d=await r.json();
 
     const keys=[
-      {key:'ANTHROPIC',label:'Anthropic',val:d.anthropicKey||d.hasAnthropic},
-      {key:'OPENAI',label:'OpenAI',val:d.openaiKey||d.hasOpenai},
+      {key:'LOCAL_LLM',label:d.localLlmModel?('Local LLM · '+d.localLlmModel):'Local LLM',val:(d.localLlm&&d.localLlm.ok)?'set':false},
       {key:'ASSEMBLYAI',label:'AssemblyAI',val:d.assemblyaiKey||d.hasAssemblyai},
       {key:'PEXELS',label:'Pexels',val:d.pexelsKey||d.hasPexels},
     ];
@@ -1072,9 +1071,10 @@ async function loadEnvStatus(){
     const el=document.getElementById('envRows');
     el.innerHTML=keys.map(k=>{
       const has=k.val===true||k.val==='set'||(typeof k.val==='string'&&k.val.length>4);
+      const shown=k.key==='LOCAL_LLM'?(has?'Online':'Offline'):(has?'••••••••••••':'Not set');
       return `<div class="env-row">
         <div class="env-key">${k.label}</div>
-        <div class="env-val">${has?'••••••••••••':'Not set'}</div>
+        <div class="env-val">${shown}</div>
         <div class="${has?'env-tick':'env-cross'}">${has?'✓':'✗'}</div>
       </div>`;
     }).join('');
