@@ -26,12 +26,15 @@ class Job:
     url: str = ""
     prompt: str = ""
     video_id: str | None = None
-    status: str = "queued"    # queued | running | done | error
+    status: str = "queued"    # queued | running | done | error | cancelled
     progress: int = 0
     error: str | None = None
     result: dict = field(default_factory=dict)
+    stats: dict = field(default_factory=dict)        # live counters (e.g. video search)
+    checkpoint: dict = field(default_factory=dict)   # resume metadata for long jobs
     steps: list[Step] = field(default_factory=list)
     logs: list[str] = field(default_factory=list)
+    cancel_requested: bool = False   # cooperative cancel; long loops poll this
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -80,6 +83,12 @@ class JobManager:
     def log(self, job: Job, message: str) -> None:
         with self._lock:
             job.logs.append(f"{time.strftime('%H:%M:%S')}  {message}")
+            job.logs = job.logs[-200:]   # cap log growth on long-running jobs
+            job.updated_at = time.time()
+
+    def set_stats(self, job: Job, **kv) -> None:
+        with self._lock:
+            job.stats.update(kv)
             job.updated_at = time.time()
 
     def step(self, job: Job, name: str, status: str, detail: str = "") -> None:
@@ -113,6 +122,20 @@ class JobManager:
         with self._lock:
             job.status = "error"
             job.error = error
+            job.updated_at = time.time()
+
+    def request_cancel(self, job: Job) -> None:
+        """Flag a cooperative cancel; long-running loops poll is_cancelled()."""
+        with self._lock:
+            job.cancel_requested = True
+            job.updated_at = time.time()
+
+    def is_cancelled(self, job: Job) -> bool:
+        return job.cancel_requested
+
+    def cancelled(self, job: Job) -> None:
+        with self._lock:
+            job.status = "cancelled"
             job.updated_at = time.time()
 
 

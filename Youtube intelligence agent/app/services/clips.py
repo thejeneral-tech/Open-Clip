@@ -17,7 +17,8 @@ def _noop(_: str) -> None:
     pass
 
 
-def find_clips(record: dict, intent: dict | None = None, log: Logger | None = None) -> list[dict]:
+def find_clips(record: dict, intent: dict | None = None, log: Logger | None = None,
+               max_windows: int | None = None, include_signals: bool = False) -> list[dict]:
     log = log or _noop
     intent = intent or {}
     meta = record.get("metadata") or {}
@@ -28,11 +29,12 @@ def find_clips(record: dict, intent: dict | None = None, log: Logger | None = No
         log("No transcript available; building clips from engagement signals.")
         return _clips_from_signals(record, intent)
 
+    cap = max_windows or MAX_WINDOWS
     windows = context.transcript_windows(segments, max_chars=4800)
-    if len(windows) > MAX_WINDOWS:
-        step = len(windows) / MAX_WINDOWS
-        sampled = [windows[int(i * step)] for i in range(MAX_WINDOWS)]
-        log(f"Long video: scanning {MAX_WINDOWS} of {len(windows)} transcript windows (evenly sampled).")
+    if len(windows) > cap:
+        step = len(windows) / cap
+        sampled = [windows[int(i * step)] for i in range(cap)]
+        log(f"Long video: scanning {cap} of {len(windows)} transcript windows (evenly sampled).")
         windows = sampled
 
     signals = context.signals_block(record, max_chars=1400)
@@ -71,9 +73,18 @@ If nothing is strong, return {{"clips":[]}}. Use exact timestamps from the marke
             log(f"Window {i + 1} clip scan failed: {e}")
             continue
         for c in (data or {}).get("clips", []) if isinstance(data, dict) else []:
-            clip = _normalize_clip(c, duration, intent, meta)
+            try:
+                clip = _normalize_clip(c, duration, intent, meta)
+            except Exception:  # noqa: BLE001 - a malformed clip must not abort the scan
+                clip = None
             if clip:
                 candidates.append(clip)
+
+    # Optionally supplement with engagement-signal clips (heatmap / comment
+    # timestamps). Keeps multi-video runs productive even when LLM scanning is
+    # sparse or flaky, and surfaces "most replayed" moments the model missed.
+    if include_signals:
+        candidates += _signal_candidates(record, intent)
 
     ranked = _rank_and_dedupe(candidates, intent)
     log(f"Found {len(ranked)} clip candidates.")
@@ -93,6 +104,17 @@ def _constraint_text(intent: dict) -> str:
     if intent.get("focus"):
         parts.append(f"User goal: {intent['focus']}.")
     return ("Constraints: " + " ".join(parts) + "\n") if parts else ""
+
+
+def _clean_str(v, default: str = "") -> str:
+    """Coerce an LLM field to a clean string. Small/flaky models sometimes return
+    a list (or number) where a string is expected; never let that crash a whole
+    video's clip scan."""
+    if v is None:
+        return default
+    if isinstance(v, (list, tuple)):
+        v = " ".join(str(x) for x in v)
+    return str(v).strip()
 
 
 def _normalize_clip(c: dict, duration: float, intent: dict, meta: dict) -> dict | None:
@@ -129,13 +151,13 @@ def _normalize_clip(c: dict, duration: float, intent: dict, meta: dict) -> dict 
         "start_str": util.fmt_timestamp(start),
         "end_str": util.fmt_timestamp(end),
         "duration": round(end - start, 1),
-        "title": (c.get("title") or "Untitled clip").strip()[:120],
-        "reason": (c.get("reason") or "").strip()[:500],
+        "title": (_clean_str(c.get("title")) or "Untitled clip")[:120],
+        "reason": _clean_str(c.get("reason"))[:500],
         "viral_score": score,
-        "hook": (c.get("hook") or "").strip()[:200],
-        "caption": (c.get("caption") or "").strip()[:200],
+        "hook": _clean_str(c.get("hook"))[:200],
+        "caption": _clean_str(c.get("caption"))[:200],
         "platform": platform,
-        "edit_style": (c.get("edit_style") or "").strip()[:200],
+        "edit_style": _clean_str(c.get("edit_style"))[:200],
         "url": util.watch_url(vid, int(start)) if vid else None,
     }
 
@@ -157,8 +179,10 @@ def _rank_and_dedupe(candidates: list[dict], intent: dict) -> list[dict]:
     return kept[:count]
 
 
-# --- fallback: no transcript --------------------------------------------
-def _clips_from_signals(record: dict, intent: dict) -> list[dict]:
+# --- engagement-signal clips (used as fallback AND as a supplement) ------
+def _signal_candidates(record: dict, intent: dict) -> list[dict]:
+    """Raw clip candidates derived from the YouTube heatmap and comment-mentioned
+    timestamps (no LLM). Returned unranked so callers can merge/dedupe."""
     meta = record.get("metadata") or {}
     insights = (record.get("comments") or {}).get("insights") or {}
     duration = meta.get("duration") or 0
@@ -177,7 +201,11 @@ def _clips_from_signals(record: dict, intent: dict) -> list[dict]:
                                 title="Audience-requested moment",
                                 reason=f"Mentioned in {t['mentions']} comments: \"{t.get('example','')[:80]}\"",
                                 score=min(95, 55 + t["mentions"] * 3)))
-    return _rank_and_dedupe(out, intent)
+    return out
+
+
+def _clips_from_signals(record: dict, intent: dict) -> list[dict]:
+    return _rank_and_dedupe(_signal_candidates(record, intent), intent)
 
 
 def _signal_clip(center: float, span: float, duration: float, vid, title, reason, score) -> dict:

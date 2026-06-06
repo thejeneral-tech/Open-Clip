@@ -4,7 +4,7 @@
     {
       "name": "yia",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "uvicorn", "app.server:app", "--port", "8011", "--reload"],
+      "runtimeArgs": ["-m", "uvicorn", "app.server:app", "--port", "8011"],
       "port": 8011
     }
   ]

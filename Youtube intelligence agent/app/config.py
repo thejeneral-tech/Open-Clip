@@ -30,8 +30,9 @@ DATA_DIR = Path(_env("YIA_DATA_DIR", str(PROJECT_ROOT / "data")))
 DB_PATH = DATA_DIR / "intelligence.db"
 VIDEO_DATA_DIR = DATA_DIR / "videos"   # per-video working dirs (frames, audio, downloads)
 EXPORT_DIR = DATA_DIR / "exports"
+CLIPS_DIR = DATA_DIR / "clips"         # rendered vertical clips, grouped by run id
 
-for _d in (DATA_DIR, VIDEO_DATA_DIR, EXPORT_DIR, WEB_DIR):
+for _d in (DATA_DIR, VIDEO_DATA_DIR, EXPORT_DIR, CLIPS_DIR, WEB_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # --- Ollama / local LLMs -------------------------------------------------
@@ -84,6 +85,28 @@ VISION_FRAME_WIDTH = _env_int("YIA_VISION_FRAME_WIDTH", 768)  # downscale before
 
 # --- Comments ------------------------------------------------------------
 MAX_COMMENTS = _env_int("YIA_MAX_COMMENTS", 200)
+
+# --- Topic-to-Clips workflow ---------------------------------------------
+# Resolution we download selected source videos at for cutting real clips.
+# 720 is a good quality/size/CPU trade-off for vertical short-form output.
+RENDER_HEIGHT = _env_int("YIA_RENDER_HEIGHT", 720)
+# Vertical render canvas (9:16). Width is derived from height (height*9/16).
+RENDER_OUT_HEIGHT = _env_int("YIA_RENDER_OUT_HEIGHT", 1920)
+# Defaults for an Auto-Create run (all overridable per-run in the UI).
+DEFAULT_VIDEOS_TO_ANALYZE = _env_int("YIA_DEFAULT_VIDEOS", 8)
+DEFAULT_CLIPS_TO_CREATE = _env_int("YIA_DEFAULT_CLIPS", 10)
+MAX_CLIPS_TO_CREATE = _env_int("YIA_MAX_CLIPS", 10)          # hard cap (spec: up to 10)
+MAX_VIDEOS_TO_ANALYZE = _env_int("YIA_MAX_VIDEOS", 15)        # safety cap on a low-RAM box
+DEFAULT_MIN_CLIP_LEN = _env_int("YIA_MIN_CLIP_LEN", 18)       # seconds
+DEFAULT_MAX_CLIP_LEN = _env_int("YIA_MAX_CLIP_LEN", 60)       # seconds
+# Minimum cross-video score for a moment to count as a "strong" clip. We never
+# pad weak clips to hit the requested number (spec): if fewer strong moments
+# exist than requested, the run reports the real count.
+MIN_STRONG_CLIP_SCORE = _env_int("YIA_MIN_STRONG_SCORE", 45)
+RENDER_TIMEOUT = _env_int("YIA_RENDER_TIMEOUT", 900)         # per-clip ffmpeg ceiling (s)
+# How long cached ytsearch results stay fresh (so retry / find-more don't re-hit
+# YouTube). Default 6 hours.
+SEARCH_CACHE_TTL = _env_int("YIA_SEARCH_CACHE_TTL", 21600)
 
 # --- Server --------------------------------------------------------------
 HOST = _env("YIA_HOST", "127.0.0.1")
