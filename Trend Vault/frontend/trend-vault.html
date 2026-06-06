@@ -7,34 +7,41 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Inter:wght@300;400;500;600;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600;700&family=Bowlby+One&family=Archivo+Black&family=Permanent+Marker&family=Caveat:wght@400;700&family=Shadows+Into+Light&family=Pacifico&family=Special+Elite&family=Creepster&family=Nosifer&family=Cormorant+Garamond:wght@400;700&family=Playfair+Display:wght@400;700;900&family=Cinzel+Decorative:wght@400;900&family=Lora:wght@400;700&family=Merriweather:wght@400;700;900&family=Bangers&family=Fredoka+One&family=Press+Start+2P&family=VT323&family=Major+Mono+Display&family=Russo+One&family=Black+Ops+One&family=Audiowide&family=Orbitron:wght@400;700;900&family=Righteous&family=Staatliches&family=Yeseva+One&family=Abril+Fatface&family=Crimson+Text:wght@400;600;700&family=Montserrat:wght@400;600;700;800;900&family=Poppins:wght@400;600;700;800;900&family=League+Spartan:wght@400;700;800;900&family=Barlow+Condensed:wght@700;800;900&family=Teko:wght@600;700&family=DM+Sans:wght@400;700;900&family=Manrope:wght@400;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/tva-theme.css"/>
+<script src="/tva-theme.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#040208;
-  --surface:#0b0814;
-  --surface2:#120f1e;
-  --surface3:#1a1530;
-  --border:#3a2860;
-  --border2:#5840a0;
-  --accent:#9b59b6;
-  --accent2:#c9a227;
-  --purple:#7c3aed;
-  --purple2:#a855f7;
-  --gold:#c9a227;
-  --gold2:#f0c040;
-  --red:#e53e3e;
-  --green:#2ecc71;
-  --text:#f8f4ff;
-  --text2:#ddd4f5;
-  --muted:#b8a8d8;
-  --r:14px;
-  --r2:10px;
+  --bg:#282c34;
+  --surface:#21252b;
+  --surface2:#2c313c;
+  --surface3:#1b1e24;
+  --panel:#21252b;
+  --border:#355a66;
+  --border2:#4a7a88;
+  --accent:#e06c75;
+  --accent2:#d19a66;
+  --purple:#e06c75;
+  --purple2:#eb8a91;
+  --gold:#d19a66;
+  --gold2:#f0ad4e;
+  --red:#ff5b5b;
+  --green:#50fa7b;
+  --warn:#f0ad4e;
+  --fg:#9cdef2;
+  --text:#9cdef2;
+  --text2:#7fb8cc;
+  --muted:#6b8a94;
+  --r:10px;
+  --r2:8px;
+  --font-mono:'Fira Code',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  --font-ui:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-height:100vh;overflow-x:hidden}
 
 /* Starfield */
-#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+#stars{display:none}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
 @keyframes twinkle{from{opacity:var(--lo,.1)}to{opacity:var(--hi,.9)}}
 /* RGB border — calm silver-white flow */
@@ -58,13 +65,13 @@ header{
   position:sticky;top:0;z-index:100;
 }
 .logo-wrap{display:flex;align-items:center;gap:12px}
-.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(155,89,182,.8))}
-.logo-text{font-family:'Cinzel',serif;font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
+.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(224,108,117,.8))}
+.logo-text{font-family:var(--font-mono);font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
 .logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;font-family:'Inter',sans-serif}
 header nav{margin-left:auto;display:flex;gap:10px}
 .nav-link{padding:8px 18px;border-radius:8px;font-size:.8rem;font-weight:600;text-decoration:none;color:var(--text2);border:1px solid var(--border);transition:all .2s;letter-spacing:.5px}
-.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.1)}
-.nav-link.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)}
+.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(224,108,117,.1)}
+.nav-link.active{background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)}
 .badge-pro{background:linear-gradient(135deg,var(--purple),var(--gold));color:#fff;font-size:.58rem;padding:2px 7px;border-radius:20px;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-left:auto}
 
 /* Main layout: sidebar controls + sticky preview + export panel */
@@ -74,22 +81,22 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .controls{flex:1;padding:28px 24px 100px 36px;display:flex;flex-direction:column;gap:18px;max-width:760px}
 
 /* Preview panel */
-.preview-wrap{width:320px;min-width:320px;padding:28px 14px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
+.preview-wrap{width:320px;min-width:320px;padding:28px 14px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(224,108,117,.45) rgba(255,255,255,.04)}
 
 /* Export / Render side panel */
-.export-panel{width:320px;min-width:320px;padding:28px 20px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:16px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(167,139,250,.45) rgba(255,255,255,.04)}
+.export-panel{width:320px;min-width:320px;padding:28px 20px 110px 0;position:sticky;top:72px;height:calc(100vh - 72px);display:flex;flex-direction:column;gap:16px;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(224,108,117,.45) rgba(255,255,255,.04)}
 /* ── Panel children must not shrink so overflow-y:auto actually scrolls ── */
 .preview-wrap>*{flex-shrink:0}
 .export-panel>*{flex-shrink:0}
 /* ── Thin purple scrollbar for both sticky panels ── */
 .preview-wrap::-webkit-scrollbar,.export-panel::-webkit-scrollbar{width:6px}
 .preview-wrap::-webkit-scrollbar-track,.export-panel::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:999px}
-.preview-wrap::-webkit-scrollbar-thumb,.export-panel::-webkit-scrollbar-thumb{background:rgba(167,139,250,.45);border-radius:999px}
-.preview-wrap::-webkit-scrollbar-thumb:hover,.export-panel::-webkit-scrollbar-thumb:hover{background:rgba(167,139,250,.7)}
-.export-section{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:14px;padding:20px;position:relative;overflow:hidden;box-shadow:0 0 10px rgba(167,139,250,.18)}
-.export-section::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.preview-wrap::-webkit-scrollbar-thumb,.export-panel::-webkit-scrollbar-thumb{background:rgba(224,108,117,.45);border-radius:999px}
+.preview-wrap::-webkit-scrollbar-thumb:hover,.export-panel::-webkit-scrollbar-thumb:hover{background:rgba(224,108,117,.7)}
+.export-section{background:#21252b!important;background-image:none!important;border:none!important;border-radius:14px;padding:20px;position:relative;overflow:hidden;box-shadow:0 0 10px rgba(224,108,117,.18)}
+.export-section::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
 .export-section::after{display:none}
-.export-label{font-size:.68rem;letter-spacing:2.5px;text-transform:uppercase;color:rgba(167,139,250,.9);margin-bottom:18px;font-weight:800;text-shadow:0 0 8px rgba(167,139,250,.3)}
+.export-label{font-size:.68rem;letter-spacing:2.5px;text-transform:uppercase;color:rgba(224,108,117,.9);margin-bottom:18px;font-weight:800;text-shadow:0 0 8px rgba(224,108,117,.3)}
 
 /* ── Render buttons — side by side, equal width ── */
 .render-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0}
@@ -113,15 +120,15 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
 .btn-render-local:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 8px rgba(13,148,136,.3)}
 
 /* ── Resolution / Format / Output info box ── */
-.export-meta{display:flex;flex-direction:column;gap:9px;padding:13px 14px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:10px;font-size:.76rem}
+.export-meta{display:flex;flex-direction:column;gap:9px;padding:13px 14px;background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.18);border-radius:10px;font-size:.76rem}
 .export-meta-row{display:flex;justify-content:space-between;align-items:center;color:var(--text2);gap:8px}
 .export-meta-row span{color:var(--muted);font-size:.72rem;white-space:nowrap}
 .export-meta-row strong{color:rgba(245,245,255,.88);font-weight:600;font-size:.74rem;text-align:right}
 
 /* ── Save Location box ── */
-.save-path{padding:13px 14px;background:rgba(124,58,237,.05);border:1px solid rgba(124,58,237,.18);border-radius:10px}
-.save-path-label{font-size:.68rem;color:rgba(167,139,250,.9);font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:7px}
-.save-path-text{font-size:.74rem;color:rgba(212,203,236,.85);font-family:'Space Grotesk',monospace;word-break:break-word;line-height:1.75}
+.save-path{padding:13px 14px;background:rgba(224,108,117,.05);border:1px solid rgba(224,108,117,.18);border-radius:10px}
+.save-path-label{font-size:.68rem;color:rgba(224,108,117,.9);font-weight:800;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:7px}
+.save-path-text{font-size:.74rem;color:rgba(212,203,236,.85);font-family:var(--font-mono);word-break:break-word;line-height:1.75}
 .save-path-text em{color:var(--muted);font-style:italic}
 
 @media(max-width:1400px){.export-panel{width:290px;min-width:290px}}
@@ -132,15 +139,15 @@ main{display:flex;gap:0;flex:1;max-width:1700px;margin:0 auto;width:100%;padding
    the mask cuts out the content-box, leaving ONLY the 2px border visible.
    The inside stays fully dark. ::after is a blurred glow behind the card.
    ──────────────────────────────────────────────────────────────────────── */
-.card{background:#0b0b12!important;background-image:none!important;border:none!important;border-radius:var(--r);padding:20px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(167,139,250,.15);transition:transform .12s ease,box-shadow .3s ease}
-.card::before{content:'';position:absolute;inset:0;padding:1.25px;border-radius:inherit;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.card{background:#21252b!important;background-image:none!important;border:none!important;border-radius:var(--r);padding:20px;position:relative;overflow:hidden;box-shadow:0 0 8px rgba(224,108,117,.15);transition:transform .12s ease,box-shadow .3s ease}
+.card::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
 .card::after{display:none}
-.card:hover{transform:translateY(-1px);box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.14)}
+.card:hover{transform:translateY(-1px);box-shadow:0 0 14px rgba(224,108,117,.22),0 0 22px rgba(156,222,242,.14)}
 .card>*{position:relative;z-index:3}
 /* Snappier slider feedback: thumb scales when grabbed for tactile feel */
 input[type=range]::-webkit-slider-thumb{transition:transform .12s ease, box-shadow .15s ease}
 input[type=range]:active::-webkit-slider-thumb{transform:scale(1.18)}
-input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,237,.22)}
+input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(224,108,117,.22)}
 /* Subtle pulse on the keyboard-shortcut hint */
 @keyframes kbdPulse{ 0%,100%{opacity:.5} 50%{opacity:.85} }
 /* ── Text glow — soft, readable, not blinding ── */
@@ -148,15 +155,15 @@ input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(124,58,2
 /* Section title icons + labels — premium soft glow */
 .card-title,.export-label{
   color:rgba(245,245,255,.95);
-  text-shadow:0 0 3px rgba(255,255,255,.35),0 0 7px rgba(167,139,250,.28),0 0 12px rgba(96,165,250,.16);
+  text-shadow:0 0 3px rgba(255,255,255,.35),0 0 7px rgba(224,108,117,.28),0 0 12px rgba(156,222,242,.16);
 }
 /* Icon/emoji next to title */
 .card-title .ti{
-  filter:drop-shadow(0 0 3px rgba(255,255,255,.4)) drop-shadow(0 0 6px rgba(167,139,250,.25));
+  filter:drop-shadow(0 0 3px rgba(255,255,255,.4)) drop-shadow(0 0 6px rgba(224,108,117,.25));
 }
 /* Headings */
 h1,h2,h3{
-  text-shadow:0 0 3px rgba(255,255,255,.25),0 0 8px rgba(167,139,250,.18);
+  text-shadow:0 0 3px rgba(255,255,255,.25),0 0 8px rgba(224,108,117,.18);
 }
 /* Buttons — very subtle, don't overpower */
 .btn-primary,.btn-gold,.btn-render-big,.btn-render-local,.btn-random{
@@ -176,9 +183,9 @@ textarea,input,select{ text-shadow:none!important; }
 /* Random button */
 .btn-random{
   padding:5px 12px;border-radius:6px;font-size:.68rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
-  background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:var(--purple2);cursor:pointer;transition:all .18s;font-family:inherit;
+  background:rgba(224,108,117,.15);border:1px solid rgba(224,108,117,.4);color:var(--purple2);cursor:pointer;transition:all .18s;font-family:inherit;
 }
-.btn-random:hover{background:rgba(124,58,237,.3);border-color:var(--purple2);transform:scale(1.04)}
+.btn-random:hover{background:rgba(224,108,117,.3);border-color:var(--purple2);transform:scale(1.04)}
 .btn-random:active{transform:scale(.97)}
 
 /* Primary button */
@@ -186,9 +193,9 @@ textarea,input,select{ text-shadow:none!important; }
   padding:14px 28px;border-radius:var(--r2);font-size:.9rem;font-weight:700;letter-spacing:.5px;
   background:linear-gradient(135deg,var(--purple) 0%,var(--purple2) 100%);
   border:none;color:#fff;cursor:pointer;transition:all .2s;font-family:inherit;
-  box-shadow:0 4px 24px rgba(124,58,237,.35);
+  box-shadow:0 4px 24px rgba(224,108,117,.35);
 }
-.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(124,58,237,.5)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(224,108,117,.5)}
 .btn-primary:active{transform:translateY(0)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
@@ -197,9 +204,9 @@ textarea,input,select{ text-shadow:none!important; }
   padding:14px 28px;border-radius:var(--r2);font-size:.9rem;font-weight:700;
   background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 100%);
   border:none;color:#100a00;cursor:pointer;transition:all .2s;font-family:inherit;
-  box-shadow:0 4px 24px rgba(201,162,39,.3);
+  box-shadow:0 4px 24px rgba(209,154,102,.3);
 }
-.btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(201,162,39,.5)}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(209,154,102,.5)}
 .btn-gold:active{transform:translateY(0)}
 
 .subject-grid{display:flex;flex-wrap:wrap;gap:8px}
@@ -209,23 +216,23 @@ textarea,input,select{ text-shadow:none!important; }
   cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
 }
 .subject-chip:hover{border-color:var(--purple);color:var(--text)}
-.subject-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.2)}
+.subject-chip.active{background:rgba(224,108,117,.2);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 8px rgba(224,108,117,.2)}
 /* Trend Vault subject grid */
 
 /* AI-generated category chips (niche idea flow) */
 .ai-cat-grid{display:flex;flex-wrap:wrap;gap:7px}
 .ai-category-chip{
   padding:6px 13px;border-radius:20px;font-size:.74rem;font-weight:600;
-  background:rgba(20,14,46,.7);border:1px solid rgba(124,58,237,.28);color:rgba(212,203,236,.85);
+  background:rgba(33,37,43,.7);border:1px solid rgba(224,108,117,.28);color:rgba(212,203,236,.85);
   cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
 }
-.ai-category-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(124,58,237,.18)}
+.ai-category-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(224,108,117,.18)}
 .ai-category-chip.active{
-  background:rgba(124,58,237,.28);border-color:var(--purple2);color:var(--purple2);
-  box-shadow:0 0 10px rgba(124,58,237,.28);font-weight:700;
+  background:rgba(224,108,117,.28);border-color:var(--purple2);color:var(--purple2);
+  box-shadow:0 0 10px rgba(224,108,117,.28);font-weight:700;
 }
 /* Haiku badge */
-.haiku-badge{font-size:.57rem;color:rgba(167,139,250,.55);letter-spacing:.8px;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px}
+.haiku-badge{font-size:.57rem;color:rgba(224,108,117,.55);letter-spacing:.8px;text-transform:uppercase;display:inline-flex;align-items:center;gap:3px}
 
 /* Category selector */
 .cat-grid{display:flex;flex-wrap:wrap;gap:8px}
@@ -235,31 +242,31 @@ textarea,input,select{ text-shadow:none!important; }
   cursor:pointer;transition:all .18s;font-family:inherit;white-space:nowrap;
 }
 .cat-chip:hover{border-color:var(--purple);color:var(--text)}
-.cat-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
-.cat-chip.niche-match{border-color:rgba(245,158,11,.55);box-shadow:0 0 0 1px rgba(245,158,11,.25) inset;color:#fcd34d}
-.cat-chip.niche-match.active{background:rgba(245,158,11,.16);color:#fde68a}
+.cat-chip.active{background:rgba(224,108,117,.2);border-color:var(--purple2);color:var(--purple2)}
+.cat-chip.niche-match{border-color:rgba(209,154,102,.55);box-shadow:0 0 0 1px rgba(209,154,102,.25) inset;color:#fcd34d}
+.cat-chip.niche-match.active{background:rgba(209,154,102,.16);color:#fde68a}
 
 /* Trending topic chips (inside 🎭 Category section) */
 .trending-topic-chip{
   padding:7px 13px;border-radius:20px;font-size:.74rem;font-weight:600;
-  background:rgba(20,14,46,.7);border:1px solid rgba(124,58,237,.28);
+  background:rgba(33,37,43,.7);border:1px solid rgba(224,108,117,.28);
   color:rgba(212,203,236,.85);cursor:pointer;transition:all .18s;
   font-family:inherit;white-space:normal;text-align:left;line-height:1.35;
 }
-.trending-topic-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(124,58,237,.18);box-shadow:0 0 8px rgba(124,58,237,.2)}
-.trending-topic-chip.active{background:rgba(124,58,237,.28);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 12px rgba(124,58,237,.32);font-weight:700}
+.trending-topic-chip:hover{border-color:var(--purple2);color:var(--text);background:rgba(224,108,117,.18);box-shadow:0 0 8px rgba(224,108,117,.2)}
+.trending-topic-chip.active{background:rgba(224,108,117,.28);border-color:var(--purple2);color:var(--purple2);box-shadow:0 0 12px rgba(224,108,117,.32);font-weight:700}
 /* ── Chip save icon ── */
 .chip-save-btn{display:inline-flex;align-items:center;justify-content:center;margin-left:5px;padding:0 3px;font-size:.65rem;opacity:.45;transition:opacity .15s,color .15s;line-height:1;cursor:pointer;border:none;background:none;color:inherit;vertical-align:middle}
 .chip-save-btn:hover{opacity:1;color:#86efac}
 /* ── Saved Vault Panel ── */
-#savedVaultPanel{background:rgba(15,10,30,.97);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:14px 14px 10px;margin-bottom:12px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+#savedVaultPanel{background:rgba(27,30,36,.97);border:1px solid rgba(224,108,117,.35);border-radius:10px;padding:14px 14px 10px;margin-bottom:12px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
 .sv-filter-row{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
 .sv-filter-btn{padding:4px 10px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.63rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;transition:all .15s}
-.sv-filter-btn.active,.sv-filter-btn:hover{background:rgba(124,58,237,.25);border-color:var(--purple2);color:var(--purple2)}
-.sv-item{background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:8px;padding:9px 11px;margin-bottom:7px;display:flex;flex-direction:column;gap:4px}
+.sv-filter-btn.active,.sv-filter-btn:hover{background:rgba(224,108,117,.25);border-color:var(--purple2);color:var(--purple2)}
+.sv-item{background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.18);border-radius:8px;padding:9px 11px;margin-bottom:7px;display:flex;flex-direction:column;gap:4px}
 .sv-item-title{font-size:.72rem;color:var(--text2);font-weight:600;word-break:break-word}
 .sv-item-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.sv-type-badge{font-size:.57rem;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.35);border-radius:4px;color:var(--purple2);padding:1px 5px;font-weight:700;letter-spacing:.5px}
+.sv-type-badge{font-size:.57rem;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.35);border-radius:4px;color:var(--purple2);padding:1px 5px;font-weight:700;letter-spacing:.5px}
 .sv-context{font-size:.58rem;color:var(--muted);letter-spacing:.2px}
 .sv-item-actions{display:flex;gap:6px;margin-top:2px}
 .sv-apply-btn{padding:3px 9px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);border-radius:5px;color:#86efac;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
@@ -272,8 +279,8 @@ textarea,input,select{ text-shadow:none!important; }
 .btn-save-vault{padding:5px 11px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:7px;color:#86efac;font-size:.67rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.3px;white-space:nowrap;transition:all .2s}
 .btn-save-vault:hover{background:rgba(34,197,94,.2);border-color:#86efac;transform:scale(1.03)}
 .btn-gen-topics{
-  padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));
-  border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;
+  padding:6px 14px;background:linear-gradient(135deg,rgba(224,108,117,.5),rgba(224,108,117,.35));
+  border:1px solid rgba(224,108,117,.65);border-radius:7px;color:#9cdef2;
   font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;
   letter-spacing:.5px;white-space:nowrap;transition:all .2s;
 }
@@ -296,15 +303,15 @@ textarea,input,select{ text-shadow:none!important; }
 .prompt-list::-webkit-scrollbar-track{background:transparent}
 .prompt-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
 .prompt-item{padding:12px 14px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .18s}
-.prompt-item:hover{border-color:var(--purple);background:rgba(124,58,237,.08)}
-.prompt-item.active{border-color:var(--purple2);background:rgba(124,58,237,.15)}
+.prompt-item:hover{border-color:var(--purple);background:rgba(224,108,117,.08)}
+.prompt-item.active{border-color:var(--purple2);background:rgba(224,108,117,.15)}
 .prompt-item .pi-text{font-size:.82rem;font-weight:600;color:var(--text);margin-bottom:4px}
 .prompt-item .pi-cat{font-size:.65rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
 
 /* Script textarea */
 .script-area{
   width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);
-  color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:.85rem;line-height:1.7;
+  color:var(--text);font-family:var(--font-mono);font-size:.85rem;line-height:1.7;
   padding:16px;resize:vertical;min-height:200px;outline:none;transition:border-color .2s;
 }
 .script-area:focus{border-color:var(--purple2)}
@@ -313,15 +320,15 @@ textarea,input,select{ text-shadow:none!important; }
 .script-lines{display:flex;flex-direction:column;gap:8px}
 .script-line-row{display:flex;gap:8px;align-items:flex-start}
 .line-type-badge{flex-shrink:0;padding:4px 8px;border-radius:6px;font-size:.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-top:10px}
-.lt-hook{background:rgba(201,162,39,.2);color:var(--gold2);border:1px solid rgba(201,162,39,.3)}
-.lt-observation{background:rgba(124,58,237,.2);color:var(--purple2);border:1px solid rgba(124,58,237,.3)}
+.lt-hook{background:rgba(209,154,102,.2);color:var(--gold2);border:1px solid rgba(209,154,102,.3)}
+.lt-observation{background:rgba(224,108,117,.2);color:var(--purple2);border:1px solid rgba(224,108,117,.3)}
 .lt-escalation{background:rgba(229,62,62,.15);color:#fc8181;border:1px solid rgba(229,62,62,.3)}
 .lt-truth{background:rgba(46,204,113,.15);color:#68d391;border:1px solid rgba(46,204,113,.3)}
 .lt-twist{background:rgba(255,107,107,.15);color:#feb2b2;border:1px solid rgba(255,107,107,.3)}
 .lt-ending{background:rgba(99,179,237,.15);color:#90cdf4;border:1px solid rgba(99,179,237,.3)}
 .line-text-input{
   flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:.82rem;line-height:1.5;
+  color:var(--text);font-family:var(--font-mono);font-size:.82rem;line-height:1.5;
   padding:9px 12px;resize:none;outline:none;transition:border-color .2s;min-height:52px;
 }
 .line-text-input:focus{border-color:var(--purple2)}
@@ -331,39 +338,39 @@ textarea,input,select{ text-shadow:none!important; }
 .line-del{flex-shrink:0;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:8px;border-radius:6px;transition:all .15s;margin-top:6px}
 .line-del:hover{color:var(--red);background:rgba(229,62,62,.1)}
 .add-line-btn{padding:8px 16px;background:var(--surface2);border:1px dashed var(--border2);border-radius:8px;color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .18s;font-family:inherit;text-align:center}
-.add-line-btn:hover{border-color:var(--purple);color:var(--purple2);background:rgba(124,58,237,.06)}
+.add-line-btn:hover{border-color:var(--purple);color:var(--purple2);background:rgba(224,108,117,.06)}
 
 /* Text formatting buttons */
 .fmt-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);padding:6px 11px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s;min-width:36px}
 .fmt-btn:hover{border-color:var(--purple);color:var(--purple2)}
-.fmt-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple);color:var(--purple2);box-shadow:0 0 8px rgba(124,58,237,.3)}
+.fmt-btn.active{background:rgba(224,108,117,.2);border-color:var(--purple);color:var(--purple2);box-shadow:0 0 8px rgba(224,108,117,.3)}
 
 /* Voice preset grid */
 .preset-grid{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
 .preset-card{
-  padding:9px 12px;border-radius:9px;background:#0b0b12!important;border:none;
+  padding:9px 12px;border-radius:9px;background:#21252b!important;border:none;
   cursor:pointer;transition:all .18s;text-align:left;position:relative;isolation:isolate;
   display:flex;flex-direction:row;align-items:center;gap:10px;
   overflow:hidden;}
 /* Preset cards — same mask technique, thinner 1.5px rim */
-.preset-card::before{content:'';position:absolute;inset:0;padding:1px;border-radius:9px;background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2}
+.preset-card::before{content:'';position:absolute;inset:0;border-radius:9px;border:1px solid var(--border);pointer-events:none;z-index:2}
 .preset-card::after{display:none}
 .preset-card:hover{transform:translateY(-1px)}
 .preset-card:hover::after{opacity:.3;filter:blur(12px)}
 .preset-card.active{
-  background:rgba(124,58,237,.18)!important;
-  box-shadow:inset 3px 0 0 var(--purple),0 0 0 1px rgba(124,58,237,.35);
+  background:rgba(224,108,117,.18)!important;
+  box-shadow:inset 3px 0 0 var(--purple),0 0 0 1px rgba(224,108,117,.35);
 }
 .preset-card.active .preset-name{color:var(--purple2)}
-.preset-card.active .preset-icon{filter:drop-shadow(0 0 4px rgba(168,85,247,.7))}
+.preset-card.active .preset-icon{filter:drop-shadow(0 0 4px rgba(224,108,117,.7))}
 .preset-card.active .preset-test-btn{
-  background:rgba(124,58,237,.4);border-color:rgba(124,58,237,.7);
+  background:rgba(224,108,117,.4);border-color:rgba(224,108,117,.7);
 }
 .preset-card.active::after{opacity:.35;filter:blur(12px)}
 .preset-selected-dot{
   display:none;width:8px;height:8px;border-radius:50%;
   background:var(--purple);flex-shrink:0;
-  box-shadow:0 0 6px rgba(168,85,247,.8);
+  box-shadow:0 0 6px rgba(224,108,117,.8);
 }
 .preset-card.active .preset-selected-dot{display:block}
 .preset-del-btn{
@@ -379,12 +386,12 @@ textarea,input,select{ text-shadow:none!important; }
 .preset-name{font-size:.74rem;font-weight:700;color:var(--text);margin-bottom:1px;line-height:1.25;white-space:normal;word-break:break-word}
 .preset-desc{font-size:.58rem;color:var(--muted);letter-spacing:.2px;line-height:1.3;word-break:break-word}
 .preset-test-btn{
-  padding:4px 9px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);
+  padding:4px 9px;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.3);
   border-radius:6px;color:var(--purple2);font-size:.58rem;font-weight:700;cursor:pointer;
   transition:all .15s;font-family:inherit;letter-spacing:.4px;text-transform:uppercase;
   flex-shrink:0;white-space:nowrap;
 }
-.preset-test-btn:hover{background:rgba(124,58,237,.4)}
+.preset-test-btn:hover{background:rgba(224,108,117,.4)}
 /* Voice sliders section */
 .voice-sliders{display:flex;flex-direction:column;gap:10px;padding:14px;background:rgba(0,0,0,.2);border-radius:10px;border:1px solid rgba(255,255,255,.05);margin-bottom:12px}
 .voice-slider-row{display:flex;align-items:center;gap:10px}
@@ -398,7 +405,7 @@ textarea,input,select{ text-shadow:none!important; }
   cursor:pointer;transition:all .2s;position:relative;background:var(--surface3);
 }
 .bg-thumb:hover{border-color:var(--purple);transform:scale(1.03)}
-.bg-thumb.active{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,162,39,.3)}
+.bg-thumb.active{border-color:var(--gold);box-shadow:0 0 0 2px rgba(209,154,102,.3)}
 .bg-thumb video,.bg-thumb img{width:100%;height:100%;object-fit:cover}
 .bg-thumb .bg-label{position:absolute;bottom:0;left:0;right:0;padding:6px 8px;background:linear-gradient(to top,rgba(0,0,0,.9),transparent);font-size:.6rem;font-weight:700;color:#fff;letter-spacing:.5px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .bg-thumb .bg-del{position:absolute;top:6px;right:6px;background:rgba(229,62,62,.8);border:none;border-radius:50%;width:22px;height:22px;color:#fff;font-size:.75rem;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
@@ -410,7 +417,7 @@ textarea,input,select{ text-shadow:none!important; }
   border:2px dashed var(--border2);border-radius:var(--r2);padding:20px;text-align:center;
   cursor:pointer;transition:all .2s;position:relative;
 }
-.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(124,58,237,.05)}
+.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(224,108,117,.05)}
 .upload-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .upload-drop .ud-icon{font-size:1.5rem;margin-bottom:6px}
 .upload-drop .ud-text{font-size:.78rem;color:var(--muted)}
@@ -443,7 +450,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
 /* Select dropdowns */
 select{
   width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:.82rem;padding:10px 14px;
+  color:var(--text);font-family:var(--font-mono);font-size:.82rem;padding:10px 14px;
   outline:none;cursor:pointer;transition:border-color .2s;-webkit-appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b5d8a' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:calc(100% - 12px) center;padding-right:32px;
@@ -464,18 +471,18 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 
 /* Music / audio rows */
 .audio-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
-.audio-item.active{border-color:var(--purple2);background:rgba(124,58,237,.1)}
+.audio-item.active{border-color:var(--purple2);background:rgba(224,108,117,.1)}
 .audio-name{flex:1;font-size:.8rem;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .audio-play-btn{background:none;border:none;color:var(--purple2);cursor:pointer;font-size:1rem;padding:4px;transition:transform .15s}
 .audio-play-btn:hover{transform:scale(1.2)}
-.audio-select-btn{padding:4px 10px;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.3);border-radius:6px;color:var(--purple2);font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit}
-.audio-select-btn.active{background:rgba(124,58,237,.3);border-color:var(--purple2)}
+.audio-select-btn{padding:4px 10px;background:rgba(224,108,117,.15);border:1px solid rgba(224,108,117,.3);border-radius:6px;color:var(--purple2);font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit}
+.audio-select-btn.active{background:rgba(224,108,117,.3);border-color:var(--purple2)}
 .audio-delete-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px;transition:color .15s,transform .15s;line-height:1}
 .audio-delete-btn:hover{color:#ef4444;transform:scale(1.2)}
 .audio-check-btn{background:none;border:1px solid var(--border);border-radius:4px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--muted);cursor:pointer;padding:0;flex-shrink:0;transition:all .12s;font-family:inherit;line-height:1}
 .audio-check-btn:hover{border-color:var(--purple2);color:var(--purple2)}
-.audio-check-btn.checked{background:rgba(124,58,237,.3);border-color:var(--purple2);color:#fff}
-.audio-item.selected-for-bulk{border-color:rgba(124,58,237,.55);background:rgba(124,58,237,.08)}
+.audio-check-btn.checked{background:rgba(224,108,117,.3);border-color:var(--purple2);color:#fff}
+.audio-item.selected-for-bulk{border-color:rgba(224,108,117,.55);background:rgba(224,108,117,.08)}
 
 /* Tone chips */
 .tone-grid{display:flex;flex-wrap:wrap;gap:6px}
@@ -485,7 +492,7 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
   cursor:pointer;transition:all .18s;font-family:inherit;
 }
 .tone-chip:hover{border-color:var(--purple);color:var(--text)}
-.tone-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
+.tone-chip.active{background:rgba(224,108,117,.2);border-color:var(--purple2);color:var(--purple2)}
 
 /* Action bar */
 .action-bar{
@@ -553,43 +560,43 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .cin-presets-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
 .cin-presets-scroll::-webkit-scrollbar{height:4px}
 .cin-presets-scroll::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:2px}
-.cin-presets-scroll::-webkit-scrollbar-thumb{background:rgba(124,58,237,.5);border-radius:2px}
+.cin-presets-scroll::-webkit-scrollbar-thumb{background:rgba(224,108,117,.5);border-radius:2px}
 .cin-preset-card{
   flex-shrink:0;width:96px;border-radius:10px;border:1px solid var(--border);padding:10px 8px;
   cursor:pointer;transition:all .18s;text-align:center;scroll-snap-align:start;
   background:var(--surface2);display:flex;flex-direction:column;align-items:center;gap:5px;
 }
-.cin-preset-card:hover{border-color:var(--purple);background:rgba(124,58,237,.12)}
-.cin-preset-card.active{border-color:var(--purple);background:rgba(124,58,237,.22);box-shadow:0 0 0 1px var(--purple)}
+.cin-preset-card:hover{border-color:var(--purple);background:rgba(224,108,117,.12)}
+.cin-preset-card.active{border-color:var(--purple);background:rgba(224,108,117,.22);box-shadow:0 0 0 1px var(--purple)}
 .cin-preset-icon{font-size:1.5rem;line-height:1}
 .cin-preset-name{font-size:.6rem;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);line-height:1.2}
 .cin-preset-card.active .cin-preset-name{color:var(--purple2)}
 
 /* ── VFX Tabs ── */
 .vfx-tabs{display:flex;gap:6px;margin-bottom:14px}
-.vfx-tab-btn{flex:1;padding:7px 10px;border-radius:8px;font-size:.63rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'Orbitron',sans-serif;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--muted);transition:all .2s}
-.vfx-tab-btn.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
-.vfx-tab-btn:hover:not(.active){border-color:rgba(124,58,237,.35);color:var(--text2)}
+.vfx-tab-btn{flex:1;padding:7px 10px;border-radius:8px;font-size:.63rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--font-mono);cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:var(--muted);transition:all .2s}
+.vfx-tab-btn.active{background:rgba(224,108,117,.2);border-color:var(--purple2);color:var(--purple2)}
+.vfx-tab-btn:hover:not(.active){border-color:rgba(224,108,117,.35);color:var(--text2)}
 /* Fish Manager tab buttons */
-.fm-tab-btn{padding:7px 10px;border-radius:7px;font-size:.66rem;font-weight:700;letter-spacing:.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer;background:transparent;border:1px solid transparent;color:var(--muted);transition:all .18s}
+.fm-tab-btn{padding:7px 10px;border-radius:7px;font-size:.66rem;font-weight:700;letter-spacing:.5px;font-family:var(--font-mono);cursor:pointer;background:transparent;border:1px solid transparent;color:var(--muted);transition:all .18s}
 .fm-tab-btn:hover:not(.fm-tab-active){background:rgba(0,180,120,.08);border-color:rgba(0,180,120,.25);color:#6ee7b7}
 .fm-tab-btn.fm-tab-active{background:rgba(0,180,120,.18);border-color:rgba(0,200,140,.5);color:#6ee7b7;font-weight:800}
 /* ── VFX Save dialog ── */
-.vfx-save-dialog{background:rgba(13,8,32,.97);border:1px solid rgba(124,58,237,.4);border-radius:11px;padding:13px;margin-bottom:14px;display:none}
+.vfx-save-dialog{background:rgba(27,30,36,.97);border:1px solid rgba(224,108,117,.4);border-radius:11px;padding:13px;margin-bottom:14px;display:none}
 .vfx-save-dialog.open{display:block}
-.vfx-save-input{width:100%;background:#11111a;border:1px solid rgba(167,139,250,.35);border-radius:8px;color:var(--text);font-size:.8rem;padding:8px 11px;font-family:'Space Grotesk',sans-serif;outline:none;margin-bottom:9px;box-sizing:border-box}
-.vfx-save-input:focus{border-color:rgba(167,139,250,.7);box-shadow:0 0 0 2px rgba(124,58,237,.12)}
+.vfx-save-input{width:100%;background:#21252b;border:1px solid rgba(224,108,117,.35);border-radius:8px;color:var(--text);font-size:.8rem;padding:8px 11px;font-family:var(--font-mono);outline:none;margin-bottom:9px;box-sizing:border-box}
+.vfx-save-input:focus{border-color:rgba(224,108,117,.7);box-shadow:0 0 0 2px rgba(224,108,117,.12)}
 .vfx-save-btns{display:flex;gap:7px}
 /* ── Saved VFX preset list ── */
 .vfx-preset-list{display:flex;flex-direction:column;gap:7px;max-height:500px;overflow-y:auto;padding-right:2px}
 .vfx-preset-empty{color:var(--muted);font-size:.73rem;padding:28px 0;text-align:center;line-height:1.65}
-.vfx-preset-item{display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.18);border-radius:10px;transition:border-color .2s}
-.vfx-preset-item:hover{border-color:rgba(124,58,237,.38)}
+.vfx-preset-item{display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.18);border-radius:10px;transition:border-color .2s}
+.vfx-preset-item:hover{border-color:rgba(224,108,117,.38)}
 .vfx-preset-info{flex:1;min-width:0}
 .vfx-preset-name{font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vfx-preset-meta{font-size:.61rem;color:var(--muted);letter-spacing:.2px}
-.vfx-preset-apply{padding:5px 12px;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.5);color:var(--purple2);font-family:inherit;transition:all .15s;flex-shrink:0}
-.vfx-preset-apply:hover{background:rgba(124,58,237,.38);border-color:var(--purple2)}
+.vfx-preset-apply{padding:5px 12px;border-radius:7px;font-size:.68rem;font-weight:700;cursor:pointer;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.5);color:var(--purple2);font-family:inherit;transition:all .15s;flex-shrink:0}
+.vfx-preset-apply:hover{background:rgba(224,108,117,.38);border-color:var(--purple2)}
 .vfx-preset-del{padding:5px 9px;border-radius:7px;font-size:.76rem;cursor:pointer;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:rgba(239,68,68,.6);transition:all .15s;line-height:1;flex-shrink:0}
 .vfx-preset-del:hover{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.6);color:var(--red2)}
 
@@ -628,21 +635,21 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
   width:min(94vw,1140px);max-height:88vh;
   background:var(--surface);border:1px solid var(--border2);border-radius:20px;
   display:flex;flex-direction:column;overflow:hidden;
-  box-shadow:0 32px 80px rgba(0,0,0,.75),0 0 0 1px rgba(155,89,182,.15);
+  box-shadow:0 32px 80px rgba(0,0,0,.75),0 0 0 1px rgba(224,108,117,.15);
 }
 .stock-header{
   display:flex;align-items:center;gap:14px;
   padding:16px 22px;border-bottom:1px solid var(--border);
   background:var(--surface2);flex-shrink:0;
 }
-.stock-title{font-family:'Cinzel',serif;font-size:.95rem;font-weight:800;
+.stock-title{font-family:var(--font-mono);font-size:.95rem;font-weight:800;
   background:linear-gradient(135deg,var(--purple2),var(--gold));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
   white-space:nowrap}
 .stock-tabs-row{display:flex;gap:6px;margin-left:auto}
 .stock-tab{padding:7px 20px;border-radius:8px;font-size:.73rem;font-weight:700;letter-spacing:.5px;
   border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .18s;font-family:inherit}
-.stock-tab.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)}
+.stock-tab.active{background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)}
 .stock-tab:hover:not(.active){border-color:var(--border2);color:var(--text)}
 .stock-close-btn{width:30px;height:30px;border-radius:50%;border:1px solid var(--border);
   background:var(--surface3);color:var(--text2);cursor:pointer;font-size:.75rem;
@@ -659,7 +666,7 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .stock-chips-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
 .stock-chip{padding:5px 13px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);
   color:var(--text2);font-size:.68rem;cursor:pointer;transition:all .18s;font-weight:600;font-family:inherit}
-.stock-chip:hover,.stock-chip.active{border-color:var(--purple);color:var(--purple2);background:rgba(124,58,237,.12)}
+.stock-chip:hover,.stock-chip.active{border-color:var(--purple);color:var(--purple2);background:rgba(224,108,117,.12)}
 
 /* Video grid */
 .stock-video-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
@@ -699,11 +706,11 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .stock-ainfo-meta{font-size:.61rem;color:var(--muted);margin-top:2px}
 .stock-aactions{display:flex;gap:8px;flex-shrink:0;align-items:center}
 .stock-prev-btn{width:30px;height:30px;border-radius:50%;
-  background:rgba(124,58,237,.15);border:1px solid var(--purple);
+  background:rgba(224,108,117,.15);border:1px solid var(--purple);
   color:var(--purple2);cursor:pointer;font-size:.7rem;
   display:flex;align-items:center;justify-content:center;transition:all .18s}
-.stock-prev-btn:hover{background:rgba(124,58,237,.35)}
-.stock-prev-btn.playing{background:rgba(124,58,237,.4);color:#fff}
+.stock-prev-btn:hover{background:rgba(224,108,117,.35)}
+.stock-prev-btn.playing{background:rgba(224,108,117,.4);color:#fff}
 
 /* Shared use button */
 .stock-use-btn{padding:5px 12px;border-radius:7px;background:var(--gold);border:none;
@@ -741,7 +748,7 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .preview-controls{display:flex;flex-direction:column;gap:8px}
 .preview-label{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-align:center}
 #timelineSlider{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;outline:none;cursor:pointer}
-#timelineSlider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold2);cursor:pointer;box-shadow:0 2px 6px rgba(201,162,39,.5)}
+#timelineSlider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold2);cursor:pointer;box-shadow:0 2px 6px rgba(209,154,102,.5)}
 .preview-script-nav{display:flex;align-items:center;gap:8px;justify-content:center}
 .preview-nav-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.75rem;transition:all .15s}
 .preview-nav-btn:hover{border-color:var(--purple);color:var(--purple2)}
@@ -752,7 +759,7 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 .render-progress.show{display:block}
 .render-bar-wrap{background:var(--surface3);border-radius:20px;height:6px;margin:10px 0;overflow:hidden}
 .render-bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple2));border-radius:20px;transition:width .3s;width:0%}
-.render-log{font-size:.72rem;color:var(--muted);font-family:'Space Grotesk',sans-serif;max-height:120px;overflow-y:auto;line-height:1.5;margin-top:8px}
+.render-log{font-size:.72rem;color:var(--muted);font-family:var(--font-mono);max-height:120px;overflow-y:auto;line-height:1.5;margin-top:8px}
 .render-log::-webkit-scrollbar{width:3px}
 .render-log::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
@@ -764,7 +771,7 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
   text-align:center;font-family:inherit;
 }
 .effect-chip:hover{border-color:var(--purple);color:var(--text)}
-.effect-chip.active{background:rgba(124,58,237,.2);border-color:var(--purple2);color:var(--purple2)}
+.effect-chip.active{background:rgba(224,108,117,.2);border-color:var(--purple2);color:var(--purple2)}
 
 /* Fish rate buttons */
 .fish-rate-btn{padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:.6rem;font-family:inherit;transition:all .15s}
@@ -816,13 +823,13 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 /* ── Render select mode ── */
 .oc-chk{position:absolute;top:7px;left:7px;width:20px;height:20px;border-radius:5px;border:2px solid rgba(255,255,255,.7);background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;font-size:.8rem;color:#fff;z-index:3;pointer-events:none;transition:all .15s}
 .output-gallery.select-mode .oc-chk{display:flex}
-.output-card.oc-selected .oc-chk{background:var(--purple);border-color:var(--purple2);box-shadow:0 0 6px rgba(124,58,237,.6)}
-.output-card.oc-selected{border-color:var(--purple2)!important;box-shadow:0 0 0 2px rgba(124,58,237,.35)!important;transform:none!important}
+.output-card.oc-selected .oc-chk{background:var(--purple);border-color:var(--purple2);box-shadow:0 0 6px rgba(224,108,117,.6)}
+.output-card.oc-selected{border-color:var(--purple2)!important;box-shadow:0 0 0 2px rgba(224,108,117,.35)!important;transform:none!important}
 .output-card.oc-selected video{opacity:.65}
 .output-gallery.select-mode .output-card:hover{transform:scale(1.02)}
 
 /* Floating help badge */
-.help-fab{position:fixed;bottom:90px;right:24px;z-index:98;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(124,58,237,.4);transition:transform .15s}
+.help-fab{position:fixed;bottom:90px;right:24px;z-index:98;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(224,108,117,.4);transition:transform .15s}
 .help-fab:hover{transform:scale(1.1)}
 
 @media(max-width:1100px){
@@ -833,11 +840,11 @@ input[type=color]{width:36px;height:36px;border:2px solid var(--border);border-r
 /* Dark text inputs — no gradient bleed */
 textarea,input[type=text],input[type=number],input[type=email],input[type=password],
 .script-area,.line-text-input,.line-dur{
-  background:#11111a!important;background-image:none!important;
-  color:#f4f4ff!important;border:1px solid rgba(168,85,247,.3)!important;
+  background:#21252b!important;background-image:none!important;
+  color:#f4f4ff!important;border:1px solid rgba(224,108,117,.3)!important;
 }
 textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
-  border-color:rgba(168,85,247,.7)!important;outline:none;
+  border-color:rgba(224,108,117,.7)!important;outline:none;
 }
 
 /* Fine print / small text — brighter and readable */
@@ -906,7 +913,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   <!-- 1. Trend Vault Subject -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title"><img src="/vault-icon.svg" width="18" height="18" style="vertical-align:middle;margin-right:2px;filter:drop-shadow(0 0 4px rgba(168,85,247,.5))"> Trend Vault</div>
+      <div class="card-title"><img src="/vault-icon.svg" width="18" height="18" style="vertical-align:middle;margin-right:2px;filter:drop-shadow(0 0 4px rgba(224,108,117,.5))"> Trend Vault</div>
       <div style="display:flex;gap:6px;align-items:center">
         <button class="btn-random" id="savedVaultBtn" onclick="toggleSavedVaultPanel()" title="View saved niches, categories and topics" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">💾 Saved</button>
         <button class="btn-random" onclick="randomNiche(event)" title="Pick a random niche. Hold Shift to also generate categories immediately.">⚡ RANDOM</button>
@@ -929,7 +936,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     </div>
 
     <!-- ── Niche Idea Builder ── -->
-    <div style="margin-bottom:12px;padding:12px 14px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.22);border-radius:10px">
+    <div style="margin-bottom:12px;padding:12px 14px;background:rgba(224,108,117,.07);border:1px solid rgba(224,108,117,.22);border-radius:10px">
       <div style="font-size:.65rem;color:var(--purple2);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">🧠 Niche Idea Builder</div>
 
       <!-- Niche input + Generate Ideas button -->
@@ -940,7 +947,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
           onkeydown="if(event.key==='Enter')nicheTrendGenerate()"
           style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text2);font-size:.72rem;padding:6px 10px;font-family:inherit;outline:none"/>
         <button onclick="nicheTrendGenerate()" id="generateIdeasBtn"
-          style="padding:6px 14px;background:linear-gradient(135deg,rgba(124,58,237,.5),rgba(168,85,247,.35));border:1px solid rgba(124,58,237,.65);border-radius:7px;color:#e9d5ff;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
+          style="padding:6px 14px;background:linear-gradient(135deg,rgba(224,108,117,.5),rgba(224,108,117,.35));border:1px solid rgba(224,108,117,.65);border-radius:7px;color:#9cdef2;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;white-space:nowrap;transition:all .2s">
           ⚡ Generate Ideas
         </button>
         <button class="btn-save-vault" onclick="saveCurrentNiche()" title="Save this niche to your Saved Vault">💾 Save Niche</button>
@@ -1017,13 +1024,13 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     </div>
     <!-- Tabs: All Prompts | ❤️ Saved -->
     <div style="display:flex;gap:6px;margin-bottom:8px">
-      <button class="prompt-tab-btn active" id="ptabAll" onclick="showPromptTab('all')" style="flex:1;padding:5px;background:rgba(124,58,237,.15);border:1px solid var(--purple);border-radius:7px;color:var(--purple2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">All Prompts</button>
+      <button class="prompt-tab-btn active" id="ptabAll" onclick="showPromptTab('all')" style="flex:1;padding:5px;background:rgba(224,108,117,.15);border:1px solid var(--purple);border-radius:7px;color:var(--purple2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">All Prompts</button>
       <button class="prompt-tab-btn" id="ptabSaved" onclick="showPromptTab('saved')" style="flex:1;padding:5px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">❤️ Saved</button>
     </div>
     <ul class="prompt-list" id="promptList"></ul>
     <ul class="prompt-list" id="promptListSaved" style="display:none"></ul>
     <!-- Fresh AI prompts area -->
-    <div id="freshPromptsArea" style="display:none;margin-top:10px;padding:10px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:10px">
+    <div id="freshPromptsArea" style="display:none;margin-top:10px;padding:10px;background:rgba(224,108,117,.07);border:1px solid rgba(224,108,117,.2);border-radius:10px">
       <div style="font-size:.7rem;color:var(--purple2);font-weight:700;margin-bottom:6px">✨ AI-Generated Prompts (click to select · use buttons to apply)</div>
       <ul class="prompt-list" id="freshPromptList"></ul>
     </div>
@@ -1053,7 +1060,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 
       <div style="display:flex;gap:5px;flex-wrap:wrap">
         <button id="applyAIBtn" onclick="applyAIToPrompt()" title="AI builds on your current prompt without replacing your original idea"
-                style="flex:1;min-width:110px;background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(245,158,11,.18));border:1px solid rgba(124,58,237,.5);color:#e9d5ff;border-radius:7px;padding:7px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">
+                style="flex:1;min-width:110px;background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.18));border:1px solid rgba(224,108,117,.5);color:#9cdef2;border-radius:7px;padding:7px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">
           ✨ Apply AI
         </button>
         <button onclick="promptSetAsNewOriginal()" title="Save the current prompt as the new original"
@@ -1082,7 +1089,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn-random" onclick="generateScript()" id="generateBtn">✨ AI GENERATE</button>
         <button class="btn-random" onclick="regenerateScript()" id="regenScriptBtn" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:#86efac" title="Reframe & clean up the script">♻ REFRAME</button>
-        <button class="btn-random" onclick="addScriptLine()" style="background:rgba(201,162,39,.1);border-color:rgba(201,162,39,.3);color:var(--gold2)">+ LINE</button>
+        <button class="btn-random" onclick="addScriptLine()" style="background:rgba(209,154,102,.1);border-color:rgba(209,154,102,.3);color:var(--gold2)">+ LINE</button>
       </div>
     </div>
     <div id="scriptStatus" style="font-size:.75rem;color:var(--muted);margin-bottom:10px;min-height:18px"></div>
@@ -1105,7 +1112,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div class="card-header">
       <div class="card-title"><span class="ti">🎙️</span> Voice Preset</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn-random" onclick="revertVoice()" id="revertVoiceBtn" title="Revert to previous voice" style="background:rgba(201,162,39,.08);border-color:rgba(201,162,39,.25);color:var(--gold2);display:none">↩ REVERT</button>
+        <button class="btn-random" onclick="revertVoice()" id="revertVoiceBtn" title="Revert to previous voice" style="background:rgba(209,154,102,.08);border-color:rgba(209,154,102,.25);color:var(--gold2);display:none">↩ REVERT</button>
         <button class="btn-random" onclick="saveCurrentVoiceAsPreset()" title="Save current voice settings as a reusable preset" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:#86efac">💾 SAVE</button>
         <button class="btn-random" onclick="randomVoice()">⚡ RANDOM</button>
       </div>
@@ -1128,7 +1135,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
           <option value="kokoro">🎤 Kokoro (local, offline)</option>
           <option value="fish-speech-s2-pro">🐟 Fish Speech S2 Pro (local)</option>
         </select>
-        <button onclick="refreshTtsEngineStatus()" title="Re-check engine status" style="background:rgba(124,58,237,.18);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↺ CHECK</button>
+        <button onclick="refreshTtsEngineStatus()" title="Re-check engine status" style="background:rgba(224,108,117,.18);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↺ CHECK</button>
       </div>
       <div id="engineDotsRow" style="display:flex;flex-direction:column;gap:4px;font-size:.66rem">
         <div><span id="kokoroDot" style="color:#64748b">⚪</span> <span id="kokoroDotLabel">Kokoro: checking…</span></div>
@@ -1143,8 +1150,8 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
           <button id="fishStartBtn"   onclick="startFishS2Pro()"        style="background:rgba(34,197,94,.18);border:1px solid rgba(34,197,94,.45);color:#86efac;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ Start Fish Speech</button>
           <button id="fishRepairBtn"  onclick="repairFishS2Pro()"       style="background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.45);color:#fbbf24;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit" title="Rebuild venv + dependencies (model is kept)">🛠 Repair</button>
-          <button id="fishChooseDirBtn" onclick="chooseFishModelDir()"  style="background:rgba(124,58,237,.18);border:1px solid rgba(124,58,237,.45);color:#c4b5fd;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit" title="Point Fish at an existing s2-pro model folder">📂 Choose Model Folder</button>
-          <button id="fishLogsBtn"    onclick="toggleFishLogs()"        style="background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.45);color:#93c5fd;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">📜 View Fish Logs</button>
+          <button id="fishChooseDirBtn" onclick="chooseFishModelDir()"  style="background:rgba(224,108,117,.18);border:1px solid rgba(224,108,117,.45);color:#9cdef2;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit" title="Point Fish at an existing s2-pro model folder">📂 Choose Model Folder</button>
+          <button id="fishLogsBtn"    onclick="toggleFishLogs()"        style="background:rgba(156,222,242,.18);border:1px solid rgba(156,222,242,.45);color:#93c5fd;border-radius:7px;padding:5px 10px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">📜 View Fish Logs</button>
           <button id="fishInstallBtn" onclick="installFishS2Pro()"      style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:5px 10px;font-size:.6rem;cursor:pointer;font-family:inherit" title="Re-download the s2-pro weights from HuggingFace (only needed if the model dir is empty)">⬇ Re-download model</button>
         </div>
         <span id="fishStartProgressLabel" style="display:block;font-size:.6rem;color:var(--muted);min-height:14px"></span>
@@ -1173,20 +1180,20 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- Modify Model Folder tab -->
     <div style="margin-bottom:10px">
       <button id="modelFolderTabBtn" onclick="toggleModelFolderPanel()"
-        style="font-size:.6rem;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:6px;background:transparent;border:1px solid rgba(124,58,237,.3);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .18s"
-        onmouseover="this.style.background='rgba(124,58,237,.12)';this.style.borderColor='rgba(124,58,237,.55)';this.style.color='#c4b5fd'"
-        onmouseout="if(!document.getElementById('modelFolderPanel').classList.contains('mfp-open')){this.style.background='transparent';this.style.borderColor='rgba(124,58,237,.3)';this.style.color='var(--muted)'}"
+        style="font-size:.6rem;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:6px;background:transparent;border:1px solid rgba(224,108,117,.3);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .18s"
+        onmouseover="this.style.background='rgba(224,108,117,.12)';this.style.borderColor='rgba(224,108,117,.55)';this.style.color='#9cdef2'"
+        onmouseout="if(!document.getElementById('modelFolderPanel').classList.contains('mfp-open')){this.style.background='transparent';this.style.borderColor='rgba(224,108,117,.3)';this.style.color='var(--muted)'}"
         title="Set the Fish Speech S2 Pro model folder path">📂 Modify Model Folder</button>
-      <div id="modelFolderPanel" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);border-radius:9px">
+      <div id="modelFolderPanel" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.25);border-radius:9px">
         <div style="font-size:.58rem;color:var(--muted);letter-spacing:1.4px;text-transform:uppercase;margin-bottom:6px">Fish Speech S2 Pro — Model Folder</div>
         <div style="font-size:.62rem;color:var(--text2);margin-bottom:8px">Set the full absolute path to the directory containing the s2-pro model files. The files are not moved or modified.</div>
         <div id="modelFolderCurrentPath" style="font-size:.58rem;color:#94a3b8;margin-bottom:8px;font-family:'Courier New',monospace;word-break:break-all;min-height:14px"></div>
         <input id="modelFolderInput" type="text" placeholder="e.g. C:\Users\YourName\s2-pro"
           style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:.7rem;padding:7px 10px;font-family:'Courier New',monospace;outline:none;margin-bottom:8px"
-          onfocus="this.style.borderColor='rgba(124,58,237,.6)'" onblur="this.style.borderColor='var(--border2)'"
+          onfocus="this.style.borderColor='rgba(224,108,117,.6)'" onblur="this.style.borderColor='var(--border2)'"
           onkeydown="if(event.key==='Enter') applyModelFolderPath()"/>
         <div style="display:flex;gap:6px">
-          <button onclick="applyModelFolderPath()" style="flex:1;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.5);color:#c4b5fd;border-radius:7px;padding:6px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit">✓ Apply Path</button>
+          <button onclick="applyModelFolderPath()" style="flex:1;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.5);color:#9cdef2;border-radius:7px;padding:6px 10px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit">✓ Apply Path</button>
           <button onclick="toggleModelFolderPanel()" style="background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:6px 10px;font-size:.68rem;cursor:pointer;font-family:inherit">✕ Close</button>
         </div>
       </div>
@@ -1203,7 +1210,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         <span id="fishStatusText" style="color:var(--text2)">Checking Fish Speech bridge...</span>
         <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
           <button onclick="checkFishSpeechStatus()" title="Recheck bridge health JSON" style="background:rgba(0,180,120,.15);border:1px solid rgba(0,180,120,.35);color:#6ee7b7;border-radius:6px;padding:3px 9px;font-size:.62rem;cursor:pointer;font-family:inherit;font-weight:700">↺ CHECK</button>
-          <button onclick="testFishVoice()" title="Run a real tiny generation to confirm Fish Speech actually works" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.35);color:#93c5fd;border-radius:6px;padding:3px 9px;font-size:.62rem;cursor:pointer;font-family:inherit;font-weight:700">🧪 TEST</button>
+          <button onclick="testFishVoice()" title="Run a real tiny generation to confirm Fish Speech actually works" style="background:rgba(156,222,242,.15);border:1px solid rgba(156,222,242,.35);color:#93c5fd;border-radius:6px;padding:3px 9px;font-size:.62rem;cursor:pointer;font-family:inherit;font-weight:700">🧪 TEST</button>
           <button onclick="fishMarkRestarted()" title="Tell the bridge that Fish Speech API was restarted (clears the CUDA-unhealthy flag)" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;border-radius:6px;padding:3px 9px;font-size:.62rem;cursor:pointer;font-family:inherit;font-weight:700">⟲ MARK RESTARTED</button>
         </div>
       </div>
@@ -1263,8 +1270,8 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <!-- Preset management -->
       <div id="fishPresetBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
         <button onclick="fishSavePresetPrompt()" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:7px;padding:4px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">💾 Save as Preset</button>
-        <button onclick="fishLoadBestSettings()" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:7px;padding:4px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">🏆 Use Best Settings</button>
-        <button onclick="fishLoadLastGoodSettings()" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:#c4b5fd;border-radius:7px;padding:4px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Last Good</button>
+        <button onclick="fishLoadBestSettings()" style="background:rgba(156,222,242,.12);border:1px solid rgba(156,222,242,.3);color:#93c5fd;border-radius:7px;padding:4px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">🏆 Use Best Settings</button>
+        <button onclick="fishLoadLastGoodSettings()" style="background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.3);color:#9cdef2;border-radius:7px;padding:4px 10px;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Last Good</button>
         <button onclick="fishResetSettings()" style="background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 10px;font-size:.62rem;cursor:pointer;font-family:inherit">↺ Reset</button>
       </div>
 
@@ -1275,8 +1282,8 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
           <span id="fishLogCount" style="font-size:.55rem;color:var(--muted)">0</span>
           <div style="margin-left:auto;display:flex;gap:5px">
             <button onclick="clearFishLogs()" title="Clear the Fish Speech log panel" style="background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit">Clear</button>
-            <button onclick="copyFishLogs()" title="Copy Fish Speech logs to clipboard" style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit">Copy</button>
-            <button onclick="exportFishLogs()" title="Download Fish Speech logs as a .txt file" style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);color:#c4b5fd;border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit">Export</button>
+            <button onclick="copyFishLogs()" title="Copy Fish Speech logs to clipboard" style="background:rgba(156,222,242,.12);border:1px solid rgba(156,222,242,.3);color:#93c5fd;border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit">Copy</button>
+            <button onclick="exportFishLogs()" title="Download Fish Speech logs as a .txt file" style="background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.3);color:#9cdef2;border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit">Export</button>
           </div>
         </div>
         <div id="fishLogBox" style="height:200px;max-height:260px;overflow-y:auto;padding:8px 10px;font-family:'Courier New',ui-monospace,monospace;font-size:.62rem;line-height:1.5;color:#cbd5e1"></div>
@@ -1309,7 +1316,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- Voice sliders -->
     <div class="voice-sliders" id="voiceSliders">
       <!-- Fine-tune toolbar: current voice + undo / redo / save -->
-      <div style="display:flex;align-items:center;gap:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(224,108,117,.08);border:1px solid rgba(224,108,117,.22);border-radius:10px;padding:8px 12px;margin-bottom:10px">
         <div style="flex:1;min-width:0">
           <div style="font-size:.55rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px">Fine-tune this preset</div>
           <div id="voiceFineTuneLabel" style="font-size:.8rem;font-weight:700;color:var(--purple2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
@@ -1356,7 +1363,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- Preview controls (full script line preview) -->
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn-random" onclick="previewVoice()" id="previewVoiceBtn" style="flex:1">▶ PREVIEW</button>
-      <button class="btn-random" onclick="refreshVoicePreview()" style="background:rgba(201,162,39,.1);border-color:rgba(201,162,39,.3);color:var(--gold2)">🔄 NEXT LINE</button>
+      <button class="btn-random" onclick="refreshVoicePreview()" style="background:rgba(209,154,102,.1);border-color:rgba(209,154,102,.3);color:var(--gold2)">🔄 NEXT LINE</button>
     </div>
     <div id="voicePreviewAudio" style="margin-top:8px;display:none">
       <audio id="previewAudio" controls style="width:100%;border-radius:8px;height:36px"></audio>
@@ -1369,7 +1376,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div class="card-header">
       <div class="card-title"><span class="ti">🌆</span> Background</div>
       <div style="display:flex;gap:6px">
-        <button class="btn-random" style="background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)" onclick="openStockBrowser('videos')">🌐 STOCK</button>
+        <button class="btn-random" style="background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)" onclick="openStockBrowser('videos')">🌐 STOCK</button>
         <button class="btn-random" onclick="refreshBgGrid()" title="Shuffle visible backgrounds">🔀 REFRESH</button>
         <button class="btn-random" onclick="randomBackground()">⚡ RANDOM</button>
       </div>
@@ -1385,7 +1392,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- URL Importer -->
     <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
       <input id="bgUrlInput" type="text" placeholder="Paste YouTube / TikTok URL…" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.75rem;padding:8px 10px;font-family:inherit;outline:none"/>
-      <button onclick="importUrl('video')" style="background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2);border-radius:8px;padding:8px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬇ Import</button>
+      <button onclick="importUrl('video')" style="background:rgba(224,108,117,.2);border:1px solid var(--purple);color:var(--purple2);border-radius:8px;padding:8px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬇ Import</button>
     </div>
     <div id="bgImportStatus" style="font-size:.68rem;color:var(--muted);margin-top:4px;min-height:14px"></div>
   </div>
@@ -1405,7 +1412,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
 
     <!-- Inline save-name dialog (hidden by default) -->
     <div class="vfx-save-dialog" id="vfxSaveDialog">
-      <div style="font-size:.63rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;font-family:'Orbitron',sans-serif">Name This Preset</div>
+      <div style="font-size:.63rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;font-family:var(--font-mono)">Name This Preset</div>
       <input class="vfx-save-input" id="vfxSaveInput" type="text" placeholder="e.g. My Horror Look" maxlength="40"
         onkeydown="if(event.key==='Enter')confirmVfxSave();if(event.key==='Escape')closeVfxSaveDialog()"/>
       <div class="vfx-save-btns">
@@ -1658,7 +1665,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <span class="slider-val" id="animSpeedVal">1.0×</span>
       <button id="voiceLinkBtn" onclick="toggleVoiceLink()"
         title="Link animation speed to voice speed"
-        style="margin-left:6px;width:26px;height:26px;border-radius:50%;border:1px solid var(--purple);background:rgba(124,58,237,.25);color:var(--purple2);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s">🔗</button>
+        style="margin-left:6px;width:26px;height:26px;border-radius:50%;border:1px solid var(--purple);background:rgba(224,108,117,.25);color:var(--purple2);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s">🔗</button>
     </div>
 
     <div style="font-size:.7rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:14px 0 8px">Text Color</div>
@@ -1763,7 +1770,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div class="card-header">
       <div class="card-title"><span class="ti">🎶</span> Background Music</div>
       <div style="display:flex;gap:6px">
-        <button class="btn-random" style="background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)" onclick="openStockBrowser('audio')">🌐 STOCK</button>
+        <button class="btn-random" style="background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)" onclick="openStockBrowser('audio')">🌐 STOCK</button>
         <button class="btn-random" onclick="randomMusic()">⚡ RANDOM</button>
       </div>
     </div>
@@ -1778,7 +1785,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- URL Importer -->
     <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
       <input id="musicUrlInput" type="text" placeholder="Paste YouTube / TikTok audio URL…" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.75rem;padding:8px 10px;font-family:inherit;outline:none"/>
-      <button onclick="importUrl('audio')" style="background:rgba(201,162,39,.15);border:1px solid var(--gold2);color:var(--gold2);border-radius:8px;padding:8px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬇ Import</button>
+      <button onclick="importUrl('audio')" style="background:rgba(209,154,102,.15);border:1px solid var(--gold2);color:var(--gold2);border-radius:8px;padding:8px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⬇ Import</button>
     </div>
     <div id="musicImportStatus" style="font-size:.68rem;color:var(--muted);margin-top:4px;min-height:14px"></div>
     <div style="margin-top:12px">
@@ -1824,7 +1831,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
   <div class="card">
     <div class="card-header">
       <div class="card-title"><span class="ti">📁</span> Drafts</div>
-      <button class="btn-random" onclick="saveDraft()" style="background:rgba(201,162,39,.12);border-color:rgba(201,162,39,.3);color:var(--gold2)">💾 SAVE DRAFT</button>
+      <button class="btn-random" onclick="saveDraft()" style="background:rgba(209,154,102,.12);border-color:rgba(209,154,102,.3);color:var(--gold2)">💾 SAVE DRAFT</button>
     </div>
     <div id="draftsList" style="display:flex;flex-direction:column;gap:6px;min-height:32px">
       <div style="font-size:.75rem;color:var(--muted)">No saved drafts yet — save your current project to resume later.</div>
@@ -1967,7 +1974,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
         <button onclick="seekRelative(-3)" class="preview-nav-btn" title="Back 3s">‹‹</button>
         <button onclick="restartPreview()" class="preview-nav-btn" title="Restart from 0:00">⟲</button>
         <button id="playPauseBtn" onclick="togglePlayPreview()"
-          style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(124,58,237,.4);transition:all .2s"
+          style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;color:#fff;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(224,108,117,.4);transition:all .2s"
           title="Play/Pause (Space)">▶</button>
         <button onclick="seekRelative(3)" class="preview-nav-btn" title="Forward 3s">››</button>
         <button onclick="nextLine()" class="preview-nav-btn" title="Next line (►)">⏭</button>
@@ -2064,7 +2071,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <!-- Platform presets -->
     <div style="font-size:.62rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;font-weight:700">Platform</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:18px" id="renderPresetGrid">
-      <button class="render-preset-btn active" data-preset="tiktok"    onclick="selectRenderPreset('tiktok')"    style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:rgba(124,58,237,.2);border:1px solid var(--purple);color:var(--purple2)">TikTok 9:16</button>
+      <button class="render-preset-btn active" data-preset="tiktok"    onclick="selectRenderPreset('tiktok')"    style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:rgba(224,108,117,.2);border:1px solid var(--purple);color:var(--purple2)">TikTok 9:16</button>
       <button class="render-preset-btn"        data-preset="ig-reel"   onclick="selectRenderPreset('ig-reel')"   style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Reels 9:16</button>
       <button class="render-preset-btn"        data-preset="ig-square" onclick="selectRenderPreset('ig-square')" style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">IG Square 1:1</button>
       <button class="render-preset-btn"        data-preset="yt-short"  onclick="selectRenderPreset('yt-short')"  style="padding:9px 6px;font-size:.66rem;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--muted)">YT Shorts 9:16</button>
@@ -2112,7 +2119,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     <div class="render-btn-row" style="margin-bottom:18px">
       <button onclick="forceWorkingVoiceRender()" id="renderBtnForceVoice"
               title="Bypass custom Kokoro presets. Falls back to ElevenLabs / Edge TTS if needed. Produces a final MP4 with voice."
-              style="width:100%;padding:9px 14px;background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.45);color:#d8b4fe;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">
+              style="width:100%;padding:9px 14px;background:rgba(224,108,117,.15);border:1px solid rgba(224,108,117,.45);color:#9cdef2;border-radius:9px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px">
         🎙 Force Working VOICE Render <span style="opacity:.7;font-weight:500">— auto-fallback</span>
       </button>
     </div>
@@ -2131,8 +2138,8 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
     </div>
 
     <!-- Render Sync Panel -->
-    <div id="renderSyncPanel" style="padding:13px 14px;background:rgba(124,58,237,.05);border:1px solid rgba(124,58,237,.18);border-radius:10px;font-size:.7rem;line-height:1.85">
-      <div style="font-weight:800;color:rgba(167,139,250,.9);font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Render Sync</div>
+    <div id="renderSyncPanel" style="padding:13px 14px;background:rgba(224,108,117,.05);border:1px solid rgba(224,108,117,.18);border-radius:10px;font-size:.7rem;line-height:1.85">
+      <div style="font-weight:800;color:rgba(224,108,117,.9);font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Render Sync</div>
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">FPS</span><strong id="rsFps" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Quality</span><strong id="rsQuality" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Duration</span><strong id="rsDuration" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
@@ -2141,7 +2148,7 @@ textarea:focus,input:focus,.script-area:focus,.line-text-input:focus{
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Audio dur.</span><strong id="rsAudioDur" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Video dur.</span><strong id="rsFinalDur" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
       <div style="display:flex;justify-content:space-between;gap:6px"><span style="color:var(--muted)">Lines</span><strong id="rsLines" style="color:rgba(245,245,255,.8);font-weight:600;text-align:right">—</strong></div>
-      <div id="rsSyncStatus" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(124,58,237,.15)">Sync: <strong style="color:#fca5a5">no preview yet</strong></div>
+      <div id="rsSyncStatus" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(224,108,117,.15)">Sync: <strong style="color:#fca5a5">no preview yet</strong></div>
     </div>
   </div>
 
@@ -2549,7 +2556,7 @@ async function init(){
       if(voiceCard){
         voiceCard.scrollIntoView({behavior:'smooth', block:'start'});
         voiceCard.style.transition = 'box-shadow .4s, border-color .4s';
-        voiceCard.style.boxShadow = '0 0 0 2px var(--purple2), 0 0 32px rgba(168,85,247,.5)';
+        voiceCard.style.boxShadow = '0 0 0 2px var(--purple2), 0 0 32px rgba(224,108,117,.5)';
         setTimeout(()=>{ voiceCard.style.boxShadow=''; voiceCard.style.transition=''; }, 2400);
       }
     }, 400);
@@ -2980,9 +2987,9 @@ function toggleModelFolderPanel(){
   panel.classList.toggle('mfp-open', opening);
   panel.style.display = opening ? 'block' : 'none';
   if(btn){
-    btn.style.background    = opening ? 'rgba(124,58,237,.15)' : 'transparent';
-    btn.style.borderColor   = opening ? 'rgba(124,58,237,.6)'  : 'rgba(124,58,237,.3)';
-    btn.style.color         = opening ? '#c4b5fd'              : 'var(--muted)';
+    btn.style.background    = opening ? 'rgba(224,108,117,.15)' : 'transparent';
+    btn.style.borderColor   = opening ? 'rgba(224,108,117,.6)'  : 'rgba(224,108,117,.3)';
+    btn.style.color         = opening ? '#9cdef2'              : 'var(--muted)';
   }
   if(opening){
     const current = state.fishEngine?.modelDir || state.fishModelDir || '';
@@ -4143,8 +4150,8 @@ function buildPresetGrid(){
     const engineColor = eng === 'fish-speech-s2-pro'
       ? 'background:rgba(0,180,120,.18);color:#6ee7b7'
       : eng === 'elevenlabs'
-        ? 'background:rgba(96,165,250,.18);color:#93c5fd'
-        : 'background:rgba(167,139,250,.18);color:#c4b5fd';
+        ? 'background:rgba(156,222,242,.18);color:#93c5fd'
+        : 'background:rgba(224,108,117,.18);color:#9cdef2';
     const engineBadge = `<span style="font-size:.5rem;${engineColor};padding:2px 6px;border-radius:4px;letter-spacing:.6px;font-weight:700;white-space:nowrap;flex-shrink:0">${engineLabel}</span>`;
     const savedBadge = isCustom
       ? `<span style="font-size:.52rem;background:rgba(34,197,94,.18);color:#86efac;padding:2px 7px;border-radius:4px;letter-spacing:.5px;font-weight:700;white-space:nowrap;flex-shrink:0">SAVED</span>`
@@ -4574,7 +4581,7 @@ function showUndoToast(msg, onUndo){
       'font-size:.72rem;font-family:inherit';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span></span><button style="background:rgba(124,111,247,.2);border:1px solid rgba(124,111,247,.5);color:#c4b5fd;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:800;cursor:pointer;font-family:inherit">↩ Undo</button>`;
+  el.innerHTML = `<span></span><button style="background:rgba(124,111,247,.2);border:1px solid rgba(124,111,247,.5);color:#9cdef2;border-radius:7px;padding:5px 12px;font-size:.7rem;font-weight:800;cursor:pointer;font-family:inherit">↩ Undo</button>`;
   el.querySelector('span').textContent = msg;
   el.style.display = 'flex';
   const undoBtn = el.querySelector('button');
@@ -7224,7 +7231,7 @@ function toggleVoiceLink(){
   const btn = document.getElementById('voiceLinkBtn');
   if(state.voiceLinked){
     btn.textContent = '🔗';
-    btn.style.background = 'rgba(124,58,237,.25)';
+    btn.style.background = 'rgba(224,108,117,.25)';
     btn.style.borderColor = 'var(--purple)';
     btn.title = 'Voice speed linked to animation speed (click to unlink)';
     syncVoiceToAnimSpeed(state.animSpeed);
@@ -8485,7 +8492,7 @@ function selectRenderPreset(id){
   // Highlight active button
   document.querySelectorAll('.render-preset-btn').forEach(btn => {
     const active = btn.dataset.preset === id;
-    btn.style.background = active ? 'rgba(124,58,237,.2)' : 'var(--surface2)';
+    btn.style.background = active ? 'rgba(224,108,117,.2)' : 'var(--surface2)';
     btn.style.borderColor = active ? 'var(--purple)'       : 'var(--border)';
     btn.style.color       = active ? 'var(--purple2)'      : 'var(--muted)';
   });
@@ -9175,7 +9182,7 @@ function buildFontGrid(){
   // Category pills
   catRow.innerHTML = FONT_CATEGORIES.map(c=>`
     <button class="font-cat-pill" data-cat="${c.id}" onclick="filterFontCat('${c.id}')"
-      style="padding:4px 9px;font-size:.66rem;font-weight:600;background:${c.id===currentFontCat?'rgba(124,58,237,.18)':'var(--surface2)'};border:1px solid ${c.id===currentFontCat?'var(--purple)':'var(--border)'};color:${c.id===currentFontCat?'var(--purple2)':'var(--muted)'};border-radius:6px;cursor:pointer;font-family:inherit">${c.label}</button>
+      style="padding:4px 9px;font-size:.66rem;font-weight:600;background:${c.id===currentFontCat?'rgba(224,108,117,.18)':'var(--surface2)'};border:1px solid ${c.id===currentFontCat?'var(--purple)':'var(--border)'};color:${c.id===currentFontCat?'var(--purple2)':'var(--muted)'};border-radius:6px;cursor:pointer;font-family:inherit">${c.label}</button>
   `).join('');
 
   renderFontGrid();
@@ -9192,7 +9199,7 @@ function renderFontGrid(){
   const fonts = currentFontCat==='all' ? FONT_LIBRARY : FONT_LIBRARY.filter(f=>f.cat===currentFontCat);
   grid.innerHTML = fonts.map(f=>`
     <div class="font-tile" onclick="setFontByValue(${JSON.stringify(f.value).replace(/"/g,'&quot;')},${JSON.stringify(f.name).replace(/"/g,'&quot;')})"
-      style="padding:9px 10px;background:${state.fontFamily===f.value?'rgba(124,58,237,.12)':'var(--surface2)'};border:1px solid ${state.fontFamily===f.value?'var(--purple)':'var(--border)'};border-radius:8px;cursor:pointer;text-align:center;transition:all .15s">
+      style="padding:9px 10px;background:${state.fontFamily===f.value?'rgba(224,108,117,.12)':'var(--surface2)'};border:1px solid ${state.fontFamily===f.value?'var(--purple)':'var(--border)'};border-radius:8px;cursor:pointer;text-align:center;transition:all .15s">
       <div style="font-family:${f.value};font-size:.95rem;font-weight:700;color:var(--text);line-height:1.2">${f.name}</div>
       <div style="font-size:.55rem;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.5px">${f.cat}</div>
     </div>
@@ -9463,7 +9470,7 @@ function showPromptTab(tab){
   document.getElementById('freshPromptsArea').style.display = tab==='fresh'?'':'none';
 
   document.getElementById('ptabAll').style.cssText = tab==='all'
-    ? 'flex:1;padding:5px;background:rgba(124,58,237,.15);border:1px solid var(--purple);border-radius:7px;color:var(--purple2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit'
+    ? 'flex:1;padding:5px;background:rgba(224,108,117,.15);border:1px solid var(--purple);border-radius:7px;color:var(--purple2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit'
     : 'flex:1;padding:5px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit';
   document.getElementById('ptabSaved').style.cssText = tab==='saved'
     ? 'flex:1;padding:5px;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.4);border-radius:7px;color:#f87171;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit'
@@ -9898,7 +9905,7 @@ async function generateFreshPrompts(){
       const isSelected = state.selectedFreshPromptIdx === i;
       return `
         <li class="fresh-prompt-card" data-idx="${i}"
-            style="list-style:none;padding:8px 10px;background:${isSelected?'rgba(124,58,237,.18)':'var(--surface)'};border:1px solid ${isSelected?'var(--purple2)':'rgba(124,58,237,.2)'};border-radius:9px;margin-bottom:5px;display:flex;flex-direction:column;gap:6px">
+            style="list-style:none;padding:8px 10px;background:${isSelected?'rgba(224,108,117,.18)':'var(--surface)'};border:1px solid ${isSelected?'var(--purple2)':'rgba(224,108,117,.2)'};border-radius:9px;margin-bottom:5px;display:flex;flex-direction:column;gap:6px">
           <div style="display:flex;align-items:flex-start;gap:8px">
             <div style="flex:1;font-size:.77rem;color:var(--text2);cursor:pointer" data-action="select" title="Click to select this prompt">${_htmlEscape(txt)}</div>
             <button data-action="favorite" title="Save to favorites" style="background:none;border:none;cursor:pointer;font-size:.9rem;flex-shrink:0;opacity:.85">${isFav?'❤️':'🤍'}</button>
@@ -9969,8 +9976,8 @@ function _rerenderFreshPromptHighlight(){
   document.querySelectorAll('.fresh-prompt-card').forEach(el => {
     const i = parseInt(el.dataset.idx, 10);
     const sel = state.selectedFreshPromptIdx === i;
-    el.style.background   = sel ? 'rgba(124,58,237,.18)' : 'var(--surface)';
-    el.style.borderColor  = sel ? 'var(--purple2)'       : 'rgba(124,58,237,.2)';
+    el.style.background   = sel ? 'rgba(224,108,117,.18)' : 'var(--surface)';
+    el.style.borderColor  = sel ? 'var(--purple2)'       : 'rgba(224,108,117,.2)';
   });
 }
 
@@ -10038,7 +10045,7 @@ async function loadDrafts(){
           <div style="font-size:.78rem;font-weight:600;color:var(--text)">${d.name}</div>
           <div style="font-size:.65rem;color:var(--muted)">${new Date(d.savedAt).toLocaleDateString()} · ${d.state?.script?.length||0} lines</div>
         </div>
-        <button onclick="loadDraft(${JSON.stringify(d).replace(/"/g,'&quot;')})" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Load</button>
+        <button onclick="loadDraft(${JSON.stringify(d).replace(/"/g,'&quot;')})" style="background:rgba(224,108,117,.15);border:1px solid var(--purple);color:var(--purple2);border-radius:7px;padding:5px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:inherit">↩ Load</button>
         <button onclick="deleteDraft('${d.id}')" style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:#f87171;border-radius:7px;padding:5px 7px;font-size:.7rem;cursor:pointer">✕</button>
       </div>`).join('');
   }catch(e){ console.warn('loadDrafts error',e); }
@@ -10179,7 +10186,7 @@ async function refreshDownloaderBanner(){
     el.innerHTML = parts.join(' &nbsp;·&nbsp; ') +
       (d.ytdlp && d.ytdlp.available
         ? ''
-        : ' &nbsp;<button onclick="fixDownloader()" style="background:rgba(124,58,237,.25);border:1px solid var(--purple2);color:#d8b4fe;border-radius:6px;padding:2px 8px;font-size:.6rem;font-weight:700;cursor:pointer;font-family:inherit">🔧 Fix Downloader</button>');
+        : ' &nbsp;<button onclick="fixDownloader()" style="background:rgba(224,108,117,.25);border:1px solid var(--purple2);color:#9cdef2;border-radius:6px;padding:2px 8px;font-size:.6rem;font-weight:700;cursor:pointer;font-family:inherit">🔧 Fix Downloader</button>');
   } catch {
     el.textContent = 'Downloader: unknown (server unreachable)';
   }

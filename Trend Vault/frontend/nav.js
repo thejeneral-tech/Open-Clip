@@ -17,16 +17,16 @@
     {
       group: 'Create',
       items: [
-        { href: '/trend-vault',  iconHTML: '<img src="/vault-icon.svg" width="14" height="14" alt="" draggable="false" style="vertical-align:-2px">', label: 'The Vault',  accent: '#a855f7' },
-        { href: '/voice-lab',    icon: '🎙️', label: 'Voice Lab',    accent: '#c4b5fd' },
-        { href: '/',             icon: '✂️', label: 'Clip Tool',    accent: '#FFE500' },
+        { href: '/trend-vault',  iconHTML: '<img src="/vault-icon.svg" width="14" height="14" alt="" draggable="false" style="vertical-align:-2px">', label: 'The Vault',  accent: '#e06c75' },
+        { href: '/voice-lab',    icon: '🎙️', label: 'Voice Lab',    accent: '#9cdef2' },
+        { href: '/',             icon: '✂️', label: 'Clip Tool',    accent: '#f0ad4e' },
       ],
     },
     {
       group: 'Hub',
       items: [
-        { href: '/mainframe',    icon: '⚡', label: 'Mainframe',    accent: '#c9a227' },
-        { href: '/accounts',     icon: '👥', label: 'Accounts',     accent: '#a855f7' },
+        { href: '/mainframe',    icon: '⚡', label: 'Mainframe',    accent: '#d19a66' },
+        { href: '/accounts',     icon: '👥', label: 'Accounts',     accent: '#7fb8cc' },
       ],
     },
     {
@@ -75,7 +75,7 @@
         gap: 0;
         margin-left: auto;
         flex-wrap: wrap;
-        font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        font-family: var(--font-mono, 'Fira Code', ui-monospace, monospace);
       }
       #tv-nav .tv-group {
         display: flex;
@@ -88,11 +88,11 @@
       #tv-nav .tv-group:first-child { padding-left: 0; }
       #tv-nav .tv-group:last-child  { padding-right: 0; }
       #tv-nav .tv-group-label {
-        font-family: 'Orbitron', 'Space Grotesk', sans-serif;
+        font-family: var(--font-mono, 'Fira Code', ui-monospace, monospace);
         font-size: .54rem;
         letter-spacing: 2.4px;
         font-weight: 700;
-        color: rgba(184,168,216,.50);
+        color: var(--muted, #6b8a94);
         text-transform: uppercase;
         padding-left: 3px;
         user-select: none;
@@ -106,10 +106,10 @@
         width: 1px;
         align-self: stretch;
         margin: 4px 0;
-        background: linear-gradient(180deg, transparent, rgba(184,168,216,.18), transparent);
+        background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--border) 70%, transparent), transparent);
       }
       #tv-nav .tv-item {
-        --tv-accent: #a855f7;
+        --tv-accent: var(--accent, #e06c75);
         display: inline-flex;
         align-items: center;
         gap: 7px;
@@ -119,21 +119,21 @@
         font-weight: 600;
         letter-spacing: .35px;
         text-decoration: none;
-        color: rgba(232,228,245,.78);
-        border: 1px solid rgba(184,168,216,.14);
+        color: var(--text2, #7fb8cc);
+        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
         background: transparent;
         transition: color .15s, background-color .15s, border-color .15s, box-shadow .18s, transform .12s;
         white-space: nowrap;
         line-height: 1;
       }
       #tv-nav .tv-item:hover {
-        color: #ede8f5;
+        color: var(--text, #9cdef2);
         border-color: color-mix(in srgb, var(--tv-accent) 55%, transparent);
         background: color-mix(in srgb, var(--tv-accent) 10%, transparent);
         transform: translateY(-1px);
       }
       #tv-nav .tv-item.tv-active {
-        color: #fff;
+        color: var(--text, #fff);
         border-color: color-mix(in srgb, var(--tv-accent) 75%, transparent);
         background: color-mix(in srgb, var(--tv-accent) 22%, transparent);
         box-shadow: 0 0 14px color-mix(in srgb, var(--tv-accent) 32%, transparent);
@@ -142,8 +142,8 @@
       #tv-nav .tv-ico-emoji { font-size: .98rem; line-height: 1; }
       /* Browsers that don't support color-mix (Safari < 16.4 etc.) fall back to translucent purple */
       @supports not (color: color-mix(in srgb, red, blue)) {
-        #tv-nav .tv-item:hover { background: rgba(168,85,247,.10); border-color: rgba(168,85,247,.55); }
-        #tv-nav .tv-item.tv-active { background: rgba(168,85,247,.22); border-color: rgba(168,85,247,.75); box-shadow: 0 0 14px rgba(168,85,247,.32); }
+        #tv-nav .tv-item:hover { background: rgba(224,108,117,.10); border-color: rgba(224,108,117,.55); }
+        #tv-nav .tv-item.tv-active { background: rgba(224,108,117,.22); border-color: rgba(224,108,117,.75); box-shadow: 0 0 14px rgba(224,108,117,.32); }
       }
       @media (max-width: 1100px) {
         #tv-nav { gap: 10px 0; }
