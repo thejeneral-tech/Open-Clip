@@ -22,10 +22,11 @@ import glob
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from core import constants
 from core.constants import (
@@ -82,6 +83,77 @@ app.add_middleware(
     allow_headers=["Accept", "Authorization", "Content-Type", "X-Requested-With"],
 )
 
+# ========= AUTH (mirrors TrendVault-Coder/app.py) =========
+from core.auth import AuthManager
+from routes.auth_routes import setup_auth_routes, SESSION_COOKIE
+
+auth_manager = AuthManager()
+app.state.auth_manager = auth_manager
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() != "false"
+LOCALHOST_BYPASS = os.getenv("LOCALHOST_BYPASS", "false").lower() == "true"
+if LOCALHOST_BYPASS:
+    logger.warning("LOCALHOST_BYPASS enabled — loopback requests skip login. "
+                   "Do not expose this instance to a network.")
+
+if AUTH_ENABLED:
+    # Exact paths that must stay reachable without a session: the login page and
+    # the auth endpoints it calls, plus health/version.
+    AUTH_EXEMPT_EXACT = {
+        "/api/auth/setup", "/api/auth/signup", "/api/auth/login",
+        "/api/auth/logout", "/api/auth/status",
+        "/api/health", "/api/version", "/login",
+    }
+    # The studio's UI assets are served from ROOT paths (/tva-theme.css,
+    # /tva-theme.js, /nav.js, /vault-icon.svg, favicon…) by the catch-all route,
+    # so the login page can't render if they 302 to /login. Exempt those asset
+    # types by extension. Media mounts (/backgrounds, /music, generated voices,
+    # clips…) and the HTML pages stay gated.
+    _STATIC_EXT = (".css", ".js", ".mjs", ".svg", ".woff", ".woff2",
+                   ".ttf", ".map", ".ico", ".webmanifest")
+
+    def _is_auth_exempt(path: str) -> bool:
+        return path in AUTH_EXEMPT_EXACT or path.endswith(_STATIC_EXT)
+
+    def _is_trusted_loopback(request: Request) -> bool:
+        """True only for a DIRECT loopback connection with no proxy/tunnel
+        forwarding headers — a reverse proxy connects from loopback too, so a
+        bare client.host check would let a remote visitor inherit local trust."""
+        host = request.client.host if request.client else None
+        if host not in ("127.0.0.1", "::1"):
+            return False
+        for h in ("x-forwarded-for", "x-real-ip", "forwarded",
+                  "cf-connecting-ip", "x-forwarded-host"):
+            if request.headers.get(h):
+                return False
+        return True
+
+    class AuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            path = request.url.path
+            if _is_auth_exempt(path):
+                return await call_next(request)
+            if LOCALHOST_BYPASS and _is_trusted_loopback(request):
+                return await call_next(request)
+            if not auth_manager.is_configured:
+                # No users yet — send browsers to /login for first-run setup.
+                if not path.startswith("/api/"):
+                    return RedirectResponse(url="/login", status_code=302)
+                return JSONResponse(status_code=401, content={"error": "Setup required"})
+            # Cookie-based session auth
+            token = request.cookies.get(SESSION_COOKIE)
+            if not auth_manager.validate_token(token):
+                if path.startswith("/api/"):
+                    return JSONResponse(status_code=401, content={"error": "Not authenticated"})
+                return RedirectResponse(url="/login", status_code=302)
+            request.state.current_user = auth_manager.get_username_for_token(token)
+            return await call_next(request)
+
+    app.add_middleware(AuthMiddleware)
+    logger.info("Auth middleware enabled (AUTH_ENABLED=true)")
+else:
+    logger.info("Auth middleware disabled (set AUTH_ENABLED=true to enable login)")
+
+
 # ========= ASSET STATIC MOUNTS (mirror the Express static routes) =========
 app.mount("/backgrounds", StaticFiles(directory=BACKGROUNDS_DIR), name="backgrounds")
 app.mount("/music", StaticFiles(directory=MUSIC_DIR), name="music")
@@ -107,11 +179,25 @@ app.include_router(setup_script_routes(get_script_service()))
 app.include_router(setup_voice_routes(get_tts_service()))
 app.include_router(setup_render_routes(get_render_service()))
 app.include_router(setup_media_routes(get_media_service()))
+app.include_router(setup_auth_routes(auth_manager))
 
 
 @app.get("/api/health")
 async def health():
     return {"status": "healthy", "version": APP_VERSION}
+
+
+@app.get("/api/version")
+async def version():
+    return {"version": APP_VERSION}
+
+
+@app.get("/login")
+async def serve_login():
+    login_path = os.path.join(STATIC_DIR, "login.html")
+    if not os.path.isfile(login_path):
+        raise HTTPException(status_code=404, detail="login.html not found")
+    return FileResponse(login_path, headers={"Cache-Control": "no-cache"})
 
 
 # ========= FRONTEND ROOT ASSETS (registered LAST so /api/* and pages win) =========

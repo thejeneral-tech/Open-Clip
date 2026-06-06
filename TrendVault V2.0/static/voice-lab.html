@@ -21,18 +21,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-hei
 .app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
 
 /* ── Header ── */
-header{display:flex;align-items:center;gap:16px;padding:18px 36px;background:rgba(4,2,8,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+header{display:flex;align-items:center;gap:16px;padding:18px 36px;background:color-mix(in srgb, var(--surface3) 92%, transparent);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .logo-wrap{display:flex;align-items:center;gap:12px}
-.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(224,108,117,.8))}
+.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(var(--accent-rgb),.8))}
 .logo-text{font-family:var(--font-mono);font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
 .logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;font-family:var(--font-mono)}
 header nav{margin-left:auto;display:flex;gap:10px}
 .nav-link{padding:8px 18px;border-radius:8px;font-size:.8rem;font-weight:600;text-decoration:none;color:var(--text2);border:1px solid var(--border);transition:all .2s;letter-spacing:.5px}
-.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(224,108,117,.1)}
-.nav-link.active{background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)}
+.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(var(--accent-rgb),.1)}
+.nav-link.active{background:linear-gradient(135deg,rgba(var(--accent-rgb),.25),rgba(var(--gold-rgb),.1));border-color:var(--purple);color:var(--purple2)}
 
 /* ── Tab bar ── */
-.tab-bar{display:flex;gap:2px;padding:0 36px;background:rgba(11,8,20,.95);border-bottom:1px solid var(--border);position:sticky;top:72px;z-index:99}
+.tab-bar{display:flex;gap:2px;padding:0 36px;background:color-mix(in srgb, var(--surface3) 95%, transparent);border-bottom:1px solid var(--border);position:sticky;top:72px;z-index:99}
 .tab-btn{padding:14px 24px;font-size:.78rem;font-weight:700;letter-spacing:.5px;color:var(--muted);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;font-family:inherit;text-transform:uppercase}
 .tab-btn:hover{color:var(--text2)}
 .tab-btn.active{color:var(--purple2);border-bottom-color:var(--purple2)}
@@ -44,8 +44,8 @@ header nav{margin-left:auto;display:flex;gap:10px}
 .sidebar{width:220px;min-width:220px;padding:24px 0;border-right:1px solid var(--border);position:sticky;top:110px;height:calc(100vh - 110px);overflow-y:auto}
 .sidebar-title{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:0 20px 10px}
 .cat-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:.8rem;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
-.cat-item:hover{background:rgba(224,108,117,.08);color:var(--text)}
-.cat-item.active{border-left-color:var(--purple2);background:rgba(224,108,117,.12);color:var(--purple2)}
+.cat-item:hover{background:rgba(var(--accent-rgb),.08);color:var(--text)}
+.cat-item.active{border-left-color:var(--purple2);background:rgba(var(--accent-rgb),.12);color:var(--purple2)}
 .cat-item .cat-icon{font-size:1rem;width:20px;text-align:center}
 .cat-item .cat-count{margin-left:auto;font-size:.62rem;color:var(--muted);background:var(--surface2);padding:2px 7px;border-radius:20px}
 
@@ -66,15 +66,15 @@ header nav{margin-left:auto;display:flex;gap:10px}
   display:flex;flex-direction:column;gap:10px;
 }
 .voice-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.voice-card.active{border-color:var(--purple2);background:rgba(224,108,117,.08);box-shadow:0 0 0 1px rgba(224,108,117,.3),0 8px 32px rgba(224,108,117,.2)}
-.voice-card.favorite-card{border-color:var(--gold);background:rgba(209,154,102,.05)}
+.voice-card.active{border-color:var(--purple2);background:rgba(var(--accent-rgb),.08);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.3),0 8px 32px rgba(var(--accent-rgb),.2)}
+.voice-card.favorite-card{border-color:var(--gold);background:rgba(var(--gold-rgb),.05)}
 .voice-card.favorite-card:hover{border-color:var(--gold2)}
 .vc-top{display:flex;align-items:flex-start;justify-content:space-between}
 .vc-icon{font-size:1.8rem;line-height:1}
 .vc-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
 .badge{font-size:.55rem;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 6px;border-radius:4px}
 .badge-fav{background:#7c4a03;color:var(--gold2);border:1px solid rgba(240,192,64,.3)}
-.badge-cat{background:rgba(224,108,117,.2);color:var(--purple2);border:1px solid rgba(224,108,117,.2)}
+.badge-cat{background:rgba(var(--accent-rgb),.2);color:var(--purple2);border:1px solid rgba(var(--accent-rgb),.2)}
 .badge-energy{background:rgba(229,62,62,.15);color:#fc8181}
 .vc-name{font-size:.92rem;font-weight:700;color:var(--text);line-height:1.2}
 .vc-desc{font-size:.68rem;color:var(--muted);line-height:1.4}
@@ -85,19 +85,19 @@ header nav{margin-left:auto;display:flex;gap:10px}
 .m-retention{background:rgba(156,222,242,.15);color:#60a5fa;border:1px solid rgba(156,222,242,.2)}
 .vc-example{font-size:.65rem;color:var(--text2);line-height:1.4;font-style:italic;border-left:2px solid var(--border2);padding-left:8px}
 .vc-actions{display:flex;gap:6px;margin-top:auto}
-.btn-test{flex:1;padding:7px;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.3);border-radius:7px;color:var(--purple2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;letter-spacing:.5px;text-transform:uppercase}
-.btn-test:hover{background:rgba(224,108,117,.4);border-color:var(--purple2)}
+.btn-test{flex:1;padding:7px;background:rgba(var(--accent-rgb),.2);border:1px solid rgba(var(--accent-rgb),.3);border-radius:7px;color:var(--purple2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;letter-spacing:.5px;text-transform:uppercase}
+.btn-test:hover{background:rgba(var(--accent-rgb),.4);border-color:var(--purple2)}
 .btn-test.playing{background:rgba(46,204,113,.15);border-color:var(--green);color:var(--green)}
-.btn-compare{padding:7px 10px;background:rgba(209,154,102,.1);border:1px solid rgba(209,154,102,.2);border-radius:7px;color:var(--gold2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
-.btn-compare:hover{background:rgba(209,154,102,.25)}
-.btn-compare.selected{background:rgba(209,154,102,.3);border-color:var(--gold)}
+.btn-compare{padding:7px 10px;background:rgba(var(--gold-rgb),.1);border:1px solid rgba(var(--gold-rgb),.2);border-radius:7px;color:var(--gold2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-compare:hover{background:rgba(var(--gold-rgb),.25)}
+.btn-compare.selected{background:rgba(var(--gold-rgb),.3);border-color:var(--gold)}
 .btn-fav{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
 .btn-fav:hover{border-color:var(--gold);color:var(--gold2)}
-.btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(209,154,102,.1)}
+.btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(var(--gold-rgb),.1)}
 .btn-trash{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
 .btn-trash:hover{border-color:rgba(239,68,68,.5);color:#f87171;background:rgba(239,68,68,.1)}
 .btn-use{padding:7px 14px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:7px;color:#fff;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:all .15s}
-.btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(224,108,117,.4)}
+.btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(var(--accent-rgb),.4)}
 
 /* ── Section header ── */
 .section-head{display:flex;align-items:center;gap:10px;margin:28px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
@@ -107,7 +107,7 @@ header nav{margin-left:auto;display:flex;gap:10px}
 /* ── Preview panel (sticky bottom) ── */
 .preview-panel{
   position:fixed;bottom:0;left:0;right:0;z-index:200;
-  background:rgba(4,2,8,.97);backdrop-filter:blur(24px);
+  background:color-mix(in srgb, var(--surface3) 97%, transparent);backdrop-filter:blur(24px);
   border-top:1px solid var(--border2);padding:16px 36px;
   display:none;gap:24px;align-items:center;flex-wrap:wrap;
 }
@@ -127,13 +127,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .pp-audio audio{width:100%;height:34px;border-radius:8px}
 .pp-text{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.78rem;flex:1;min-width:200px;max-width:360px;outline:none;resize:none;height:52px}
 .btn-gen{padding:10px 20px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s}
-.btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(224,108,117,.4)}
+.btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(var(--accent-rgb),.4)}
 .btn-gen:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-close-pp{padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:1rem;cursor:pointer;transition:all .15s}
 .btn-close-pp:hover{border-color:var(--red);color:var(--red)}
 
 /* ── Compare bar ── */
-.compare-bar{position:fixed;top:110px;left:0;right:0;z-index:99;background:rgba(30,15,60,.97);backdrop-filter:blur(16px);border-bottom:1px solid var(--purple);padding:10px 36px;display:none;align-items:center;gap:16px}
+.compare-bar{position:fixed;top:110px;left:0;right:0;z-index:99;background:color-mix(in srgb, var(--surface3) 97%, transparent);backdrop-filter:blur(16px);border-bottom:1px solid var(--purple);padding:10px 36px;display:none;align-items:center;gap:16px}
 .compare-bar.show{display:flex}
 .compare-slots{display:flex;gap:10px;flex:1}
 .compare-slot{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:8px;min-width:160px}
@@ -147,17 +147,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .clone-layout{display:flex;gap:24px;flex-wrap:wrap}
 .clone-panel{flex:1;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .clone-panel-title{font-size:.72rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6d4bd6,#e06c75);color:#fff;font-size:.72rem;font-weight:800;flex-shrink:0}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6d4bd6,var(--accent));color:#fff;font-size:.72rem;font-weight:800;flex-shrink:0}
 .upload-drop{border:2px dashed var(--border2);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
-.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(224,108,117,.05)}
+.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(var(--accent-rgb),.05)}
 .upload-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .ud-icon{font-size:2rem;margin-bottom:8px}
 .ud-text{font-size:.78rem;color:var(--muted);line-height:1.5}
 .ud-text strong{color:var(--purple2)}
 .voice-db-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto}
 .vdb-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
-.vdb-item:hover{border-color:var(--purple);background:rgba(224,108,117,.06)}
-.vdb-item.active{border-color:var(--purple2);background:rgba(224,108,117,.12)}
+.vdb-item:hover{border-color:var(--purple);background:rgba(var(--accent-rgb),.06)}
+.vdb-item.active{border-color:var(--purple2);background:rgba(var(--accent-rgb),.12)}
 .vdb-icon{font-size:1.4rem}
 .vdb-info{flex:1}
 .vdb-name{font-size:.82rem;font-weight:700;color:var(--text)}
@@ -171,7 +171,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .form-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:9px 12px;outline:none;transition:border-color .2s}
 .form-input:focus{border-color:var(--purple2)}
 .btn-primary{padding:11px 24px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;width:100%}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(224,108,117,.4)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(var(--accent-rgb),.4)}
 .status-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.75rem;color:var(--muted);line-height:1.6;margin-top:12px;min-height:60px}
 .status-box.ok{border-color:rgba(46,204,113,.3);color:#68d391}
 .status-box.error{border-color:rgba(229,62,62,.3);color:#fc8181}
@@ -203,7 +203,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:.85rem}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;font-weight:600;background:rgba(224,108,117,.15);color:var(--purple2);border:1px solid rgba(224,108,117,.2);margin:2px}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;font-weight:600;background:rgba(var(--accent-rgb),.15);color:var(--purple2);border:1px solid rgba(var(--accent-rgb),.2);margin:2px}
 .openai-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;font-size:.65rem;font-weight:700;background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2)}
 .openai-badge.offline{background:rgba(107,93,138,.1);color:var(--muted);border-color:var(--border)}
 
@@ -214,14 +214,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
 /* ── Card base: solid dark, no gradient bleed ── */
 .card{
-  background:#21252b!important;
+  background:var(--surface)!important;
   background-image:none!important;
   border:none!important;
   border-radius:14px;
   padding:20px;
   position:relative;
   overflow:hidden;
-  box-shadow:0 0 8px rgba(224,108,117,.14);
+  box-shadow:0 0 8px rgba(var(--accent-rgb),.14);
   transition:transform .12s ease,box-shadow .3s ease;
 }
 /* RGB rim — mask cuts out interior, only 1.5px border visible */
@@ -232,7 +232,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .card>*{position:relative;z-index:3}
 .card:hover{
   transform:translateY(-1px);
-  box-shadow:0 0 14px rgba(224,108,117,.22),0 0 22px rgba(156,222,242,.12);
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.22),0 0 22px rgba(156,222,242,.12);
 }
 
 /* ── Section/card headers ── */
@@ -241,14 +241,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   color:rgba(245,245,255,.95);
   text-shadow:
     0 0 3px rgba(255,255,255,.35),
-    0 0 7px rgba(224,108,117,.28),
+    0 0 7px rgba(var(--accent-rgb),.28),
     0 0 12px rgba(156,222,242,.16);
 }
 /* Icon/emoji glow */
 .card-title .ti,.section-head-icon,.tile-icon,.section-icon{
   filter:
     drop-shadow(0 0 3px rgba(255,255,255,.4))
-    drop-shadow(0 0 6px rgba(224,108,117,.25));
+    drop-shadow(0 0 6px rgba(var(--accent-rgb),.25));
 }
 
 /* ── Fine print / muted text — brighter, still calm ── */
@@ -264,12 +264,12 @@ a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
 a[style*="font-size:.7"],a[href*="localhost"]{
   color:#c4b8f0!important;
   text-decoration:none;
-  text-shadow:0 0 5px rgba(224,108,117,.35);
+  text-shadow:0 0 5px rgba(var(--accent-rgb),.35);
   transition:color .2s,text-shadow .2s;
 }
 a.small:hover,a[href*="localhost"]:hover{
   color:#e2d9ff!important;
-  text-shadow:0 0 8px rgba(224,108,117,.55);
+  text-shadow:0 0 8px rgba(var(--accent-rgb),.55);
 }
 
 /* ── General fine print size bump ── */
@@ -279,23 +279,23 @@ a.small:hover,a[href*="localhost"]:hover{
 
 /* ── Inputs dark and clean ── */
 input,textarea,select{
-  background:#21252b!important;
+  background:var(--surface)!important;
   color:#f0ecff!important;
-  border-color:rgba(224,108,117,.3)!important;
+  border-color:rgba(var(--accent-rgb),.3)!important;
   text-shadow:none!important;
 }
 input:focus,textarea:focus,select:focus{
-  border-color:rgba(224,108,117,.65)!important;
+  border-color:rgba(var(--accent-rgb),.65)!important;
   outline:none!important;
-  box-shadow:0 0 0 2px rgba(224,108,117,.12)!important;
+  box-shadow:0 0 0 2px rgba(var(--accent-rgb),.12)!important;
 }
 
 
 /* voice-lab adv-card gets same treatment */
 .adv-card{
-  background:#21252b!important;border:none!important;
+  background:var(--surface)!important;border:none!important;
   border-radius:10px;padding:16px;position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(224,108,117,.14);
+  box-shadow:0 0 8px rgba(var(--accent-rgb),.14);
 }
 .adv-card::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
 .adv-card::after{display:none!important}
@@ -325,7 +325,7 @@ input:focus,textarea:focus,select:focus{
 <!-- Tab bar -->
 <div class="tab-bar">
   <button class="tab-btn active" onclick="switchTab('browse')">🎭 Browse Voices</button>
-  <button class="tab-btn" onclick="switchTab('favorites')">⭐ Favorites <span id="favCount" style="font-size:.65rem;margin-left:4px;background:rgba(209,154,102,.18);color:var(--gold2);padding:1px 6px;border-radius:8px">0</span></button>
+  <button class="tab-btn" onclick="switchTab('favorites')">⭐ Favorites <span id="favCount" style="font-size:.65rem;margin-left:4px;background:rgba(var(--gold-rgb),.18);color:var(--gold2);padding:1px 6px;border-radius:8px">0</span></button>
   <button class="tab-btn" onclick="switchTab('presets')">💾 My Presets</button>
   <button class="tab-btn" onclick="switchTab('advanced')">🎛️ Advanced Controls</button>
   <button class="tab-btn" onclick="switchTab('clone')">🧬 Voice Cloning</button>
@@ -383,7 +383,7 @@ input:focus,textarea:focus,select:focus{
   <div class="tab-content" id="tab-presets">
     <div class="content-header">
       <div class="content-title">💾 My Custom Presets</div>
-      <button onclick="savePresetSnapshot()" style="background:rgba(224,108,117,.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
+      <button onclick="savePresetSnapshot()" style="background:rgba(var(--accent-rgb),.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
     </div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:18px;line-height:1.6">
       Save a snapshot of the current voice + slider settings as a reusable preset. Presets are stored in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">custom-presets.json</code> and appear in Trend Vault Studio automatically.
@@ -405,7 +405,7 @@ input:focus,textarea:focus,select:focus{
     </div>
 
     <!-- AI PROMPT BAR -->
-    <div style="background:linear-gradient(135deg,rgba(224,108,117,.08),rgba(209,154,102,.04));border:1px solid rgba(224,108,117,.3);border-radius:12px;padding:16px;margin-bottom:20px">
+    <div style="background:linear-gradient(135deg,rgba(var(--accent-rgb),.08),rgba(var(--gold-rgb),.04));border:1px solid rgba(var(--accent-rgb),.3);border-radius:12px;padding:16px;margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:1.1rem">🪄</span>
         <span style="font-size:.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--purple2)">AI Voice Prompt</span>
@@ -469,7 +469,7 @@ input:focus,textarea:focus,select:focus{
     </div>
 
     <!-- Send advanced settings to Studio -->
-    <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(224,108,117,.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(var(--accent-rgb),.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
         <div style="font-size:.78rem;font-weight:700;color:#86efac;margin-bottom:4px">📤 Export to Trend Vault Studio</div>
         <div style="font-size:.7rem;color:var(--muted);line-height:1.5">Sends the selected voice + all Advanced slider values to the Studio for final render.</div>
@@ -486,7 +486,7 @@ input:focus,textarea:focus,select:focus{
 
       <!-- Title -->
       <div style="text-align:center">
-        <div style="font-family:var(--font-mono);font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#6ea8ff,#e06c75);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.5px">Fish Speech S2 Pro</div>
+        <div style="font-family:var(--font-mono);font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#6ea8ff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.5px">Fish Speech S2 Pro</div>
         <div style="font-size:.8rem;color:var(--muted);margin-top:4px">Upload a voice sample — the model will speak in that voice</div>
       </div>
 
@@ -534,7 +534,7 @@ input:focus,textarea:focus,select:focus{
           </div>
         </details>
 
-        <div id="cloneSelectedBadge" style="display:none;margin-top:12px;padding:8px 11px;background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.3);border-radius:8px;font-size:.72rem;color:#9cdef2">
+        <div id="cloneSelectedBadge" style="display:none;margin-top:12px;padding:8px 11px;background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.3);border-radius:8px;font-size:.72rem;color:var(--text)">
           🎙 Using reference voice: <strong id="cloneSelectedName">—</strong>
         </div>
 
@@ -564,7 +564,7 @@ input:focus,textarea:focus,select:focus{
 
         <div style="display:flex;gap:10px;margin-top:16px">
           <button id="cloneGenBtn" onclick="cloneGenerate()"
-            style="flex:1;background:linear-gradient(135deg,#6d4bd6,#e06c75);border:none;color:#fff;border-radius:9px;padding:12px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+            style="flex:1;background:linear-gradient(135deg,#6d4bd6,var(--accent));border:none;color:#fff;border-radius:9px;padding:12px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
             ▶ Generate Speech
           </button>
           <button id="cloneReconnectBtn" onclick="cloneReconnectRecover()" title="Re-check the Fish Speech server and recover your last job — never starts a new generation"
@@ -581,7 +581,7 @@ input:focus,textarea:focus,select:focus{
             <span id="cloneProgressPct" style="font-size:.7rem;color:var(--muted)">0%</span>
           </div>
           <div style="height:6px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden">
-            <div id="cloneProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6d4bd6,#e06c75);border-radius:4px;transition:width .35s ease"></div>
+            <div id="cloneProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6d4bd6,var(--accent));border-radius:4px;transition:width .35s ease"></div>
           </div>
         </div>
       </div>
@@ -601,7 +601,7 @@ input:focus,textarea:focus,select:focus{
             ⬇ Download WAV
           </button>
           <button onclick="cloneSavePreset()"
-            style="flex:1;background:linear-gradient(135deg,rgba(209,154,102,.25),rgba(240,192,64,.35));border:1px solid rgba(240,192,64,.4);color:var(--gold2);border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
+            style="flex:1;background:linear-gradient(135deg,rgba(var(--gold-rgb),.25),rgba(240,192,64,.35));border:1px solid rgba(240,192,64,.4);color:var(--gold2);border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
             💾 Save as Preset
           </button>
         </div>
@@ -611,7 +611,7 @@ input:focus,textarea:focus,select:focus{
       <div class="card" style="padding:22px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
           <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">📦 Saved Presets</span>
-          <span id="clonePresetCount" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.25);color:#9cdef2">0</span>
+          <span id="clonePresetCount" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.25);color:var(--text)">0</span>
         </div>
         <div id="clonePresetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
           <div style="font-size:.72rem;color:var(--muted);grid-column:1/-1">No saved presets yet — generate audio and click Save.</div>
@@ -679,7 +679,7 @@ input:focus,textarea:focus,select:focus{
               🛠 Repair Fish Speech
             </button>
             <button onclick="fishLabChooseModel()"
-              style="background:rgba(224,108,117,.14);border:1px solid rgba(224,108,117,.35);color:#9cdef2;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              style="background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.35);color:var(--text);border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
               📂 Choose Existing Model Folder
             </button>
             <button onclick="fishLabToggleLogs()"
@@ -744,7 +744,7 @@ input:focus,textarea:focus,select:focus{
                 ▶ Preview Voice
               </button>
               <button onclick="fishLabUseInStudio()"
-                style="background:rgba(209,154,102,.12);border:1px solid rgba(209,154,102,.25);color:var(--gold2);border-radius:8px;padding:9px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">
+                style="background:rgba(var(--gold-rgb),.12);border:1px solid rgba(var(--gold-rgb),.25);color:var(--gold2);border-radius:8px;padding:9px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">
                 USE IN STUDIO
               </button>
               <div id="fishLabGenStatus" style="font-size:.65rem;color:var(--muted);flex:1;min-width:120px"></div>
@@ -806,7 +806,7 @@ input:focus,textarea:focus,select:focus{
   </div>
   <div class="pp-actions">
     <button class="btn-gen" id="ppGenBtn" onclick="generatePreview()">▶ GENERATE</button>
-    <button onclick="useInStudio()" style="padding:10px 16px;background:rgba(209,154,102,.15);border:1px solid rgba(209,154,102,.3);border-radius:8px;color:var(--gold2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">USE IN STUDIO</button>
+    <button onclick="useInStudio()" style="padding:10px 16px;background:rgba(var(--gold-rgb),.15);border:1px solid rgba(var(--gold-rgb),.3);border-radius:8px;color:var(--gold2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">USE IN STUDIO</button>
     <button class="btn-close-pp" onclick="closePreview()">✕</button>
   </div>
 </div>
@@ -1335,8 +1335,8 @@ function renderVoiceCardForFavorites(p){
     <div class="voice-name">${p.name}</div>
     <div class="voice-desc">${p.description||''}</div>
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-      <button onclick="event.stopPropagation();quickTest('${p.id}')" style="flex:1;background:rgba(224,108,117,.15);border:1px solid var(--purple);color:var(--purple2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ TEST</button>
-      <button onclick="event.stopPropagation();toggleFav('${p.id}')" style="background:rgba(209,154,102,.18);border:1px solid var(--gold2);color:var(--gold2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">★ FAV</button>
+      <button onclick="event.stopPropagation();quickTest('${p.id}')" style="flex:1;background:rgba(var(--accent-rgb),.15);border:1px solid var(--purple);color:var(--purple2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ TEST</button>
+      <button onclick="event.stopPropagation();toggleFav('${p.id}')" style="background:rgba(var(--gold-rgb),.18);border:1px solid var(--gold2);color:var(--gold2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">★ FAV</button>
       <button onclick="event.stopPropagation();sendVoiceToStudio('${p.id}')" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">→ STUDIO</button>
     </div>
   </div>`;
@@ -1657,15 +1657,15 @@ function _renderCloneSources(){
       ? `${s.sampleCount} sample${s.sampleCount!==1?'s':''}`
       : (s.sizeBytes ? (s.sizeBytes/1024/1024).toFixed(1)+' MB' : '');
     const typeTag = s.type === 'profile'
-      ? `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(224,108,117,.2);color:#9cdef2;margin-left:4px">profile</span>`
+      ? `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(var(--accent-rgb),.2);color:var(--text);margin-left:4px">profile</span>`
       : `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(0,180,120,.15);color:#6ee7b7;margin-left:4px">file</span>`;
     return `<div onclick="cloneSelectSource('${s.id}')"
       style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .12s;
-             background:${isSelected?'rgba(224,108,117,.18)':'rgba(255,255,255,.03)'};
-             border:1px solid ${isSelected?'rgba(224,108,117,.5)':'var(--border)'}">
+             background:${isSelected?'rgba(var(--accent-rgb),.18)':'rgba(255,255,255,.03)'};
+             border:1px solid ${isSelected?'rgba(var(--accent-rgb),.5)':'var(--border)'}">
       <span style="font-size:1rem">${s.type==='profile'?'🎙️':'📁'}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.78rem;font-weight:600;color:${isSelected?'#9cdef2':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        <div style="font-size:.78rem;font-weight:600;color:${isSelected?'var(--text)':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           ${s.name}${typeTag}
         </div>
         <div style="font-size:.62rem;color:var(--muted)">${meta}</div>
@@ -1701,7 +1701,7 @@ function cloneOnFilePick(files){
   if(btn){
     btn.disabled = false;
     btn.style.cursor = 'pointer';
-    btn.style.background = 'linear-gradient(135deg,#6d4bd6,#e06c75)';
+    btn.style.background = 'linear-gradient(135deg,#6d4bd6,var(--accent))';
     btn.style.color = '#fff';
     btn.style.borderColor = 'transparent';
   }
@@ -1849,7 +1849,7 @@ function cloneShowProgress(pct, stage, detail){
     fill.style.width = shown+'%';
     fill.style.background = failed
       ? 'linear-gradient(90deg,#ef4444,#f87171)'
-      : (done ? 'linear-gradient(90deg,#22c55e,#6ee7b7)' : 'linear-gradient(90deg,#6d4bd6,#e06c75)');
+      : (done ? 'linear-gradient(90deg,#22c55e,#6ee7b7)' : 'linear-gradient(90deg,#6d4bd6,var(--accent))');
   }
   if(stg)  stg.textContent  = cloneStageLabel(stage, detail);
   if(pctEl)pctEl.textContent= Math.round(shown)+'%';
@@ -2419,7 +2419,7 @@ function _renderClonePresets(){
   }
   grid.innerHTML = _clonePresets.map(p => `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s"
-         onmouseover="this.style.borderColor='rgba(224,108,117,.45)'" onmouseout="this.style.borderColor='var(--border)'">
+         onmouseover="this.style.borderColor='rgba(var(--accent-rgb),.45)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="display:flex;align-items:flex-start;gap:8px">
         <span style="font-size:1.4rem">${p.icon||'🎤'}</span>
         <div style="flex:1;min-width:0">
@@ -2431,7 +2431,7 @@ function _renderClonePresets(){
       ${(p.generatedAudioUrl||p.sampleAudioUrl) ? `<audio src="${p.generatedAudioUrl||p.sampleAudioUrl}" controls style="width:100%;height:28px;border-radius:6px"></audio>` : ''}
       <div style="display:flex;gap:5px;flex-wrap:wrap">
         <button onclick="cloneUsePreset('${p.id}')"
-          style="flex:1;background:rgba(209,154,102,.14);border:1px solid rgba(209,154,102,.28);color:var(--gold2);border-radius:6px;padding:5px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">
+          style="flex:1;background:rgba(var(--gold-rgb),.14);border:1px solid rgba(var(--gold-rgb),.28);color:var(--gold2);border-radius:6px;padding:5px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">
           USE IN STUDIO
         </button>
         <button onclick="cloneDeletePreset('${p.id}')"
@@ -2532,7 +2532,7 @@ function vlShowUndoToast(msg, onUndo){
       'padding:10px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:.74rem';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span></span><button style="background:rgba(209,154,102,.18);border:1px solid rgba(240,192,64,.4);color:#f0ad4e;border-radius:7px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer">↩ Undo</button>`;
+  el.innerHTML = `<span></span><button style="background:rgba(var(--gold-rgb),.18);border:1px solid rgba(240,192,64,.4);color:#f0ad4e;border-radius:7px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer">↩ Undo</button>`;
   el.querySelector('span').textContent = msg;
   el.style.display = 'flex';
   const hide = () => { el.style.display = 'none'; };

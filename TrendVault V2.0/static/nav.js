@@ -77,6 +77,18 @@
         </a>
       </div>
       <nav class="tv-sb-nav" aria-label="Primary navigation">${sectionsHTML}</nav>
+      <div class="tv-sb-account" id="tvSbAccount" hidden>
+        <a class="tv-sb-acct-main" id="tvSbAcctMain" title="Account">
+          <span class="tv-sb-avatar" id="tvSbAvatar" aria-hidden="true">?</span>
+          <span class="tv-sb-acct-meta">
+            <span class="tv-sb-acct-name" id="tvSbAcctName">—</span>
+            <span class="tv-sb-acct-role" id="tvSbAcctRole"></span>
+          </span>
+        </a>
+        <button class="tv-sb-logout" id="tvSbLogout" type="button" title="Sign out" aria-label="Sign out">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
       <div class="tv-sb-foot"><span class="tv-sb-dot" aria-hidden="true"></span><span class="tv-sb-lbl">v2.0</span></div>
     `;
     document.body.appendChild(aside);
@@ -124,7 +136,7 @@
         background: color-mix(in srgb, var(--accent) 10%, transparent);
       }
       #tv-sidebar .tv-sb-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; min-width: 0; }
-      #tv-sidebar .tv-sb-brand img { filter: drop-shadow(0 0 5px rgba(224,108,117,.5)); flex-shrink: 0; }
+      #tv-sidebar .tv-sb-brand img { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 50%, transparent)); flex-shrink: 0; }
       #tv-sidebar .tv-sb-brand-title {
         font-size: .92rem; font-weight: 700; letter-spacing: .3px; white-space: nowrap;
         color: var(--accent, #e06c75);
@@ -170,6 +182,44 @@
       }
       #tv-sidebar .tv-sb-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green, #50fa7b); box-shadow: 0 0 6px var(--green, #50fa7b); }
 
+      /* Account + logout (signed-in user) — mirrors the Coder's account control */
+      #tv-sidebar .tv-sb-account {
+        flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; margin: 4px 8px 0;
+        border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      }
+      #tv-sidebar .tv-sb-acct-main {
+        display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0;
+        text-decoration: none; color: inherit; border-radius: 8px; padding: 4px;
+        transition: background-color .14s;
+      }
+      #tv-sidebar a.tv-sb-acct-main { cursor: pointer; }
+      #tv-sidebar a.tv-sb-acct-main:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+      #tv-sidebar .tv-sb-avatar {
+        width: 28px; height: 28px; min-width: 28px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; flex-shrink: 0; color: #fff;
+        background: linear-gradient(135deg, var(--purple2), var(--gold));
+      }
+      #tv-sidebar .tv-sb-acct-meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+      #tv-sidebar .tv-sb-acct-name { font-size: .8rem; font-weight: 600; color: var(--text, #9cdef2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #tv-sidebar .tv-sb-acct-role { font-size: .56rem; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted, #6b8a94); }
+      #tv-sidebar .tv-sb-logout {
+        flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: transparent; color: var(--muted, #6b8a94); cursor: pointer;
+        border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+        transition: color .15s, background-color .15s, border-color .15s;
+      }
+      #tv-sidebar .tv-sb-logout:hover {
+        color: var(--red, #ff5b5b);
+        border-color: color-mix(in srgb, var(--red, #ff5b5b) 55%, transparent);
+        background: color-mix(in srgb, var(--red, #ff5b5b) 12%, transparent);
+      }
+      :root.tv-collapsed #tv-sidebar .tv-sb-account { flex-direction: column; gap: 6px; padding: 8px 0; margin: 4px 6px 0; }
+      :root.tv-collapsed #tv-sidebar .tv-sb-acct-meta { display: none; }
+      :root.tv-collapsed #tv-sidebar .tv-sb-acct-main { justify-content: center; flex: none; }
+
       /* Collapsed icon-rail */
       :root.tv-collapsed #tv-sidebar .tv-sb-lbl,
       :root.tv-collapsed #tv-sidebar .tv-sb-brand,
@@ -192,6 +242,9 @@
         #tv-sidebar .tv-sb-top { justify-content: center; padding: 14px 0 10px; }
         #tv-sidebar .tv-sb-item { justify-content: center; padding: 10px 0; gap: 0; }
         #tv-sidebar .tv-sb-foot { justify-content: center; padding: 9px 0; }
+        #tv-sidebar .tv-sb-account { flex-direction: column; gap: 6px; padding: 8px 0; margin: 4px 6px 0; }
+        #tv-sidebar .tv-sb-acct-meta { display: none; }
+        #tv-sidebar .tv-sb-acct-main { justify-content: center; flex: none; }
       }
     `;
     const el = document.createElement('style');
@@ -200,12 +253,84 @@
     document.head.appendChild(el);
   }
 
+  async function _logout() {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) { /* ignore */ }
+    // Wipe per-user client state on logout so the next account that signs in on
+    // this browser doesn't inherit it — but KEEP the saved theme and remembered
+    // username for a smooth re-login.
+    try {
+      var keep = { 'trendvault-ai-theme': 1, 'trendvault-ai-last-user': 1 };
+      var toRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && !keep[k]) toRemove.push(k);
+      }
+      toRemove.forEach(function (k) { localStorage.removeItem(k); });
+      sessionStorage.clear();
+    } catch (e) { /* ignore */ }
+    window.location.href = '/login';
+  }
+
+  async function initAccount() {
+    var wrap = document.getElementById('tvSbAccount');
+    if (!wrap) return;
+    var data = null;
+    try {
+      var res = await fetch('/api/auth/status', { credentials: 'same-origin' });
+      data = await res.json();
+    } catch (e) { /* auth disabled / unreachable */ }
+    if (!data || !data.authenticated) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var name = data.username || 'user';
+    var isAdmin = !!data.is_admin;
+    var avatar = document.getElementById('tvSbAvatar');
+    var nameEl = document.getElementById('tvSbAcctName');
+    var roleEl = document.getElementById('tvSbAcctRole');
+    var main = document.getElementById('tvSbAcctMain');
+    if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
+    if (nameEl) { nameEl.textContent = name; nameEl.title = name; }
+    if (roleEl) roleEl.textContent = isAdmin ? 'Admin' : 'User';
+    // Account row opens the User Management window widget — account + password
+    // for everyone, full user administration for admins.
+    if (main) {
+      main.title = isAdmin ? 'Manage users' : 'Account';
+      if (!main.dataset.wired) {
+        main.dataset.wired = '1';
+        main.setAttribute('role', 'button');
+        main.setAttribute('tabindex', '0');
+        main.style.cursor = 'pointer';
+        var openUsers = function (e) { if (e) e.preventDefault(); if (window.TVAUsers && window.TVAUsers.open) window.TVAUsers.open(); };
+        main.addEventListener('click', openUsers);
+        main.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') openUsers(e); });
+      }
+    }
+    var logoutBtn = document.getElementById('tvSbLogout');
+    if (logoutBtn && !logoutBtn.dataset.wired) {
+      logoutBtn.dataset.wired = '1';
+      logoutBtn.addEventListener('click', _logout);
+    }
+  }
+
+  // The User Management window widget lives in a separate script loaded on every
+  // page (so it's reachable from the sidebar account control anywhere, like the
+  // Coder's cookbook). It self-registers window.TVAUsers and builds its DOM lazily.
+  function loadUsersWidget() {
+    if (document.getElementById('tva-users-widget-js') || window.TVAUsers) return;
+    var s = document.createElement('script');
+    s.id = 'tva-users-widget-js';
+    s.src = '/users-widget.js';
+    s.defer = true;
+    document.head.appendChild(s);
+  }
+
   function init() {
     injectStyle();
     let collapsed = false;
     try { collapsed = localStorage.getItem(SB_KEY) === '1'; } catch (e) { /* ignore */ }
     applyCollapsed(collapsed);
     buildSidebar();
+    loadUsersWidget();
+    initAccount();
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
         e.preventDefault();

@@ -49,8 +49,25 @@
 
   function mix(a, p, b) { return 'color-mix(in srgb, ' + a + ' ' + p + '%, ' + b + ')'; }
 
+  // Hex helpers — emit rgb() components so every hard-coded rgba(224,108,117,α)
+  // / rgba(209,154,102,α) in the studio can become rgba(var(--accent-rgb),α)
+  // and recolor with the active theme.
+  function toRgb(hex) {
+    var h = String(hex).replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function rgbStr(hex) { var c = toRgb(hex); return c[0] + ',' + c[1] + ',' + c[2]; }
+  function blendHex(a, p, b) {
+    var ca = toRgb(a), cb = toRgb(b), f = p / 100;
+    function hx(v) { return ('0' + Math.round(v).toString(16)).slice(-2); }
+    return '#' + hx(ca[0] * f + cb[0] * (1 - f)) + hx(ca[1] * f + cb[1] * (1 - f)) + hx(ca[2] * f + cb[2] * (1 - f));
+  }
+
   // Expand a {bg,fg,panel,border,red} preset into the full studio token set.
   function deriveTokens(t) {
+    var goldHex = (t.ext && t.ext['--gold']) ? t.ext['--gold'] : blendHex(t.red, 45, '#d9a05a');
     var o = {
       '--bg': t.bg,
       '--fg': t.fg,
@@ -66,8 +83,10 @@
       '--purple': t.red,
       '--purple2': mix(t.red, 72, '#ffffff'),
       '--purple3': mix(t.red, 55, '#ffffff'),
-      '--gold': mix(t.red, 45, '#d9a05a'),
+      '--gold': goldHex,
       '--gold2': '#f0ad4e',
+      '--accent-rgb': rgbStr(t.red),
+      '--gold-rgb': rgbStr(goldHex),
       '--red': '#ff5b5b',
       '--green': '#50fa7b',
       '--warn': '#f0ad4e',

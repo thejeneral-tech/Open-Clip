@@ -20,6 +20,8 @@
   --border2:   #4a7a88;
   --accent:    #e06c75;
   --accent2:   #d19a66;
+  --accent-rgb: 224,108,117;  /* rgb() parts so rgba(var(--accent-rgb), α) tracks the theme */
+  --gold-rgb:   209,154,102;
   --purple:    #e06c75;   /* legacy name remapped to coral so old refs recolor */
   --purple2:   #eb8a91;
   --purple3:   #f0a6ab;

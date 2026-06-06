@@ -50,9 +50,9 @@ body{
 .nebula{
   position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(120px);opacity:0.07;
 }
-.nebula1{width:600px;height:600px;background:radial-gradient(circle,#e06c75,transparent);top:-200px;left:-200px}
-.nebula2{width:500px;height:500px;background:radial-gradient(circle,#d19a66,transparent);bottom:-200px;right:-100px}
-.nebula3{width:400px;height:400px;background:radial-gradient(circle,#e06c75,transparent);top:40%;left:50%}
+.nebula1{width:600px;height:600px;background:radial-gradient(circle,var(--accent),transparent);top:-200px;left:-200px}
+.nebula2{width:500px;height:500px;background:radial-gradient(circle,var(--gold),transparent);bottom:-200px;right:-100px}
+.nebula3{width:400px;height:400px;background:radial-gradient(circle,var(--accent),transparent);top:40%;left:50%}
 
 /* ── Layout ── */
 .app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
@@ -61,19 +61,19 @@ body{
 header{
   display:flex;align-items:center;gap:16px;
   padding:18px 40px;
-  background:rgba(2,1,8,.95);
+  background:color-mix(in srgb, var(--surface3) 95%, transparent);
   backdrop-filter:blur(24px);
   border-bottom:1px solid var(--border2);
   position:sticky;top:0;z-index:100;
 }
 .logo-glyph{
   font-size:2.2rem;
-  filter:drop-shadow(0 0 14px rgba(224,108,117,.9));
+  filter:drop-shadow(0 0 14px rgba(var(--accent-rgb),.9));
   animation:pulse-glow 3s ease-in-out infinite alternate;
 }
 @keyframes pulse-glow{
-  from{filter:drop-shadow(0 0 8px rgba(224,108,117,.6))}
-  to{filter:drop-shadow(0 0 22px rgba(209,154,102,.9))}
+  from{filter:drop-shadow(0 0 8px rgba(var(--accent-rgb),.6))}
+  to{filter:drop-shadow(0 0 22px rgba(var(--gold-rgb),.9))}
 }
 .logo-block{display:flex;flex-direction:column;gap:1px}
 .logo-name{
@@ -91,14 +91,14 @@ header nav{margin-left:auto;display:flex;align-items:center;gap:10px}
   transition:all .2s;letter-spacing:.5px;font-family:var(--font-mono);
   cursor:pointer;background:transparent;
 }
-.nav-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(224,108,117,.12)}
-.nav-btn.active{background:rgba(224,108,117,.2);border-color:var(--purple);color:var(--purple3)}
+.nav-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(var(--accent-rgb),.12)}
+.nav-btn.active{background:rgba(var(--accent-rgb),.2);border-color:var(--purple);color:var(--purple3)}
 
 /* ── System Bar ── */
 .sysbar{
   display:flex;align-items:center;gap:0;
   padding:10px 40px;
-  background:rgba(8,5,15,.8);
+  background:color-mix(in srgb, var(--surface3) 80%, transparent);
   border-bottom:1px solid var(--border);
   font-family:var(--font-mono);
   font-size:.65rem;letter-spacing:1.5px;
@@ -176,17 +176,17 @@ main{
 }
 .tool-tile::before{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(135deg,rgba(224,108,117,.08),transparent);
+  background:linear-gradient(135deg,rgba(var(--accent-rgb),.08),transparent);
   opacity:0;transition:opacity .22s;
 }
 .tool-tile:hover{
   border-color:var(--purple);
   transform:translateY(-2px);
-  box-shadow:0 8px 28px rgba(224,108,117,.2);
+  box-shadow:0 8px 28px rgba(var(--accent-rgb),.2);
 }
 .tool-tile:hover::before{opacity:1}
-.tool-tile.gold:hover{border-color:var(--gold);box-shadow:0 8px 28px rgba(209,154,102,.2)}
-.tool-tile.gold::before{background:linear-gradient(135deg,rgba(209,154,102,.08),transparent)}
+.tool-tile.gold:hover{border-color:var(--gold);box-shadow:0 8px 28px rgba(var(--gold-rgb),.2)}
+.tool-tile.gold::before{background:linear-gradient(135deg,rgba(var(--gold-rgb),.08),transparent)}
 .tile-icon{font-size:2rem;line-height:1}
 .tile-name{
   font-size:.82rem;font-weight:700;color:var(--text);
@@ -197,9 +197,9 @@ main{
   position:absolute;bottom:10px;right:10px;
   font-size:.55rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;
   padding:2px 7px;border-radius:10px;
-  background:rgba(224,108,117,.3);border:1px solid var(--purple);color:var(--purple3);
+  background:rgba(var(--accent-rgb),.3);border:1px solid var(--purple);color:var(--purple3);
 }
-.tile-badge.gold{background:rgba(209,154,102,.2);border-color:var(--gold);color:var(--gold2)}
+.tile-badge.gold{background:rgba(var(--gold-rgb),.2);border-color:var(--gold);color:var(--gold2)}
 
 /* ── Connection panel ── */
 .connection-panel{
@@ -348,8 +348,8 @@ main{
   transition:all .2s;text-decoration:none;
 }
 .action-btn:last-child{margin-bottom:0}
-.action-btn:hover{border-color:var(--purple);background:rgba(224,108,117,.1);transform:translateX(3px)}
-.action-btn.gold:hover{border-color:var(--gold);background:rgba(209,154,102,.08)}
+.action-btn:hover{border-color:var(--purple);background:rgba(var(--accent-rgb),.1);transform:translateX(3px)}
+.action-btn.gold:hover{border-color:var(--gold);background:rgba(var(--gold-rgb),.08)}
 .action-icon{font-size:1.1rem;flex-shrink:0}
 .action-text{flex:1}
 .action-arrow{color:var(--muted);font-size:.8rem}
@@ -406,14 +406,14 @@ main{
 
 /* ── Card base: solid dark, no gradient bleed ── */
 .card{
-  background:#21252b!important;
+  background:var(--surface)!important;
   background-image:none!important;
   border:none!important;
   border-radius:14px;
   padding:20px;
   position:relative;
   overflow:hidden;
-  box-shadow:0 0 8px rgba(224,108,117,.14);
+  box-shadow:0 0 8px rgba(var(--accent-rgb),.14);
   transition:transform .12s ease,box-shadow .3s ease;
 }
 /* RGB rim — mask cuts out interior, only 1.5px border visible */
@@ -424,7 +424,7 @@ main{
 .card>*{position:relative;z-index:3}
 .card:hover{
   transform:translateY(-1px);
-  box-shadow:0 0 14px rgba(224,108,117,.22),0 0 22px rgba(156,222,242,.12);
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.22),0 0 22px rgba(156,222,242,.12);
 }
 
 /* ── Section/card headers ── */
@@ -433,14 +433,14 @@ main{
   color:rgba(245,245,255,.95);
   text-shadow:
     0 0 3px rgba(255,255,255,.35),
-    0 0 7px rgba(224,108,117,.28),
+    0 0 7px rgba(var(--accent-rgb),.28),
     0 0 12px rgba(156,222,242,.16);
 }
 /* Icon/emoji glow */
 .card-title .ti,.section-head-icon,.tile-icon,.section-icon{
   filter:
     drop-shadow(0 0 3px rgba(255,255,255,.4))
-    drop-shadow(0 0 6px rgba(224,108,117,.25));
+    drop-shadow(0 0 6px rgba(var(--accent-rgb),.25));
 }
 
 /* ── Fine print / muted text — brighter, still calm ── */
@@ -456,12 +456,12 @@ a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
 a[style*="font-size:.7"],a[href*="localhost"]{
   color:#c4b8f0!important;
   text-decoration:none;
-  text-shadow:0 0 5px rgba(224,108,117,.35);
+  text-shadow:0 0 5px rgba(var(--accent-rgb),.35);
   transition:color .2s,text-shadow .2s;
 }
 a.small:hover,a[href*="localhost"]:hover{
   color:#e2d9ff!important;
-  text-shadow:0 0 8px rgba(224,108,117,.55);
+  text-shadow:0 0 8px rgba(var(--accent-rgb),.55);
 }
 
 /* ── General fine print size bump ── */
@@ -471,37 +471,37 @@ a.small:hover,a[href*="localhost"]:hover{
 
 /* ── Inputs dark and clean ── */
 input,textarea,select{
-  background:#21252b!important;
+  background:var(--surface)!important;
   color:#f0ecff!important;
-  border-color:rgba(224,108,117,.3)!important;
+  border-color:rgba(var(--accent-rgb),.3)!important;
   text-shadow:none!important;
 }
 input:focus,textarea:focus,select:focus{
-  border-color:rgba(224,108,117,.65)!important;
+  border-color:rgba(var(--accent-rgb),.65)!important;
   outline:none!important;
-  box-shadow:0 0 0 2px rgba(224,108,117,.12)!important;
+  box-shadow:0 0 0 2px rgba(var(--accent-rgb),.12)!important;
 }
 
 
 /* ── Niche Trend Builder ── */
-.niche-card{background:rgba(10,6,22,.85)!important;border:1px solid rgba(224,108,117,.22)!important;border-radius:16px;padding:18px 16px;box-shadow:0 0 24px rgba(224,108,117,.12)}
-.niche-select{flex:1;background:#0d0820;border:1px solid rgba(224,108,117,.3);border-radius:8px;color:#e8e2ff;font-size:.75rem;padding:8px 10px;font-family:var(--font-mono);cursor:pointer;outline:none;min-width:0}
-.niche-select:focus{border-color:rgba(224,108,117,.7)}
-.nb-btn{padding:7px 13px;border-radius:8px;font-size:.72rem;font-weight:700;border:1px solid rgba(224,108,117,.35);color:#9cdef2;cursor:pointer;background:rgba(224,108,117,.15);font-family:var(--font-mono);letter-spacing:.4px;transition:all .18s;white-space:nowrap}
-.nb-btn:hover{background:rgba(224,108,117,.3);border-color:rgba(224,108,117,.6);color:#e8e2ff}
-.nb-btn.gold{background:rgba(209,154,102,.18);border-color:rgba(209,154,102,.5);color:#ffe500}
-.nb-btn.gold:hover{background:rgba(209,154,102,.32);color:#fff}
+.niche-card{background:rgba(10,6,22,.85)!important;border:1px solid rgba(var(--accent-rgb),.22)!important;border-radius:16px;padding:18px 16px;box-shadow:0 0 24px rgba(var(--accent-rgb),.12)}
+.niche-select{flex:1;background:#0d0820;border:1px solid rgba(var(--accent-rgb),.3);border-radius:8px;color:#e8e2ff;font-size:.75rem;padding:8px 10px;font-family:var(--font-mono);cursor:pointer;outline:none;min-width:0}
+.niche-select:focus{border-color:rgba(var(--accent-rgb),.7)}
+.nb-btn{padding:7px 13px;border-radius:8px;font-size:.72rem;font-weight:700;border:1px solid rgba(var(--accent-rgb),.35);color:var(--text);cursor:pointer;background:rgba(var(--accent-rgb),.15);font-family:var(--font-mono);letter-spacing:.4px;transition:all .18s;white-space:nowrap}
+.nb-btn:hover{background:rgba(var(--accent-rgb),.3);border-color:rgba(var(--accent-rgb),.6);color:#e8e2ff}
+.nb-btn.gold{background:rgba(var(--gold-rgb),.18);border-color:rgba(var(--gold-rgb),.5);color:#ffe500}
+.nb-btn.gold:hover{background:rgba(var(--gold-rgb),.32);color:#fff}
 .nb-btn.green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#86efac}
 .nb-btn.green:hover{background:rgba(34,197,94,.25)}
 .nb-btn.sm{padding:4px 9px;font-size:.65rem}
-.idea-grid{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(224,108,117,.35) transparent;padding-right:2px;margin-top:2px}
+.idea-grid{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(var(--accent-rgb),.35) transparent;padding-right:2px;margin-top:2px}
 .idea-grid::-webkit-scrollbar{width:4px}
-.idea-grid::-webkit-scrollbar-thumb{background:rgba(224,108,117,.35);border-radius:4px}
-.idea-pill{display:flex;align-items:flex-start;gap:8px;background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.13);border-radius:10px;padding:9px 11px;font-size:.74rem;color:#d4cbec;line-height:1.4;transition:border-color .15s}
-.idea-pill:hover{background:rgba(224,108,117,.11);border-color:rgba(224,108,117,.28)}
+.idea-grid::-webkit-scrollbar-thumb{background:rgba(var(--accent-rgb),.35);border-radius:4px}
+.idea-pill{display:flex;align-items:flex-start;gap:8px;background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.13);border-radius:10px;padding:9px 11px;font-size:.74rem;color:#d4cbec;line-height:1.4;transition:border-color .15s}
+.idea-pill:hover{background:rgba(var(--accent-rgb),.11);border-color:rgba(var(--accent-rgb),.28)}
 .pill-text{flex:1}
-.pill-tag{font-size:.56rem;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:20px;flex-shrink:0;background:rgba(224,108,117,.25);color:#9cdef2;margin-top:1px}
-.pill-save{background:none;border:1px solid rgba(224,108,117,.2);border-radius:6px;color:rgba(224,108,117,.5);font-size:.68rem;padding:3px 8px;cursor:pointer;transition:all .15s;font-family:inherit;flex-shrink:0;white-space:nowrap}
+.pill-tag{font-size:.56rem;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:20px;flex-shrink:0;background:rgba(var(--accent-rgb),.25);color:var(--text);margin-top:1px}
+.pill-save{background:none;border:1px solid rgba(var(--accent-rgb),.2);border-radius:6px;color:rgba(var(--accent-rgb),.5);font-size:.68rem;padding:3px 8px;cursor:pointer;transition:all .15s;font-family:inherit;flex-shrink:0;white-space:nowrap}
 .pill-save:hover,.pill-save.saved{background:rgba(34,197,94,.15);border-color:#4ade80;color:#86efac}
 .saved-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:20px;padding:5px 8px 5px 12px;font-size:.68rem;color:#86efac;font-weight:600}
 .saved-chip button{background:none;border:none;color:#6ee7b7;font-size:.72rem;cursor:pointer;padding:0 2px;line-height:1;transition:color .12s}
@@ -569,7 +569,7 @@ input:focus,textarea:focus,select:focus{
   <header>
     <div class="ping-wrap" style="width:36px;height:36px">
       <div class="ping-ring" id="headerPing"></div>
-      <img src="/vault-icon.svg" width="36" height="36" alt="Trend Vault" draggable="false" style="display:block;filter:drop-shadow(0 0 8px rgba(224,108,117,.6))">
+      <img src="/vault-icon.svg" width="36" height="36" alt="Trend Vault" draggable="false" style="display:block;filter:drop-shadow(0 0 8px rgba(var(--accent-rgb),.6))">
     </div>
     <div class="logo-block">
       <div class="logo-name">Trend Vault Mainframe</div>
@@ -634,7 +634,7 @@ input:focus,textarea:focus,select:focus{
       <div class="tools-grid">
         <a href="/trend-vault" class="tool-tile gold">
           <div class="tile-badge gold">Main</div>
-          <div class="tile-icon"><img src="/vault-icon.svg" width="32" height="32" alt="Trend Vault" draggable="false" style="filter:drop-shadow(0 0 6px rgba(224,108,117,.55))"></div>
+          <div class="tile-icon"><img src="/vault-icon.svg" width="32" height="32" alt="Trend Vault" draggable="false" style="filter:drop-shadow(0 0 6px rgba(var(--accent-rgb),.55))"></div>
           <div class="tile-name">Trend Vault Studio</div>
           <div class="tile-desc">Generate &amp; render trend-vault videos</div>
         </a>
@@ -664,13 +664,13 @@ input:focus,textarea:focus,select:focus{
           <div class="tile-desc">Post renders as Reels (mobile API)</div>
         </a>
         <a href="/accounts" class="tool-tile">
-          <div class="tile-badge" style="background:rgba(224,108,117,.25);border-color:var(--purple2);color:var(--purple3)">New</div>
+          <div class="tile-badge" style="background:rgba(var(--accent-rgb),.25);border-color:var(--purple2);color:var(--purple3)">New</div>
           <div class="tile-icon">👥</div>
           <div class="tile-name">Accounts</div>
           <div class="tile-desc">Manage connected social accounts</div>
         </a>
         <a href="http://localhost:3002" target="_blank" rel="noopener" class="tool-tile">
-          <div class="tile-badge" style="background:rgba(224,108,117,.25);border-color:var(--purple2);color:var(--purple3)">New</div>
+          <div class="tile-badge" style="background:rgba(var(--accent-rgb),.25);border-color:var(--purple2);color:var(--purple3)">New</div>
           <div class="tile-icon">🤖</div>
           <div class="tile-name">Ollama Chat</div>
           <div class="tile-desc">Local LLM web UI (port 3002)</div>
@@ -818,7 +818,7 @@ input:focus,textarea:focus,select:focus{
         <!-- Niche picker row -->
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
           <input id="nicheSelect" placeholder="Type a niche or subject…"
-            style="flex:1;background:var(--surface2,#1e1e2e);border:1px solid rgba(224,108,117,.25);border-radius:8px;color:#e2d9f3;font-size:.75rem;padding:7px 10px;font-family:inherit;outline:none"/>
+            style="flex:1;background:var(--surface2,#1e1e2e);border:1px solid rgba(var(--accent-rgb),.25);border-radius:8px;color:#e2d9f3;font-size:.75rem;padding:7px 10px;font-family:inherit;outline:none"/>
         </div>
 
         <button class="nb-btn gold" style="width:100%;margin-bottom:14px;padding:10px 0" onclick="nbGenerate()">
@@ -828,18 +828,18 @@ input:focus,textarea:focus,select:focus{
         <!-- Output -->
         <div id="nbOutput" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:.6rem;letter-spacing:1.5px;color:rgba(224,108,117,.6);text-transform:uppercase;font-weight:700">🎭 Categories</div>
+            <div style="font-size:.6rem;letter-spacing:1.5px;color:rgba(var(--accent-rgb),.6);text-transform:uppercase;font-weight:700">🎭 Categories</div>
             <div style="display:flex;gap:6px">
               <button class="nb-btn sm" onclick="nbRandomSpotlight()">⚡ Random Pick</button>
               <button class="nb-btn sm green" onclick="nbSaveAll()">💾 Save All</button>
             </div>
           </div>
-          <div id="nbSpotlight" style="display:none;background:rgba(209,154,102,.08);border:1px solid rgba(209,154,102,.3);border-radius:10px;padding:12px 14px;font-size:.8rem;color:#ffe500;font-weight:700;margin-bottom:10px;line-height:1.5"></div>
+          <div id="nbSpotlight" style="display:none;background:rgba(var(--gold-rgb),.08);border:1px solid rgba(var(--gold-rgb),.3);border-radius:10px;padding:12px 14px;font-size:.8rem;color:#ffe500;font-weight:700;margin-bottom:10px;line-height:1.5"></div>
           <div id="nbPills" class="idea-grid"></div>
         </div>
 
         <!-- Saved -->
-        <div id="nbSavedSection" style="display:none;margin-top:14px;border-top:1px solid rgba(224,108,117,.12);padding-top:12px">
+        <div id="nbSavedSection" style="display:none;margin-top:14px;border-top:1px solid rgba(var(--accent-rgb),.12);padding-top:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div style="font-size:.6rem;letter-spacing:1.5px;color:rgba(34,197,94,.6);text-transform:uppercase;font-weight:700">💾 Saved Ideas</div>
             <button class="nb-btn sm" onclick="nbClearSaved()" style="color:#f87171;border-color:rgba(248,113,113,.25)">✕ Clear All</button>

@@ -8,6 +8,9 @@ node_modules/
 
 # ── Secrets (NEVER commit) ──
 .env
+# Auth — bcrypt password hashes + active session tokens (login feature)
+data/auth.json
+data/sessions.json
 data/youtube-credentials.json
 data/youtube-token.json
 data/instagram-session.json

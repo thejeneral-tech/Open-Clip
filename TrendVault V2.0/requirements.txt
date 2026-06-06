@@ -10,4 +10,9 @@ pydantic-settings>=2.0
 SQLAlchemy
 anthropic
 imageio-ffmpeg
+# Auth / login (ported from TrendVault-Coder): bcrypt password hashing,
+# pyotp TOTP 2FA, qrcode[pil] for the 2FA enrollment QR.
+bcrypt
+pyotp
+qrcode[pil]
 # Phase 4 (social uploaders): playwright, instagrapi, google-api-python-client, google-auth-oauthlib

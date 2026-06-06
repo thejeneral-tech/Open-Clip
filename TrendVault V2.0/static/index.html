@@ -41,7 +41,7 @@
       align-items: center;
       gap: 14px;
       border-bottom: 1px solid var(--border);
-      background: rgba(8,8,16,0.9);
+      background: color-mix(in srgb, var(--surface3) 90%, transparent);
       backdrop-filter: blur(12px);
       position: sticky;
       top: 0;
@@ -377,14 +377,14 @@
 
 /* ── Card base: solid dark, no gradient bleed ── */
 .card{
-  background:#21252b!important;
+  background:var(--surface)!important;
   background-image:none!important;
   border:none!important;
   border-radius:14px;
   padding:20px;
   position:relative;
   overflow:hidden;
-  box-shadow:0 0 8px rgba(224,108,117,.14);
+  box-shadow:0 0 8px rgba(var(--accent-rgb),.14);
   transition:transform .12s ease,box-shadow .3s ease;
 }
 /* Flat 1px border rim */
@@ -395,7 +395,7 @@
 .card>*{position:relative;z-index:3}
 .card:hover{
   transform:translateY(-1px);
-  box-shadow:0 0 14px rgba(224,108,117,.22),0 0 22px rgba(156,222,242,.12);
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.22),0 0 22px rgba(156,222,242,.12);
 }
 
 /* ── Section/card headers ── */
@@ -404,14 +404,14 @@
   color:rgba(245,245,255,.95);
   text-shadow:
     0 0 3px rgba(255,255,255,.35),
-    0 0 7px rgba(224,108,117,.28),
+    0 0 7px rgba(var(--accent-rgb),.28),
     0 0 12px rgba(156,222,242,.16);
 }
 /* Icon/emoji glow */
 .card-title .ti,.section-head-icon,.tile-icon,.section-icon{
   filter:
     drop-shadow(0 0 3px rgba(255,255,255,.4))
-    drop-shadow(0 0 6px rgba(224,108,117,.25));
+    drop-shadow(0 0 6px rgba(var(--accent-rgb),.25));
 }
 
 /* ── Fine print / muted text — brighter, still calm ── */
@@ -427,12 +427,12 @@ a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
 a[style*="font-size:.7"],a[href*="localhost"]{
   color:#c4b8f0!important;
   text-decoration:none;
-  text-shadow:0 0 5px rgba(224,108,117,.35);
+  text-shadow:0 0 5px rgba(var(--accent-rgb),.35);
   transition:color .2s,text-shadow .2s;
 }
 a.small:hover,a[href*="localhost"]:hover{
   color:#e2d9ff!important;
-  text-shadow:0 0 8px rgba(224,108,117,.55);
+  text-shadow:0 0 8px rgba(var(--accent-rgb),.55);
 }
 
 /* ── General fine print size bump ── */
@@ -442,15 +442,15 @@ a.small:hover,a[href*="localhost"]:hover{
 
 /* ── Inputs dark and clean ── */
 input,textarea,select{
-  background:#21252b!important;
+  background:var(--surface)!important;
   color:#f0ecff!important;
-  border-color:rgba(224,108,117,.3)!important;
+  border-color:rgba(var(--accent-rgb),.3)!important;
   text-shadow:none!important;
 }
 input:focus,textarea:focus,select:focus{
-  border-color:rgba(224,108,117,.65)!important;
+  border-color:rgba(var(--accent-rgb),.65)!important;
   outline:none!important;
-  box-shadow:0 0 0 2px rgba(224,108,117,.12)!important;
+  box-shadow:0 0 0 2px rgba(var(--accent-rgb),.12)!important;
 }
 
 /* ── YouTube / Web Downloader card ── */
@@ -505,7 +505,7 @@ input:focus,textarea:focus,select:focus{
 <body>
 
 <header>
-  <img src="/vault-icon.svg" width="34" height="34" alt="The Vault" style="vertical-align:middle;filter:drop-shadow(0 0 6px rgba(224,108,117,.7))" draggable="false">
+  <img src="/vault-icon.svg" width="34" height="34" alt="The Vault" style="vertical-align:middle;filter:drop-shadow(0 0 6px rgba(var(--accent-rgb),.7))" draggable="false">
   <h1>Trend Vault <span>Program</span></h1>
   <nav id="tv-nav"></nav>
   <span class="badge" style="margin-left:auto">TikTok Ready</span>
@@ -1001,7 +1001,7 @@ newVideoBtn.addEventListener('click', () => {
       ytAvail.className = 'show err';
       ytAvail.innerHTML =
         '✗ yt-dlp not found — ' +
-        '<button id="ytFixBtn" style="background:rgba(224,108,117,.25);border:1px solid var(--purple,#e06c75);color:#fff;border-radius:6px;padding:3px 10px;font-size:.72rem;font-weight:700;cursor:pointer;margin-left:6px">🔧 Fix Downloader</button>' +
+        '<button id="ytFixBtn" style="background:rgba(var(--accent-rgb),.25);border:1px solid var(--purple,var(--accent));color:#fff;border-radius:6px;padding:3px 10px;font-size:.72rem;font-weight:700;cursor:pointer;margin-left:6px">🔧 Fix Downloader</button>' +
         ' &nbsp;or place <code>yt-dlp.exe</code> in a <code>bin/</code> folder, or run <code>pip install yt-dlp</code>';
       const fixBtn = document.getElementById('ytFixBtn');
       if (fixBtn) fixBtn.addEventListener('click', runFixDownloader);
