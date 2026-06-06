@@ -1,0 +1,13 @@
+# TrendVault Studio V2.0 — Python backend (FastAPI). Remotion render deps come
+# from package.json (npm install). Kokoro/Fish TTS run as separate local servers.
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+httpx
+pydantic>=2.0
+pydantic-settings>=2.0
+SQLAlchemy
+anthropic
+imageio-ffmpeg
+# Phase 4 (social uploaders): playwright, instagrapi, google-api-python-client, google-auth-oauthlib

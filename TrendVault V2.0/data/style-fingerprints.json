@@ -1,0 +1,18 @@
+[
+  {
+    "filename": "44e0e29fd89dc7205408df0246dd8aca.mp4",
+    "durationSeconds": 90,
+    "fileSizeMB": "3.1",
+    "estimatedPacing": "slow",
+    "recommendedFps": 30,
+    "analyzedAt": "2026-05-08T03:14:26.281Z",
+    "suggestions": {
+      "grainType": "film",
+      "colorGrade": "dark",
+      "textAnimation": "fade",
+      "slowZoom": true,
+      "fogOverlay": true,
+      "targetDuration": 90
+    }
+  }
+]

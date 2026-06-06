@@ -1,0 +1,1458 @@
+[
+  {
+    "id": "news_reporter",
+    "name": "News Reporter",
+    "icon": "\ud83d\udcf0",
+    "description": "Broadcast \u2022 Clear \u2022 Authoritative",
+    "category": "documentary",
+    "favorite": true,
+    "edgeId": "en-US-ChristopherNeural",
+    "defaults": {
+      "pitch": 0,
+      "rate": 0,
+      "speed": 1.0,
+      "volume": 0,
+      "intensity": 10
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "broadcast",
+      "authoritative",
+      "clear",
+      "neutral"
+    ],
+    "energyRating": 6,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "news",
+      "documentary",
+      "explainer"
+    ],
+    "exampleLine": "What they discovered next changed everything.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "velvet_static",
+    "name": "Velvet Static",
+    "icon": "\ud83c\udf99\ufe0f",
+    "description": "Baritone \u2022 Smoky \u2022 Midnight Podcast",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-EricNeural",
+    "defaults": {
+      "pitch": -5,
+      "rate": -10,
+      "speed": 0.88,
+      "volume": 2,
+      "intensity": 40
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "baritone",
+      "smoky",
+      "cinematic",
+      "intimate",
+      "podcast"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark story",
+      "relationship",
+      "philosophy",
+      "tiktok"
+    ],
+    "exampleLine": "Some people disappear. Not because they stopped caring. But because caring became too loud.",
+    "pacing": "measured",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_male",
+    "name": "TikTok Male",
+    "icon": "\ud83c\udf11",
+    "description": "Deep \u2022 Locked In \u2022 Dark Edge",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -4,
+      "rate": -12,
+      "speed": 0.84,
+      "volume": 2,
+      "intensity": 20
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "tiktok",
+      "deep",
+      "locked in",
+      "dark",
+      "viral"
+    ],
+    "energyRating": 7,
+    "realismRating": 8,
+    "retentionRating": 10,
+    "contentType": [
+      "tiktok",
+      "trend-vault",
+      "relationship",
+      "viral"
+    ],
+    "exampleLine": "The truth about why they left was never what they told you.",
+    "pacing": "deliberate",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_female",
+    "name": "TikTok Female",
+    "icon": "\ud83d\udc69",
+    "description": "Soft \u2022 Mysterious \u2022 Dark Narrator",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-AriaNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -8,
+      "speed": 0.88,
+      "volume": 1,
+      "intensity": 30
+    },
+    "eq": "warm",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "tiktok",
+      "female",
+      "mysterious",
+      "soft",
+      "viral"
+    ],
+    "energyRating": 6,
+    "realismRating": 9,
+    "retentionRating": 10,
+    "contentType": [
+      "tiktok",
+      "trend-vault",
+      "relationship",
+      "emotional"
+    ],
+    "exampleLine": "She knew. She always knew. She just wasn't ready to say it out loud.",
+    "pacing": "soft",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "adam_style",
+    "name": "Deep Storyteller",
+    "icon": "\ud83c\udfad",
+    "description": "Calm \u2022 Grounded \u2022 Storytelling Authority",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -6,
+      "rate": -8,
+      "speed": 0.9,
+      "volume": 0,
+      "intensity": 20
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "deep",
+      "storyteller",
+      "calm",
+      "grounded",
+      "authoritative"
+    ],
+    "energyRating": 7,
+    "realismRating": 9,
+    "retentionRating": 9,
+    "contentType": [
+      "reddit stories",
+      "dark tiktok",
+      "conspiracy",
+      "documentary"
+    ],
+    "exampleLine": "There are things that happen in the dark that daylight never gets to explain.",
+    "pacing": "slow deliberate",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "midnight_confess",
+    "name": "Midnight Confession",
+    "icon": "\ud83d\udd6f\ufe0f",
+    "description": "Intimate \u2022 Conversational \u2022 Dark",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -8,
+      "speed": 0.86,
+      "volume": 1,
+      "intensity": 40
+    },
+    "eq": "warm",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "intimate",
+      "confessional",
+      "dark",
+      "conversational"
+    ],
+    "energyRating": 6,
+    "realismRating": 9,
+    "retentionRating": 9,
+    "contentType": [
+      "confession",
+      "relationship",
+      "personal story",
+      "reddit"
+    ],
+    "exampleLine": "I never told anyone this. But the night everything changed, I wasn't even surprised.",
+    "pacing": "conversational",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "reddit_noir",
+    "name": "Reddit Noir",
+    "icon": "\ud83d\udcd6",
+    "description": "Dramatic \u2022 Intense \u2022 Story-Driven",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-JasonNeural",
+    "defaults": {
+      "pitch": -4,
+      "rate": -5,
+      "speed": 0.87,
+      "volume": 2,
+      "intensity": 25
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "reddit",
+      "dramatic",
+      "noir",
+      "story",
+      "intense"
+    ],
+    "energyRating": 8,
+    "realismRating": 8,
+    "retentionRating": 9,
+    "contentType": [
+      "reddit stories",
+      "drama",
+      "confession",
+      "viral story"
+    ],
+    "exampleLine": "AITA for cutting off my entire family after what I found in the basement.",
+    "pacing": "building tension",
+    "emotionalIntensity": "very high"
+  },
+  {
+    "id": "shadow_voice",
+    "name": "The Shadow",
+    "icon": "\ud83c\udf18",
+    "description": "Cold \u2022 Precise \u2022 Commanding",
+    "category": "dark_storytelling",
+    "favorite": false,
+    "edgeId": "en-US-ChristopherNeural",
+    "defaults": {
+      "pitch": -5,
+      "rate": -10,
+      "speed": 0.85,
+      "volume": 2,
+      "intensity": 30
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "cold",
+      "commanding",
+      "dark",
+      "precise",
+      "cinematic"
+    ],
+    "energyRating": 8,
+    "realismRating": 8,
+    "retentionRating": 9,
+    "contentType": [
+      "conspiracy",
+      "dark tiktok",
+      "power",
+      "authority"
+    ],
+    "exampleLine": "Power doesn't corrupt people. It reveals who they always were.",
+    "pacing": "controlled",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "documentary",
+    "name": "Documentary",
+    "icon": "\ud83c\udfac",
+    "description": "Measured \u2022 Credible \u2022 Engaging",
+    "category": "documentary",
+    "favorite": false,
+    "edgeId": "en-US-SteffanNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -5,
+      "speed": 0.92,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "documentary",
+      "credible",
+      "measured",
+      "engaging"
+    ],
+    "energyRating": 6,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "documentary",
+      "explainer",
+      "history",
+      "crime"
+    ],
+    "exampleLine": "In 2019, a single decision unraveled a decade of carefully constructed lies.",
+    "pacing": "measured",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "professor",
+    "name": "Professor",
+    "icon": "\ud83c\udf93",
+    "description": "Warm \u2022 Deliberate \u2022 Wise",
+    "category": "documentary",
+    "favorite": false,
+    "edgeId": "en-US-SteffanNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -10,
+      "speed": 0.86,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "wise",
+      "deliberate",
+      "warm",
+      "educational"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 7,
+    "contentType": [
+      "philosophy",
+      "psychology",
+      "educational",
+      "explainer"
+    ],
+    "exampleLine": "The psychology of avoidance is not weakness. It is the oldest form of self-preservation we have.",
+    "pacing": "deliberate",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "josh_narrator",
+    "name": "Calm Narrator",
+    "icon": "\ud83c\udf0a",
+    "description": "Smooth \u2022 Relaxed \u2022 Reddit Voice",
+    "category": "documentary",
+    "favorite": false,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -5,
+      "speed": 0.92,
+      "volume": 0,
+      "intensity": 20
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "calm",
+      "relaxed",
+      "reddit",
+      "smooth",
+      "conversational"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "reddit stories",
+      "confession",
+      "calm narrative"
+    ],
+    "exampleLine": "So this actually happened. And I still don't fully understand it.",
+    "pacing": "relaxed",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "horror_ghost",
+    "name": "Horror Ghost",
+    "icon": "\ud83d\udc7b",
+    "description": "Whisper \u2022 Reverb \u2022 Haunted",
+    "category": "horror",
+    "favorite": false,
+    "edgeId": "en-US-AriaNeural",
+    "defaults": {
+      "pitch": -10,
+      "rate": -18,
+      "speed": 0.8,
+      "volume": 0,
+      "intensity": 85
+    },
+    "eq": "dark",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "horror",
+      "ghost",
+      "whisper",
+      "haunted",
+      "reverb"
+    ],
+    "energyRating": 4,
+    "realismRating": 7,
+    "retentionRating": 9,
+    "contentType": [
+      "horror",
+      "paranormal",
+      "creepy",
+      "ARG"
+    ],
+    "exampleLine": "She kept leaving notes. We didn't realize until later \u2014 she had been dead for three days.",
+    "pacing": "agonizingly slow",
+    "emotionalIntensity": "very high"
+  },
+  {
+    "id": "fast_viral",
+    "name": "Fast Viral",
+    "icon": "\u26a1",
+    "description": "Energy \u2022 Punchy \u2022 Hook in 2 Seconds",
+    "category": "motivational",
+    "favorite": false,
+    "edgeId": "en-US-TonyNeural",
+    "defaults": {
+      "pitch": 1,
+      "rate": 10,
+      "speed": 1.15,
+      "volume": 2,
+      "intensity": 5
+    },
+    "eq": "bright",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "viral",
+      "fast",
+      "punchy",
+      "energy",
+      "hook"
+    ],
+    "energyRating": 10,
+    "realismRating": 7,
+    "retentionRating": 10,
+    "contentType": [
+      "tiktok",
+      "reels",
+      "shorts",
+      "viral",
+      "motivational"
+    ],
+    "exampleLine": "This is the ONE thing every successful person does before 6am \u2014 and nobody talks about it.",
+    "pacing": "rapid fire",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "hype_man",
+    "name": "Hype Man",
+    "icon": "\ud83d\udd25",
+    "description": "Maximum Energy \u2022 Rapid \u2022 Viral Hook",
+    "category": "motivational",
+    "favorite": false,
+    "edgeId": "en-US-TonyNeural",
+    "defaults": {
+      "pitch": 2,
+      "rate": 15,
+      "speed": 1.2,
+      "volume": 3,
+      "intensity": 5
+    },
+    "eq": "bright",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "hype",
+      "energy",
+      "viral",
+      "fast",
+      "exciting"
+    ],
+    "energyRating": 10,
+    "realismRating": 6,
+    "retentionRating": 9,
+    "contentType": [
+      "viral",
+      "reels",
+      "shorts",
+      "tiktok",
+      "hype"
+    ],
+    "exampleLine": "Wait \u2014 you actually haven't heard about this? Let me change your entire perspective in 30 seconds.",
+    "pacing": "explosive",
+    "emotionalIntensity": "maximum"
+  },
+  {
+    "id": "confident",
+    "name": "Confident Authority",
+    "icon": "\ud83d\udc54",
+    "description": "Steady \u2022 Respected \u2022 Zero Doubt",
+    "category": "motivational",
+    "favorite": false,
+    "edgeId": "en-US-ChristopherNeural",
+    "defaults": {
+      "pitch": 0,
+      "rate": 0,
+      "speed": 0.95,
+      "volume": 2,
+      "intensity": 10
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "confident",
+      "authority",
+      "steady",
+      "professional"
+    ],
+    "energyRating": 7,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "business",
+      "finance",
+      "self-improvement",
+      "leadership"
+    ],
+    "exampleLine": "The people who succeed aren't smarter. They're just more comfortable being uncomfortable.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium-high"
+  },
+  {
+    "id": "emotional_confess",
+    "name": "Emotional Confession",
+    "icon": "\ud83d\udc94",
+    "description": "Raw \u2022 Vulnerable \u2022 Relatable",
+    "category": "relationship",
+    "favorite": false,
+    "edgeId": "en-US-JennyNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -5,
+      "speed": 0.87,
+      "volume": 1,
+      "intensity": 35
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "emotional",
+      "vulnerable",
+      "raw",
+      "female",
+      "relatable"
+    ],
+    "energyRating": 6,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "relationship",
+      "confession",
+      "emotional",
+      "tiktok female"
+    ],
+    "exampleLine": "I kept telling myself I was fine. And then someone asked if I was okay \u2014 and I just completely fell apart.",
+    "pacing": "natural",
+    "emotionalIntensity": "very high"
+  },
+  {
+    "id": "late_night",
+    "name": "Late Night Thoughts",
+    "icon": "\ud83c\udf19",
+    "description": "3AM \u2022 Introspective \u2022 Honest",
+    "category": "relationship",
+    "favorite": false,
+    "edgeId": "en-US-MonicaNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -8,
+      "speed": 0.86,
+      "volume": 1,
+      "intensity": 30
+    },
+    "eq": "warm",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "3am",
+      "introspective",
+      "honest",
+      "late night",
+      "thoughts"
+    ],
+    "energyRating": 4,
+    "realismRating": 9,
+    "retentionRating": 9,
+    "contentType": [
+      "mental health",
+      "relationship",
+      "personal growth",
+      "philosophy"
+    ],
+    "exampleLine": "It's 3am and I'm still trying to understand how someone who loved you could just stop.",
+    "pacing": "slow intimate",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "antoni_natural",
+    "name": "Natural Narrator",
+    "icon": "\ud83d\udde3\ufe0f",
+    "description": "Casual \u2022 Emotional \u2022 Conversational",
+    "category": "relationship",
+    "favorite": false,
+    "edgeId": "en-US-AndrewNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -3,
+      "speed": 0.95,
+      "volume": 0,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "natural",
+      "casual",
+      "emotional",
+      "conversational",
+      "authentic"
+    ],
+    "energyRating": 6,
+    "realismRating": 10,
+    "retentionRating": 9,
+    "contentType": [
+      "confession",
+      "personal story",
+      "relationship",
+      "tiktok"
+    ],
+    "exampleLine": "Look \u2014 I know this is going to sound weird. But hear me out.",
+    "pacing": "conversational",
+    "emotionalIntensity": "medium-high"
+  },
+  {
+    "id": "podcast_host",
+    "name": "Podcast Host",
+    "icon": "\ud83c\udfa7",
+    "description": "Smooth \u2022 Engaging \u2022 Pull-you-in",
+    "category": "podcast",
+    "favorite": false,
+    "edgeId": "en-US-BrianNeural",
+    "defaults": {
+      "pitch": -1,
+      "rate": 0,
+      "speed": 0.95,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "podcast",
+      "engaging",
+      "smooth",
+      "professional"
+    ],
+    "energyRating": 6,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "podcast",
+      "interview",
+      "commentary",
+      "educational"
+    ],
+    "exampleLine": "Welcome back. Today we're going into something I've wanted to talk about for a while.",
+    "pacing": "natural flow",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "gen_z",
+    "name": "Gen-Z Voice",
+    "icon": "\ud83d\udcf1",
+    "description": "Casual \u2022 Real \u2022 Native Internet",
+    "category": "podcast",
+    "favorite": false,
+    "edgeId": "en-US-AndrewNeural",
+    "defaults": {
+      "pitch": 0,
+      "rate": 5,
+      "speed": 1.0,
+      "volume": 1,
+      "intensity": 10
+    },
+    "eq": "bright",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "gen-z",
+      "casual",
+      "internet",
+      "authentic",
+      "conversational"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 9,
+    "contentType": [
+      "tiktok",
+      "shorts",
+      "commentary",
+      "lifestyle"
+    ],
+    "exampleLine": "Okay no wait \u2014 this is actually kind of insane. You need to hear this.",
+    "pacing": "natural fast",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "asmr_whisper",
+    "name": "ASMR Whisper",
+    "icon": "\ud83c\udf3f",
+    "description": "Soft \u2022 Intimate \u2022 Close Mic",
+    "category": "podcast",
+    "favorite": false,
+    "edgeId": "en-US-JaneNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -15,
+      "speed": 0.82,
+      "volume": -2,
+      "intensity": 25
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "asmr",
+      "whisper",
+      "soft",
+      "intimate",
+      "calming"
+    ],
+    "energyRating": 2,
+    "realismRating": 8,
+    "retentionRating": 8,
+    "contentType": [
+      "ASMR",
+      "meditation",
+      "calm",
+      "sleep content"
+    ],
+    "exampleLine": "You've been carrying this for so long. And it's okay to just... let it rest for a moment.",
+    "pacing": "drifting slow",
+    "emotionalIntensity": "low"
+  },
+  {
+    "id": "chill_commentary",
+    "name": "Chill Commentary",
+    "icon": "\u2615",
+    "description": "Relaxed \u2022 Witty \u2022 Low Effort (on purpose)",
+    "category": "podcast",
+    "favorite": false,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -1,
+      "rate": 0,
+      "speed": 0.93,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "chill",
+      "witty",
+      "relaxed",
+      "commentary",
+      "conversational"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "commentary",
+      "lifestyle",
+      "review",
+      "casual"
+    ],
+    "exampleLine": "So I found out something today that I genuinely cannot stop thinking about. Sit down.",
+    "pacing": "easy going",
+    "emotionalIntensity": "low-medium"
+  },
+  {
+    "id": "luxury",
+    "name": "Luxury Brand",
+    "icon": "\ud83d\udc8e",
+    "description": "Refined \u2022 Premium \u2022 Aspirational",
+    "category": "luxury",
+    "favorite": false,
+    "edgeId": "en-GB-RyanNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -5,
+      "speed": 0.9,
+      "volume": 1,
+      "intensity": 20
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "luxury",
+      "premium",
+      "refined",
+      "british",
+      "aspirational"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "luxury lifestyle",
+      "brand",
+      "aspirational",
+      "wealth"
+    ],
+    "exampleLine": "The ones who truly have everything never need to announce it.",
+    "pacing": "composed",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "british_elegance",
+    "name": "British Elegance",
+    "icon": "\ud83c\udfa9",
+    "description": "Measured \u2022 Intelligent \u2022 Old World Authority",
+    "category": "luxury",
+    "favorite": false,
+    "edgeId": "en-GB-ThomasNeural",
+    "defaults": {
+      "pitch": -1,
+      "rate": -3,
+      "speed": 0.92,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "broadcast",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "british",
+      "elegant",
+      "intelligent",
+      "measured",
+      "authority"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "documentary",
+      "luxury",
+      "philosophy",
+      "history"
+    ],
+    "exampleLine": "Civilizations are not built by the loudest voices. They are shaped in silence, by those who choose not to explain themselves.",
+    "pacing": "measured intelligence",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "conspiracy",
+    "name": "Conspiracy Voice",
+    "icon": "\ud83c\udf00",
+    "description": "Urgent \u2022 Suspicious \u2022 You Need to Hear This",
+    "category": "mystery",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -5,
+      "speed": 0.88,
+      "volume": 2,
+      "intensity": 40
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "conspiracy",
+      "urgent",
+      "mysterious",
+      "suspense",
+      "viral"
+    ],
+    "energyRating": 8,
+    "realismRating": 7,
+    "retentionRating": 10,
+    "contentType": [
+      "conspiracy",
+      "mystery",
+      "thriller",
+      "viral"
+    ],
+    "exampleLine": "They removed this video three times. Here's what they don't want you to understand.",
+    "pacing": "urgent whisper",
+    "emotionalIntensity": "very high"
+  },
+  {
+    "id": "comedy_robot",
+    "name": "Comedy Robot",
+    "icon": "\ud83e\udd16",
+    "description": "Robotic \u2022 Processed \u2022 Meme Energy",
+    "category": "special",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -8,
+      "rate": 0,
+      "speed": 0.95,
+      "volume": 1,
+      "intensity": 70
+    },
+    "eq": "thin",
+    "reverb": false,
+    "robot": true,
+    "tags": [
+      "robot",
+      "comedy",
+      "meme",
+      "viral",
+      "effect"
+    ],
+    "energyRating": 8,
+    "realismRating": 3,
+    "retentionRating": 8,
+    "contentType": [
+      "comedy",
+      "meme",
+      "viral",
+      "entertainment"
+    ],
+    "exampleLine": "I have calculated that your ex has made seventeen questionable decisions since leaving you.",
+    "pacing": "robotic staccato",
+    "emotionalIntensity": "low"
+  },
+  {
+    "id": "cosmic_monk",
+    "name": "Cosmic Monk",
+    "icon": "\ud83c\udf0c",
+    "description": "Reverberant \u2022 Calm \u2022 Cosmic-scale narration",
+    "category": "cinematic_narrator",
+    "favorite": false,
+    "edgeId": "en-US-SteffanNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -12,
+      "speed": 0.88,
+      "volume": 1,
+      "intensity": 60
+    },
+    "eq": "warm",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "cosmic",
+      "monk",
+      "reverb",
+      "calm",
+      "spiritual"
+    ],
+    "energyRating": 4,
+    "realismRating": 9,
+    "retentionRating": 9,
+    "contentType": [
+      "philosophy",
+      "spiritual",
+      "relationship"
+    ],
+    "exampleLine": "And so the universe answered, in a language older than language.",
+    "pacing": "very slow",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "dark_story_narrator",
+    "name": "Dark Story Narrator",
+    "icon": "\ud83c\udf11",
+    "description": "Cinematic \u2022 Haunting \u2022 Late-night",
+    "category": "cinematic_narrator",
+    "favorite": true,
+    "edgeId": "en-US-EricNeural",
+    "defaults": {
+      "pitch": -5,
+      "rate": -13,
+      "speed": 0.85,
+      "volume": 2,
+      "intensity": 35
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "dark",
+      "cinematic",
+      "haunting",
+      "story"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "relationship",
+      "tiktok"
+    ],
+    "exampleLine": "Some endings begin in silence \u2014 long before the words arrive.",
+    "pacing": "steady",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "ancient_librarian",
+    "name": "Ancient Librarian",
+    "icon": "\ud83d\udcdc",
+    "description": "Whispered \u2022 Scholarly \u2022 Dust and parchment",
+    "category": "cinematic_narrator",
+    "favorite": false,
+    "edgeId": "en-US-RogerNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -15,
+      "speed": 0.84,
+      "volume": 0,
+      "intensity": 30
+    },
+    "eq": "warm",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "scholar",
+      "whisper",
+      "library",
+      "ancient"
+    ],
+    "energyRating": 4,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "history",
+      "mystery",
+      "explainer"
+    ],
+    "exampleLine": "This passage was meant to be forgotten \u2014 and yet, here it is.",
+    "pacing": "slow",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "ethereal_spirit",
+    "name": "Ethereal Spirit",
+    "icon": "\u2728",
+    "description": "Airy \u2022 Otherworldly \u2022 Floating reverb",
+    "category": "cinematic_narrator",
+    "favorite": false,
+    "edgeId": "en-US-AriaNeural",
+    "defaults": {
+      "pitch": -1,
+      "rate": -12,
+      "speed": 0.86,
+      "volume": 0,
+      "intensity": 70
+    },
+    "eq": "bright",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "ethereal",
+      "spirit",
+      "airy",
+      "floating"
+    ],
+    "energyRating": 5,
+    "realismRating": 9,
+    "retentionRating": 8,
+    "contentType": [
+      "spiritual",
+      "dream",
+      "fantasy"
+    ],
+    "exampleLine": "I do not arrive in the wind. I arrive in the pause between breaths.",
+    "pacing": "slow",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "gravel_king",
+    "name": "Gravel King",
+    "icon": "\ud83e\udea8",
+    "description": "Deep \u2022 Rough \u2022 Battle-worn baritone",
+    "category": "cinematic_narrator",
+    "favorite": true,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -10,
+      "rate": -10,
+      "speed": 0.86,
+      "volume": 3,
+      "intensity": 25
+    },
+    "eq": "dark",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "gravel",
+      "deep",
+      "baritone",
+      "rough",
+      "masculine"
+    ],
+    "energyRating": 8,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "myth",
+      "heroic"
+    ],
+    "exampleLine": "I have buried men for less. Listen carefully.",
+    "pacing": "slow",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "raspy_oracle_narrator",
+    "name": "Raspy Oracle Narrator",
+    "icon": "\ud83d\udf02",
+    "description": "Slightly raspy \u2022 Cinematic YouTube storyteller \u2022 Powerful but warm",
+    "category": "cinematic_narrator",
+    "favorite": true,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -10,
+      "speed": 0.92,
+      "volume": 2,
+      "intensity": 28
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "raspy",
+      "oracle",
+      "narrator",
+      "cinematic",
+      "youtube",
+      "gravelly"
+    ],
+    "energyRating": 8,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "motivational",
+      "mythic",
+      "narrator"
+    ],
+    "exampleLine": "What you are about to hear has been waiting a long time to find you.",
+    "pacing": "steady",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_male_natural",
+    "name": "TikTok Male \u2014 Natural",
+    "icon": "\ud83c\udf99\ufe0f",
+    "description": "Less robotic \u2022 Conversational \u2022 Cleaner pacing",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -6,
+      "speed": 0.94,
+      "volume": 1,
+      "intensity": 12
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "natural",
+      "tiktok",
+      "male",
+      "clean"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 9,
+    "contentType": [
+      "tiktok",
+      "narrator",
+      "explainer"
+    ],
+    "exampleLine": "Most people miss this \u2014 but the ones who get it never forget.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "tiktok_male_cinematic",
+    "name": "TikTok Male \u2014 Cinematic",
+    "icon": "\ud83c\udfac",
+    "description": "Deeper \u2022 Wider \u2022 Slow cinematic delivery",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -5,
+      "rate": -14,
+      "speed": 0.86,
+      "volume": 2,
+      "intensity": 35
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "cinematic",
+      "tiktok",
+      "male",
+      "slow"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "tiktok",
+      "cinematic"
+    ],
+    "exampleLine": "And just like that, everything you thought you knew quietly changed.",
+    "pacing": "slow",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_male_raspy",
+    "name": "TikTok Male \u2014 Raspy",
+    "icon": "\ud83e\udea8",
+    "description": "Slightly gravelly \u2022 Warm \u2022 Storyteller edge",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-DavisNeural",
+    "defaults": {
+      "pitch": -4,
+      "rate": -10,
+      "speed": 0.9,
+      "volume": 2,
+      "intensity": 22
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "raspy",
+      "gravelly",
+      "male",
+      "warm"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "tiktok",
+      "narrator"
+    ],
+    "exampleLine": "Some truths only land when the voice telling them has a few miles on it.",
+    "pacing": "steady",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_male_youtube_narrator",
+    "name": "TikTok Male \u2014 YouTube Narrator",
+    "icon": "\ud83d\udcf9",
+    "description": "Clear \u2022 Confident \u2022 Smooth narrator polish",
+    "category": "improved",
+    "favorite": true,
+    "edgeId": "en-US-AndrewNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -4,
+      "speed": 0.96,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "youtube",
+      "narrator",
+      "clear",
+      "confident"
+    ],
+    "energyRating": 8,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "narrator",
+      "explainer",
+      "tiktok",
+      "educational"
+    ],
+    "exampleLine": "Here is the part most channels never tell you.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "tiktok_female_natural",
+    "name": "TikTok Female \u2014 Natural",
+    "icon": "\ud83d\udc69",
+    "description": "Cleaner \u2022 Conversational \u2022 Less synthetic",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-AriaNeural",
+    "defaults": {
+      "pitch": -1,
+      "rate": -4,
+      "speed": 0.95,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "natural",
+      "tiktok",
+      "female",
+      "clean"
+    ],
+    "energyRating": 7,
+    "realismRating": 10,
+    "retentionRating": 9,
+    "contentType": [
+      "tiktok",
+      "narrator",
+      "explainer"
+    ],
+    "exampleLine": "You felt it before you understood it \u2014 that's the part nobody talks about.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium"
+  },
+  {
+    "id": "tiktok_female_cinematic",
+    "name": "TikTok Female \u2014 Cinematic",
+    "icon": "\ud83c\udf11",
+    "description": "Deep \u2022 Smoky \u2022 Late-night storyteller",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-AriaNeural",
+    "defaults": {
+      "pitch": -3,
+      "rate": -12,
+      "speed": 0.86,
+      "volume": 2,
+      "intensity": 38
+    },
+    "eq": "velvet",
+    "reverb": true,
+    "robot": false,
+    "tags": [
+      "cinematic",
+      "tiktok",
+      "female",
+      "smoky"
+    ],
+    "energyRating": 6,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "dark_storytelling",
+      "tiktok",
+      "cinematic"
+    ],
+    "exampleLine": "There was a version of this story you weren't supposed to hear.",
+    "pacing": "slow",
+    "emotionalIntensity": "high"
+  },
+  {
+    "id": "tiktok_female_youtube_narrator",
+    "name": "TikTok Female \u2014 YouTube Narrator",
+    "icon": "\ud83d\udcfa",
+    "description": "Polished \u2022 Warm \u2022 Professional narrator tone",
+    "category": "improved",
+    "favorite": false,
+    "edgeId": "en-US-JennyNeural",
+    "defaults": {
+      "pitch": 0,
+      "rate": -2,
+      "speed": 0.97,
+      "volume": 1,
+      "intensity": 12
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "tags": [
+      "youtube",
+      "narrator",
+      "polished",
+      "female"
+    ],
+    "energyRating": 8,
+    "realismRating": 10,
+    "retentionRating": 10,
+    "contentType": [
+      "narrator",
+      "educational",
+      "tiktok"
+    ],
+    "exampleLine": "And this is where most people stop paying attention \u2014 but they shouldn't.",
+    "pacing": "steady",
+    "emotionalIntensity": "medium"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "titleTemplate": "{folder} #Shorts",
+  "descriptionTemplate": "Generated with Trend Vault.\n\n#Shorts #trendvault",
+  "tags": "shorts,trendvault,fyp",
+  "privacy": "public",
+  "madeForKids": false
+}

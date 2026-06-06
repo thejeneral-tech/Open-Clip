@@ -4,20 +4,18 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>🎙️ Voice Lab — Trend Vault Studio</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;600&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#040208;--surface:#0b0814;--surface2:#120f1e;--surface3:#1a1530;
+  --bg:#040208;--surface:#21252b;--surface2:#2c313c;--surface3:#1b1e24;
   --border:#281d47;--border2:#3d2a6a;
-  --accent:#9b59b6;--purple:#7c3aed;--purple2:#a855f7;
-  --gold:#c9a227;--gold2:#f0c040;--green:#2ecc71;--red:#e53e3e;
+  --accent:#e06c75;--purple:#e06c75;--purple2:#e06c75;
+  --gold:#d19a66;--gold2:#f0ad4e;--green:#2ecc71;--red:#e53e3e;
   --text:#e8e0f5;--text2:#d4cbec;--muted:#9890ba;--r:14px;--r2:10px;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh}
-#stars{position:fixed;inset:0;pointer-events:none;z-index:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-height:100vh}
+#stars{display:none}
 .star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
 @keyframes twinkle{from{opacity:var(--lo,.1)}to{opacity:var(--hi,.9)}}
 .app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
@@ -25,13 +23,13 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 /* ── Header ── */
 header{display:flex;align-items:center;gap:16px;padding:18px 36px;background:rgba(4,2,8,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .logo-wrap{display:flex;align-items:center;gap:12px}
-.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(155,89,182,.8))}
-.logo-text{font-family:'Cinzel',serif;font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
-.logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;font-family:'Inter',sans-serif}
+.logo-icon{font-size:2rem;filter:drop-shadow(0 0 12px rgba(224,108,117,.8))}
+.logo-text{font-family:var(--font-mono);font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,var(--purple2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:1px}
+.logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;font-family:var(--font-mono)}
 header nav{margin-left:auto;display:flex;gap:10px}
 .nav-link{padding:8px 18px;border-radius:8px;font-size:.8rem;font-weight:600;text-decoration:none;color:var(--text2);border:1px solid var(--border);transition:all .2s;letter-spacing:.5px}
-.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.1)}
-.nav-link.active{background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(201,162,39,.1));border-color:var(--purple);color:var(--purple2)}
+.nav-link:hover{border-color:var(--purple);color:var(--text);background:rgba(224,108,117,.1)}
+.nav-link.active{background:linear-gradient(135deg,rgba(224,108,117,.25),rgba(209,154,102,.1));border-color:var(--purple);color:var(--purple2)}
 
 /* ── Tab bar ── */
 .tab-bar{display:flex;gap:2px;padding:0 36px;background:rgba(11,8,20,.95);border-bottom:1px solid var(--border);position:sticky;top:72px;z-index:99}
@@ -46,8 +44,8 @@ header nav{margin-left:auto;display:flex;gap:10px}
 .sidebar{width:220px;min-width:220px;padding:24px 0;border-right:1px solid var(--border);position:sticky;top:110px;height:calc(100vh - 110px);overflow-y:auto}
 .sidebar-title{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:0 20px 10px}
 .cat-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:.8rem;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
-.cat-item:hover{background:rgba(124,58,237,.08);color:var(--text)}
-.cat-item.active{border-left-color:var(--purple2);background:rgba(124,58,237,.12);color:var(--purple2)}
+.cat-item:hover{background:rgba(224,108,117,.08);color:var(--text)}
+.cat-item.active{border-left-color:var(--purple2);background:rgba(224,108,117,.12);color:var(--purple2)}
 .cat-item .cat-icon{font-size:1rem;width:20px;text-align:center}
 .cat-item .cat-count{margin-left:auto;font-size:.62rem;color:var(--muted);background:var(--surface2);padding:2px 7px;border-radius:20px}
 
@@ -68,15 +66,15 @@ header nav{margin-left:auto;display:flex;gap:10px}
   display:flex;flex-direction:column;gap:10px;
 }
 .voice-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.voice-card.active{border-color:var(--purple2);background:rgba(124,58,237,.08);box-shadow:0 0 0 1px rgba(168,85,247,.3),0 8px 32px rgba(124,58,237,.2)}
-.voice-card.favorite-card{border-color:var(--gold);background:rgba(201,162,39,.05)}
+.voice-card.active{border-color:var(--purple2);background:rgba(224,108,117,.08);box-shadow:0 0 0 1px rgba(224,108,117,.3),0 8px 32px rgba(224,108,117,.2)}
+.voice-card.favorite-card{border-color:var(--gold);background:rgba(209,154,102,.05)}
 .voice-card.favorite-card:hover{border-color:var(--gold2)}
 .vc-top{display:flex;align-items:flex-start;justify-content:space-between}
 .vc-icon{font-size:1.8rem;line-height:1}
 .vc-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
 .badge{font-size:.55rem;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 6px;border-radius:4px}
 .badge-fav{background:#7c4a03;color:var(--gold2);border:1px solid rgba(240,192,64,.3)}
-.badge-cat{background:rgba(124,58,237,.2);color:var(--purple2);border:1px solid rgba(168,85,247,.2)}
+.badge-cat{background:rgba(224,108,117,.2);color:var(--purple2);border:1px solid rgba(224,108,117,.2)}
 .badge-energy{background:rgba(229,62,62,.15);color:#fc8181}
 .vc-name{font-size:.92rem;font-weight:700;color:var(--text);line-height:1.2}
 .vc-desc{font-size:.68rem;color:var(--muted);line-height:1.4}
@@ -84,22 +82,22 @@ header nav{margin-left:auto;display:flex;gap:10px}
 .metric{font-size:.58rem;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.3px}
 .m-energy{background:rgba(252,129,74,.15);color:#fc8f4a;border:1px solid rgba(252,129,74,.2)}
 .m-realism{background:rgba(46,204,113,.15);color:#2ecc71;border:1px solid rgba(46,204,113,.2)}
-.m-retention{background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.2)}
+.m-retention{background:rgba(156,222,242,.15);color:#60a5fa;border:1px solid rgba(156,222,242,.2)}
 .vc-example{font-size:.65rem;color:var(--text2);line-height:1.4;font-style:italic;border-left:2px solid var(--border2);padding-left:8px}
 .vc-actions{display:flex;gap:6px;margin-top:auto}
-.btn-test{flex:1;padding:7px;background:rgba(124,58,237,.2);border:1px solid rgba(124,58,237,.3);border-radius:7px;color:var(--purple2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;letter-spacing:.5px;text-transform:uppercase}
-.btn-test:hover{background:rgba(124,58,237,.4);border-color:var(--purple2)}
+.btn-test{flex:1;padding:7px;background:rgba(224,108,117,.2);border:1px solid rgba(224,108,117,.3);border-radius:7px;color:var(--purple2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit;letter-spacing:.5px;text-transform:uppercase}
+.btn-test:hover{background:rgba(224,108,117,.4);border-color:var(--purple2)}
 .btn-test.playing{background:rgba(46,204,113,.15);border-color:var(--green);color:var(--green)}
-.btn-compare{padding:7px 10px;background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.2);border-radius:7px;color:var(--gold2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
-.btn-compare:hover{background:rgba(201,162,39,.25)}
-.btn-compare.selected{background:rgba(201,162,39,.3);border-color:var(--gold)}
+.btn-compare{padding:7px 10px;background:rgba(209,154,102,.1);border:1px solid rgba(209,154,102,.2);border-radius:7px;color:var(--gold2);font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-compare:hover{background:rgba(209,154,102,.25)}
+.btn-compare.selected{background:rgba(209,154,102,.3);border-color:var(--gold)}
 .btn-fav{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
 .btn-fav:hover{border-color:var(--gold);color:var(--gold2)}
-.btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(201,162,39,.1)}
+.btn-fav.starred{color:var(--gold2);border-color:rgba(240,192,64,.4);background:rgba(209,154,102,.1)}
 .btn-trash{padding:7px 9px;background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:.9rem;cursor:pointer;transition:all .15s}
 .btn-trash:hover{border-color:rgba(239,68,68,.5);color:#f87171;background:rgba(239,68,68,.1)}
 .btn-use{padding:7px 14px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:7px;color:#fff;font-size:.68rem;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.5px;text-transform:uppercase;transition:all .15s}
-.btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,58,237,.4)}
+.btn-use:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(224,108,117,.4)}
 
 /* ── Section header ── */
 .section-head{display:flex;align-items:center;gap:10px;margin:28px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
@@ -129,7 +127,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .pp-audio audio{width:100%;height:34px;border-radius:8px}
 .pp-text{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.78rem;flex:1;min-width:200px;max-width:360px;outline:none;resize:none;height:52px}
 .btn-gen{padding:10px 20px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s}
-.btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(124,58,237,.4)}
+.btn-gen:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(224,108,117,.4)}
 .btn-gen:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-close-pp{padding:10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:1rem;cursor:pointer;transition:all .15s}
 .btn-close-pp:hover{border-color:var(--red);color:var(--red)}
@@ -149,17 +147,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .clone-layout{display:flex;gap:24px;flex-wrap:wrap}
 .clone-panel{flex:1;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
 .clone-panel-title{font-size:.72rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6d4bd6,#a855f7);color:#fff;font-size:.72rem;font-weight:800;flex-shrink:0}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6d4bd6,#e06c75);color:#fff;font-size:.72rem;font-weight:800;flex-shrink:0}
 .upload-drop{border:2px dashed var(--border2);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
-.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(124,58,237,.05)}
+.upload-drop:hover,.upload-drop.drag-over{border-color:var(--purple);background:rgba(224,108,117,.05)}
 .upload-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .ud-icon{font-size:2rem;margin-bottom:8px}
 .ud-text{font-size:.78rem;color:var(--muted);line-height:1.5}
 .ud-text strong{color:var(--purple2)}
 .voice-db-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto}
 .vdb-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .15s}
-.vdb-item:hover{border-color:var(--purple);background:rgba(124,58,237,.06)}
-.vdb-item.active{border-color:var(--purple2);background:rgba(124,58,237,.12)}
+.vdb-item:hover{border-color:var(--purple);background:rgba(224,108,117,.06)}
+.vdb-item.active{border-color:var(--purple2);background:rgba(224,108,117,.12)}
 .vdb-icon{font-size:1.4rem}
 .vdb-info{flex:1}
 .vdb-name{font-size:.82rem;font-weight:700;color:var(--text)}
@@ -173,7 +171,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .form-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:.82rem;padding:9px 12px;outline:none;transition:border-color .2s}
 .form-input:focus{border-color:var(--purple2)}
 .btn-primary{padding:11px 24px;background:linear-gradient(135deg,var(--purple),var(--purple2));border:none;border-radius:8px;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;width:100%}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(124,58,237,.4)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(224,108,117,.4)}
 .status-box{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.75rem;color:var(--muted);line-height:1.6;margin-top:12px;min-height:60px}
 .status-box.ok{border-color:rgba(46,204,113,.3);color:#68d391}
 .status-box.error{border-color:rgba(229,62,62,.3);color:#fc8181}
@@ -205,7 +203,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:.85rem}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;font-weight:600;background:rgba(124,58,237,.15);color:var(--purple2);border:1px solid rgba(124,58,237,.2);margin:2px}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;font-weight:600;background:rgba(224,108,117,.15);color:var(--purple2);border:1px solid rgba(224,108,117,.2);margin:2px}
 .openai-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:6px;font-size:.65rem;font-weight:700;background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2)}
 .openai-badge.offline{background:rgba(107,93,138,.1);color:var(--muted);border-color:var(--border)}
 
@@ -214,54 +212,27 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
    Injected across all pages for visual consistency
    ══════════════════════════════════════════════════════════════ */
 
-/* Calm silver-white RGB border animation */
-@keyframes calmRgbBorderMove{
-  0%  {background-position:0%   50%}
-  100%{background-position:260% 50%}
-}
-
 /* ── Card base: solid dark, no gradient bleed ── */
 .card{
-  background:#0b0b12!important;
+  background:#21252b!important;
   background-image:none!important;
   border:none!important;
   border-radius:14px;
   padding:20px;
   position:relative;
   overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.14);
+  box-shadow:0 0 8px rgba(224,108,117,.14);
   transition:transform .12s ease,box-shadow .3s ease;
 }
 /* RGB rim — mask cuts out interior, only 1.5px border visible */
-.card::before{
-  content:'';
-  position:absolute;
-  inset:0;
-  padding:1.5px;
-  border-radius:inherit;
-  background:linear-gradient(120deg,
-    rgba(255,255,255,.88),
-    rgba(167,139,250,.72),
-    rgba(96,165,250,.58),
-    rgba(255,255,255,.78),
-    rgba(244,114,182,.55),
-    rgba(255,255,255,.88)
-  );
-  background-size:260% 260%;
-  animation:calmRgbBorderMove 12s linear infinite;
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;
-  mask-composite:exclude;
-  pointer-events:none;
-  z-index:2;
-}
+.card::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
 /* No ::after — was causing interior color bleed */
 .card::after{display:none!important}
 /* Content always above the rim layer */
 .card>*{position:relative;z-index:3}
 .card:hover{
   transform:translateY(-1px);
-  box-shadow:0 0 14px rgba(167,139,250,.22),0 0 22px rgba(96,165,250,.12);
+  box-shadow:0 0 14px rgba(224,108,117,.22),0 0 22px rgba(156,222,242,.12);
 }
 
 /* ── Section/card headers ── */
@@ -270,14 +241,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   color:rgba(245,245,255,.95);
   text-shadow:
     0 0 3px rgba(255,255,255,.35),
-    0 0 7px rgba(167,139,250,.28),
-    0 0 12px rgba(96,165,250,.16);
+    0 0 7px rgba(224,108,117,.28),
+    0 0 12px rgba(156,222,242,.16);
 }
 /* Icon/emoji glow */
 .card-title .ti,.section-head-icon,.tile-icon,.section-icon{
   filter:
     drop-shadow(0 0 3px rgba(255,255,255,.4))
-    drop-shadow(0 0 6px rgba(167,139,250,.25));
+    drop-shadow(0 0 6px rgba(224,108,117,.25));
 }
 
 /* ── Fine print / muted text — brighter, still calm ── */
@@ -293,12 +264,12 @@ a.small,a[style*="font-size:.6"],a[style*="font-size:.65"],
 a[style*="font-size:.7"],a[href*="localhost"]{
   color:#c4b8f0!important;
   text-decoration:none;
-  text-shadow:0 0 5px rgba(167,139,250,.35);
+  text-shadow:0 0 5px rgba(224,108,117,.35);
   transition:color .2s,text-shadow .2s;
 }
 a.small:hover,a[href*="localhost"]:hover{
   color:#e2d9ff!important;
-  text-shadow:0 0 8px rgba(167,139,250,.55);
+  text-shadow:0 0 8px rgba(224,108,117,.55);
 }
 
 /* ── General fine print size bump ── */
@@ -308,36 +279,31 @@ a.small:hover,a[href*="localhost"]:hover{
 
 /* ── Inputs dark and clean ── */
 input,textarea,select{
-  background:#11111a!important;
+  background:#21252b!important;
   color:#f0ecff!important;
-  border-color:rgba(167,139,250,.3)!important;
+  border-color:rgba(224,108,117,.3)!important;
   text-shadow:none!important;
 }
 input:focus,textarea:focus,select:focus{
-  border-color:rgba(167,139,250,.65)!important;
+  border-color:rgba(224,108,117,.65)!important;
   outline:none!important;
-  box-shadow:0 0 0 2px rgba(167,139,250,.12)!important;
+  box-shadow:0 0 0 2px rgba(224,108,117,.12)!important;
 }
 
 
 /* voice-lab adv-card gets same treatment */
 .adv-card{
-  background:#0b0b12!important;border:none!important;
+  background:#21252b!important;border:none!important;
   border-radius:10px;padding:16px;position:relative;overflow:hidden;
-  box-shadow:0 0 8px rgba(167,139,250,.14);
+  box-shadow:0 0 8px rgba(224,108,117,.14);
 }
-.adv-card::before{
-  content:'';position:absolute;inset:0;padding:1.5px;border-radius:inherit;
-  background:linear-gradient(120deg,rgba(255,255,255,.88),rgba(167,139,250,.72),
-    rgba(96,165,250,.58),rgba(255,255,255,.78),rgba(244,114,182,.55),rgba(255,255,255,.88));
-  background-size:260% 260%;animation:calmRgbBorderMove 12s linear infinite;
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
-  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;z-index:2;
-}
+.adv-card::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
 .adv-card::after{display:none!important}
 .adv-card>*{position:relative;z-index:3}
 
 </style>
+<link rel="stylesheet" href="/tva-theme.css"/>
+<script src="/tva-theme.js"></script>
 </head>
 <body>
 <div id="stars"></div>
@@ -359,7 +325,7 @@ input:focus,textarea:focus,select:focus{
 <!-- Tab bar -->
 <div class="tab-bar">
   <button class="tab-btn active" onclick="switchTab('browse')">🎭 Browse Voices</button>
-  <button class="tab-btn" onclick="switchTab('favorites')">⭐ Favorites <span id="favCount" style="font-size:.65rem;margin-left:4px;background:rgba(201,162,39,.18);color:var(--gold2);padding:1px 6px;border-radius:8px">0</span></button>
+  <button class="tab-btn" onclick="switchTab('favorites')">⭐ Favorites <span id="favCount" style="font-size:.65rem;margin-left:4px;background:rgba(209,154,102,.18);color:var(--gold2);padding:1px 6px;border-radius:8px">0</span></button>
   <button class="tab-btn" onclick="switchTab('presets')">💾 My Presets</button>
   <button class="tab-btn" onclick="switchTab('advanced')">🎛️ Advanced Controls</button>
   <button class="tab-btn" onclick="switchTab('clone')">🧬 Voice Cloning</button>
@@ -417,7 +383,7 @@ input:focus,textarea:focus,select:focus{
   <div class="tab-content" id="tab-presets">
     <div class="content-header">
       <div class="content-title">💾 My Custom Presets</div>
-      <button onclick="savePresetSnapshot()" style="background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
+      <button onclick="savePresetSnapshot()" style="background:rgba(224,108,117,.15);border:1px solid var(--purple);color:var(--purple2);padding:7px 14px;border-radius:8px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">+ Save Current as Preset</button>
     </div>
     <p style="font-size:.78rem;color:var(--muted);margin-bottom:18px;line-height:1.6">
       Save a snapshot of the current voice + slider settings as a reusable preset. Presets are stored in <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">custom-presets.json</code> and appear in Trend Vault Studio automatically.
@@ -439,7 +405,7 @@ input:focus,textarea:focus,select:focus{
     </div>
 
     <!-- AI PROMPT BAR -->
-    <div style="background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(201,162,39,.04));border:1px solid rgba(124,58,237,.3);border-radius:12px;padding:16px;margin-bottom:20px">
+    <div style="background:linear-gradient(135deg,rgba(224,108,117,.08),rgba(209,154,102,.04));border:1px solid rgba(224,108,117,.3);border-radius:12px;padding:16px;margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:1.1rem">🪄</span>
         <span style="font-size:.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--purple2)">AI Voice Prompt</span>
@@ -503,7 +469,7 @@ input:focus,textarea:focus,select:focus{
     </div>
 
     <!-- Send advanced settings to Studio -->
-    <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(124,58,237,.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(224,108,117,.06));border:1px solid rgba(34,197,94,.3);border-radius:12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:200px">
         <div style="font-size:.78rem;font-weight:700;color:#86efac;margin-bottom:4px">📤 Export to Trend Vault Studio</div>
         <div style="font-size:.7rem;color:var(--muted);line-height:1.5">Sends the selected voice + all Advanced slider values to the Studio for final render.</div>
@@ -520,7 +486,7 @@ input:focus,textarea:focus,select:focus{
 
       <!-- Title -->
       <div style="text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#6ea8ff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.5px">Fish Speech S2 Pro</div>
+        <div style="font-family:var(--font-mono);font-size:1.7rem;font-weight:900;background:linear-gradient(135deg,#6ea8ff,#e06c75);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.5px">Fish Speech S2 Pro</div>
         <div style="font-size:.8rem;color:var(--muted);margin-top:4px">Upload a voice sample — the model will speak in that voice</div>
       </div>
 
@@ -568,7 +534,7 @@ input:focus,textarea:focus,select:focus{
           </div>
         </details>
 
-        <div id="cloneSelectedBadge" style="display:none;margin-top:12px;padding:8px 11px;background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.3);border-radius:8px;font-size:.72rem;color:#c4b5fd">
+        <div id="cloneSelectedBadge" style="display:none;margin-top:12px;padding:8px 11px;background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.3);border-radius:8px;font-size:.72rem;color:#9cdef2">
           🎙 Using reference voice: <strong id="cloneSelectedName">—</strong>
         </div>
 
@@ -598,7 +564,7 @@ input:focus,textarea:focus,select:focus{
 
         <div style="display:flex;gap:10px;margin-top:16px">
           <button id="cloneGenBtn" onclick="cloneGenerate()"
-            style="flex:1;background:linear-gradient(135deg,#6d4bd6,#a855f7);border:none;color:#fff;border-radius:9px;padding:12px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
+            style="flex:1;background:linear-gradient(135deg,#6d4bd6,#e06c75);border:none;color:#fff;border-radius:9px;padding:12px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s">
             ▶ Generate Speech
           </button>
           <button id="cloneReconnectBtn" onclick="cloneReconnectRecover()" title="Re-check the Fish Speech server and recover your last job — never starts a new generation"
@@ -615,7 +581,7 @@ input:focus,textarea:focus,select:focus{
             <span id="cloneProgressPct" style="font-size:.7rem;color:var(--muted)">0%</span>
           </div>
           <div style="height:6px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden">
-            <div id="cloneProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6d4bd6,#a855f7);border-radius:4px;transition:width .35s ease"></div>
+            <div id="cloneProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6d4bd6,#e06c75);border-radius:4px;transition:width .35s ease"></div>
           </div>
         </div>
       </div>
@@ -635,7 +601,7 @@ input:focus,textarea:focus,select:focus{
             ⬇ Download WAV
           </button>
           <button onclick="cloneSavePreset()"
-            style="flex:1;background:linear-gradient(135deg,rgba(201,162,39,.25),rgba(240,192,64,.35));border:1px solid rgba(240,192,64,.4);color:var(--gold2);border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
+            style="flex:1;background:linear-gradient(135deg,rgba(209,154,102,.25),rgba(240,192,64,.35));border:1px solid rgba(240,192,64,.4);color:var(--gold2);border-radius:9px;padding:12px 18px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit">
             💾 Save as Preset
           </button>
         </div>
@@ -645,7 +611,7 @@ input:focus,textarea:focus,select:focus{
       <div class="card" style="padding:22px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
           <span style="font-size:.7rem;letter-spacing:2px;text-transform:uppercase;color:var(--text2);font-weight:700">📦 Saved Presets</span>
-          <span id="clonePresetCount" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.25);color:#c4b5fd">0</span>
+          <span id="clonePresetCount" style="font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(224,108,117,.12);border:1px solid rgba(224,108,117,.25);color:#9cdef2">0</span>
         </div>
         <div id="clonePresetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
           <div style="font-size:.72rem;color:var(--muted);grid-column:1/-1">No saved presets yet — generate audio and click Save.</div>
@@ -684,7 +650,7 @@ input:focus,textarea:focus,select:focus{
         <!-- Checklist card -->
         <div class="card" style="padding:18px">
           <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;font-weight:700">🔍 Setup Checklist</div>
-          <div id="fishLabChecklist" style="display:flex;flex-direction:column;gap:6px;font-size:.72rem;font-family:'Courier New',monospace">
+          <div id="fishLabChecklist" style="display:flex;flex-direction:column;gap:6px;font-size:.72rem;font-family:var(--font-mono)">
             <div data-fstep="model">    ⚪ Fish model: …</div>
             <div data-fstep="runtime">  ⚪ Fish runtime: …</div>
             <div data-fstep="venv">     ⚪ Python venv: …</div>
@@ -713,11 +679,11 @@ input:focus,textarea:focus,select:focus{
               🛠 Repair Fish Speech
             </button>
             <button onclick="fishLabChooseModel()"
-              style="background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.35);color:#c4b5fd;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              style="background:rgba(224,108,117,.14);border:1px solid rgba(224,108,117,.35);color:#9cdef2;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
               📂 Choose Existing Model Folder
             </button>
             <button onclick="fishLabToggleLogs()"
-              style="background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
+              style="background:rgba(156,222,242,.12);border:1px solid rgba(156,222,242,.3);color:#93c5fd;border-radius:8px;padding:10px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s">
               📜 View Fish Logs
             </button>
           </div>
@@ -726,7 +692,7 @@ input:focus,textarea:focus,select:focus{
         <!-- Config summary -->
         <div class="card" style="padding:16px">
           <div style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:700">📋 Active Config</div>
-          <div id="fishLabConfig" style="font-size:.62rem;color:var(--muted);line-height:1.8;font-family:'Courier New',monospace">loading…</div>
+          <div id="fishLabConfig" style="font-size:.62rem;color:var(--muted);line-height:1.8;font-family:var(--font-mono)">loading…</div>
         </div>
 
       </div><!-- /left -->
@@ -741,7 +707,7 @@ input:focus,textarea:focus,select:focus{
               <span style="font-size:.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700">📜 Fish Speech Logs</span>
               <button onclick="fishLabClearLogs()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.6rem;cursor:pointer;padding:3px 8px;font-family:inherit">Clear</button>
             </div>
-            <div id="fishLabLogEntries" style="background:#060610;border:1px solid var(--border);border-radius:6px;padding:10px;max-height:260px;overflow-y:auto;font-family:'Courier New',monospace;font-size:.6rem;color:#cbd5e1;line-height:1.5">
+            <div id="fishLabLogEntries" style="background:#060610;border:1px solid var(--border);border-radius:6px;padding:10px;max-height:260px;overflow-y:auto;font-family:var(--font-mono);font-size:.6rem;color:#cbd5e1;line-height:1.5">
               <span style="color:var(--muted)">no logs yet — click ▶ Start Fish Speech</span>
             </div>
           </div>
@@ -778,7 +744,7 @@ input:focus,textarea:focus,select:focus{
                 ▶ Preview Voice
               </button>
               <button onclick="fishLabUseInStudio()"
-                style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold2);border-radius:8px;padding:9px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">
+                style="background:rgba(209,154,102,.12);border:1px solid rgba(209,154,102,.25);color:var(--gold2);border-radius:8px;padding:9px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit">
                 USE IN STUDIO
               </button>
               <div id="fishLabGenStatus" style="font-size:.65rem;color:var(--muted);flex:1;min-width:120px"></div>
@@ -840,7 +806,7 @@ input:focus,textarea:focus,select:focus{
   </div>
   <div class="pp-actions">
     <button class="btn-gen" id="ppGenBtn" onclick="generatePreview()">▶ GENERATE</button>
-    <button onclick="useInStudio()" style="padding:10px 16px;background:rgba(201,162,39,.15);border:1px solid rgba(201,162,39,.3);border-radius:8px;color:var(--gold2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">USE IN STUDIO</button>
+    <button onclick="useInStudio()" style="padding:10px 16px;background:rgba(209,154,102,.15);border:1px solid rgba(209,154,102,.3);border-radius:8px;color:var(--gold2);font-size:.72rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">USE IN STUDIO</button>
     <button class="btn-close-pp" onclick="closePreview()">✕</button>
   </div>
 </div>
@@ -1369,8 +1335,8 @@ function renderVoiceCardForFavorites(p){
     <div class="voice-name">${p.name}</div>
     <div class="voice-desc">${p.description||''}</div>
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-      <button onclick="event.stopPropagation();quickTest('${p.id}')" style="flex:1;background:rgba(124,58,237,.15);border:1px solid var(--purple);color:var(--purple2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ TEST</button>
-      <button onclick="event.stopPropagation();toggleFav('${p.id}')" style="background:rgba(201,162,39,.18);border:1px solid var(--gold2);color:var(--gold2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">★ FAV</button>
+      <button onclick="event.stopPropagation();quickTest('${p.id}')" style="flex:1;background:rgba(224,108,117,.15);border:1px solid var(--purple);color:var(--purple2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">▶ TEST</button>
+      <button onclick="event.stopPropagation();toggleFav('${p.id}')" style="background:rgba(209,154,102,.18);border:1px solid var(--gold2);color:var(--gold2);padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">★ FAV</button>
       <button onclick="event.stopPropagation();sendVoiceToStudio('${p.id}')" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#86efac;padding:5px 9px;border-radius:6px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">→ STUDIO</button>
     </div>
   </div>`;
@@ -1691,15 +1657,15 @@ function _renderCloneSources(){
       ? `${s.sampleCount} sample${s.sampleCount!==1?'s':''}`
       : (s.sizeBytes ? (s.sizeBytes/1024/1024).toFixed(1)+' MB' : '');
     const typeTag = s.type === 'profile'
-      ? `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(124,58,237,.2);color:#c4b5fd;margin-left:4px">profile</span>`
+      ? `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(224,108,117,.2);color:#9cdef2;margin-left:4px">profile</span>`
       : `<span style="font-size:.55rem;padding:1px 5px;border-radius:4px;background:rgba(0,180,120,.15);color:#6ee7b7;margin-left:4px">file</span>`;
     return `<div onclick="cloneSelectSource('${s.id}')"
       style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .12s;
-             background:${isSelected?'rgba(124,58,237,.18)':'rgba(255,255,255,.03)'};
-             border:1px solid ${isSelected?'rgba(124,58,237,.5)':'var(--border)'}">
+             background:${isSelected?'rgba(224,108,117,.18)':'rgba(255,255,255,.03)'};
+             border:1px solid ${isSelected?'rgba(224,108,117,.5)':'var(--border)'}">
       <span style="font-size:1rem">${s.type==='profile'?'🎙️':'📁'}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:.78rem;font-weight:600;color:${isSelected?'#c4b5fd':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        <div style="font-size:.78rem;font-weight:600;color:${isSelected?'#9cdef2':'var(--text2)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           ${s.name}${typeTag}
         </div>
         <div style="font-size:.62rem;color:var(--muted)">${meta}</div>
@@ -1735,7 +1701,7 @@ function cloneOnFilePick(files){
   if(btn){
     btn.disabled = false;
     btn.style.cursor = 'pointer';
-    btn.style.background = 'linear-gradient(135deg,#6d4bd6,#a855f7)';
+    btn.style.background = 'linear-gradient(135deg,#6d4bd6,#e06c75)';
     btn.style.color = '#fff';
     btn.style.borderColor = 'transparent';
   }
@@ -1883,7 +1849,7 @@ function cloneShowProgress(pct, stage, detail){
     fill.style.width = shown+'%';
     fill.style.background = failed
       ? 'linear-gradient(90deg,#ef4444,#f87171)'
-      : (done ? 'linear-gradient(90deg,#22c55e,#6ee7b7)' : 'linear-gradient(90deg,#6d4bd6,#a855f7)');
+      : (done ? 'linear-gradient(90deg,#22c55e,#6ee7b7)' : 'linear-gradient(90deg,#6d4bd6,#e06c75)');
   }
   if(stg)  stg.textContent  = cloneStageLabel(stage, detail);
   if(pctEl)pctEl.textContent= Math.round(shown)+'%';
@@ -1933,7 +1899,7 @@ function cloneSetConn(state, detail){
   const map = {
     connected:    ['#22c55e', 'Connected'],
     generating:   ['#6ea8ff', 'Generating…'],
-    starting:     ['#a855f7', 'Starting Fish Speech…'],
+    starting:     ['#e06c75', 'Starting Fish Speech…'],
     reconnecting: ['#f59e0b', 'Reconnecting'+(detail?' ('+detail+')':'…')],
     offline:      ['#ef4444', 'Server offline'],
   };
@@ -2453,7 +2419,7 @@ function _renderClonePresets(){
   }
   grid.innerHTML = _clonePresets.map(p => `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s"
-         onmouseover="this.style.borderColor='rgba(124,58,237,.45)'" onmouseout="this.style.borderColor='var(--border)'">
+         onmouseover="this.style.borderColor='rgba(224,108,117,.45)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="display:flex;align-items:flex-start;gap:8px">
         <span style="font-size:1.4rem">${p.icon||'🎤'}</span>
         <div style="flex:1;min-width:0">
@@ -2465,7 +2431,7 @@ function _renderClonePresets(){
       ${(p.generatedAudioUrl||p.sampleAudioUrl) ? `<audio src="${p.generatedAudioUrl||p.sampleAudioUrl}" controls style="width:100%;height:28px;border-radius:6px"></audio>` : ''}
       <div style="display:flex;gap:5px;flex-wrap:wrap">
         <button onclick="cloneUsePreset('${p.id}')"
-          style="flex:1;background:rgba(201,162,39,.14);border:1px solid rgba(201,162,39,.28);color:var(--gold2);border-radius:6px;padding:5px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">
+          style="flex:1;background:rgba(209,154,102,.14);border:1px solid rgba(209,154,102,.28);color:var(--gold2);border-radius:6px;padding:5px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:inherit">
           USE IN STUDIO
         </button>
         <button onclick="cloneDeletePreset('${p.id}')"
@@ -2566,7 +2532,7 @@ function vlShowUndoToast(msg, onUndo){
       'padding:10px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:.74rem';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span></span><button style="background:rgba(201,162,39,.18);border:1px solid rgba(240,192,64,.4);color:#f0c040;border-radius:7px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer">↩ Undo</button>`;
+  el.innerHTML = `<span></span><button style="background:rgba(209,154,102,.18);border:1px solid rgba(240,192,64,.4);color:#f0ad4e;border-radius:7px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer">↩ Undo</button>`;
   el.querySelector('span').textContent = msg;
   el.style.display = 'flex';
   const hide = () => { el.style.display = 'none'; };
