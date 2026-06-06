@@ -77,6 +77,9 @@
         </a>
       </div>
       <nav class="tv-sb-nav" aria-label="Primary navigation">${sectionsHTML}</nav>
+      <button class="tv-sb-settings" id="tvSbSettings" type="button" title="Settings">
+        <span class="tv-sb-ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="tv-sb-lbl">Settings</span>
+      </button>
       <div class="tv-sb-account" id="tvSbAccount" hidden>
         <a class="tv-sb-acct-main" id="tvSbAcctMain" title="Account">
           <span class="tv-sb-avatar" id="tvSbAvatar" aria-hidden="true">?</span>
@@ -220,6 +223,18 @@
       :root.tv-collapsed #tv-sidebar .tv-sb-acct-meta { display: none; }
       :root.tv-collapsed #tv-sidebar .tv-sb-acct-main { justify-content: center; flex: none; }
 
+      /* Settings entry at the bottom of the sidebar */
+      #tv-sidebar .tv-sb-settings {
+        flex-shrink: 0; display: flex; align-items: center; gap: 11px;
+        margin: 8px 8px 0; padding: 9px 10px; border-radius: 9px;
+        background: transparent; border: 1px solid transparent;
+        color: var(--text2, #7fb8cc); font-family: inherit; font-size: .8rem; font-weight: 600; letter-spacing: .2px;
+        cursor: pointer; white-space: nowrap; line-height: 1; text-align: left;
+        transition: color .14s, background-color .14s, border-color .14s;
+      }
+      #tv-sidebar .tv-sb-settings:hover { color: var(--text, #9cdef2); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+      :root.tv-collapsed #tv-sidebar .tv-sb-settings { justify-content: center; padding: 10px 0; gap: 0; margin: 8px 6px 0; }
+
       /* Collapsed icon-rail */
       :root.tv-collapsed #tv-sidebar .tv-sb-lbl,
       :root.tv-collapsed #tv-sidebar .tv-sb-brand,
@@ -245,6 +260,7 @@
         #tv-sidebar .tv-sb-account { flex-direction: column; gap: 6px; padding: 8px 0; margin: 4px 6px 0; }
         #tv-sidebar .tv-sb-acct-meta { display: none; }
         #tv-sidebar .tv-sb-acct-main { justify-content: center; flex: none; }
+        #tv-sidebar .tv-sb-settings { justify-content: center; padding: 10px 0; gap: 0; margin: 8px 6px 0; }
       }
     `;
     const el = document.createElement('style');
@@ -311,15 +327,13 @@
     }
   }
 
-  // The User Management window widget lives in a separate script loaded on every
-  // page (so it's reachable from the sidebar account control anywhere, like the
-  // Coder's cookbook). It self-registers window.TVAUsers and builds its DOM lazily.
-  function loadUsersWidget() {
-    if (document.getElementById('tva-users-widget-js') || window.TVAUsers) return;
+  // The User Management + Settings window widgets live in separate scripts loaded
+  // on every page (so they're reachable from the sidebar anywhere, like the
+  // Coder's cookbook + settings). Each self-registers a global and builds lazily.
+  function loadWidget(id, src, globalName) {
+    if (document.getElementById(id) || window[globalName]) return;
     var s = document.createElement('script');
-    s.id = 'tva-users-widget-js';
-    s.src = '/users-widget.js';
-    s.defer = true;
+    s.id = id; s.src = src; s.defer = true;
     document.head.appendChild(s);
   }
 
@@ -329,7 +343,10 @@
     try { collapsed = localStorage.getItem(SB_KEY) === '1'; } catch (e) { /* ignore */ }
     applyCollapsed(collapsed);
     buildSidebar();
-    loadUsersWidget();
+    loadWidget('tva-users-widget-js', '/users-widget.js', 'TVAUsers');
+    loadWidget('tva-settings-widget-js', '/settings-widget.js', 'TVASettings');
+    var settingsBtn = document.getElementById('tvSbSettings');
+    if (settingsBtn) settingsBtn.addEventListener('click', function () { if (window.TVASettings && window.TVASettings.open) window.TVASettings.open(); });
     initAccount();
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
