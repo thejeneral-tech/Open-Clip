@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Accounts Manager — Trend Vault</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#282c34;
+  --surface:#21252b;
+  --surface2:#2c313c;
+  --surface3:#1b1e24;
+  --border:#1e1535;
+  --border2:#2d2050;
+  --purple:#e06c75;
+  --purple2:#e06c75;
+  --purple3:#f0a6ab;
+  --gold:#d19a66;
+  --gold2:#f0ad4e;
+  --green:#22c55e;
+  --green2:#4ade80;
+  --red:#ef4444;
+  --red2:#f87171;
+  --blue:#3b82f6;
+  --blue2:#60a5fa;
+  --pink:#ec4899;
+  --pink2:#f472b6;
+  --text:#ede8f5;
+  --text2:#6b8a94;
+  --muted:#9890ba;
+  --r:14px;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-mono);
+  min-height:100vh;overflow-x:hidden;
+}
+
+/* ── Starfield ── */
+#stars{display:none}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--dur,3s) ease-in-out infinite alternate}
+@keyframes twinkle{from{opacity:var(--lo,.05)}to{opacity:var(--hi,.7)}}
+
+/* Nebulae */
+.nebula{position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(130px);opacity:.06}
+.nb1{width:700px;height:700px;background:radial-gradient(circle,#e06c75,transparent);top:-250px;left:-200px}
+.nb2{width:500px;height:500px;background:radial-gradient(circle,#d19a66,transparent);bottom:-200px;right:-100px}
+
+/* ── Layout ── */
+.app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Header ── */
+header{
+  display:flex;align-items:center;gap:16px;
+  padding:16px 40px;
+  background:rgba(2,1,8,.95);
+  backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border2);
+  position:sticky;top:0;z-index:100;
+}
+.logo-block{display:flex;flex-direction:column;gap:1px}
+.logo-name{
+  font-family:var(--font-mono);font-size:1.15rem;font-weight:900;
+  background:linear-gradient(135deg,var(--purple3),var(--gold2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:2px;
+}
+.logo-sub{font-size:.55rem;color:var(--muted);letter-spacing:4px;text-transform:uppercase;font-family:var(--font-mono)}
+
+header nav{margin-left:auto;display:flex;align-items:center;gap:10px}
+.back-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:8px 18px;border-radius:9px;font-size:.76rem;font-weight:600;
+  text-decoration:none;color:var(--text2);border:1px solid var(--border2);
+  transition:all .2s;letter-spacing:.4px;cursor:pointer;background:transparent;
+  font-family:var(--font-mono);
+}
+.back-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(224,108,117,.12);transform:translateX(-2px)}
+
+/* ── Main content ── */
+main{
+  flex:1;
+  padding:32px 40px 60px;
+  max-width:1300px;
+  margin:0 auto;
+  width:100%;
+}
+
+/* ── Page header ── */
+.page-header{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:20px;margin-bottom:28px;flex-wrap:wrap;
+}
+.page-title{
+  font-family:var(--font-mono);font-size:1.6rem;font-weight:900;
+  background:linear-gradient(135deg,var(--purple3),var(--gold2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:1.5px;
+  text-shadow:none;
+  line-height:1.2;
+}
+.page-sub{font-size:.75rem;color:var(--muted);margin-top:4px;letter-spacing:.3px}
+
+.header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ── Search bar ── */
+.search-wrap{
+  position:relative;display:flex;align-items:center;
+}
+.search-icon{position:absolute;left:10px;color:var(--muted);font-size:.85rem;pointer-events:none}
+.search-input{
+  padding:9px 12px 9px 32px;
+  background:#0d0820;border:1px solid rgba(224,108,117,.25);
+  border-radius:9px;color:var(--text);font-size:.76rem;
+  font-family:var(--font-mono);width:220px;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+.search-input:focus{
+  border-color:rgba(224,108,117,.65);
+  box-shadow:0 0 0 2px rgba(224,108,117,.12);
+}
+.search-input::placeholder{color:var(--muted)}
+
+/* ── Buttons ── */
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 18px;border-radius:9px;font-size:.76rem;font-weight:700;
+  cursor:pointer;font-family:var(--font-mono);letter-spacing:.4px;
+  border:1px solid transparent;transition:all .2s;white-space:nowrap;
+}
+.btn-add{
+  background:linear-gradient(135deg,rgba(224,108,117,.5),rgba(224,108,117,.35));
+  border-color:rgba(224,108,117,.65);color:#e9d5ff;
+}
+.btn-add:hover{background:linear-gradient(135deg,rgba(224,108,117,.75),rgba(224,108,117,.55));border-color:rgba(224,108,117,.8);color:#fff;transform:translateY(-1px)}
+.btn-sm{padding:5px 11px;font-size:.68rem;border-radius:7px}
+.btn-del{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.3);color:var(--red2)}
+.btn-del:hover{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.6)}
+.btn-edit{background:rgba(224,108,117,.1);border-color:rgba(224,108,117,.25);color:var(--purple3)}
+.btn-edit:hover{background:rgba(224,108,117,.22);border-color:rgba(224,108,117,.5)}
+.btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1);color:var(--text2)}
+.btn-cancel:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+.btn-save-note{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:var(--green2)}
+.btn-save-note:hover{background:rgba(34,197,94,.22);border-color:rgba(34,197,94,.55)}
+
+/* ── Stats bar ── */
+.stats-bar{
+  display:flex;gap:14px;margin-bottom:22px;flex-wrap:wrap;
+}
+.stat-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 16px;border-radius:20px;
+  background:rgba(224,108,117,.06);border:1px solid rgba(224,108,117,.14);
+  font-size:.7rem;color:var(--text2);font-weight:600;
+}
+.stat-pill .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-purple{background:var(--purple2);box-shadow:0 0 6px var(--purple2)}
+.dot-tiktok{background:#ff2d55;box-shadow:0 0 6px #ff2d55}
+.dot-yt{background:#ff0000;box-shadow:0 0 6px #ff0000}
+.dot-ig{background:#e1306c;box-shadow:0 0 6px #e1306c}
+
+/* ── Card wrapper (RGB border) ── */
+.card{
+  background:#21252b;
+  border:none;border-radius:var(--r);
+  padding:0;
+  position:relative;overflow:hidden;
+  box-shadow:0 0 12px rgba(224,108,117,.1);
+  transition:box-shadow .3s;
+}
+.card::before{content:'';position:absolute;inset:0;border-radius:inherit;border:1px solid var(--border);pointer-events:none;z-index:2}
+.card>*{position:relative;z-index:3}
+.card:hover{box-shadow:0 0 18px rgba(224,108,117,.18),0 0 28px rgba(156,222,242,.1)}
+
+/* ── Empty state ── */
+.empty-state{
+  padding:60px 20px;text-align:center;
+  color:var(--muted);
+}
+.empty-icon{font-size:3.5rem;margin-bottom:16px;opacity:.5}
+.empty-title{font-size:.95rem;font-weight:700;color:var(--text2);margin-bottom:8px}
+.empty-desc{font-size:.75rem;line-height:1.6}
+
+/* ── Table ── */
+.table-wrap{overflow-x:auto;border-radius:var(--r)}
+table{
+  width:100%;border-collapse:collapse;
+  font-size:.78rem;
+}
+thead th{
+  padding:13px 16px;
+  background:rgba(224,108,117,.06);
+  border-bottom:1px solid rgba(224,108,117,.15);
+  color:var(--muted);font-size:.62rem;font-weight:700;
+  letter-spacing:2px;text-transform:uppercase;
+  text-align:left;white-space:nowrap;
+  font-family:var(--font-mono);
+}
+thead th:first-child{border-radius:12px 0 0 0}
+thead th:last-child{border-radius:0 12px 0 0;text-align:center}
+tbody tr{
+  border-bottom:1px solid rgba(224,108,117,.07);
+  transition:background .15s;
+}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(224,108,117,.04)}
+tbody td{padding:14px 16px;vertical-align:middle}
+tbody td:last-child{text-align:center}
+
+/* ── Account name cell ── */
+.acct-name-cell{display:flex;align-items:center;gap:10px}
+.acct-avatar{
+  width:34px;height:34px;border-radius:50%;
+  background:linear-gradient(135deg,var(--purple),var(--purple3));
+  display:flex;align-items:center;justify-content:center;
+  font-size:1rem;font-weight:800;color:#fff;flex-shrink:0;
+  text-shadow:0 1px 3px rgba(0,0,0,.4);
+}
+.acct-name-text{font-weight:600;color:var(--text)}
+.acct-name-input{
+  background:#21252b;border:1px solid rgba(224,108,117,.35);
+  border-radius:7px;color:var(--text);font-size:.78rem;
+  padding:5px 9px;font-family:var(--font-mono);
+  outline:none;width:160px;
+}
+.acct-name-input:focus{border-color:rgba(224,108,117,.7);box-shadow:0 0 0 2px rgba(224,108,117,.1)}
+
+/* ── Platform toggle ── */
+.plat-toggle{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:20px;
+  font-size:.7rem;font-weight:700;cursor:pointer;
+  border:1px solid transparent;
+  transition:all .22s;font-family:var(--font-mono);
+  white-space:nowrap;letter-spacing:.3px;
+}
+
+/* TikTok — connected */
+.plat-toggle.tiktok.on{
+  background:rgba(255,45,85,.15);border-color:rgba(255,45,85,.45);
+  color:#ff6b8a;
+  box-shadow:0 0 10px rgba(255,45,85,.2),0 0 2px rgba(255,45,85,.3) inset;
+}
+.plat-toggle.tiktok.off{
+  background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);
+  color:rgba(255,255,255,.25);
+}
+.plat-toggle.tiktok.on:hover{background:rgba(255,45,85,.25);border-color:rgba(255,45,85,.7)}
+.plat-toggle.tiktok.off:hover{background:rgba(255,45,85,.08);border-color:rgba(255,45,85,.25);color:rgba(255,45,85,.6)}
+
+/* YouTube — connected */
+.plat-toggle.youtube.on{
+  background:rgba(255,0,0,.15);border-color:rgba(255,0,0,.45);
+  color:#ff6060;
+  box-shadow:0 0 10px rgba(255,0,0,.2),0 0 2px rgba(255,0,0,.3) inset;
+}
+.plat-toggle.youtube.off{
+  background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);
+  color:rgba(255,255,255,.25);
+}
+.plat-toggle.youtube.on:hover{background:rgba(255,0,0,.25);border-color:rgba(255,0,0,.7)}
+.plat-toggle.youtube.off:hover{background:rgba(255,0,0,.08);border-color:rgba(255,0,0,.25);color:rgba(255,80,80,.6)}
+
+/* Instagram — connected */
+.plat-toggle.instagram.on{
+  background:rgba(214,41,118,.15);border-color:rgba(214,41,118,.45);
+  color:#f472b6;
+  box-shadow:0 0 10px rgba(214,41,118,.2),0 0 2px rgba(214,41,118,.3) inset;
+}
+.plat-toggle.instagram.off{
+  background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);
+  color:rgba(255,255,255,.25);
+}
+.plat-toggle.instagram.on:hover{background:rgba(214,41,118,.25);border-color:rgba(214,41,118,.7)}
+.plat-toggle.instagram.off:hover{background:rgba(214,41,118,.08);border-color:rgba(214,41,118,.25);color:rgba(214,41,118,.6)}
+
+/* ── Notes cell ── */
+.notes-cell{display:flex;align-items:center;gap:6px;min-width:160px;max-width:260px}
+.notes-text{
+  color:var(--text2);font-size:.73rem;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;max-width:180px;
+  cursor:pointer;
+}
+.notes-text.empty-note{color:rgba(255,255,255,.18);font-style:italic}
+.notes-input{
+  flex:1;background:#21252b;border:1px solid rgba(224,108,117,.3);
+  border-radius:7px;color:var(--text);font-size:.73rem;
+  padding:5px 8px;font-family:var(--font-mono);outline:none;
+  min-width:0;
+}
+.notes-input:focus{border-color:rgba(224,108,117,.65);box-shadow:0 0 0 2px rgba(224,108,117,.1)}
+
+/* ── Actions cell ── */
+.actions-cell{display:flex;align-items:center;gap:6px;justify-content:center}
+
+/* ── Modal ── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(2,1,8,.85);backdrop-filter:blur(8px);
+  z-index:1000;align-items:center;justify-content:center;
+  padding:20px;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:#0d0820;border:1px solid rgba(224,108,117,.3);
+  border-radius:16px;padding:28px;width:100%;max-width:460px;
+  position:relative;
+  box-shadow:0 0 40px rgba(224,108,117,.25),0 0 0 1px rgba(224,108,117,.1);
+  animation:modal-in .18s ease;
+}
+@keyframes modal-in{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+.modal-title{
+  font-size:1.05rem;font-weight:700;color:var(--text);
+  margin-bottom:20px;
+  display:flex;align-items:center;gap:10px;
+}
+.modal-field{margin-bottom:16px}
+.modal-label{font-size:.65rem;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:6px;font-family:var(--font-mono)}
+.modal-input{
+  width:100%;background:#21252b;border:1px solid rgba(224,108,117,.3);
+  border-radius:9px;color:var(--text);font-size:.82rem;
+  padding:10px 12px;font-family:var(--font-mono);outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.modal-input:focus{border-color:rgba(224,108,117,.65);box-shadow:0 0 0 2px rgba(224,108,117,.12)}
+.modal-textarea{
+  width:100%;background:#21252b;border:1px solid rgba(224,108,117,.3);
+  border-radius:9px;color:var(--text);font-size:.8rem;
+  padding:10px 12px;font-family:var(--font-mono);outline:none;
+  resize:vertical;min-height:80px;
+  transition:border-color .2s,box-shadow .2s;
+}
+.modal-textarea:focus{border-color:rgba(224,108,117,.65);box-shadow:0 0 0 2px rgba(224,108,117,.12)}
+
+/* Platform toggles inside modal */
+.modal-plat-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.modal-plat-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:20px;
+  font-size:.73rem;font-weight:700;cursor:pointer;
+  border:1px solid transparent;transition:all .2s;
+  font-family:var(--font-mono);
+}
+.modal-plat-btn.tiktok{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.25)}
+.modal-plat-btn.tiktok.on{background:rgba(255,45,85,.15);border-color:rgba(255,45,85,.5);color:#ff6b8a;box-shadow:0 0 8px rgba(255,45,85,.2)}
+.modal-plat-btn.youtube{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.25)}
+.modal-plat-btn.youtube.on{background:rgba(255,0,0,.15);border-color:rgba(255,0,0,.5);color:#ff6060;box-shadow:0 0 8px rgba(255,0,0,.2)}
+.modal-plat-btn.instagram{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(255,255,255,.25)}
+.modal-plat-btn.instagram.on{background:rgba(214,41,118,.15);border-color:rgba(214,41,118,.5);color:#f472b6;box-shadow:0 0 8px rgba(214,41,118,.2)}
+
+/* Platform button layout — with status label */
+.modal-plat-row .modal-plat-btn{flex-direction:column;gap:2px;padding:9px 14px;min-width:118px;justify-content:center;line-height:1}
+.plat-stat-lbl{display:block;font-size:.55rem;font-weight:700;letter-spacing:.9px;text-transform:uppercase;font-family:var(--font-mono);opacity:.55;margin-top:3px}
+.modal-plat-btn.on .plat-stat-lbl{opacity:.9;color:inherit}
+.modal-plat-btn.off .plat-stat-lbl{color:rgba(255,255,255,.28)}
+
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
+.btn-primary{
+  background:linear-gradient(135deg,rgba(224,108,117,.7),rgba(224,108,117,.5));
+  border:1px solid rgba(224,108,117,.8);color:#e9d5ff;
+  padding:10px 22px;border-radius:9px;font-size:.78rem;font-weight:700;
+  cursor:pointer;font-family:var(--font-mono);letter-spacing:.4px;
+  transition:all .2s;
+}
+.btn-primary:hover{background:linear-gradient(135deg,rgba(224,108,117,.9),rgba(224,108,117,.7));color:#fff;transform:translateY(-1px)}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:28px;right:28px;z-index:9999;
+  padding:11px 20px;border-radius:10px;font-size:.78rem;font-weight:600;
+  background:#0d0820;border:1px solid rgba(224,108,117,.4);
+  color:var(--text);box-shadow:0 8px 28px rgba(0,0,0,.5);
+  transform:translateY(20px);opacity:0;transition:all .25s;
+  pointer-events:none;
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:rgba(34,197,94,.5);color:var(--green2)}
+.toast.error{border-color:rgba(239,68,68,.5);color:var(--red2)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+
+/* ── Confirm dialog ── */
+.confirm-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(2,1,8,.88);backdrop-filter:blur(8px);
+  z-index:1100;align-items:center;justify-content:center;padding:20px;
+}
+.confirm-overlay.open{display:flex}
+.confirm-box{
+  background:#0d0820;border:1px solid rgba(239,68,68,.35);
+  border-radius:14px;padding:24px 28px;width:100%;max-width:380px;
+  box-shadow:0 0 30px rgba(239,68,68,.15);animation:modal-in .18s ease;
+}
+.confirm-title{font-size:.95rem;font-weight:700;color:var(--red2);margin-bottom:10px}
+.confirm-msg{font-size:.78rem;color:var(--text2);line-height:1.5;margin-bottom:20px}
+.confirm-footer{display:flex;gap:10px;justify-content:flex-end}
+.btn-danger{
+  background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.5);
+  color:var(--red2);padding:9px 20px;border-radius:8px;font-size:.76rem;
+  font-weight:700;cursor:pointer;font-family:var(--font-mono);
+  transition:all .2s;
+}
+.btn-danger:hover{background:rgba(239,68,68,.35);border-color:rgba(239,68,68,.8)}
+
+/* ── No-results ── */
+.no-results-row td{
+  text-align:center;padding:40px;
+  color:var(--muted);font-size:.78rem;
+}
+
+@media(max-width:900px){
+  main{padding:20px 16px 40px}
+  .page-header{flex-direction:column;align-items:flex-start}
+  .header-actions{width:100%}
+  .search-input{width:100%}
+  .search-wrap{flex:1}
+}
+</style>
+<link rel="stylesheet" href="/tva-theme.css"/>
+<script src="/tva-theme.js"></script>
+</head>
+<body>
+<div id="stars"></div>
+<div class="nebula nb1"></div>
+<div class="nebula nb2"></div>
+
+<div class="app">
+
+<!-- ── Header ── -->
+<header>
+  <div style="font-size:1.8rem;filter:drop-shadow(0 0 12px rgba(224,108,117,.8))">👥</div>
+  <div class="logo-block">
+    <div class="logo-name">Accounts Manager</div>
+    <div class="logo-sub">Social Platform Tracker</div>
+  </div>
+  <nav id="tv-nav"></nav>
+</header>
+<script src="/nav.js" defer></script>
+
+<!-- ── Main ── -->
+<main>
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">Accounts</div>
+      <div class="page-sub">Track every social account and which platforms are connected.</div>
+    </div>
+    <div class="header-actions">
+      <!-- Search -->
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" type="text"
+          placeholder="Search accounts…"
+          oninput="renderTable()"/>
+      </div>
+      <!-- Add account -->
+      <button class="btn btn-add" onclick="openAddModal()">
+        ＋ Add Account
+      </button>
+      <!-- Back -->
+      <a class="back-btn" href="/mainframe">← Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-pill"><span class="dot dot-purple"></span> <span id="statTotal">0</span> Accounts</div>
+    <div class="stat-pill"><span class="dot dot-tiktok"></span> <span id="statTt">0</span> TikTok</div>
+    <div class="stat-pill"><span class="dot dot-yt"></span> <span id="statYt">0</span> YouTube</div>
+    <div class="stat-pill"><span class="dot dot-ig"></span> <span id="statIg">0</span> Instagram</div>
+  </div>
+
+  <!-- Table card -->
+  <div class="card">
+    <div class="table-wrap">
+      <table id="accountsTable">
+        <thead>
+          <tr>
+            <th>Account Name</th>
+            <th>📤 TikTok</th>
+            <th>📺 YouTube</th>
+            <th>📸 Instagram</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- ── Add / Edit Modal ── -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnBg(event)">
+  <div class="modal" id="modal">
+    <div class="modal-title">
+      <span id="modalIcon">＋</span>
+      <span id="modalTitle">Add Account</span>
+    </div>
+
+    <div class="modal-field">
+      <div class="modal-label">Account Name</div>
+      <input class="modal-input" id="modalName" type="text"
+        placeholder="e.g. @myaccount or Brand Name"
+        onkeydown="if(event.key==='Enter')saveModal()"/>
+    </div>
+
+    <div class="modal-field">
+      <div class="modal-label">Platforms Connected</div>
+      <div class="modal-plat-row">
+        <button class="modal-plat-btn tiktok off" id="mTikTok" onclick="navigateToPlatform('tiktok')">
+          📤 TikTok<span class="plat-stat-lbl" id="mTikTokStat">Not Connected</span>
+        </button>
+        <button class="modal-plat-btn youtube off" id="mYouTube" onclick="navigateToPlatform('youtube')">
+          📺 YouTube<span class="plat-stat-lbl" id="mYouTubeStat">Not Connected</span>
+        </button>
+        <button class="modal-plat-btn instagram off" id="mInstagram" onclick="navigateToPlatform('instagram')">
+          📸 Instagram<span class="plat-stat-lbl" id="mInstagramStat">Not Connected</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <div class="modal-label">Notes</div>
+      <textarea class="modal-textarea" id="modalNotes" placeholder="Optional notes, niche, schedule…"></textarea>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-cancel btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveModal()">💾 Save Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Dialog ── -->
+<div class="confirm-overlay" id="confirmOverlay" onclick="closeConfirmOnBg(event)">
+  <div class="confirm-box">
+    <div class="confirm-title">🗑 Delete Account</div>
+    <div class="confirm-msg" id="confirmMsg">Are you sure you want to delete this account? This cannot be undone.</div>
+    <div class="confirm-footer">
+      <button class="btn btn-cancel btn-sm" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// ACCOUNTS — DATA & PERSISTENCE
+// ════════════════════════════════════════════════════════════════════════════
+const STORAGE_KEY = 'tv_accounts_v1';
+
+function loadAccounts() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveAccounts(accounts) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+}
+
+function nextId() {
+  return 'acc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+}
+
+let accounts = loadAccounts();
+
+// ════════════════════════════════════════════════════════════════════════════
+// STARS
+// ════════════════════════════════════════════════════════════════════════════
+(function(){
+  const c = document.getElementById('stars');
+  for (let i = 0; i < 100; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = Math.random() * 2.2 + 0.4;
+    s.style.cssText = `width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;`
+      + `--dur:${(Math.random()*4+2).toFixed(1)}s;--lo:${(Math.random()*.1).toFixed(2)};`
+      + `--hi:${(Math.random()*.7+.2).toFixed(2)};animation-delay:${(Math.random()*4).toFixed(1)}s`;
+    c.appendChild(s);
+  }
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════════════════════════════
+function renderTable() {
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const filtered = q
+    ? accounts.filter(a => a.name.toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q))
+    : accounts;
+
+  const tbody = document.getElementById('tableBody');
+
+  if (accounts.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="padding:0">
+          <div class="empty-state">
+            <div class="empty-icon">👥</div>
+            <div class="empty-title">No accounts yet</div>
+            <div class="empty-desc">Click <strong>+ Add Account</strong> to track your first social account.</div>
+          </div>
+        </td>
+      </tr>`;
+    updateStats();
+    return;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr class="no-results-row"><td colspan="6">No accounts match "<strong>${escHtml(q)}</strong>"</td></tr>`;
+    updateStats();
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(a => buildRow(a)).join('');
+  updateStats();
+}
+
+function buildRow(a) {
+  const initial = (a.name || '?').trim().charAt(0).toUpperCase();
+  const ttOn  = a.tiktok    ? 'on' : 'off';
+  const ytOn  = a.youtube   ? 'on' : 'off';
+  const igOn  = a.instagram ? 'on' : 'off';
+  const ttTxt  = a.tiktok    ? '📤 Connected' : '📤 TikTok';
+  const ytTxt  = a.youtube   ? '📺 Connected' : '📺 YouTube';
+  const igTxt  = a.instagram ? '📸 Connected' : '📸 Instagram';
+  const noteTxt = (a.notes || '').trim();
+
+  return `<tr data-id="${a.id}">
+    <td>
+      <div class="acct-name-cell">
+        <div class="acct-avatar" style="background:${avatarColor(a.id)}">${escHtml(initial)}</div>
+        <span class="acct-name-text">${escHtml(a.name)}</span>
+      </div>
+    </td>
+    <td>
+      <button class="plat-toggle tiktok ${ttOn}"
+        onclick="togglePlatform('${a.id}','tiktok')"
+        title="${a.tiktok ? 'Click to disconnect TikTok' : 'Click to mark TikTok as connected'}">
+        ${ttTxt}
+      </button>
+    </td>
+    <td>
+      <button class="plat-toggle youtube ${ytOn}"
+        onclick="togglePlatform('${a.id}','youtube')"
+        title="${a.youtube ? 'Click to disconnect YouTube' : 'Click to mark YouTube as connected'}">
+        ${ytTxt}
+      </button>
+    </td>
+    <td>
+      <button class="plat-toggle instagram ${igOn}"
+        onclick="togglePlatform('${a.id}','instagram')"
+        title="${a.instagram ? 'Click to disconnect Instagram' : 'Click to mark Instagram as connected'}">
+        ${igTxt}
+      </button>
+    </td>
+    <td>
+      <div class="notes-cell" id="notesCell_${a.id}">
+        <span class="notes-text ${noteTxt ? '' : 'empty-note'}"
+          onclick="editNoteInline('${a.id}')"
+          title="Click to edit note">
+          ${noteTxt ? escHtml(noteTxt) : 'Add note…'}
+        </span>
+      </div>
+    </td>
+    <td>
+      <div class="actions-cell">
+        <button class="btn btn-sm btn-edit" onclick="openEditModal('${a.id}')" title="Edit account">✏️</button>
+        <button class="btn btn-sm btn-del" onclick="askDelete('${a.id}')" title="Delete account">🗑</button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function updateStats() {
+  document.getElementById('statTotal').textContent = accounts.length;
+  document.getElementById('statTt').textContent = accounts.filter(a => a.tiktok).length;
+  document.getElementById('statYt').textContent = accounts.filter(a => a.youtube).length;
+  document.getElementById('statIg').textContent = accounts.filter(a => a.instagram).length;
+}
+
+// Avatar colour palette keyed by account id
+const AVATAR_COLORS = [
+  'linear-gradient(135deg,#7c3aed,#c084fc)',
+  'linear-gradient(135deg,#1d4ed8,#60a5fa)',
+  'linear-gradient(135deg,#be185d,#f472b6)',
+  'linear-gradient(135deg,#065f46,#34d399)',
+  'linear-gradient(135deg,#92400e,#fbbf24)',
+  'linear-gradient(135deg,#1e3a8a,#818cf8)',
+  'linear-gradient(135deg,#831843,#fb7185)',
+  'linear-gradient(135deg,#064e3b,#6ee7b7)',
+];
+const colorCache = {};
+function avatarColor(id) {
+  if (!colorCache[id]) {
+    const hash = id.split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0);
+    colorCache[id] = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  }
+  return colorCache[id];
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PLATFORM TOGGLES (inline, from table)
+// ════════════════════════════════════════════════════════════════════════════
+function togglePlatform(id, plat) {
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  acct[plat] = !acct[plat];
+  saveAccounts(accounts);
+  renderTable();
+  const msg = acct[plat]
+    ? `${platLabel(plat)} connected for ${acct.name}`
+    : `${platLabel(plat)} disconnected`;
+  showToast(msg, acct[plat] ? 'success' : '');
+}
+
+function platLabel(plat) {
+  return { tiktok:'TikTok', youtube:'YouTube', instagram:'Instagram' }[plat] || plat;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INLINE NOTE EDITING
+// ════════════════════════════════════════════════════════════════════════════
+function editNoteInline(id) {
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  const cell = document.getElementById('notesCell_' + id);
+  if (!cell) return;
+  if (cell.querySelector('input')) return; // already editing
+
+  const cur = acct.notes || '';
+  cell.innerHTML = `
+    <input class="notes-input" id="noteInp_${id}" type="text"
+      value="${escHtml(cur)}" placeholder="Add note…"
+      onkeydown="noteKey(event,'${id}')" autofocus/>
+    <button class="btn btn-sm btn-save-note" onclick="saveNoteInline('${id}')">✓</button>
+    <button class="btn btn-sm btn-cancel" onclick="renderTable()">✕</button>
+  `;
+  const inp = document.getElementById('noteInp_' + id);
+  inp.focus();
+  inp.select();
+}
+
+function noteKey(e, id) {
+  if (e.key === 'Enter') saveNoteInline(id);
+  if (e.key === 'Escape') renderTable();
+}
+
+function saveNoteInline(id) {
+  const inp = document.getElementById('noteInp_' + id);
+  if (!inp) return;
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  acct.notes = inp.value.trim();
+  saveAccounts(accounts);
+  renderTable();
+  showToast('Note saved', 'success');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL DRAFT — save / restore state across platform-page navigation
+// ════════════════════════════════════════════════════════════════════════════
+const DRAFT_KEY = 'tv_modal_draft_v1';
+
+function _saveModalDraft(navigatingTo) {
+  const draft = {
+    name:        (document.getElementById('modalName').value  || '').trim(),
+    notes:       (document.getElementById('modalNotes').value || '').trim(),
+    mPlatState:  { tiktok: mPlat.tiktok, youtube: mPlat.youtube, instagram: mPlat.instagram },
+    modalMode,
+    editingId,
+    navigatingTo,
+    ts: Date.now(),
+  };
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+function _checkReturnFromPlatform() {
+  const p = new URLSearchParams(window.location.search);
+  const returnPlat = p.get('returnFromPlatform');
+  if (!returnPlat) return;
+
+  // Clean the URL so a refresh doesn't re-trigger this flow
+  history.replaceState({}, '', window.location.pathname);
+
+  // Try to retrieve the saved draft
+  let draft = null;
+  try { draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null'); } catch {}
+  sessionStorage.removeItem(DRAFT_KEY);
+
+  if (!draft || (Date.now() - (draft.ts || 0)) > 3_600_000) {
+    // Draft missing or too old — just show a toast, don't reopen modal
+    showToast(platLabel(returnPlat) + ' connection complete ✓', 'success');
+    return;
+  }
+
+  // Restore modal fields
+  modalMode = draft.modalMode || 'add';
+  editingId = draft.editingId || null;
+  document.getElementById('modalTitle').textContent = modalMode === 'edit' ? 'Edit Account' : 'Add Account';
+  document.getElementById('modalIcon').textContent  = modalMode === 'edit' ? '✏️' : '＋';
+  document.getElementById('modalName').value  = draft.name  || '';
+  document.getElementById('modalNotes').value = draft.notes || '';
+
+  // Restore platform state + mark the returning platform as connected
+  const mps = draft.mPlatState || {};
+  mPlat.tiktok    = !!mps.tiktok;
+  mPlat.youtube   = !!mps.youtube;
+  mPlat.instagram = !!mps.instagram;
+  mPlat[returnPlat] = true; // the platform we just visited = connected
+
+  syncModalPlatBtns();
+  showModal();
+  showToast(platLabel(returnPlat) + ' marked as connected ✓', 'success');
+  setTimeout(() => document.getElementById('modalName').focus(), 80);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL — ADD / EDIT
+// ════════════════════════════════════════════════════════════════════════════
+let modalMode = 'add'; // 'add' | 'edit'
+let editingId = null;
+
+// Modal platform state
+const mPlat = { tiktok: false, youtube: false, instagram: false };
+
+function openAddModal() {
+  modalMode = 'add'; editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add Account';
+  document.getElementById('modalIcon').textContent = '＋';
+  document.getElementById('modalName').value = '';
+  document.getElementById('modalNotes').value = '';
+  mPlat.tiktok = false; mPlat.youtube = false; mPlat.instagram = false;
+  syncModalPlatBtns();
+  showModal();
+  setTimeout(() => document.getElementById('modalName').focus(), 80);
+}
+
+function openEditModal(id) {
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  modalMode = 'edit'; editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Account';
+  document.getElementById('modalIcon').textContent = '✏️';
+  document.getElementById('modalName').value = acct.name;
+  document.getElementById('modalNotes').value = acct.notes || '';
+  mPlat.tiktok = !!acct.tiktok;
+  mPlat.youtube = !!acct.youtube;
+  mPlat.instagram = !!acct.instagram;
+  syncModalPlatBtns();
+  showModal();
+  setTimeout(() => document.getElementById('modalName').focus(), 80);
+}
+
+function navigateToPlatform(plat) {
+  // Save current modal draft to sessionStorage before navigating away
+  _saveModalDraft(plat);
+  const routes = { tiktok: '/tiktok', youtube: '/youtube', instagram: '/instagram' };
+  window.location.href = (routes[plat] || '/' + plat) + '?returnTo=accounts&platform=' + plat;
+}
+
+function toggleModalPlat(plat) {
+  // Direct programmatic toggle (used internally)
+  mPlat[plat] = !mPlat[plat];
+  syncModalPlatBtns();
+}
+
+function syncModalPlatBtns() {
+  ['tiktok','youtube','instagram'].forEach(p => {
+    const capP = p.charAt(0).toUpperCase() + p.slice(1);
+    const btn = document.getElementById('m' + capP);
+    if (!btn) return;
+    btn.classList.toggle('on',  mPlat[p]);
+    btn.classList.toggle('off', !mPlat[p]);
+    const statEl = document.getElementById('m' + capP + 'Stat');
+    if (statEl) statEl.textContent = mPlat[p] ? '✓ Connected' : 'Not Connected';
+  });
+}
+
+function saveModal() {
+  const name = (document.getElementById('modalName').value || '').trim();
+  if (!name) {
+    document.getElementById('modalName').focus();
+    showToast('Enter an account name', 'error');
+    return;
+  }
+  const notes = (document.getElementById('modalNotes').value || '').trim();
+
+  if (modalMode === 'add') {
+    const acct = {
+      id: nextId(),
+      name,
+      tiktok: mPlat.tiktok,
+      youtube: mPlat.youtube,
+      instagram: mPlat.instagram,
+      notes,
+      createdAt: new Date().toISOString(),
+    };
+    accounts.unshift(acct);
+    showToast('Account added ✓', 'success');
+  } else {
+    const acct = accounts.find(a => a.id === editingId);
+    if (acct) {
+      acct.name = name;
+      acct.tiktok = mPlat.tiktok;
+      acct.youtube = mPlat.youtube;
+      acct.notes = notes;
+      acct.updatedAt = new Date().toISOString();
+    }
+    showToast('Account updated ✓', 'success');
+  }
+
+  saveAccounts(accounts);
+  closeModal();
+  renderTable();
+}
+
+function showModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function closeModalOnBg(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DELETE
+// ════════════════════════════════════════════════════════════════════════════
+let deleteTargetId = null;
+
+function askDelete(id) {
+  const acct = accounts.find(a => a.id === id);
+  if (!acct) return;
+  deleteTargetId = id;
+  document.getElementById('confirmMsg').innerHTML =
+    `Delete <strong>${escHtml(acct.name)}</strong>? This cannot be undone.`;
+  document.getElementById('confirmOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function confirmDelete() {
+  if (!deleteTargetId) return;
+  accounts = accounts.filter(a => a.id !== deleteTargetId);
+  saveAccounts(accounts);
+  deleteTargetId = null;
+  closeConfirm();
+  renderTable();
+  showToast('Account deleted', '');
+}
+
+function closeConfirm() {
+  document.getElementById('confirmOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function closeConfirmOnBg(e) {
+  if (e.target === document.getElementById('confirmOverlay')) closeConfirm();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════════════════════════════
+let toastTimer = null;
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 2400);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ════════════════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal();
+    closeConfirm();
+  }
+  // Ctrl/Cmd + N → Add new account
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+    e.preventDefault();
+    openAddModal();
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════════════════════════════════════════
+renderTable();
+_checkReturnFromPlatform(); // restore modal if returning from a platform page
+</script>
+</body>
+</html>

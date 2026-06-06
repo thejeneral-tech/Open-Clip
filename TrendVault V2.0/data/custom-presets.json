@@ -1,0 +1,71 @@
+[
+  {
+    "id": "custom_1778298364023_acg7t",
+    "name": "Tiktok male monetone",
+    "icon": "📹",
+    "description": "Custom • based on TikTok Male — YouTube Narrator",
+    "category": "custom",
+    "favorite": false,
+    "edgeId": "en-US-AndrewNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -4,
+      "speed": 0.96,
+      "volume": 1,
+      "intensity": 15
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "custom": true,
+    "createdAt": "2026-05-09T03:46:04.023Z",
+    "sourceFile": null,
+    "analysis": null
+  },
+  {
+    "id": "custom_1778298329678_n2yc7",
+    "name": "Tiktok less more fluent",
+    "icon": "🎙️",
+    "description": "Custom • based on TikTok Male — Natural",
+    "category": "custom",
+    "favorite": false,
+    "edgeId": "en-US-GuyNeural",
+    "defaults": {
+      "pitch": -2,
+      "rate": -6,
+      "speed": 0.94,
+      "volume": 1,
+      "intensity": 12
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "custom": true,
+    "createdAt": "2026-05-09T03:45:29.679Z",
+    "sourceFile": null,
+    "analysis": null
+  },
+  {
+    "id": "custom_1778298295020_9tbjy",
+    "name": "Good female smooth",
+    "icon": "📺",
+    "description": "Custom • based on TikTok Female — YouTube Narrator",
+    "category": "custom",
+    "favorite": false,
+    "edgeId": "en-US-JennyNeural",
+    "defaults": {
+      "pitch": 0,
+      "rate": -2,
+      "speed": 0.97,
+      "volume": 1,
+      "intensity": 12
+    },
+    "eq": "warm",
+    "reverb": false,
+    "robot": false,
+    "custom": true,
+    "createdAt": "2026-05-09T03:44:55.020Z",
+    "sourceFile": null,
+    "analysis": null
+  }
+]

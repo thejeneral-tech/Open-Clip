@@ -1,0 +1,29 @@
+# ── Python ──
+venv/
+__pycache__/
+*.pyc
+
+# ── Node / Remotion ──
+node_modules/
+
+# ── Secrets (NEVER commit) ──
+.env
+data/youtube-credentials.json
+data/youtube-token.json
+data/instagram-session.json
+data/instagram-2fa-pending.json
+.tiktok-session/
+
+# ── Runtime output / regenerated state ──
+trend-vault-output/
+public/custom-audio/
+public/captions/
+public/previews/
+custom-audio/
+data/app.db
+debug/
+
+# ── OS / build junk ──
+.DS_Store
+build/
+*.spec
