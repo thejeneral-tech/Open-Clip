@@ -5,8 +5,10 @@
  */
 
 import * as store from './store.js';
+import * as exec from './exec.js';
 import { el, clear, cx, icon } from './dom.js';
 import { KIND_META, KIND_ORDER } from './registry.js';
+import { recommendNodes } from './suggestions.js';
 import { EXPORTERS, runExport } from './exporters.js';
 import { copyToClipboard, parseWorkflowFile, readTextFile, triggerDownload } from './io.js';
 
@@ -67,21 +69,62 @@ export function createToolbar(api = {}) {
     if (v) { store.createBoard(v); closeBoards(); } else renderBoards();
   }
 
-  /* ---------- add node menu ---------- */
+  /* ---------- add node menu (suggestion-aware) ---------- */
   const addMenu = el('div', { class: 'am-menu am-add-menu', style: 'display:none' });
-  for (const kind of KIND_ORDER) {
-    const m = KIND_META[kind];
-    addMenu.appendChild(el('button', { class: 'am-menu-item', onclick: () => { store.addNode(kind); closeAdd(); } },
-      el('span', { class: 'am-menu-kico', style: { background: m.color + '22', color: m.color }, html: icon(m.icon, 15) }),
-      el('span', { class: 'am-menu-itext', text: m.label })));
-  }
   const addBtn = el('button', { class: 'am-btn am-btn-primary', onclick: toggleAdd }, el('span', { html: icon('plus', 16) }), 'Add node');
   const addWrap = el('div', { class: 'am-pop' }, addBtn, addMenu);
   let addOpen = false;
+
+  function menuItem(kind, reason) {
+    const m = KIND_META[kind];
+    return el('button', { class: 'am-menu-item', title: reason || m.hint, onclick: () => { store.addNode(kind); closeAdd(); } },
+      el('span', { class: 'am-menu-kico', style: { background: m.color + '22', color: m.color }, html: icon(m.icon, 15) }),
+      el('span', { class: 'am-menu-itext' },
+        el('span', { class: 'am-menu-iname', text: m.label }),
+        reason ? el('span', { class: 'am-menu-ireason', text: reason }) : null));
+  }
+
+  function renderAddMenu() {
+    clear(addMenu);
+    const s = store.getState();
+    const { recommendations, suggestSample } = recommendNodes(s.nodes, s.edges);
+
+    if (recommendations.length) {
+      addMenu.appendChild(el('div', { class: 'am-menu-label', text: 'Recommended next' }));
+      for (const r of recommendations) addMenu.appendChild(menuItem(r.kind, r.reason));
+      if (suggestSample) {
+        addMenu.appendChild(el('button', { class: 'am-menu-item am-menu-action', onclick: () => { store.loadSample(); closeAdd(); setTimeout(() => api.fitView?.({ padding: 0.25, maxZoom: 1 }), 0); } },
+          el('span', { class: 'am-menu-kico', style: { background: 'var(--am-accent-soft)', color: 'var(--am-accent)' }, html: icon('workflow', 15) }),
+          el('span', { class: 'am-menu-itext' }, el('span', { class: 'am-menu-iname', text: 'Load sample workflow' }), el('span', { class: 'am-menu-ireason', text: 'A runnable Input → Agent → Test → Output pipeline.' }))));
+      }
+      addMenu.appendChild(el('div', { class: 'am-menu-div' }));
+    }
+
+    addMenu.appendChild(el('div', { class: 'am-menu-label', text: 'All node types' }));
+    const grid = el('div', { class: 'am-add-grid' });
+    for (const kind of KIND_ORDER) {
+      const m = KIND_META[kind];
+      grid.appendChild(el('button', { class: 'am-add-grid-item', title: m.hint, onclick: () => { store.addNode(kind); closeAdd(); } },
+        el('span', { class: 'am-menu-kico', style: { background: m.color + '22', color: m.color }, html: icon(m.icon, 14) }),
+        el('span', { class: 'am-add-grid-label', text: m.label })));
+    }
+    addMenu.appendChild(grid);
+  }
+
   function toggleAdd() { addOpen ? closeAdd() : openAdd(); }
-  function openAdd() { addOpen = true; addMenu.style.display = ''; document.addEventListener('pointerdown', addOutside, true); }
+  function openAdd() { addOpen = true; renderAddMenu(); addMenu.style.display = ''; document.addEventListener('pointerdown', addOutside, true); }
   function closeAdd() { addOpen = false; addMenu.style.display = 'none'; document.removeEventListener('pointerdown', addOutside, true); }
   function addOutside(e) { if (!addWrap.contains(e.target)) closeAdd(); }
+
+  /* ---------- run / stop / retry workflow ---------- */
+  const runWfBtn = el('button', { class: 'am-btn am-btn-run', title: 'Run the whole workflow (nodes execute in order)', onclick: () => exec.runWorkflow() }, '▶ Run');
+  const stopWfBtn = el('button', { class: 'am-btn am-btn-stop', title: 'Stop the running workflow', style: 'display:none', onclick: () => exec.stopWorkflow() }, '■ Stop');
+  const retryWfBtn = el('button', { class: 'am-btn am-btn-retry', title: 'Retry from the failed node', style: 'display:none', onclick: () => exec.retryWorkflow() }, '↻ Retry');
+  const wfStatus = el('span', { class: 'am-wf-status' });
+
+  /* ---------- full system check ---------- */
+  const sysCheckBtn = el('button', { class: 'am-btn am-btn-syscheck', title: 'Test every feature in the app and report what works, what fails, and what needs fixing', onclick: () => api.openSystemCheck?.() },
+    el('span', { html: icon('activity', 15) }), el('span', { class: 'am-hide-sm', text: 'Run Full System Check' }));
 
   /* ---------- toggles + actions ---------- */
   const fileInput = el('input', { type: 'file', accept: '.json,application/json', style: 'display:none',
@@ -101,6 +144,7 @@ export function createToolbar(api = {}) {
   const mapBtn = toggle('map', 'Mini map', 'showMiniMap');
   const searchBtn = toggle('search', 'Search & filters', 'showSearch');
   const healthBtn = toggle('activity', 'Health panel', 'showHealth');
+  const explorerBtn = toggle('folder', 'Workspace files', 'showExplorer');
   const undoBtn = el('button', { class: 'am-icon-btn', title: 'Undo (Ctrl/Cmd+Z)', onclick: () => store.undo(), html: icon('undo', 16) });
   const redoBtn = el('button', { class: 'am-icon-btn', title: 'Redo (Ctrl/Cmd+Shift+Z)', onclick: () => store.redo(), html: icon('redo', 16) });
   const countText = el('div', { class: 'am-brand-sub', text: '' });
@@ -119,9 +163,13 @@ export function createToolbar(api = {}) {
       addWrap,
       el('button', { class: 'am-btn am-btn-outline', title: 'Command palette (Ctrl/Cmd+K)', onclick: () => store.setCommandOpen(true) },
         el('span', { html: icon('command', 15) }), el('span', { class: 'am-hide-sm', text: 'Commands' })),
+      el('span', { class: 'am-divider' }),
+      runWfBtn, stopWfBtn, retryWfBtn, wfStatus,
+      el('span', { class: 'am-divider' }),
+      sysCheckBtn,
     ),
     el('div', { class: 'am-toolbar-right' },
-      snapBtn, mapBtn, searchBtn, healthBtn,
+      snapBtn, mapBtn, searchBtn, healthBtn, explorerBtn,
       el('button', { class: 'am-icon-btn', title: 'Fit view', onclick: () => api.fitView?.({ padding: 0.2 }), html: icon('maximize', 16) }),
       el('button', { class: 'am-icon-btn', title: 'Auto-layout (tidy up)', onclick: handleTidy, html: icon('wand', 16) }),
       el('span', { class: 'am-divider' }),
@@ -196,8 +244,24 @@ export function createToolbar(api = {}) {
     mapBtn.classList.toggle('active', s.ui.showMiniMap);
     searchBtn.classList.toggle('active', s.ui.showSearch);
     healthBtn.classList.toggle('active', s.ui.showHealth);
+    explorerBtn.classList.toggle('active', !!s.ui.showExplorer);
     undoBtn.disabled = !store.canUndo();
     redoBtn.disabled = !store.canRedo();
+    // run/stop/retry workflow visibility + status
+    const wfRunning = !!(s.activeRun && s.activeRun.status === 'running');
+    const wfFailed = !!(s.activeRun && s.activeRun.mode === 'graph' && (s.activeRun.status === 'failed' || s.activeRun.status === 'cancelled'));
+    runWfBtn.style.display = wfRunning ? 'none' : '';
+    stopWfBtn.style.display = wfRunning ? '' : 'none';
+    retryWfBtn.style.display = (!wfRunning && wfFailed) ? '' : 'none';
+    if (s.activeRun && s.activeRun.mode === 'graph') {
+      const label = { running: 'Running…', success: '✓ Completed', failed: '✗ Failed', cancelled: 'Stopped' }[s.activeRun.status] || '';
+      wfStatus.textContent = label;
+      wfStatus.style.color = s.activeRun.status === 'failed' ? '#ef4444' : s.activeRun.status === 'success' ? '#22c55e' : 'var(--am-muted)';
+      wfStatus.title = s.activeRun.error || '';
+    } else {
+      wfStatus.textContent = '';
+      wfStatus.title = '';
+    }
     if (s.exportOpen !== lastExportOpen) { lastExportOpen = s.exportOpen; s.exportOpen ? openExport() : closeExport(); }
     else if (s.exportOpen && exportDialog) { /* keep open */ }
   }

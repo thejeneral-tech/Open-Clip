@@ -11,6 +11,7 @@ import { el, svg, clear, cx, icon, getBezierPath } from './dom.js';
 import { KIND_META, STATUS_META, HEALTH_META } from './registry.js';
 import { validateWorkflow } from './validation.js';
 import { nodeMatchesFilters } from './filtering.js';
+import { createEmptyState } from './emptyState.js';
 
 const NODE_WIDTH = 248;
 const FALLBACK_H = 132;
@@ -52,7 +53,8 @@ export function createCanvas() {
 
   const controls = buildControls();
   const minimap = el('div', { class: 'am-minimap' });
-  const emptyState = el('div', { class: 'am-empty', style: 'display:none' });
+  const emptyUI = createEmptyState({ worldCenter, fitView, focusNode });
+  const emptyState = emptyUI.el;
 
   const canvas = el('div', { class: 'am-canvas' }, dots, world, emptyState, controls.el, minimap);
 
@@ -161,8 +163,7 @@ export function createCanvas() {
       nodeHeights.set(node.id, elem.offsetHeight || FALLBACK_H);
     }
 
-    emptyState.style.display = state.nodes.length === 0 ? '' : 'none';
-    if (state.nodes.length === 0) renderEmpty();
+    emptyUI.setEmpty(state.nodes.length === 0);
 
     drawEdges();
     if (!didInitialFit && state.nodes.length) { didInitialFit = true; fitView({ padding: 0.25, maxZoom: 1 }); }
@@ -213,26 +214,38 @@ export function createCanvas() {
     }
   }
 
-  function renderEmpty() {
-    emptyState.innerHTML = '';
-    emptyState.appendChild(el('div', { class: 'am-empty-card' },
-      el('div', { class: 'am-empty-icon', html: icon('workflow', 26) }),
-      el('h2', { text: 'Start your workflow' }),
-      el('p', { text: 'Map out files, APIs, databases, prompts and deploy steps — then connect them to see how your project fits together.' }),
-      el('button', { class: 'am-btn am-btn-primary', onclick: () => store.addNode('feature') },
-        el('span', { html: icon('feature', 15) }), 'Add a Feature node'),
-      el('button', { class: 'am-btn am-btn-outline', onclick: () => store.loadSample() }, 'Load the sample workflow'),
-      el('button', { class: 'am-btn am-btn-ghost', onclick: () => store.setCommandOpen(true) },
-        el('span', { html: icon('command', 14) }), 'Open command palette'),
-      el('p', { class: 'am-empty-tip', text: 'Tip: drag node types from the left sidebar onto the canvas.' }),
-    ));
+  /** World-space coordinates of the current viewport centre (for centred adds). */
+  function worldCenter() {
+    const r = rect();
+    return screenToFlow(r.left + r.width / 2, r.top + r.height / 2);
   }
 
   /* ================= node card markup ================= */
+  const RUN_STATUS = {
+    waiting: { c: '#8b93a7', l: 'Waiting', w: '12%' },
+    running: { c: '#38bdf8', l: 'Running', w: '45%' },
+    success: { c: '#22c55e', l: 'Success', w: '100%' },
+    failed: { c: '#ef4444', l: 'Failed', w: '100%' },
+    cancelled: { c: '#f59e0b', l: 'Cancelled', w: '100%' },
+    skipped: { c: '#64748b', l: 'Skipped', w: '100%' },
+  };
+
+  /** A thin run-progress bar at the foot of a node card (indeterminate while
+   *  running, full + colored once settled). */
+  function progressHtml(rt) {
+    if (!rt || !rt.status) return '';
+    const s = RUN_STATUS[rt.status];
+    if (!s) return '';
+    const ind = rt.status === 'running' ? ' indeterminate' : '';
+    return `<div class="am-node-progress${ind}"><div class="am-node-progress-fill" style="width:${s.w};background:${s.c}"></div></div>`;
+  }
+
   function nodeInner(node, health) {
     const d = node.data;
     const meta = KIND_META[d.kind];
     const status = STATUS_META[d.status];
+    const rt = (store.getState().runtime || {})[node.id];
+    const rs = rt && rt.status ? RUN_STATUS[rt.status] : null;
     const hMeta = health ? HEALTH_META[health.level] : null;
     const hColor = hMeta?.color ?? '#8b93a7';
     const hLabel = hMeta?.label ?? 'Unverified';
@@ -261,6 +274,8 @@ export function createCanvas() {
             <div class="am-node-kind">${esc(meta.label)}</div>
           </div>
           <span class="am-node-status" style="background:${status.color};box-shadow:0 0 8px ${status.color}66" title="${esc(status.label)}"></span>
+          ${d.approved ? `<span class="am-node-approved" title="Approved">${icon('check', 12)}</span>` : ''}
+          ${rs ? `<span class="am-node-run ${rt.status === 'running' ? 'am-run-spin' : ''}" style="color:${rs.c};border-color:${rs.c}66;background:${rs.c}1f" title="${esc(rs.l)}${rt.error ? ': ' + esc(rt.error) : ''}">${rt.status === 'running' ? '<span class="am-run-dot"></span>' : ''}${esc(rs.l)}</span>` : ''}
         </div>
         ${hasBody ? `<div class="am-node-body">
           ${d.description.trim() ? `<p class="am-node-desc">${esc(d.description)}</p>` : ''}
@@ -271,6 +286,7 @@ export function createCanvas() {
           <span class="am-dot" style="background:${hColor}"></span>
           <span style="color:${hColor}">${esc(hLabel)}</span>
         </div>
+        ${progressHtml(rt)}
       </div>`;
   }
 

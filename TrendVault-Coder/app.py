@@ -708,6 +708,14 @@ app.include_router(setup_vault_routes())
 from companion import setup_companion_routes
 app.include_router(setup_companion_routes())
 
+# Automation Map — executable AI workflow builder (persistence + execution)
+from routes.automation_routes import setup_automation_routes
+app.include_router(setup_automation_routes())
+
+# YouTube → Workflow-Remake-Prompt builder (reliable chunked Ollama pipeline)
+from routes.yt_workflow_routes import setup_yt_workflow_routes
+app.include_router(setup_yt_workflow_routes())
+
 # ========= ROUTES (kept in app.py) =========
 
 def _serve_html_with_nonce(request: Request, file_path: str) -> HTMLResponse:

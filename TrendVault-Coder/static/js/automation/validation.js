@@ -30,21 +30,21 @@ export function getPredecessors(nodeId, edges) {
 
 /** Inspect a single node → { level, issues }. Pure. */
 export function validateNode(node, nodes, edges) {
-  const data = node.data;
-  const meta = KIND_META[data.kind];
+  const data = node.data || {};
+  const meta = KIND_META[data.kind] || KIND_META.feature;
   const incoming = incomingCount(node.id, edges);
   const outgoing = outgoingCount(node.id, edges);
   const issues = [];
 
-  /* content checks (kind specific) */
-  if (data.kind === 'api' && !data.url.trim()) issues.push('API node is missing a URL.');
+  /* content checks (kind specific) — tolerate partial data defensively */
+  if (data.kind === 'api' && !(data.url || '').trim()) issues.push('API node is missing a URL.');
   if (data.kind === 'database') {
-    if (!data.schema.trim()) issues.push('Database node has no schema info.');
+    if (!(data.schema || '').trim()) issues.push('Database node has no schema info.');
     if (!data.hasCredentials) issues.push('Database node is missing credentials.');
   }
-  if (data.kind === 'agent' && !data.prompt.trim()) issues.push('AI agent node has no prompt.');
-  if (data.kind === 'terminal' && !data.command.trim()) issues.push('Terminal node has no command.');
-  if (data.kind === 'env' && !data.envVars.trim()) issues.push('Environment node has no variables defined.');
+  if (data.kind === 'agent' && !(data.prompt || '').trim()) issues.push('AI agent node has no prompt.');
+  if (data.kind === 'terminal' && !(data.command || '').trim()) issues.push('Terminal node has no command.');
+  if (data.kind === 'env' && !(data.envVars || '').trim()) issues.push('Environment node has no variables defined.');
   if (data.kind === 'deployment') {
     const predecessors = getPredecessors(node.id, edges);
     const hasUpstreamTest = nodes.some((n) => predecessors.has(n.id) && n.data.kind === 'test');
