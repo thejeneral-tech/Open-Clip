@@ -1,0 +1,21 @@
+# Web server
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+
+# HTTP (Ollama client)
+httpx>=0.27
+
+# YouTube data
+yt-dlp>=2024.8.6
+youtube-transcript-api>=0.6.2
+
+# Media / vision
+Pillow>=10.0
+imageio-ffmpeg>=0.5.1
+
+# NOTE: Whisper transcription (openai-whisper + a CPU build of PyTorch) is NOT
+# listed here on purpose. It is installed separately by install.bat / starter.py
+# with a pinned, known-good CPU torch from the pytorch.org index, because a plain
+# `pip install` pulls the latest torch wheel, which has shipped broken on
+# Python 3.13 / Windows. See INSTALL.md.

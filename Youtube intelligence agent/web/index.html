@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YouTube Video Intelligence Agent</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">▶</span> YouTube Video <b>Intelligence Agent</b></div>
+    <div id="health" class="health"><span class="pill pill-muted">checking…</span></div>
+  </header>
+
+  <!-- Controls -->
+  <section class="controls card">
+    <div class="row">
+      <input id="url" class="url-input" placeholder="Paste a YouTube URL or video id…" autocomplete="off" />
+    </div>
+    <div class="row">
+      <textarea id="prompt" class="prompt-input" rows="2"
+        placeholder="What should I do with this video?  e.g.  Find the best clips for YouTube Shorts · Summarize this · Make a viral TikTok script · Find the funniest moments · Turn this into a blog post"></textarea>
+    </div>
+    <div class="row chips" id="chips"></div>
+    <div class="row options">
+      <label class="opt"><input type="checkbox" id="optFrames" checked /> Analyze video frames <span class="hint">(downloads video — slower)</span></label>
+      <label class="opt"><input type="checkbox" id="optWhisper" /> Force Whisper transcription</label>
+      <span class="spacer"></span>
+      <button id="runFull" class="btn primary big">⚡ Run Full Analysis</button>
+    </div>
+    <div class="row step-buttons">
+      <span class="step-label">Manual steps:</span>
+      <button class="btn step" data-step="metadata">Fetch Metadata</button>
+      <button class="btn step" data-step="transcript">Get Transcript</button>
+      <button class="btn step" data-step="comments">Analyze Comments</button>
+      <button class="btn step" data-step="frames">Extract Frames</button>
+      <button class="btn step" data-step="clips">Find Clips</button>
+      <button class="btn step" data-step="output">Generate Output</button>
+    </div>
+
+    <div class="progress-area" id="progressArea">
+      <div class="progress-head">
+        <span id="progressTitle">Idle</span>
+        <span id="progressPct" class="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+      <ul id="steps" class="steps"></ul>
+      <details class="log-details">
+        <summary>Activity log</summary>
+        <pre id="log" class="log"></pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- Main layout -->
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head" id="sidebarHead">
+        <span class="sidebar-title">📊 Video info &amp; history</span>
+        <button id="toggleSidebar" class="sidebar-toggle" title="Collapse / expand" aria-expanded="true" aria-label="Collapse panel">▾</button>
+      </div>
+      <div class="sidebar-body" id="sidebarBody">
+        <div id="metaPanel" class="card meta-panel">
+          <div class="empty">Metadata will appear here.</div>
+        </div>
+        <div class="card history-panel">
+          <div class="card-head"><h3>History</h3><button id="refreshHistory" class="btn tiny">↻</button></div>
+          <ul id="history" class="history"></ul>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main card">
+      <nav class="tabs">
+        <button class="tab active" data-tab="output">Output</button>
+        <button class="tab" data-tab="clips">Clips &amp; Timeline</button>
+        <button class="tab" data-tab="transcript">Transcript</button>
+        <button class="tab" data-tab="comments">Comments</button>
+        <button class="tab" data-tab="frames">Frames</button>
+        <button class="tab" data-tab="export">Export</button>
+      </nav>
+
+      <div class="tab-panels">
+        <section id="panel-output" class="panel active">
+          <div class="panel-head">
+            <h2 id="outputTitle">Output</h2>
+            <button id="copyOutput" class="btn tiny">Copy</button>
+          </div>
+          <div id="output" class="markdown empty">Run an analysis or click <b>Generate Output</b>.</div>
+        </section>
+
+        <section id="panel-clips" class="panel">
+          <div id="timeline" class="timeline"></div>
+          <div id="clips" class="clips empty">No clips yet. Click <b>Find Clips</b> or run a full analysis.</div>
+        </section>
+
+        <section id="panel-transcript" class="panel">
+          <div class="panel-head">
+            <h2>Transcript</h2>
+            <input id="transcriptSearch" class="search" placeholder="Search transcript…" />
+            <span id="transcriptMeta" class="muted"></span>
+          </div>
+          <div id="transcript" class="transcript empty">No transcript yet.</div>
+        </section>
+
+        <section id="panel-comments" class="panel">
+          <div id="comments" class="comments empty">No comment analysis yet.</div>
+        </section>
+
+        <section id="panel-frames" class="panel">
+          <div id="frames" class="frames empty">No frames yet. Click <b>Extract Frames</b>.</div>
+        </section>
+
+        <section id="panel-export" class="panel">
+          <h2>Export</h2>
+          <p class="muted">Download the analyzed data for this video.</p>
+          <div id="exportButtons" class="export-buttons"></div>
+          <h3>Generated outputs</h3>
+          <ul id="outputsList" class="outputs-list"></ul>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
