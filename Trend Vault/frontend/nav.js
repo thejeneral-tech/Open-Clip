@@ -29,14 +29,6 @@
         { href: '/accounts',     icon: '👥', label: 'Accounts',     accent: '#7fb8cc' },
       ],
     },
-    {
-      group: 'Distribute',
-      items: [
-        { href: '/tiktok',       icon: '📤', label: 'TikTok',       accent: '#fe2c55' },
-        { href: '/youtube',      icon: '📺', label: 'YouTube',      accent: '#ff0033' },
-        { href: '/instagram',    icon: '📸', label: 'Instagram',    accent: '#d62976' },
-      ],
-    },
   ];
 
   function normalize(p) {
