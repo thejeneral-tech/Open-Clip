@@ -276,3 +276,75 @@ def format_comments_for_context(comments_data: Dict[str, Any], url: str) -> str:
 
     ctx += "[END COMMENTS]\n"
     return ctx
+
+
+async def fetch_youtube_metadata(video_id: str, timeout: int = 30) -> Dict[str, Any]:
+    """Fetch video card metadata via yt-dlp: title, description, thumbnail,
+    channel, duration, tags and chapters. No transcript/comments here — this is
+    the lightweight data the YouTube Workflow Builder shows in its video card.
+    """
+    try:
+        cmd = [
+            _find_ytdlp(),
+            "--skip-download",
+            "--dump-json",
+            "--no-warnings",
+            "--js-runtimes", "node",
+            "--remote-components", "ejs:github",
+            f"https://www.youtube.com/watch?v={video_id}",
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise
+
+        if proc.returncode != 0:
+            return {"success": False, "error": f"yt-dlp failed: {stderr.decode()[:200]}"}
+
+        data = json.loads(stdout.decode())
+
+        chapters = []
+        for ch in (data.get("chapters") or []):
+            if not isinstance(ch, dict):
+                continue
+            start = ch.get("start_time") or 0
+            try:
+                start = float(start)
+            except (TypeError, ValueError):
+                start = 0
+            chapters.append({
+                "title": ch.get("title", ""),
+                "start": start,
+                "timestamp": f"{int(start // 60):02d}:{int(start % 60):02d}",
+            })
+
+        return {
+            "success": True,
+            "video_id": video_id,
+            "title": data.get("title", ""),
+            "description": (data.get("description") or "")[:8000],
+            "channel": data.get("channel", "") or data.get("uploader", ""),
+            "duration": data.get("duration"),
+            "thumbnail": data.get("thumbnail", ""),
+            "tags": (data.get("tags") or [])[:30],
+            "chapters": chapters,
+            "view_count": data.get("view_count"),
+            "upload_date": data.get("upload_date", ""),
+        }
+
+    except asyncio.TimeoutError:
+        logger.warning(f"Metadata fetch timed out for {video_id}")
+        return {"success": False, "error": "Metadata fetch timed out"}
+    except FileNotFoundError:
+        logger.warning("yt-dlp not installed — cannot fetch metadata")
+        return {"success": False, "error": "yt-dlp not installed"}
+    except Exception as e:
+        logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+        return {"success": False, "error": str(e)}

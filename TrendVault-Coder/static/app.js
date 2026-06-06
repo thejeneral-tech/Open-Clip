@@ -919,6 +919,20 @@ function initializeEventListeners() {
     });
   }
 
+  // YouTube Workflow Builder tool button
+  const toolYtWorkflowBtn = el('tool-ytworkflow-btn');
+  if (toolYtWorkflowBtn) {
+    toolYtWorkflowBtn.addEventListener('click', async () => {
+      const mod = (await import('./js/youtubeWorkflow.js')).default;
+      if (!mod) return;
+      const Modals = await import('./js/modalManager.js');
+      if (!Modals.toggle('youtube-workflow-modal')) {
+        if (mod.isYoutubeWorkflowOpen()) mod.closeYoutubeWorkflow();
+        else mod.openYoutubeWorkflow();
+      }
+    });
+  }
+
   // Notes tool button
   const toolNotesBtn = el('tool-notes-btn');
   if (toolNotesBtn) {

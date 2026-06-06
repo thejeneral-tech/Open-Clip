@@ -9,9 +9,10 @@
  */
 
 import { nanoid } from './dom.js';
-import { makeNodeData } from './registry.js';
-import { buildSample, DEFAULT_SPACES } from './sample.js';
+import { makeNodeData, normalizeNode } from './registry.js';
+import { buildSample, buildAgentPipelineSample, DEFAULT_SPACES } from './sample.js';
 import { APP_ID } from './io.js';
+import * as api from './api.js';
 
 const STORAGE_KEY = 'trendvault-ai.automationMap.v1';
 const DEFAULT_BOARD_ID = 'board-default';
@@ -78,6 +79,7 @@ function computeLayout(nodes, edges) {
 
 const BOARD_SWITCH_RESET = () => ({
   selectedNodeId: null, activeSpace: 'all', past: [], future: [], _histTag: undefined,
+  runtime: {}, activeRun: null,
 });
 
 /* ------------------------------------------------------------------ */
@@ -116,7 +118,7 @@ function loadPersisted() {
     edges: active.edges,
     spaces: active.spaces?.length ? active.spaces : DEFAULT_SPACES.map((s) => ({ ...s })),
     activeSpace: typeof p.activeSpace === 'string' ? p.activeSpace : 'all',
-    ui: { snapToGrid: false, showMiniMap: true, showHealth: true, showSearch: true, ...(p.ui || {}) },
+    ui: { snapToGrid: false, showMiniMap: true, showHealth: true, showSearch: true, searchCollapsed: false, healthCollapsed: false, ...(p.ui || {}) },
     filters: { ...EMPTY_FILTERS, ...(p.filters || {}) },
   };
 }
@@ -135,10 +137,20 @@ let state = {
   _histTag: undefined,
   commandOpen: false,
   exportOpen: false,
+  // Server sync (Phase 1). serverSynced flips true once we've talked to the
+  // backend; until then we run purely off the localStorage snapshot.
+  serverSynced: false,
+  _hydrated: false,
+  // Runtime execution state (Phase 2+). Kept OUT of the persisted doc — never
+  // written to localStorage or the server. Keyed by node id.
+  runtime: {},
+  activeRun: null,
 };
 
 const listeners = new Set();
 let persistTimer = 0;
+let serverTimer = 0;       // debounced server autosave
+let graphDirty = false;    // a graph (nodes/edges/spaces) change awaits autosave
 
 function persist() {
   try {
@@ -158,6 +170,132 @@ function schedulePersist() {
   persistTimer = setTimeout(persist, 400);
 }
 
+/* ------------------------------------------------------------------ */
+/* Server sync (SQLite-backed persistence; localStorage = offline cache)*/
+/* ------------------------------------------------------------------ */
+
+function activeBoardEntry() {
+  return state.boards.find((b) => b.id === state.activeBoardId) || null;
+}
+
+/** The live graph as a server doc. */
+function liveDoc() {
+  return { nodes: state.nodes, edges: state.edges, spaces: state.spaces };
+}
+
+function scheduleServerPersist() {
+  clearTimeout(serverTimer);
+  serverTimer = setTimeout(serverAutosave, 5000);
+}
+
+/** PUT the active board's graph to the server (5s debounced via set()). */
+async function serverAutosave() {
+  if (!state.serverSynced || !graphDirty) return;
+  const board = activeBoardEntry();
+  if (!board) return;
+  graphDirty = false;
+  const wid = board.id;
+  const rev = board._rev ?? 0;
+  try {
+    const resp = await api.saveWorkflow(wid, { name: board.name, doc: liveDoc(), rev });
+    // Write the new rev onto the SAME board object that lands in state (not a
+    // pre-await copy) so the next autosave sends a fresh rev — otherwise a
+    // stale rev would 409 and revert the user's in-flight edits.
+    set({ boards: state.boards.map((b) => (b.id === wid ? { ...b, _rev: resp.rev, _loaded: true } : b)) });
+  } catch (e) {
+    if (e && e.status === 409 && e.body?.detail?.current) {
+      // A newer save won (e.g. another tab/user) — adopt the server's version.
+      const cur = e.body.detail.current;
+      const isActive = state.activeBoardId === wid;
+      set({
+        boards: state.boards.map((b) => (b.id === wid ? { ...b, _rev: cur.rev } : b)),
+        ...(isActive ? {
+          nodes: (cur.doc.nodes || []).map(normalizeNode),
+          edges: cur.doc.edges || [],
+          spaces: cur.doc.spaces?.length ? cur.doc.spaces : state.spaces,
+        } : {}),
+      });
+      // We just took the server copy; don't immediately re-save it.
+      graphDirty = false;
+      clearTimeout(serverTimer);
+    } else {
+      // Network/server error — fall back to localStorage-only until next open.
+      set({ serverSynced: false });
+    }
+  }
+}
+
+/**
+ * Immediate, awaitable save of the active board (used by explicit "Save"
+ * actions and the empty-state flows). Always writes the localStorage cache;
+ * additionally PUTs to the server when synced. Resolves {ok, offline?, rev} on
+ * success and THROWS if the server write fails (callers show an error toast).
+ */
+export async function saveNow() {
+  const board = activeBoardEntry();
+  if (!board) return { ok: false, offline: true };
+  clearTimeout(persistTimer);
+  persist();
+  if (!state.serverSynced) return { ok: false, offline: true };
+  clearTimeout(serverTimer);
+  graphDirty = false;
+  const resp = await api.saveWorkflow(board.id, { name: board.name, doc: liveDoc(), rev: board._rev ?? 0 });
+  set({ boards: state.boards.map((b) => (b.id === board.id ? { ...b, _rev: resp.rev, _loaded: true } : b)) });
+  return { ok: true, rev: resp.rev };
+}
+
+/**
+ * Load boards from the backend on first open. If the user has none yet, seed
+ * the server with the current (sample/local) board. On any failure we keep the
+ * localStorage-loaded state and stay in offline mode.
+ */
+export async function hydrateFromServer() {
+  if (state._hydrated && state.serverSynced) return;
+  let list;
+  try {
+    list = await api.listWorkflows();
+  } catch {
+    set({ serverSynced: false, _hydrated: true });
+    return;
+  }
+
+  if (!list.length) {
+    const board = activeBoardEntry();
+    try {
+      const created = await api.createWorkflow({ name: board?.name || 'My Project', doc: liveDoc() });
+      const boards = state.boards.map((b) => (b.id === state.activeBoardId
+        ? { ...b, id: created.id, name: created.name, _rev: created.rev, _loaded: true }
+        : b));
+      set({ boards, activeBoardId: created.id, serverSynced: true, _hydrated: true });
+    } catch {
+      set({ serverSynced: false, _hydrated: true });
+    }
+    return;
+  }
+
+  const boards = list.map((r) => ({
+    id: r.id, name: r.name, nodes: [], edges: [], spaces: [], _rev: r.rev, _loaded: false,
+  }));
+  const activeId = boards.some((b) => b.id === state.activeBoardId) ? state.activeBoardId : boards[0].id;
+  try {
+    const full = await api.getWorkflow(activeId);
+    const ab = boards.find((b) => b.id === activeId);
+    ab.nodes = (full.doc.nodes || []).map(normalizeNode);
+    ab.edges = full.doc.edges || [];
+    ab.spaces = full.doc.spaces?.length ? full.doc.spaces : DEFAULT_SPACES.map((s) => ({ ...s }));
+    ab._rev = full.rev;
+    ab._loaded = true;
+    set({
+      boards, activeBoardId: activeId,
+      nodes: ab.nodes, edges: ab.edges, spaces: ab.spaces,
+      serverSynced: true, _hydrated: true,
+      ...BOARD_SWITCH_RESET(),
+    });
+  } catch {
+    set({ serverSynced: false, _hydrated: true });
+  }
+}
+
 export function getState() { return state; }
 
 export function subscribe(fn) {
@@ -166,9 +304,17 @@ export function subscribe(fn) {
 }
 
 function set(patch) {
-  state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
+  const applied = typeof patch === 'function' ? patch(state) : patch;
+  state = { ...state, ...applied };
   for (const l of listeners) l(state);
   schedulePersist();
+  // Any change to the graph itself marks the active board dirty for the 5s
+  // server autosave. Selection / filters / ui / runtime changes don't.
+  if (applied && typeof applied === 'object' &&
+      ('nodes' in applied || 'edges' in applied || 'spaces' in applied)) {
+    graphDirty = true;
+    scheduleServerPersist();
+  }
 }
 
 export function canUndo() { return state.past.length > 0; }
@@ -230,6 +376,11 @@ export function addNode(kind, position) {
 export function updateNodeData(id, patch) {
   snapshot('node:' + id);
   set({ nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)) });
+}
+
+/** Toggle the human-in-the-loop "Approve" gate on a node (persisted). */
+export function approveNode(id, value = true) {
+  set({ nodes: state.nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, approved: !!value } } : n)) });
 }
 
 /** Move a node (no history — the canvas snapshots once at drag start). */
@@ -311,46 +462,87 @@ export function tidyLayout() {
 }
 
 /* ---- boards ---- */
-export function switchBoard(id) {
+export async function switchBoard(id) {
   if (id === state.activeBoardId) return;
-  const target = state.boards.find((b) => b.id === id);
+  let target = state.boards.find((b) => b.id === id);
   if (!target) return;
+  // Flush any pending edits on the current board before leaving it.
+  if (graphDirty) await serverAutosave();
+  // Lazily load the target board's graph from the server.
+  if (state.serverSynced && !target._loaded) {
+    try {
+      const full = await api.getWorkflow(id);
+      target = {
+        ...target,
+        nodes: (full.doc.nodes || []).map(normalizeNode),
+        edges: full.doc.edges || [],
+        spaces: full.doc.spaces?.length ? full.doc.spaces : DEFAULT_SPACES.map((s) => ({ ...s })),
+        _rev: full.rev,
+        _loaded: true,
+      };
+    } catch { /* offline — use whatever we have cached */ }
+  }
   set({
-    boards: syncActiveBoard(state.boards, state.activeBoardId, state.nodes, state.edges, state.spaces),
+    boards: state.boards.map((b) => {
+      if (b.id === state.activeBoardId) return { ...b, nodes: state.nodes, edges: state.edges, spaces: state.spaces };
+      if (b.id === id) return target;
+      return b;
+    }),
     activeBoardId: id,
     nodes: target.nodes, edges: target.edges, spaces: target.spaces,
     ...BOARD_SWITCH_RESET(),
   });
 }
 
-export function createBoard(name) {
+export async function createBoard(name) {
   const trimmed = (name || '').trim() || 'Untitled board';
+  const synced = syncActiveBoard(state.boards, state.activeBoardId, state.nodes, state.edges, state.spaces);
+  const spaces = DEFAULT_SPACES.map((s) => ({ ...s }));
+  if (state.serverSynced) {
+    try {
+      const created = await api.createWorkflow({ name: trimmed, doc: { nodes: [], edges: [], spaces } });
+      const board = { id: created.id, name: created.name, nodes: [], edges: [], spaces, _rev: created.rev, _loaded: true };
+      set({ boards: [...synced, board], activeBoardId: created.id, nodes: [], edges: [], spaces, ...BOARD_SWITCH_RESET() });
+      return;
+    } catch { /* fall through to local-only */ }
+  }
   const id = 'board-' + nanoid(6);
-  const board = { id, name: trimmed, nodes: [], edges: [], spaces: DEFAULT_SPACES.map((s) => ({ ...s })) };
-  set({
-    boards: [...syncActiveBoard(state.boards, state.activeBoardId, state.nodes, state.edges, state.spaces), board],
-    activeBoardId: id,
-    nodes: [], edges: [], spaces: board.spaces,
-    ...BOARD_SWITCH_RESET(),
-  });
+  const board = { id, name: trimmed, nodes: [], edges: [], spaces, _rev: 0, _loaded: true };
+  set({ boards: [...synced, board], activeBoardId: id, nodes: [], edges: [], spaces, ...BOARD_SWITCH_RESET() });
 }
 
 export function renameBoard(id, name) {
-  set({ boards: state.boards.map((b) => (b.id === id ? { ...b, name: (name || '').trim() || b.name } : b)) });
+  const nm = (name || '').trim();
+  set({ boards: state.boards.map((b) => (b.id === id ? { ...b, name: nm || b.name } : b)) });
+  if (state.serverSynced && nm) {
+    const board = state.boards.find((b) => b.id === id);
+    const body = { name: nm, rev: board?._rev ?? 0 };
+    // Including the live doc on the active board keeps rev in lock-step with
+    // the pending autosave (avoids a self-inflicted 409).
+    if (id === state.activeBoardId) { body.doc = liveDoc(); graphDirty = false; }
+    api.saveWorkflow(id, body).then((resp) => { if (board) board._rev = resp.rev; }).catch(() => {});
+  }
 }
 
-export function duplicateBoard(id) {
+export async function duplicateBoard(id) {
   const synced = syncActiveBoard(state.boards, state.activeBoardId, state.nodes, state.edges, state.spaces);
   const src = synced.find((b) => b.id === id);
   if (!src) return;
+  let doc = { nodes: src.nodes, edges: src.edges, spaces: src.spaces };
+  if (state.serverSynced && !src._loaded) {
+    try { doc = (await api.getWorkflow(id)).doc; } catch { /* use cached */ }
+  }
+  if (state.serverSynced) {
+    try {
+      const created = await api.createWorkflow({ name: src.name + ' copy', doc });
+      const board = { id: created.id, name: created.name, nodes: doc.nodes || [], edges: doc.edges || [], spaces: doc.spaces || [], _rev: created.rev, _loaded: true };
+      set({ boards: [...synced, board], activeBoardId: created.id, nodes: board.nodes, edges: board.edges, spaces: board.spaces, ...BOARD_SWITCH_RESET() });
+      return;
+    } catch { /* fall through */ }
+  }
   const newId = 'board-' + nanoid(6);
-  const copy = { id: newId, name: src.name + ' copy', nodes: src.nodes, edges: src.edges, spaces: src.spaces };
-  set({
-    boards: [...synced, copy],
-    activeBoardId: newId,
-    nodes: copy.nodes, edges: copy.edges, spaces: copy.spaces,
-    ...BOARD_SWITCH_RESET(),
-  });
+  const copy = { id: newId, name: src.name + ' copy', nodes: doc.nodes || [], edges: doc.edges || [], spaces: doc.spaces || [], _rev: 0, _loaded: true };
+  set({ boards: [...synced, copy], activeBoardId: newId, nodes: copy.nodes, edges: copy.edges, spaces: copy.spaces, ...BOARD_SWITCH_RESET() });
 }
 
 export function deleteBoard(id) {
@@ -367,6 +559,7 @@ export function deleteBoard(id) {
   } else {
     set({ boards: remaining });
   }
+  if (state.serverSynced) api.deleteWorkflow(id).catch(() => {});
 }
 
 /* ---- spaces ---- */
@@ -401,6 +594,28 @@ export function setUi(patch) { set({ ui: { ...state.ui, ...patch } }); }
 export function setCommandOpen(open) { set({ commandOpen: open }); }
 export function setExportOpen(open) { set({ exportOpen: open }); }
 
+/* ---- runtime execution state (live; never persisted) ---- */
+export function getNodeRuntime(id) { return state.runtime[id] || null; }
+export function setNodeRuntime(id, patch) {
+  set({ runtime: { ...state.runtime, [id]: { ...(state.runtime[id] || {}), ...patch } } });
+}
+/** Append streamed text deltas (batched by the caller) to runtime fields. */
+export function appendNodeRuntimeBatch(id, patch) {
+  const cur = state.runtime[id] || {};
+  const next = { ...cur };
+  for (const k of Object.keys(patch)) next[k] = (cur[k] || '') + patch[k];
+  set({ runtime: { ...state.runtime, [id]: next } });
+}
+export function clearNodeRuntime(id) {
+  const r = { ...state.runtime };
+  delete r[id];
+  set({ runtime: r });
+}
+export function resetRuntime() { set({ runtime: {}, activeRun: null }); }
+/** Replace the whole runtime map in one update (e.g. seed all nodes 'waiting'). */
+export function setRuntimeAll(map) { set({ runtime: map || {} }); }
+export function setActiveRun(run) { set({ activeRun: run }); }
+
 /* ---- persistence / import-export ---- */
 export function exportState(exportedAt) {
   return { app: APP_ID, version: 1, exportedAt, nodes: state.nodes, edges: state.edges, spaces: state.spaces };
@@ -409,7 +624,7 @@ export function exportState(exportedAt) {
 export function importWorkflow(file) {
   snapshot();
   set({
-    nodes: file.nodes ?? [],
+    nodes: (file.nodes ?? []).map(normalizeNode),
     edges: file.edges ?? [],
     spaces: file.spaces?.length ? file.spaces : DEFAULT_SPACES.map((s) => ({ ...s })),
     selectedNodeId: null,
@@ -427,8 +642,34 @@ export function resetWorkflow() {
 
 export function loadSample() {
   snapshot();
-  const s = buildSample();
-  set({ nodes: s.nodes, edges: s.edges, spaces: s.spaces, selectedNodeId: null });
+  const s = buildAgentPipelineSample();
+  set({
+    nodes: s.nodes, edges: s.edges, spaces: s.spaces,
+    selectedNodeId: null, activeSpace: 'all', runtime: {}, activeRun: null,
+  });
+}
+
+/* ---- snapshot / restore (used by the Full System Check to run real
+   operations on the live graph and then put everything back exactly) ---- */
+export function snapshotGraph() {
+  return JSON.parse(JSON.stringify({
+    nodes: state.nodes, edges: state.edges, spaces: state.spaces,
+    selectedNodeId: state.selectedNodeId, activeSpace: state.activeSpace,
+    filters: state.filters, runtime: state.runtime,
+  }));
+}
+/** Restore a snapshot from snapshotGraph(). Clears the undo history so the
+ *  check's scratch operations don't pollute it. */
+export function restoreGraph(snap) {
+  if (!snap) return;
+  set({
+    nodes: snap.nodes || [], edges: snap.edges || [], spaces: snap.spaces || [],
+    selectedNodeId: snap.selectedNodeId ?? null,
+    activeSpace: snap.activeSpace ?? 'all',
+    filters: snap.filters || { ...EMPTY_FILTERS },
+    runtime: snap.runtime || {},
+    past: [], future: [], _histTag: undefined,
+  });
 }
 
 /** Convenience: the currently-selected node (or null). */

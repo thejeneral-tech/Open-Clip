@@ -20,7 +20,9 @@ import { createToolbar } from './automation/toolbar.js';
 import { createPalette } from './automation/palette.js';
 import { createInspector } from './automation/inspector.js';
 import { createHealthPanel, createSearchPanel } from './automation/panels.js';
+import { createExplorer } from './automation/explorer.js';
 import { createCommandPalette } from './automation/commandPalette.js';
+import { createSystemCheckPanel } from './automation/systemCheckPanel.js';
 import { openContextMenu } from './automation/contextMenu.js';
 
 const MODAL_ID = 'automation-map-modal';
@@ -70,16 +72,22 @@ function mountApp() {
   _api = { fitView: canvas.fitView, focusNode: canvas.focusNode };
   canvas.setContextMenuHandler((menu) => openContextMenu(menu, _api));
 
+  // The Full System Check report panel; expose its opener on the shared api so
+  // the toolbar / command palette can launch it.
+  const sysCheck = createSystemCheckPanel();
+  _api.openSystemCheck = () => sysCheck.open();
+
   const toolbar = createToolbar(_api);
   const palette = createPalette();
   const inspector = createInspector(_api);
   const health = createHealthPanel(_api);
   const search = createSearchPanel();
+  const explorer = createExplorer();
   const cmd = createCommandPalette(_api);
 
   const canvasWrap = document.createElement('div');
   canvasWrap.className = 'am-canvas-wrap';
-  canvasWrap.append(canvas.el, search.el, health.el, inspector.el);
+  canvasWrap.append(canvas.el, search.el, health.el, explorer.el, inspector.el);
 
   const appBody = document.createElement('div');
   appBody.className = 'am-body';
@@ -87,10 +95,10 @@ function mountApp() {
 
   const root = document.createElement('div');
   root.className = 'am-root';
-  root.append(toolbar.el, appBody, cmd.el);
+  root.append(toolbar.el, appBody, cmd.el, sysCheck.el);
 
   body.appendChild(root);
-  _parts.push(canvas, toolbar, palette, inspector, health, search, cmd);
+  _parts.push(canvas, toolbar, palette, inspector, health, search, explorer, cmd, sysCheck);
   _mounted = true;
 
   bindShortcuts();
@@ -159,6 +167,13 @@ export function openAutomationMap() {
   _open = true;
 
   mountApp();
+
+  // Load boards from the backend on first open (replaces localStorage-only
+  // persistence). Falls back silently to the cached state if the server is
+  // unreachable. Re-fit the view once the graph arrives.
+  store.hydrateFromServer()
+    .then(() => requestAnimationFrame(() => _api?.fitView?.({ padding: 0.25, maxZoom: 1 })))
+    .catch(() => {});
 
   Modals.register(MODAL_ID, {
     sidebarBtnId: 'tool-automation-btn',

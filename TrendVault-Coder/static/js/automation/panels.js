@@ -20,10 +20,10 @@ const MAX_VISIBLE = 8;
 /* ====================== Health panel ====================== */
 export function createHealthPanel(api = {}) {
   const root = el('section', { class: 'am-panel am-health' });
-  let collapsed = false;
 
   function render() {
     const state = store.getState();
+    const collapsed = !!state.ui.healthCollapsed;
     root.style.display = state.ui.showHealth ? '' : 'none';
     if (!state.ui.showHealth) return;
     clear(root);
@@ -43,7 +43,7 @@ export function createHealthPanel(api = {}) {
 
     if (collapsed) {
       root.classList.add('collapsed');
-      root.appendChild(el('button', { class: 'am-health-pill', title: 'Show connection health', onclick: () => { collapsed = false; render(); } },
+      root.appendChild(el('button', { class: 'am-health-pill', title: 'Show connection health', onclick: () => store.setUi({ healthCollapsed: false }) },
         el('span', { style: { color: headColor }, html: icon(ready ? 'checkCircle' : attentionCount > 0 ? 'alertTriangle' : 'activity', 15) }),
         el('span', { style: ready ? { color: headColor } : null, text: headText }),
         el('span', { class: 'am-muted', html: icon('chevronUp', 14) }),
@@ -53,10 +53,11 @@ export function createHealthPanel(api = {}) {
     root.classList.remove('collapsed');
 
     root.appendChild(el('header', { class: 'am-panel-head' },
-      el('span', { class: 'am-accent-ico', html: icon('activity', 15) }),
-      el('span', { class: 'am-panel-title', text: 'Connection health' }),
+      el('button', { class: 'am-panel-mintitle', title: 'Minimize panel', onclick: () => store.setUi({ healthCollapsed: true }) },
+        el('span', { class: 'am-accent-ico', html: icon('activity', 15) }),
+        el('span', { class: 'am-panel-title', text: 'Connection health' })),
       el('div', { class: 'am-panel-actions' },
-        el('button', { class: 'am-icon-btn am-sm', title: 'Collapse', onclick: () => { collapsed = true; render(); }, html: icon('chevronUp', 15) }),
+        el('button', { class: 'am-icon-btn am-sm', title: 'Minimize', onclick: () => store.setUi({ healthCollapsed: true }), html: icon('chevronUp', 15) }),
         el('button', { class: 'am-icon-btn am-sm', title: 'Hide panel', onclick: () => store.setUi({ showHealth: false }), html: icon('x', 15) }),
       ),
     ));
@@ -69,6 +70,28 @@ export function createHealthPanel(api = {}) {
         el('p', { class: 'am-muted-note', text: `${summary.total} ${summary.total === 1 ? 'node' : 'nodes'} on canvas` }),
       ),
     ));
+
+    /* explicit live metrics: nodes, connections, broken, missing input + readiness */
+    const ids = new Set(state.nodes.map((n) => n.id));
+    const dangling = state.edges.filter((e) => !ids.has(e.source) || !ids.has(e.target)).length;
+    const connectedIds = new Set(state.edges.flatMap((e) => [e.source, e.target]));
+    const isolated = state.nodes.filter((n) => !connectedIds.has(n.id)).length;
+    const brokenConns = dangling + (summary.counts['broken-chain'] || 0);
+    const missingInputs = summary.counts['missing-input'] || 0;
+
+    const metric = (label, value, color) => el('div', { class: 'am-health-metric' },
+      el('span', { class: 'am-health-metric-val', style: color ? { color } : null, text: String(value) }),
+      el('span', { class: 'am-health-metric-label', text: label }));
+    body.appendChild(el('div', { class: 'am-health-metrics' },
+      metric('Nodes', summary.total),
+      metric('Connections', state.edges.length),
+      metric('Broken', brokenConns, brokenConns ? '#ef4444' : null),
+      metric('Missing input', missingInputs, missingInputs ? '#fb923c' : null),
+    ));
+    body.appendChild(el('div', { class: 'am-health-ready' },
+      el('span', { class: 'am-dot', style: { background: ready ? HEALTH_META.ready.color : isEmpty ? '#8b93a7' : HEALTH_META['needs-review'].color } }),
+      el('span', { class: 'am-muted', text: 'Workflow readiness: ' }),
+      el('b', { style: { color: ready ? HEALTH_META.ready.color : isEmpty ? '#8b93a7' : HEALTH_META['needs-review'].color }, text: ready ? 'Ready to run' : isEmpty ? 'Empty' : 'In progress' })));
 
     const breakdown = HEALTH_ORDER.filter((l) => summary.counts[l] > 0);
     if (breakdown.length) {
@@ -113,6 +136,26 @@ export function createHealthPanel(api = {}) {
       body.appendChild(sec);
     }
 
+    /* suggested fixes — concrete next actions to make the workflow healthy */
+    const fixes = [];
+    if (isolated > 0) fixes.push(`Connect ${isolated} isolated node${isolated === 1 ? '' : 's'} into the flow.`);
+    if (dangling > 0) fixes.push(`Remove ${dangling} dangling connection${dangling === 1 ? '' : 's'}.`);
+    for (const gi of summary.globalIssues) fixes.push(gi);
+    for (const a of attention.slice(0, 3)) {
+      const iss = health[a.id]?.issues?.[0];
+      if (iss) fixes.push(`${a.title}: ${iss}`);
+    }
+    if (!fixes.length && !isEmpty) fixes.push(ready ? 'No issues — the workflow is ready to run.' : 'Keep connecting nodes to complete the flow.');
+    if (fixes.length) {
+      const sec = el('div', { class: 'am-health-fixes' }, el('p', { class: 'am-label', text: 'Suggested fixes' }));
+      const ul = el('ul', { class: 'am-fix-list' });
+      for (const f of fixes.slice(0, 5)) {
+        ul.appendChild(el('li', null, el('span', { class: 'am-fix-ico', html: icon('wand', 12) }), el('span', { text: f })));
+      }
+      sec.appendChild(ul);
+      body.appendChild(sec);
+    }
+
     root.appendChild(body);
   }
 
@@ -124,7 +167,6 @@ export function createHealthPanel(api = {}) {
 /* ====================== Search & filters ====================== */
 export function createSearchPanel() {
   const root = el('div', { class: 'am-panel am-search' });
-  let collapsed = false;
   let editing = false;
 
   root.addEventListener('focusin', (e) => { if (e.target.matches('input[type=text], .am-search-input')) editing = true; });
@@ -132,6 +174,7 @@ export function createSearchPanel() {
 
   function render() {
     const state = store.getState();
+    const collapsed = !!state.ui.searchCollapsed;
     root.style.display = state.ui.showSearch ? '' : 'none';
     if (!state.ui.showSearch) return;
     clear(root);
@@ -144,7 +187,7 @@ export function createSearchPanel() {
 
     if (collapsed) {
       root.appendChild(el('div', { class: 'am-search-collapsed' },
-        el('button', { class: 'am-search-expand', title: 'Expand search & filters', onclick: () => { collapsed = false; render(); } },
+        el('button', { class: 'am-search-expand', title: 'Expand search & filters', onclick: () => store.setUi({ searchCollapsed: false }) },
           el('span', { class: 'am-muted', html: icon('search', 15) }),
           el('span', { text: activeCount > 0 ? `Filters (${activeCount} active)` : 'Filters' }),
           el('span', { class: 'am-muted', html: icon('chevronDown', 15) }),
@@ -155,11 +198,12 @@ export function createSearchPanel() {
     }
 
     root.appendChild(el('div', { class: 'am-panel-head' },
-      el('span', { class: 'am-accent-ico', html: icon('filter', 15) }),
-      el('span', { class: 'am-panel-title', text: 'Search & filters' }),
+      el('button', { class: 'am-panel-mintitle', title: 'Minimize panel', onclick: () => store.setUi({ searchCollapsed: true }) },
+        el('span', { class: 'am-accent-ico', html: icon('filter', 15) }),
+        el('span', { class: 'am-panel-title', text: 'Search & filters' })),
       activeCount > 0 ? el('span', { class: 'am-chip am-accent-chip', text: String(activeCount) }) : null,
       el('div', { class: 'am-panel-actions' },
-        el('button', { class: 'am-icon-btn am-sm', title: 'Collapse', onclick: () => { collapsed = true; render(); }, html: icon('chevronUp', 15) }),
+        el('button', { class: 'am-icon-btn am-sm', title: 'Minimize', onclick: () => store.setUi({ searchCollapsed: true }), html: icon('chevronUp', 15) }),
         el('button', { class: 'am-icon-btn am-sm', title: 'Hide panel', onclick: () => store.setUi({ showSearch: false }), html: icon('x', 15) }),
       ),
     ));

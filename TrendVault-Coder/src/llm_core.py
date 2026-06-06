@@ -1051,7 +1051,7 @@ async def llm_call_async(
 async def stream_llm(url: str, model: str, messages: List[Dict], temperature: float = LLMConfig.DEFAULT_TEMPERATURE,
                      max_tokens: int = LLMConfig.DEFAULT_MAX_TOKENS, headers: Optional[Dict] = None,
                      timeout: int = LLMConfig.STREAM_TIMEOUT, prompt_type: Optional[str] = None,
-                     tools: Optional[List[Dict]] = None):
+                     tools: Optional[List[Dict]] = None, num_ctx: Optional[int] = None):
     """Stream LLM responses with improved error handling.
 
     Yields SSE chunks:
@@ -1088,7 +1088,8 @@ async def stream_llm(url: str, model: str, messages: List[Dict], temperature: fl
             h.update(headers)
         payload = _build_ollama_payload(
             model, messages_copy, temperature, max_tokens,
-            stream=True, tools=tools, num_ctx=get_context_length(url, model),
+            stream=True, tools=tools,
+            num_ctx=(num_ctx if (num_ctx and num_ctx > 0) else get_context_length(url, model)),
         )
     else:
         target_url = url

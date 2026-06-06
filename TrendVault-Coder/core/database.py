@@ -1412,6 +1412,129 @@ class Integration(TimestampMixin, Base):
     enabled = Column(Boolean, default=True)
 
 
+# ---------------------------------------------------------------------------
+# Automation Map — executable AI workflow builder
+# ---------------------------------------------------------------------------
+# A "workflow" is one Automation Map board: a graph of nodes + edges + spaces.
+# The whole graph is stored as a single JSON `doc` (fast whole-board load/save,
+# mirrors the front-end store shape) while execution history is normalised into
+# WorkflowRun / NodeRun rows and generated artefacts into GeneratedFile.
+
+class Workflow(TimestampMixin, Base):
+    """One Automation Map board, persisted server-side (replaces the old
+    localStorage-only store). `doc` holds the live graph the front-end edits:
+    {"nodes": [...], "edges": [...], "spaces": [...]}.
+    """
+    __tablename__ = "workflows"
+
+    id             = Column(String, primary_key=True, index=True)   # board id, e.g. "board-ab12cd"
+    owner          = Column(String, nullable=True, index=True)      # username; null = shared/legacy
+    name           = Column(String, nullable=False, default="Untitled board")
+    doc            = Column(JSON, nullable=False, default=dict)     # {nodes, edges, spaces}
+    schema_version = Column(Integer, nullable=False, default=1)
+    # Monotonic revision bumped on every successful write. The autosave PUT
+    # sends the rev it last saw; a stale rev is rejected so a slow autosave
+    # can't clobber a newer save (last-writer-wins guard).
+    rev            = Column(Integer, nullable=False, default=0)
+    is_active      = Column(Boolean, default=True)                  # soft-delete flag
+
+    __table_args__ = (
+        Index('ix_workflows_owner_updated', 'owner', 'is_active', 'updated_at'),
+    )
+
+
+class WorkflowRun(Base):
+    """One execution of a workflow — either a full graph run or a single-node
+    run (mode='single'). Parent of NodeRun rows."""
+    __tablename__ = "workflow_runs"
+
+    id           = Column(String, primary_key=True, index=True)
+    workflow_id  = Column(String, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner        = Column(String, nullable=True, index=True)
+    mode         = Column(String, default="graph")     # "graph" | "single"
+    root_node_id = Column(String, nullable=True)        # for single-node runs
+    status       = Column(String, default="running")    # waiting|running|success|failed|cancelled
+    started_at   = Column(DateTime, nullable=False, default=utcnow_naive)
+    finished_at  = Column(DateTime, nullable=True)
+    error        = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index('ix_workflow_runs_wf', 'workflow_id', 'started_at'),
+    )
+
+
+class NodeRun(Base):
+    """One node execution within a WorkflowRun. Stores resolved inputs, the
+    captured output/logs, exit code and error so runs are inspectable later."""
+    __tablename__ = "node_runs"
+
+    id          = Column(String, primary_key=True, index=True)
+    run_id      = Column(String, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    node_id     = Column(String, nullable=False, index=True)
+    kind        = Column(String, nullable=False)        # agent|function|terminal|file|...
+    status      = Column(String, default="waiting")     # waiting|running|success|failed|cancelled|skipped
+    started_at  = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    inputs      = Column(JSON, nullable=True)            # {sourceNodeId: text}
+    output      = Column(Text, nullable=True)            # capped to last N KB
+    logs        = Column(Text, nullable=True)            # capped to last N KB
+    exit_code   = Column(Integer, nullable=True)
+    error       = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index('ix_node_runs_run', 'run_id', 'node_id'),
+    )
+
+
+class GeneratedFile(TimestampMixin, Base):
+    """A file written into a workflow's workspace by an agent/file/function
+    node. `rel_path` is relative to data/workspaces/<workflow_id>/."""
+    __tablename__ = "generated_files"
+
+    id          = Column(String, primary_key=True, index=True)
+    workflow_id = Column(String, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id      = Column(String, nullable=True, index=True)
+    node_id     = Column(String, nullable=True)
+    rel_path    = Column(String, nullable=False)
+    size        = Column(Integer, nullable=True)
+    owner       = Column(String, nullable=True, index=True)
+
+    __table_args__ = (
+        Index('ix_generated_files_wf_path', 'workflow_id', 'rel_path', unique=True),
+    )
+
+
+# ---------------------------------------------------------------------------
+# YouTube → Workflow-Remake-Prompt builder history
+# ---------------------------------------------------------------------------
+
+class YtWorkflowPrompt(TimestampMixin, Base):
+    """One generated "remake this video's workflow on my server" prompt.
+
+    Persists the final output plus the build diagnostics (model used, chunk
+    count, retries, errors) so the YouTube Workflow Builder tool can show a
+    history and re-export past prompts. ``created_at`` (from TimestampMixin) is
+    the date the prompt was generated.
+    """
+    __tablename__ = "yt_workflow_prompts"
+
+    id           = Column(String, primary_key=True, index=True)
+    owner        = Column(String, nullable=True, index=True)
+    video_url    = Column(String, nullable=True)
+    video_id     = Column(String, nullable=True, index=True)
+    title        = Column(String, nullable=True)
+    model_used   = Column(String, nullable=True)
+    chunk_count  = Column(Integer, nullable=True)
+    final_output = Column(Text, nullable=True)
+    errors       = Column(Text, nullable=True)     # newline-joined error strings, if any
+    diagnostics  = Column(JSON, nullable=True)      # GenDiag + source meta snapshot
+    emergency    = Column(Boolean, default=False)   # built without the model?
+
+    __table_args__ = (
+        Index('ix_yt_wf_owner_created', 'owner', 'created_at'),
+    )
+
+
 
 
 

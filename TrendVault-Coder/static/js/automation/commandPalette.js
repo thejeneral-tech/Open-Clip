@@ -4,8 +4,10 @@
  */
 
 import * as store from './store.js';
+import * as exec from './exec.js';
 import { el, clear, cx, icon } from './dom.js';
 import { KIND_META, KIND_ORDER } from './registry.js';
+import { toast } from './toast.js';
 
 export function createCommandPalette(api = {}) {
   const overlay = el('div', { class: 'am-cmdk-overlay', style: 'display:none', onmousedown: (e) => { if (e.target === overlay) store.setCommandOpen(false); } });
@@ -32,9 +34,12 @@ export function createCommandPalette(api = {}) {
       { id: 'health', label: `${ui.showHealth ? 'Hide' : 'Show'} connection health`, group: 'Actions', icon: 'activity', run: () => { store.setUi({ showHealth: !ui.showHealth }); dismiss(); } },
       { id: 'minimap', label: `${ui.showMiniMap ? 'Hide' : 'Show'} mini map`, group: 'Actions', icon: 'map', run: () => { store.setUi({ showMiniMap: !ui.showMiniMap }); dismiss(); } },
       { id: 'snap', label: `${ui.snapToGrid ? 'Disable' : 'Enable'} snap to grid`, group: 'Actions', icon: 'grid', run: () => { store.setUi({ snapToGrid: !ui.snapToGrid }); dismiss(); } },
+      { id: 'run', label: 'Run workflow', group: 'Actions', icon: 'activity', keywords: 'run execute start play', run: () => { dismiss(); exec.runWorkflow(); } },
+      { id: 'syscheck', label: 'Run Full System Check', group: 'Actions', icon: 'activity', keywords: 'test diagnostic check health verify report', run: () => { dismiss(); api.openSystemCheck?.(); } },
       { id: 'export', label: 'Export workflow…', group: 'Actions', icon: 'download', keywords: 'claude cursor json markdown checklist prompt', run: () => { store.setExportOpen(true); dismiss(); } },
-      { id: 'sample', label: 'Load sample workflow', group: 'Actions', icon: 'feature', run: () => { store.loadSample(); dismiss(); } },
-      { id: 'reset', label: 'Reset workflow…', group: 'Actions', icon: 'rotateCcw', run: () => { if (confirm('Clear the entire workflow? This cannot be undone.')) store.resetWorkflow(); dismiss(); } },
+      { id: 'save', label: 'Save project', group: 'Actions', icon: 'check', keywords: 'save persist sqlite store', run: async () => { dismiss(); try { const r = await store.saveNow(); toast(r && r.offline ? 'Saved locally (server offline)' : 'Project saved', { type: 'success' }); } catch (e) { toast('Save failed: ' + ((e && e.message) || e), { type: 'error' }); } } },
+      { id: 'sample', label: 'Load sample workflow', group: 'Actions', icon: 'feature', keywords: 'sample example pipeline agents demo', run: () => { store.loadSample(); dismiss(); } },
+      { id: 'reset', label: 'Clear canvas…', group: 'Actions', icon: 'rotateCcw', keywords: 'reset clear empty delete all', run: () => { if (confirm('Clear the entire workflow? This cannot be undone.')) store.resetWorkflow(); dismiss(); } },
     ];
     for (const kind of KIND_ORDER) {
       const m = KIND_META[kind];

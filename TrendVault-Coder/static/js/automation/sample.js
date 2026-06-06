@@ -111,3 +111,68 @@ export function buildSample() {
 
   return { nodes, edges, spaces: DEFAULT_SPACES.map((s) => ({ ...s })) };
 }
+
+/**
+ * A runnable multi-agent pipeline shown by the empty-state "Load the sample
+ * workflow" button: Input → Research Agent → Coding Agent → Test Agent →
+ * Output, laid out left-to-right and pre-connected. Agents carry prompts so
+ * the whole thing can be executed end-to-end with one "Run workflow".
+ */
+export function buildAgentPipelineSample() {
+  const Y = 220;
+  const input = node('feature', 'features', 0, Y, {
+    title: 'Input',
+    description: 'The task or request that flows into the pipeline.',
+    status: 'idea',
+    tags: ['input'],
+  });
+  const research = node('agent', 'ai-agents', 340, Y, {
+    title: 'Research Agent',
+    description: 'Gathers context and requirements for the task.',
+    status: 'idea',
+    systemPrompt: 'You are a meticulous research agent. Be concise and factual.',
+    prompt: 'Research the task provided by the upstream Input node and summarise the key requirements, constraints and approach.',
+    tags: ['ai'],
+  });
+  const coding = node('agent', 'ai-agents', 680, Y, {
+    title: 'Coding Agent',
+    description: 'Implements the solution from the research findings.',
+    status: 'idea',
+    systemPrompt: 'You are a senior software engineer. Produce clean, working code.',
+    prompt: 'Using the research from the upstream node, implement the solution. Output the code clearly.',
+    tags: ['ai'],
+  });
+  const testing = node('agent', 'ai-agents', 1020, Y, {
+    title: 'Test Agent',
+    description: 'Reviews and tests the generated code.',
+    status: 'idea',
+    systemPrompt: 'You are a rigorous QA engineer.',
+    prompt: 'Review the code from the upstream Coding Agent. List bugs, edge cases and concrete test cases.',
+    tags: ['ai'],
+  });
+  const output = node('documentation', 'documentation', 1360, Y, {
+    title: 'Output',
+    description: 'Final result / summary collected from the pipeline.',
+    status: 'idea',
+    tags: ['output'],
+  });
+
+  const nodes = [input, research, coding, testing, output];
+  const edge = (source, outIdx, target, inIdx, label, kind = 'default') => ({
+    id: nanoid(8),
+    source: source.id,
+    target: target.id,
+    sourceHandle: source.data.outputs[outIdx]?.id,
+    targetHandle: target.data.inputs[inIdx]?.id,
+    type: 'labeled',
+    data: { label, kind },
+  });
+  const edges = [
+    edge(input, 0, research, 0, 'task'),
+    edge(research, 0, coding, 0, 'findings', 'success'),
+    edge(coding, 0, testing, 0, 'code', 'success'),
+    edge(testing, 0, output, 0, 'result', 'success'),
+  ];
+
+  return { nodes, edges, spaces: DEFAULT_SPACES.map((s) => ({ ...s })) };
+}
