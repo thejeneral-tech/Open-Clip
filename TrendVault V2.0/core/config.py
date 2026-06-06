@@ -7,10 +7,13 @@ sensible defaults so a blank LOCAL_TTS_URL= doesn't override the real default.
 """
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from core.constants import BASE_DIR
 
 
 class TVSettings(BaseSettings):
@@ -39,7 +42,7 @@ class TVSettings(BaseSettings):
     port: int = 3001
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.path.join(BASE_DIR, ".env"),   # absolute → cwd-independent
         env_file_encoding="utf-8-sig",      # tolerate a Notepad BOM
         extra="ignore",
         case_sensitive=False,

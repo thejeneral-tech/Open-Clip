@@ -13,8 +13,10 @@ def register_static_mime_types() -> None:
 register_static_mime_types()
 
 from dotenv import load_dotenv
-# utf-8-sig tolerates a Notepad BOM in .env (a common Windows gotcha).
-load_dotenv(encoding="utf-8-sig")
+# Load .env by ABSOLUTE path (next to this file) so the app works regardless of
+# the launcher's cwd. utf-8-sig tolerates a Notepad BOM (a Windows gotcha).
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+            encoding="utf-8-sig")
 
 import glob
 import logging
