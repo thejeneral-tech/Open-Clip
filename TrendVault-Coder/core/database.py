@@ -1504,40 +1504,6 @@ class GeneratedFile(TimestampMixin, Base):
     )
 
 
-# ---------------------------------------------------------------------------
-# YouTube → Workflow-Remake-Prompt builder history
-# ---------------------------------------------------------------------------
-
-class YtWorkflowPrompt(TimestampMixin, Base):
-    """One generated "remake this video's workflow on my server" prompt.
-
-    Persists the final output plus the build diagnostics (model used, chunk
-    count, retries, errors) so the YouTube Workflow Builder tool can show a
-    history and re-export past prompts. ``created_at`` (from TimestampMixin) is
-    the date the prompt was generated.
-    """
-    __tablename__ = "yt_workflow_prompts"
-
-    id           = Column(String, primary_key=True, index=True)
-    owner        = Column(String, nullable=True, index=True)
-    video_url    = Column(String, nullable=True)
-    video_id     = Column(String, nullable=True, index=True)
-    title        = Column(String, nullable=True)
-    model_used   = Column(String, nullable=True)
-    chunk_count  = Column(Integer, nullable=True)
-    final_output = Column(Text, nullable=True)
-    errors       = Column(Text, nullable=True)     # newline-joined error strings, if any
-    diagnostics  = Column(JSON, nullable=True)      # GenDiag + source meta snapshot
-    emergency    = Column(Boolean, default=False)   # built without the model?
-
-    __table_args__ = (
-        Index('ix_yt_wf_owner_created', 'owner', 'created_at'),
-    )
-
-
-
-
-
 def _migrate_seed_email_account():
     """If email_accounts is empty and settings.json has legacy flat imap_host/smtp_host
     keys, create a single default account from them so nothing breaks for users who

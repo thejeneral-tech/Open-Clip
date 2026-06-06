@@ -281,7 +281,7 @@ def format_comments_for_context(comments_data: Dict[str, Any], url: str) -> str:
 async def fetch_youtube_metadata(video_id: str, timeout: int = 30) -> Dict[str, Any]:
     """Fetch video card metadata via yt-dlp: title, description, thumbnail,
     channel, duration, tags and chapters. No transcript/comments here — this is
-    the lightweight data the YouTube Workflow Builder shows in its video card.
+    the lightweight data used to render a video card.
     """
     try:
         cmd = [
