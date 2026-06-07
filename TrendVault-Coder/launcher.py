@@ -2,196 +2,142 @@
 TrendVault AI Launcher
 ──────────────────────
 Single-file GUI launcher for the TrendVault AI workspace (the self-hosted
-FastAPI app in this folder). A dark-theme control panel that creates the
-virtualenv, installs dependencies, runs first-time setup, and starts/stops
-the server — so you never have to touch a terminal.
+FastAPI app in this folder). A focused control panel that creates the
+virtualenv, installs dependencies, runs first-time setup (setup.py), and
+starts / stops the web UI — so you never have to touch a terminal.
 
-Mirrors the Trend Vault stack launcher, adapted for this Python/uvicorn app.
+Modeled on the Trend Vault Studio V2.0 launcher: a left tab rail (Launch /
+Settings / About), the studio's One-Dark theme, and a Settings tab where the
+external servers this app talks to (the local LLM, LM Studio, SearXNG, …) are
+edited as URLs and written back to .env so the web app picks them up on its
+next start. Everything else — Ollama, the search engine, ChromaDB — is treated
+as an *external server* you point at by URL, so it can live on this PC or
+another box.
+
+Styling mirrors the app's web theme (static/style.css): One-Dark charcoal
+background, cyan text, coral accent, monospace UI.
 
 Build to .exe (needs a GUI Python, not the Windows Store stub):
     pip install pyinstaller
     pyinstaller --onefile --windowed --name TrendVaultAILauncher launcher.py
 """
 
-import os, sys, time, socket, subprocess, threading, webbrowser, shutil, platform
-import tkinter as tk
-from tkinter import font as tkfont, messagebox
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+import webbrowser
 from datetime import datetime
+from urllib.parse import urlparse
 
-# ── Project root (works as .py or frozen .exe) ───────────────────────────────
-ROOT = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
-IS_WIN = sys.platform == 'win32'
+import tkinter as tk
+from tkinter import filedialog, font as tkfont, messagebox
 
-# ── App boot config ──────────────────────────────────────────────────────────
-# The native PowerShell launcher boots with: venv -> pip install -r
-# requirements.txt -> python setup.py -> uvicorn app:app --host H --port P.
-# We replicate that flow here. Host/port follow .env (APP_BIND/APP_PORT) when
-# present, otherwise the documented defaults.
-_DEFAULT_HOST = '127.0.0.1'
-_DEFAULT_PORT = 7000
+# ── Project root (works as plain .py or a frozen .exe) ────────────────────────
+ROOT = os.path.dirname(
+    sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__)
+)
+IS_WIN = sys.platform == "win32"
 
+# Key paths the launcher reads / writes.
+ENV_PATH     = os.path.join(ROOT, ".env")
+DATA_DIR     = os.path.join(ROOT, "data")
+CONFIG_PATH  = os.path.join(DATA_DIR, "launcher-config.json")   # custom servers + folders
+REQUIREMENTS = os.path.join(ROOT, "requirements.txt")
+VENV_PY      = os.path.join(ROOT, "venv", "Scripts", "python.exe") if IS_WIN \
+               else os.path.join(ROOT, "venv", "bin", "python")
+SETUP_PY     = os.path.join(ROOT, "setup.py")
 
-def _read_env_setting(key: str, default: str) -> str:
-    """Read a single KEY=value from .env (tolerating a UTF-8 BOM), else default."""
-    env_path = os.path.join(ROOT, '.env')
-    try:
-        with open(env_path, 'r', encoding='utf-8-sig') as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith('#') or '=' not in line:
-                    continue
-                k, _, v = line.partition('=')
-                if k.strip() == key:
-                    return v.strip().strip('"').strip("'") or default
-    except OSError:
-        pass
-    return default
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 7000
 
-
-APP_HOST = _read_env_setting('APP_BIND', _read_env_setting('TRENDVAULT_AI_HOST', _DEFAULT_HOST))
-try:
-    APP_PORT = int(_read_env_setting('APP_PORT', _read_env_setting('TRENDVAULT_AI_PORT', str(_DEFAULT_PORT))))
-except ValueError:
-    APP_PORT = _DEFAULT_PORT
-# The bind host may be 0.0.0.0 (all interfaces); browse to loopback regardless.
-_BROWSE_HOST = '127.0.0.1' if APP_HOST in ('0.0.0.0', '::', '') else APP_HOST
-APP_URL = f'http://{_BROWSE_HOST}:{APP_PORT}'
-
-
-def _venv_python() -> str | None:
-    """Return the venv interpreter path if the venv exists, else None."""
-    p = os.path.join(ROOT, 'venv', 'Scripts', 'python.exe') if IS_WIN \
-        else os.path.join(ROOT, 'venv', 'bin', 'python')
-    return p if os.path.isfile(p) else None
-
-
-def _resolve_system_python() -> list[str] | None:
-    """Find a Python 3.11+ interpreter for creating the venv.
-
-    Search order mirrors launch-windows.ps1: the Windows 'py' launcher
-    (newest first), then canonical python names. Returns a command prefix
-    list (e.g. ['py', '-3.12'] or ['/usr/bin/python3']), or None."""
-    def _ver_ok(cmd: list[str]) -> bool:
-        try:
-            r = subprocess.run(
-                cmd + ['-c', 'import sys;print("%d.%d" % sys.version_info[:2])'],
-                capture_output=True, text=True, timeout=5,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-            )
-            if r.returncode != 0:
-                return False
-            major, _, minor = r.stdout.strip().partition('.')
-            return int(major) == 3 and int(minor) >= 11 or int(major) > 3
-        except Exception:
-            return False
-
-    if shutil.which('py'):
-        for v in ('-3.13', '-3.12', '-3.11'):
-            if _ver_ok(['py', v]):
-                return ['py', v]
-    for name in ('python3.13', 'python3.12', 'python3.11', 'python3', 'python'):
-        path = shutil.which(name)
-        if path and _ver_ok([path]):
-            return [path]
-    return None
-
-
-# ── Ollama (optional local LLM backend the app can connect to) ────────────────
-_OLLAMA_INSTALLER_URL = 'https://ollama.com/download/OllamaSetup.exe'
-_OLLAMA_DEFAULT_EXE = os.path.expandvars(r'%LOCALAPPDATA%\Programs\Ollama\ollama.exe')
-
-
-def resolve_ollama() -> str | None:
-    """Return the path to the ollama binary, or None if it isn't installed."""
-    p = shutil.which('ollama')
-    if p:
-        return p
-    if IS_WIN and os.path.isfile(_OLLAMA_DEFAULT_EXE):
-        return _OLLAMA_DEFAULT_EXE
-    return None
-
-
-def app_http_ok(timeout: float = 2.0) -> tuple[bool, str]:
-    """Confirm the TrendVault AI server is actually answering on its port."""
-    import urllib.request
-    base = APP_URL
-    for path in ('/login.html', '/', '/static/login.html'):
-        try:
-            with urllib.request.urlopen(base + path, timeout=timeout) as r:
-                if 200 <= r.status < 500:
-                    return True, base
-        except Exception:
-            continue
-    return False, base
-
-
-# ── Services ──────────────────────────────────────────────────────────────────
-# The app's command is rebuilt at launch time from the (possibly just-created)
-# venv interpreter, so 'cmd' here is only a placeholder.
-SERVICES = [
-    {
-        'key':  'app',
-        'name': 'TrendVault AI',
-        'desc': f'FastAPI workspace  •  port {APP_PORT}',
-        'port': APP_PORT,
-        'cmd':  None,                # resolved in _launch() from the venv python
-        'url':  APP_URL,
-        'http_health': app_http_ok,
-    },
-    {
-        'key':  'ollama',
-        'name': 'Ollama',
-        'desc': 'Local LLM server  •  port 11434',
-        'port': 11434,
-        'cmd':  ['ollama', 'serve'],
-        'url':  None,
-    },
+# Known external endpoints the app reads from .env. (label, env key, default).
+# Edited as URLs in Settings and written back to .env on save.
+BUILTIN_SERVERS = [
+    ("Ollama  (local LLM)",   "OLLAMA_BASE_URL",       "http://localhost:11434/v1"),
+    ("LM Studio",             "LM_STUDIO_URL",         "http://localhost:1234"),
+    ("SearXNG  (web search)", "SEARXNG_INSTANCE",      "http://localhost:8080"),
+    ("Research LLM endpoint", "RESEARCH_LLM_ENDPOINT", "http://localhost:8000/v1/chat/completions"),
 ]
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG      = '#0d0d14'
-BG2     = '#13131e'
-CARD    = '#1a1a2a'
-BORDER  = '#2a2a40'
-ACCENT  = '#7c6ff7'
-GREEN   = '#00e676'
-RED     = '#ff4d4d'
-AMBER   = '#ffb300'
-TEXT    = '#e8e8f0'
-MUTED   = '#5a5a78'
-BTN     = '#252538'
-BTN_HOV = '#30304a'
-BTN_GO  = '#1e3a2f'
-BTN_STP = '#3a1e1e'
+# Ollama (optional local LLM backend the app can connect to).
+_OLLAMA_DEFAULT_EXE = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe")
+
+# ── Palette — matches static/style.css :root (the default "dark" theme) ───────
+BG        = "#282c34"   # --bg
+SURFACE   = "#21252b"   # panel / rail
+SURFACE2  = "#2c313c"   # cards
+SURFACE3  = "#1b1e24"   # rail / inputs
+BORDER    = "#355a66"   # --border
+BORDER2   = "#4a7a88"
+ACCENT    = "#e06c75"   # --red (coral)
+GOLD      = "#d19a66"   # --accent-warm
+TEXT      = "#9cdef2"   # --fg (cyan)
+TEXT2     = "#7fb8cc"
+MUTED     = "#6b8a94"   # --color-subheader
+GREEN     = "#50fa7b"   # --green
+RED       = "#ff5b5b"
+# Pre-blended tints (Tk has no color-mix): coral over the dark surfaces.
+TINT      = "#3c2f35"   # ~coral 14% on surface (button hover / accents)
+TINT2     = "#403037"   # ~coral 16% on surface (active tab)
+HOVER     = "#353b48"   # neutral button hover
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+#  Small helpers — ports, .env, config files
+# ─────────────────────────────────────────────────────────────────────────────
+def ts() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
 def port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.4)
-        return s.connect_ex(('127.0.0.1', port)) == 0
+        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def kill_port(port: int):
+def url_reachable(url: str, timeout: float = 2.0) -> bool:
+    """True if *something* is listening at the URL's host:port (TCP connect)."""
+    try:
+        u = urlparse(url if "://" in url else "http://" + url)
+        host = u.hostname or "127.0.0.1"
+        port = u.port or (443 if u.scheme == "https" else 80)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            return s.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
+
+def kill_port(port: int) -> None:
     """Kill whatever process is listening on the given port."""
     try:
         if IS_WIN:
-            result = subprocess.run(['netstat', '-aon'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(["netstat", "-aon"], capture_output=True,
+                                    text=True, timeout=5)
             for line in result.stdout.splitlines():
-                if f':{port} ' in line and 'LISTENING' in line:
+                if f":{port} " in line and "LISTENING" in line:
                     pid = line.split()[-1]
-                    if pid and pid != '0':
-                        subprocess.run(['taskkill', '/F', '/PID', pid], capture_output=True, timeout=5)
+                    if pid and pid != "0":
+                        subprocess.run(["taskkill", "/F", "/PID", pid],
+                                       capture_output=True, timeout=5)
         else:
-            r = subprocess.run(['lsof', '-ti', f'tcp:{port}'], capture_output=True, text=True, timeout=5)
+            r = subprocess.run(["lsof", "-ti", f"tcp:{port}"], capture_output=True,
+                               text=True, timeout=5)
             for pid in r.stdout.split():
-                subprocess.run(['kill', '-9', pid], capture_output=True, timeout=5)
+                subprocess.run(["kill", "-9", pid], capture_output=True, timeout=5)
     except Exception:
         pass
 
 
-def _kill_proc_tree(proc: subprocess.Popen):
-    """Terminate a process and its child tree gracefully, then force-kill."""
+def kill_proc_tree(proc: "subprocess.Popen") -> None:
+    """Terminate a process and its child tree (uvicorn may spawn children)."""
     if proc.poll() is not None:
         return
     try:
@@ -200,9 +146,9 @@ def _kill_proc_tree(proc: subprocess.Popen):
     except subprocess.TimeoutExpired:
         try:
             if IS_WIN:
-                subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                                capture_output=True, timeout=5,
-                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             else:
                 proc.kill()
         except Exception:
@@ -212,649 +158,832 @@ def _kill_proc_tree(proc: subprocess.Popen):
                 pass
 
 
-def ts() -> str:
-    return datetime.now().strftime('%H:%M:%S')
+# ── .env read / write (preserves comments + unrelated keys) ───────────────────
+def _read_env_text() -> str:
+    try:
+        with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
-# ── Main app ──────────────────────────────────────────────────────────────────
+def env_get(key: str, default: str = "") -> str:
+    """Read a single uncommented KEY=value from .env (quotes stripped)."""
+    pat = re.compile(r"^\s*" + re.escape(key) + r"\s*=(.*)$", re.M)
+    m = pat.search(_read_env_text())
+    if not m:
+        return default
+    return m.group(1).strip().strip('"').strip("'") or default
+
+
+def env_set(updates: dict) -> None:
+    """Set each KEY=value in .env, replacing the existing line or appending.
+    Comment lines (#...) and every other key are left untouched."""
+    lines = _read_env_text().splitlines()
+    done = set()
+    for i, line in enumerate(lines):
+        m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+        if m and m.group(1) in updates:
+            lines[i] = f"{m.group(1)}={updates[m.group(1)]}"
+            done.add(m.group(1))
+    for k, v in updates.items():
+        if k not in done:
+            lines.append(f"{k}={v}")
+    tmp = ENV_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, ENV_PATH)
+
+
+# ── launcher-config.json (custom servers + folders) ───────────────────────────
+def load_config() -> dict:
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            if isinstance(d, dict):
+                return d
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def save_config(cfg: dict) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, CONFIG_PATH)
+
+
+# ── Python / Ollama resolution ────────────────────────────────────────────────
+def system_python() -> list[str] | None:
+    """Find a Python 3.11+ to *build* the venv with (mirrors launch-windows.ps1).
+    Returns a command prefix list (e.g. ['py', '-3.12'] or ['/usr/bin/python3'])."""
+    def _ver_ok(cmd: list[str]) -> bool:
+        try:
+            r = subprocess.run(cmd + ["-c", "import sys;print('%d.%d' % sys.version_info[:2])"],
+                               capture_output=True, text=True, timeout=5,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if r.returncode != 0:
+                return False
+            major, _, minor = r.stdout.strip().partition(".")
+            return (int(major) == 3 and int(minor) >= 11) or int(major) > 3
+        except Exception:
+            return False
+
+    if shutil.which("py"):
+        for v in ("-3.13", "-3.12", "-3.11"):
+            if _ver_ok(["py", v]):
+                return ["py", v]
+    for name in ("python3.13", "python3.12", "python3.11", "python3", "python"):
+        path = shutil.which(name)
+        if path and _ver_ok([path]):
+            return [path]
+    return None
+
+
+def resolve_ollama() -> str | None:
+    """Return the path to the ollama binary, or None if it isn't installed."""
+    p = shutil.which("ollama")
+    if p:
+        return p
+    if IS_WIN and os.path.isfile(_OLLAMA_DEFAULT_EXE):
+        return _OLLAMA_DEFAULT_EXE
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Main application window
+# ─────────────────────────────────────────────────────────────────────────────
 class TrendVaultAILauncher(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('🏦 TrendVault AI Launcher')
+        self.title("TrendVault AI Launcher")
         self.configure(bg=BG)
-        self.minsize(1040, 680)
-        self.geometry('1160x760')
+        self.minsize(960, 680)
+        self.geometry("1040x720")
 
-        self._procs: dict[str, subprocess.Popen] = {}
-        self._lock = threading.Lock()
-        self._installing_ollama = False
+        # State
+        self._cfg     = load_config()
+        self._host    = env_get("APP_BIND", env_get("TRENDVAULT_AI_HOST", DEFAULT_HOST))
+        self._port    = self._read_port()
+        self._folders = [p for p in (self._cfg.get("folders") or []) if p]
+        self._proc: subprocess.Popen | None = None
+        self._lock    = threading.Lock()
+        self._running = False
         self._setting_up = False
         self._auto_opened = False
-        # CLI runner state
-        self._cli_proc: subprocess.Popen | None = None
-        self._cli_busy = False
-        self._cli_history: list[str] = []
-        self._cli_history_idx: int = -1
-        self._cli_draft: str = ''
+        self._server_rows: list[dict] = []
 
+        self._pick_fonts()
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._poll()
-        self.after(400, self._check_env_on_start)
+        self.after(400, self._initial_check)
+
+    def _read_port(self) -> int:
+        try:
+            return int(env_get("APP_PORT", env_get("TRENDVAULT_AI_PORT", str(DEFAULT_PORT))))
+        except ValueError:
+            return DEFAULT_PORT
+
+    # ── URLs ──────────────────────────────────────────────────────────────────
+    def _browse_host(self) -> str:
+        # The bind host may be 0.0.0.0 (all interfaces); browse to loopback.
+        return "127.0.0.1" if self._host in ("0.0.0.0", "::", "") else self._host
+
+    def _app_url(self) -> str:
+        return f"http://{self._browse_host()}:{self._port}"
+
+    def _app_http_ok(self, timeout: float = 2.0) -> tuple[bool, str]:
+        """Confirm the server is actually answering (not just the port being open)."""
+        base = self._app_url()
+        for path in ("/login.html", "/", "/static/login.html"):
+            try:
+                with urllib.request.urlopen(base + path, timeout=timeout) as r:
+                    if 200 <= r.status < 500:
+                        return True, base
+            except Exception:
+                continue
+        return False, base
+
+    # ── Fonts (prefer Fira Code like the web theme, fall back to Consolas) ────
+    def _pick_fonts(self):
+        fams = set(tkfont.families())
+        mono = next((f for f in ("Fira Code", "Cascadia Code", "Consolas",
+                                 "Courier New") if f in fams), "Courier New")
+        self.F_MONO   = (mono, 10)
+        self.F_SMALL  = (mono, 9)
+        self.F_TINY   = (mono, 8)
+        self.F_BOLD   = (mono, 10, "bold")
+        self.F_HEAD   = (mono, 11, "bold")
+        self.F_WORD   = (mono, 17, "bold")
+        self.F_DOT    = (mono, 13)
 
     # ── UI construction ───────────────────────────────────────────────────────
     def _build_ui(self):
-        mono = tkfont.Font(family='Consolas', size=9)
-
-        hdr = tk.Frame(self, bg=BG, pady=14)
-        hdr.pack(fill='x', padx=28)
-        tk.Label(hdr, text='🏦  TRENDVAULT AI', bg=BG, fg=TEXT,
-                 font=('Segoe UI', 18, 'bold')).pack(side='left')
-        tk.Label(hdr, text='CONTROL', bg=BG, fg=ACCENT,
-                 font=('Segoe UI', 18, 'bold')).pack(side='left', padx=(8, 0))
-        self._status_var = tk.StringVar(value='Ready')
+        # Header
+        hdr = tk.Frame(self, bg=BG)
+        hdr.pack(fill="x", padx=22, pady=(16, 10))
+        tk.Label(hdr, text="Trend", bg=BG, fg=TEXT, font=self.F_WORD).pack(side="left")
+        tk.Label(hdr, text="Vault", bg=BG, fg=ACCENT, font=self.F_WORD).pack(side="left")
+        tk.Label(hdr, text=" AI", bg=BG, fg=GOLD, font=self.F_WORD).pack(side="left")
+        tk.Label(hdr, text="LAUNCHER", bg=BG, fg=MUTED, font=self.F_TINY).pack(
+            side="left", padx=(10, 0), pady=(8, 0))
+        self._status_var = tk.StringVar(value="Ready")
         tk.Label(hdr, textvariable=self._status_var, bg=BG, fg=MUTED,
-                 font=('Segoe UI', 9)).pack(side='right')
+                 font=self.F_SMALL).pack(side="right")
 
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x")
 
+        # Body: left tab rail + content
         body = tk.Frame(self, bg=BG)
-        body.pack(fill='both', expand=True)
+        body.pack(fill="both", expand=True)
 
-        left = tk.Frame(body, bg=BG, width=560)
-        left.pack(side='left', fill='y')
-        left.pack_propagate(False)
+        rail = tk.Frame(body, bg=SURFACE3, width=168)
+        rail.pack(side="left", fill="y")
+        rail.pack_propagate(False)
+        tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
 
-        tk.Frame(body, bg=BORDER, width=1).pack(side='left', fill='y')
+        content = tk.Frame(body, bg=BG)
+        content.pack(side="left", fill="both", expand=True)
 
-        right = tk.Frame(body, bg=BG2)
-        right.pack(side='left', fill='both', expand=True)
+        # Tabs
+        self._tabs: dict[str, tk.Button] = {}
+        self._panels: dict[str, tk.Frame] = {}
+        tk.Label(rail, text="  MENU", bg=SURFACE3, fg=MUTED, font=self.F_TINY,
+                 anchor="w").pack(fill="x", pady=(14, 6))
+        for key, label, glyph in (("launch", "Launch", "▶"),
+                                   ("settings", "Settings", "⚙"),
+                                   ("about", "About", "ⓘ")):
+            self._tabs[key] = self._make_tab(rail, key, label, glyph)
 
-        # ── LEFT: services ──
-        tk.Label(left, text='SERVICES', bg=BG, fg=MUTED,
-                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=28, pady=(18, 6))
-        cards_frame = tk.Frame(left, bg=BG)
-        cards_frame.pack(fill='x', padx=28)
+        # Panels
+        self._panels["launch"]   = self._build_launch_panel(content)
+        self._panels["settings"] = self._build_settings_panel(content)
+        self._panels["about"]    = self._build_about_panel(content)
 
-        self._cards: dict[str, dict] = {}
-        for svc in SERVICES:
-            self._cards[svc['key']] = self._make_card(cards_frame, svc)
+        self._select_tab("launch")
 
-        # ── LEFT: actions ──
-        tk.Frame(left, bg=BORDER, height=1).pack(fill='x', pady=(14, 0))
-        tk.Label(left, text='ACTIONS', bg=BG, fg=MUTED,
-                 font=('Segoe UI', 8, 'bold')).pack(anchor='w', padx=28, pady=(12, 6))
-        bar = tk.Frame(left, bg=BG)
-        bar.pack(fill='x', padx=24, pady=(0, 16))
-        row1 = tk.Frame(bar, bg=BG); row1.pack(fill='x', pady=(0, 6))
-        row2 = tk.Frame(bar, bg=BG); row2.pack(fill='x')
-        self._btn(row1, '▶  START ALL', self._start_all, BTN_GO, GREEN).pack(side='left', padx=3)
-        self._btn(row1, '■  STOP ALL',  self._stop_all,  BTN_STP, RED).pack(side='left', padx=3)
-        self._btn(row1, '\U0001f4e6 SETUP', self._run_setup_clicked, BTN, AMBER).pack(side='left', padx=3)
-        self._btn(row1, '⬡  HEALTH',     self._health,    BTN, AMBER).pack(side='left', padx=3)
-        self._btn(row2, '\U0001f310 OPEN APP', self._open_browser, BTN, ACCENT).pack(side='left', padx=3)
-        self._btn(row2, '\U0001f916 INSTALL OLLAMA', self._run_install_ollama, BTN, AMBER).pack(side='left', padx=3)
-
-        # ── RIGHT: console ──
-        rhdr = tk.Frame(right, bg=BG2)
-        rhdr.pack(fill='x', padx=20, pady=(18, 6))
-        tk.Label(rhdr, text='CONSOLE', bg=BG2, fg=ACCENT,
-                 font=('Segoe UI', 9, 'bold')).pack(side='left')
-        self._cwd_var = tk.StringVar(value='cwd: ' + ROOT)
-        tk.Label(rhdr, textvariable=self._cwd_var, bg=BG2, fg=MUTED,
-                 font=('Consolas', 8)).pack(side='left', padx=(12, 0))
-        self._btn(rhdr, 'clear', self._clear_log, BG2, MUTED,
-                  font=('Segoe UI', 8)).pack(side='right')
-
-        log_wrap = tk.Frame(right, bg=BORDER)
-        log_wrap.pack(fill='both', expand=True, padx=20, pady=(0, 8))
-        self._log = tk.Text(
-            log_wrap, bg=BG, fg='#c0c0d8', font=mono,
-            bd=0, relief='flat', wrap='word',
-            state='disabled', padx=12, pady=10,
-            insertbackground=TEXT, selectbackground=ACCENT,
-        )
-        self._log.pack(fill='both', expand=True, padx=1, pady=1)
-
-        # ── RIGHT: CLI ──
-        tk.Label(right, text='CLI  (Enter to run a shell command  ·  Up/Down for history)',
-                 bg=BG2, fg=MUTED, font=('Segoe UI', 8, 'bold')
-                 ).pack(anchor='w', padx=20, pady=(2, 4))
-        prompt_wrap = tk.Frame(right, bg=BORDER)
-        prompt_wrap.pack(fill='x', padx=20, pady=(0, 18))
-        prompt_row = tk.Frame(prompt_wrap, bg=BG)
-        prompt_row.pack(fill='x', padx=1, pady=1)
-        tk.Label(prompt_row, text='$', bg=BG, fg=ACCENT,
-                 font=('Consolas', 13, 'bold')).pack(side='left', padx=(10, 6), pady=4)
-        self._prompt_var = tk.StringVar()
-        self._prompt_entry = tk.Entry(
-            prompt_row, textvariable=self._prompt_var,
-            bg=BG, fg=TEXT, insertbackground=TEXT,
-            relief='flat', bd=0, highlightthickness=0, font=('Consolas', 10),
-        )
-        self._prompt_entry.pack(side='left', fill='x', expand=True, ipady=8)
-        self._prompt_entry.bind('<Return>', lambda e: self._run_cli())
-        self._prompt_entry.bind('<Up>',     lambda e: self._history_prev())
-        self._prompt_entry.bind('<Down>',   lambda e: self._history_next())
-        self._prompt_entry.bind('<Escape>', lambda e: self._stop_cli())
-        self._run_btn = self._btn(prompt_row, 'RUN', self._run_cli, BTN_GO, GREEN,
-                                  font=('Segoe UI', 9, 'bold'))
-        self._run_btn.pack(side='left', padx=(6, 3), pady=4)
-        self._stop_btn = self._btn(prompt_row, 'STOP', self._stop_cli, BTN_STP, RED,
-                                   font=('Segoe UI', 9, 'bold'))
-        self._stop_btn.pack(side='left', padx=(0, 6), pady=4)
-        self._stop_btn.configure(state='disabled')
-
-    def _make_card(self, parent: tk.Frame, svc: dict) -> dict:
-        card = tk.Frame(parent, bg=CARD, bd=0, padx=16, pady=12,
-                        highlightbackground=BORDER, highlightthickness=1)
-        card.pack(fill='x', pady=6)
-
-        left = tk.Frame(card, bg=CARD)
-        left.pack(side='left', fill='y')
-        dot = tk.Label(left, text='○', bg=CARD, fg=RED, font=('Segoe UI', 14))
-        dot.pack(side='left', padx=(0, 10))
-        info = tk.Frame(left, bg=CARD)
-        info.pack(side='left')
-        tk.Label(info, text=svc['name'], bg=CARD, fg=TEXT,
-                 font=('Segoe UI', 11, 'bold'), anchor='w').pack(anchor='w')
-        tk.Label(info, text=svc['desc'], bg=CARD, fg=MUTED,
-                 font=('Segoe UI', 8), anchor='w').pack(anchor='w')
-
-        right = tk.Frame(card, bg=CARD)
-        right.pack(side='right')
-        btn_start = self._btn(right, '▶ Start', lambda k=svc['key']: self._start_one(k),
-                              BTN_GO, GREEN, font=('Segoe UI', 9, 'bold'))
-        btn_start.pack(side='left', padx=(0, 6))
-        btn_stop = self._btn(right, '■ Stop', lambda k=svc['key']: self._stop_one(k),
-                             BTN_STP, RED, font=('Segoe UI', 9, 'bold'))
-        btn_stop.pack(side='left')
-        return {'dot': dot, 'btn_start': btn_start, 'btn_stop': btn_stop, 'running': False}
-
-    @staticmethod
-    def _btn(parent, text, cmd, bg, fg, font=('Segoe UI', 9, 'bold')) -> tk.Button:
-        b = tk.Button(parent, text=text, command=cmd,
-                      bg=bg, fg=fg, activebackground=BTN_HOV, activeforeground=TEXT,
-                      font=font, bd=0, relief='flat', padx=12, pady=6, cursor='hand2')
-        b.bind('<Enter>', lambda e, w=b: w.configure(bg=BTN_HOV))
-        b.bind('<Leave>', lambda e, w=b, c=bg: w.configure(bg=c))
+    def _make_tab(self, parent, key, label, glyph) -> tk.Button:
+        b = tk.Button(parent, text="  " + glyph + "   " + label, anchor="w",
+                      bg=SURFACE3, fg=TEXT2, activebackground=TINT2,
+                      activeforeground=TEXT, font=self.F_BOLD, bd=0,
+                      relief="flat", padx=14, pady=10, cursor="hand2",
+                      command=lambda k=key: self._select_tab(k))
+        b.pack(fill="x", padx=8, pady=2)
+        b.bind("<Enter>", lambda e, w=b: w.configure(bg=HOVER)
+               if self._active_tab != key else None)
+        b.bind("<Leave>", lambda e, w=b, k=key: w.configure(
+            bg=TINT2 if self._active_tab == k else SURFACE3))
         return b
 
-    # ── Logging ───────────────────────────────────────────────────────────────
-    def _log_line(self, msg: str, color: str = '#a0a0c0'):
+    _active_tab = None
+
+    def _select_tab(self, key):
+        self._active_tab = key
+        for k, b in self._tabs.items():
+            on = (k == key)
+            b.configure(bg=TINT2 if on else SURFACE3, fg=TEXT if on else TEXT2)
+        for k, p in self._panels.items():
+            p.pack_forget()
+            if k == key:
+                p.pack(fill="both", expand=True)
+
+    # ── LAUNCH panel ──────────────────────────────────────────────────────────
+    def _build_launch_panel(self, parent) -> tk.Frame:
+        p = tk.Frame(parent, bg=BG)
+
+        self._section(p, "WEB UI")
+        card = self._card(p)
+
+        top = tk.Frame(card, bg=SURFACE2)
+        top.pack(fill="x")
+        self._dot = tk.Label(top, text="○", bg=SURFACE2, fg=MUTED, font=self.F_DOT)
+        self._dot.pack(side="left", padx=(0, 10))
+        info = tk.Frame(top, bg=SURFACE2)
+        info.pack(side="left", fill="x", expand=True)
+        tk.Label(info, text="TrendVault AI", bg=SURFACE2, fg=TEXT,
+                 font=self.F_BOLD, anchor="w").pack(anchor="w")
+        self._svc_desc = tk.StringVar()
+        tk.Label(info, textvariable=self._svc_desc, bg=SURFACE2, fg=MUTED,
+                 font=self.F_TINY, anchor="w").pack(anchor="w")
+
+        btns = tk.Frame(card, bg=SURFACE2)
+        btns.pack(fill="x", pady=(14, 0))
+        self._btn(btns, "▶  Start", self._start, kind="go").pack(side="left", padx=(0, 7))
+        self._btn(btns, "■  Stop", self._stop, kind="stop").pack(side="left", padx=(0, 7))
+        self._btn(btns, "🌐  Open App", self._open_app, kind="accent").pack(side="left", padx=(0, 7))
+        self._btn(btns, "⚙  Setup deps", self._setup_deps).pack(side="left")
+
+        # Console
+        chdr = tk.Frame(p, bg=BG)
+        chdr.pack(fill="x", padx=20, pady=(16, 4))
+        tk.Label(chdr, text="CONSOLE", bg=BG, fg=ACCENT, font=self.F_TINY).pack(side="left")
+        self._btn(chdr, "clear", self._clear_log, small=True).pack(side="right")
+        self._btn(chdr, "⬡  health", self._health, small=True).pack(side="right", padx=(0, 6))
+
+        wrap = tk.Frame(p, bg=BORDER)
+        wrap.pack(fill="both", expand=True, padx=20, pady=(0, 18))
+        self._console = tk.Text(wrap, bg=SURFACE3, fg=TEXT2, font=self.F_SMALL,
+                                bd=0, relief="flat", wrap="word", state="disabled",
+                                padx=12, pady=10, insertbackground=TEXT,
+                                selectbackground=TINT)
+        self._console.pack(fill="both", expand=True, padx=1, pady=1)
+
+        self._refresh_desc()
+        return p
+
+    # ── SETTINGS panel ────────────────────────────────────────────────────────
+    def _build_settings_panel(self, parent) -> tk.Frame:
+        p = tk.Frame(parent, bg=BG)
+
+        # Scrollable body (settings can grow with many rows).
+        canvas = tk.Canvas(p, bg=BG, bd=0, highlightthickness=0)
+        sb = tk.Scrollbar(p, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=BG)
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        # Mouse wheel scrolling while hovering the settings tab.
+        canvas.bind_all("<MouseWheel>",
+                        lambda e: canvas.yview_scroll(int(-e.delta / 120), "units")
+                        if self._active_tab == "settings" else None)
+
+        # ── External servers ──
+        self._section(inner, "EXTERNAL SERVERS")
+        card = self._card(inner)
+        tk.Label(card, text="Links the app connects to (local or remote). Known\n"
+                            "endpoints are written to .env so the web app uses them on\n"
+                            "its next start. Add your own as bookmarks.",
+                 bg=SURFACE2, fg=MUTED, font=self.F_TINY, justify="left").pack(anchor="w")
+        self._servers_box = tk.Frame(card, bg=SURFACE2)
+        self._servers_box.pack(fill="x", pady=(12, 0))
+        row = tk.Frame(card, bg=SURFACE2)
+        row.pack(fill="x", pady=(12, 0))
+        self._btn(row, "+  Add server", self._add_server).pack(side="left")
+        self._btn(row, "💾  Save & apply", self._save_servers, kind="accent").pack(side="left", padx=(7, 0))
+
+        # ── Folders ──
+        self._section(inner, "FOLDERS")
+        fcard = self._card(inner)
+        tk.Label(fcard, text="Bookmarked folders — open them from here in one click.",
+                 bg=SURFACE2, fg=MUTED, font=self.F_TINY, justify="left").pack(anchor="w")
+        self._folders_box = tk.Frame(fcard, bg=SURFACE2)
+        self._folders_box.pack(fill="x", pady=(12, 0))
+        self._btn(fcard, "+  Add folder", self._add_folder).pack(anchor="w", pady=(12, 0))
+
+        # ── Web UI host + port ──
+        self._section(inner, "WEB UI ADDRESS")
+        pcard = self._card(inner)
+        tk.Label(pcard, text="Where the web UI binds. Keep the host on 127.0.0.1 unless\n"
+                             "you want other devices on your LAN to reach it (0.0.0.0).",
+                 bg=SURFACE2, fg=MUTED, font=self.F_TINY, justify="left").pack(anchor="w")
+        prow = tk.Frame(pcard, bg=SURFACE2)
+        prow.pack(fill="x", pady=(12, 0))
+        tk.Label(prow, text="Host", bg=SURFACE2, fg=TEXT2, font=self.F_SMALL).pack(side="left", padx=(0, 8))
+        self._host_var = tk.StringVar(value=self._host)
+        self._entry(prow, self._host_var, width=16).pack(side="left", padx=(0, 16))
+        tk.Label(prow, text="Port", bg=SURFACE2, fg=TEXT2, font=self.F_SMALL).pack(side="left", padx=(0, 8))
+        self._port_var = tk.StringVar(value=str(self._port))
+        self._entry(prow, self._port_var, width=8).pack(side="left")
+        self._btn(prow, "Save", self._save_address).pack(side="left", padx=(10, 0))
+
+        self._render_servers()
+        self._render_folders()
+        return p
+
+    def _build_about_panel(self, parent) -> tk.Frame:
+        p = tk.Frame(parent, bg=BG)
+        self._section(p, "ABOUT")
+        card = self._card(p)
+        tk.Label(card, text="TrendVault AI Launcher", bg=SURFACE2, fg=ACCENT,
+                 font=self.F_HEAD).pack(anchor="w")
+        tk.Label(card, text="Sets up and starts the self-hosted TrendVault AI web UI.\n"
+                            "Configure the servers it talks to in the Settings tab.",
+                 bg=SURFACE2, fg=MUTED, font=self.F_TINY, justify="left").pack(anchor="w", pady=(6, 12))
+        for k, v in (("Web app", "FastAPI + uvicorn  •  app:app"),
+                     ("Setup", "venv → pip install → setup.py"),
+                     ("LLM", "Ollama / LM Studio / OpenAI-compatible (local)"),
+                     ("Project", ROOT)):
+            r = tk.Frame(card, bg=SURFACE2)
+            r.pack(fill="x", pady=3)
+            tk.Label(r, text=k, bg=SURFACE2, fg=MUTED, font=self.F_TINY, width=10,
+                     anchor="w").pack(side="left")
+            tk.Label(r, text=v, bg=SURFACE2, fg=TEXT2, font=self.F_TINY,
+                     anchor="w").pack(side="left")
+        return p
+
+    # ── Reusable styled widgets ───────────────────────────────────────────────
+    def _section(self, parent, text):
+        tk.Label(parent, text=text, bg=BG, fg=MUTED, font=self.F_TINY,
+                 anchor="w").pack(fill="x", padx=22, pady=(16, 6))
+
+    def _card(self, parent) -> tk.Frame:
+        outer = tk.Frame(parent, bg=BORDER)
+        outer.pack(fill="x", padx=20)
+        card = tk.Frame(outer, bg=SURFACE2, padx=16, pady=14)
+        card.pack(fill="x", padx=1, pady=1)
+        return card
+
+    def _btn(self, parent, text, cmd, kind="default", small=False):
+        fg = {"go": GREEN, "stop": RED, "accent": ACCENT}.get(kind, TEXT2)
+        bg = SURFACE3 if not small else BG
+        b = tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg,
+                      activebackground=TINT, activeforeground=TEXT,
+                      font=self.F_TINY if small else self.F_SMALL, bd=0,
+                      relief="flat", padx=(8 if small else 13), pady=(4 if small else 7),
+                      cursor="hand2", highlightthickness=0)
+        b.bind("<Enter>", lambda e, w=b: w.configure(bg=TINT, fg=TEXT))
+        b.bind("<Leave>", lambda e, w=b, c=bg, f=fg: w.configure(bg=c, fg=f))
+        return b
+
+    def _entry(self, parent, var, width=None):
+        return tk.Entry(parent, textvariable=var, bg=SURFACE3, fg=TEXT,
+                        insertbackground=TEXT, relief="flat", bd=0,
+                        highlightthickness=1, highlightbackground=BORDER,
+                        highlightcolor=ACCENT, font=self.F_SMALL,
+                        width=width or 0)
+
+    # ── Settings: external servers ────────────────────────────────────────────
+    def _render_servers(self):
+        for w in self._servers_box.winfo_children():
+            w.destroy()
+        self._server_rows = []
+
+        # Builtin endpoints first (fixed label, editable URL), then custom rows.
+        def add_row(label, url, env_key, builtin):
+            row = tk.Frame(self._servers_box, bg=SURFACE2)
+            row.pack(fill="x", pady=4)
+            url_var = tk.StringVar(value=url)
+            entry = {"env": env_key, "builtin": builtin, "url_var": url_var,
+                     "frame": row, "label_var": None}
+            if builtin:
+                tk.Label(row, text=label, bg=SURFACE2, fg=TEXT2, font=self.F_TINY,
+                         width=26, anchor="w").pack(side="left")
+            else:
+                lbl_var = tk.StringVar(value=label)
+                entry["label_var"] = lbl_var
+                e = self._entry(row, lbl_var)
+                e.configure(width=22)
+                e.pack(side="left", padx=(0, 6))
+            self._entry(row, url_var).pack(side="left", fill="x", expand=True, padx=(0, 6), ipady=2)
+            self._btn(row, "Test", lambda u=url_var, l=label: self._test_server(u, l),
+                      small=True).pack(side="left")
+            if not builtin:
+                self._btn(row, "✕", lambda en=entry: self._remove_server(en),
+                          small=True, kind="stop").pack(side="left", padx=(4, 0))
+            self._server_rows.append(entry)
+
+        for label, env_key, default in BUILTIN_SERVERS:
+            add_row(label, env_get(env_key) or default, env_key, True)
+        for s in (self._cfg.get("servers") or []):
+            add_row(s.get("label", ""), s.get("url", ""), None, False)
+
+    def _add_server(self):
+        self._cfg.setdefault("servers", []).append({"label": "New server", "url": "http://"})
+        self._render_servers()
+
+    def _remove_server(self, entry):
+        # Rebuild the custom list from the current rows, dropping this one.
+        self._cfg["servers"] = [
+            {"label": r["label_var"].get().strip(), "url": r["url_var"].get().strip()}
+            for r in self._server_rows
+            if not r["builtin"] and r is not entry and r["url_var"].get().strip()
+        ]
+        save_config(self._cfg)
+        self._render_servers()
+
+    def _test_server(self, url_var, label):
+        url = url_var.get().strip()
+        if not url:
+            return
         def _do():
-            self._log.configure(state='normal')
-            tag = 'c' + color.replace('#', '')
-            self._log.tag_configure(tag, foreground=color)
-            self._log.insert('end', '[' + ts() + ']  ' + msg + '\n', tag)
-            self._log.see('end')
-            self._log.configure(state='disabled')
-        self.after(0, _do)
+            ok = url_reachable(url)
+            self._log(("✓ " if ok else "✗ ") + label.strip() + " — " +
+                      ("reachable" if ok else "no response") + " at " + url,
+                      GREEN if ok else RED)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _save_servers(self):
+        updates, custom = {}, []
+        for r in self._server_rows:
+            url = r["url_var"].get().strip()
+            if r["builtin"]:
+                if url:
+                    updates[r["env"]] = url
+            elif url:
+                custom.append({"label": (r["label_var"].get().strip() or url), "url": url})
+        try:
+            if updates:
+                env_set(updates)
+            self._cfg["servers"] = custom
+            save_config(self._cfg)
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e))
+            return
+        self._log("External servers saved to .env", GREEN)
+        if self._running:
+            self._log("Restart the Web UI to apply the new server URLs.", GOLD)
+
+    # ── Settings: folders ─────────────────────────────────────────────────────
+    def _render_folders(self):
+        for w in self._folders_box.winfo_children():
+            w.destroy()
+        if not self._folders:
+            tk.Label(self._folders_box, text="No folders yet.", bg=SURFACE2,
+                     fg=MUTED, font=self.F_TINY).pack(anchor="w")
+            return
+        for path in list(self._folders):
+            row = tk.Frame(self._folders_box, bg=SURFACE2)
+            row.pack(fill="x", pady=3)
+            exists = os.path.isdir(path)
+            tk.Label(row, text=("📁 " if exists else "⚠ ") + path, bg=SURFACE2,
+                     fg=TEXT2 if exists else GOLD, font=self.F_TINY, anchor="w").pack(
+                side="left", fill="x", expand=True)
+            self._btn(row, "Open", lambda p=path: self._open_folder(p), small=True).pack(side="left", padx=(6, 0))
+            self._btn(row, "✕", lambda p=path: self._remove_folder(p), small=True, kind="stop").pack(side="left", padx=(4, 0))
+
+    def _add_folder(self):
+        path = filedialog.askdirectory(title="Add a folder", initialdir=ROOT)
+        if not path:
+            return
+        path = os.path.normpath(path)
+        if path not in self._folders:
+            self._folders.append(path)
+            self._cfg["folders"] = self._folders
+            save_config(self._cfg)
+            self._render_folders()
+
+    def _open_folder(self, path):
+        if not os.path.isdir(path):
+            messagebox.showwarning("Folder missing", "This folder no longer exists:\n" + path)
+            return
+        try:
+            if IS_WIN:
+                os.startfile(path)  # noqa: S606 — Windows
+            else:
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
+        except Exception as e:
+            self._log("Could not open folder: " + str(e), RED)
+
+    def _remove_folder(self, path):
+        self._folders = [p for p in self._folders if p != path]
+        self._cfg["folders"] = self._folders
+        save_config(self._cfg)
+        self._render_folders()
+
+    def _save_address(self):
+        host = self._host_var.get().strip() or DEFAULT_HOST
+        try:
+            port = int(self._port_var.get().strip())
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid port", "Enter a port between 1 and 65535.")
+            return
+        self._host, self._port = host, port
+        try:
+            env_set({"APP_BIND": host, "APP_PORT": str(port)})
+        except Exception as e:
+            messagebox.showerror("Save failed", str(e))
+            return
+        self._refresh_desc()
+        self._log(f"Web UI address set to {host}:{port}. Restart the Web UI to apply.", GOLD)
+
+    # ── Logging / status ──────────────────────────────────────────────────────
+    def _log(self, msg, color=TEXT2):
+        self.after(0, lambda: self._log_widget_insert(msg, color))
+
+    def _log_widget_insert(self, msg, color):
+        self._console.configure(state="normal")
+        tag = "c" + color.lstrip("#")
+        self._console.tag_configure(tag, foreground=color)
+        self._console.insert("end", f"[{ts()}]  {msg}\n", tag)
+        self._console.see("end")
+        self._console.configure(state="disabled")
 
     def _clear_log(self):
-        self._log.configure(state='normal')
-        self._log.delete('1.0', 'end')
-        self._log.configure(state='disabled')
+        self._console.configure(state="normal")
+        self._console.delete("1.0", "end")
+        self._console.configure(state="disabled")
 
-    def _set_status(self, msg: str):
+    def _set_status(self, msg):
         self.after(0, lambda: self._status_var.set(msg))
+
+    def _refresh_desc(self):
+        self._svc_desc.set(f"FastAPI workspace  •  {self._app_url()}")
 
     # ── Status polling ────────────────────────────────────────────────────────
     def _poll(self):
-        for svc in SERVICES:
-            up = port_in_use(svc['port'])
-            card = self._cards[svc['key']]
-            if up != card['running']:
-                card['running'] = up
-                color = GREEN if up else RED
-                self.after(0, lambda d=card['dot'], c=color, u=up:
-                           d.configure(fg=c, text='●' if u else '○'))
+        up = port_in_use(self._port)
+        if up != self._running:
+            self._running = up
+            self._dot.configure(fg=GREEN if up else MUTED, text="●" if up else "○")
+            self._set_status("Web UI online" if up else "Ready")
         self.after(2000, self._poll)
 
-    # ── First-run environment check ───────────────────────────────────────────
-    def _check_env_on_start(self):
-        self._log_line('TrendVault AI launcher ready', ACCENT)
-        self._log_line('App URL: ' + APP_URL, MUTED)
-        syspy = _resolve_system_python()
-        if syspy:
-            self._log_line('Python detected: ' + ' '.join(syspy), GREEN)
-        else:
-            self._log_line('No Python 3.11+ found — install it from python.org before SETUP', RED)
-        if _venv_python():
-            self._log_line('venv ready: ' + _venv_python(), GREEN)
-        else:
-            self._log_line('venv not found — click 📦 SETUP (or START) to create it', AMBER)
+    def _initial_check(self):
+        self._log("TrendVault AI Launcher ready.", ACCENT)
+        self._log("App URL: " + self._app_url(), MUTED)
+        if not os.path.isfile(VENV_PY):
+            self._log("Project venv not found — click 'Setup deps' for first-time setup.", GOLD)
+        elif not os.path.isfile(ENV_PATH):
+            self._log(".env not found — click 'Setup deps' to run first-time setup.", GOLD)
         if resolve_ollama():
-            self._log_line('Ollama detected: ' + resolve_ollama(), GREEN)
+            self._log("Ollama detected: " + resolve_ollama(), GREEN)
         else:
-            self._log_line('Ollama not installed (optional — for local models)', MUTED)
-        if not IS_WIN or shutil.which('bash'):
-            return
-        self._log_line('Note: Git Bash (bash.exe) not on PATH — the core app works '
-                       'without it; install Git for Windows for full Cookbook/agent-shell.', MUTED)
+            self._log("Ollama not detected (optional — set its URL in Settings or install it).", MUTED)
 
-    # ── Setup: venv + deps + setup.py ─────────────────────────────────────────
-    def _run_setup_clicked(self):
-        if self._setting_up:
-            self._log_line('Setup already in progress...', AMBER)
-            return
-        threading.Thread(target=self._run_setup, daemon=True).start()
+    # ── Dependency / first-time setup ─────────────────────────────────────────
+    def _deps_ready(self) -> bool:
+        if not os.path.isfile(VENV_PY) or not os.path.isfile(ENV_PATH):
+            return False
+        try:
+            r = subprocess.run([VENV_PY, "-c", "import uvicorn, fastapi"],
+                               capture_output=True, timeout=15,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return r.returncode == 0
+        except Exception:
+            return False
 
-    def _ensure_setup(self) -> bool:
-        """Quick gate before starting the app: returns True when the venv is
-        ready, otherwise runs the full setup once."""
-        if _venv_python() and os.path.isfile(os.path.join(ROOT, '.env')):
+    def _ensure_deps(self) -> bool:
+        """Start gate: True when the app is ready to launch, else run full setup."""
+        if self._deps_ready():
             return True
-        return self._run_setup()
+        return self._full_setup()
 
-    def _run_setup(self) -> bool:
+    def _full_setup(self) -> bool:
         """Create the venv, install requirements, run setup.py. Idempotent —
         safe to re-run; skips whatever already exists."""
         if self._setting_up:
+            self._log("Setup already in progress…", GOLD)
             return False
         self._setting_up = True
         try:
-            self._log_line('--- Setup ---', ACCENT)
-            self._set_status('Setting up...')
+            self._log("─── Setup ───", ACCENT)
+            self._set_status("Setting up…")
 
-            syspy = _resolve_system_python()
-            if not syspy:
-                self._log_line('Cannot set up: no Python 3.11+ on PATH. '
-                               'Install from https://www.python.org/downloads/ and retry.', RED)
-                return False
-
-            venv_py = _venv_python()
-            if not venv_py:
-                self._log_line('Creating virtual environment (venv)...', TEXT)
-                ok = self._stream(syspy + ['-m', 'venv', os.path.join(ROOT, 'venv')], '[venv]')
-                venv_py = _venv_python()
-                if not ok or not venv_py:
-                    self._log_line('Failed to create the virtual environment.', RED)
+            # 1 — venv
+            if not os.path.isfile(VENV_PY):
+                syspy = system_python()
+                if not syspy:
+                    self._log("Python 3.11+ not found. Install it from python.org.", RED)
                     return False
-                self._log_line('venv created: ' + venv_py, GREEN)
+                self._log("Creating virtual environment (./venv)…", TEXT)
+                if not self._run_stream(syspy + ["-m", "venv", os.path.join(ROOT, "venv")], "venv"):
+                    self._log("Failed to create the virtual environment.", RED)
+                    return False
             else:
-                self._log_line('venv already exists — reusing ' + venv_py, MUTED)
+                self._log("venv already exists — reusing it.", MUTED)
 
-            self._log_line('Upgrading pip...', TEXT)
-            self._stream([venv_py, '-m', 'pip', 'install', '--upgrade', 'pip'], '[pip]')
-
-            self._log_line('Installing dependencies (first run can take a few minutes)...', TEXT)
-            ok = self._stream([venv_py, '-m', 'pip', 'install', '-r', 'requirements.txt'], '[pip]')
-            if not ok:
-                self._log_line('Dependency install failed — scroll up for the pip error.', RED)
+            # 2 — python deps
+            self._log("Upgrading pip…", TEXT)
+            self._run_stream([VENV_PY, "-m", "pip", "install", "--upgrade", "pip"], "pip")
+            self._log("Installing dependencies (first run can take a few minutes)…", TEXT)
+            if not self._run_stream([VENV_PY, "-m", "pip", "install", "-r", REQUIREMENTS], "pip"):
+                self._log("Dependency install failed — scroll up for the pip error.", RED)
                 return False
 
-            self._log_line('Running first-time setup (setup.py)...', TEXT)
-            # SKIP_ADMIN_PROMPT stops setup.py from blocking on getpass(); it
-            # then generates and PRINTS a temporary admin password we surface.
-            env = {**os.environ, 'TRENDVAULT_AI_SKIP_ADMIN_PROMPT': '1', 'PYTHONUNBUFFERED': '1'}
-            ok = self._stream([venv_py, 'setup.py'], '[setup]', env=env)
-            if ok:
-                self._log_line('Setup complete. Click ▶ Start on the TrendVault AI card.', GREEN)
-            else:
-                self._log_line('setup.py reported an error — see above.', RED)
-            return ok
+            # 3 — first-time setup (data dirs, DB, .env, admin user)
+            if os.path.isfile(SETUP_PY):
+                self._log("Running first-time setup (setup.py)…", TEXT)
+                # SKIP_ADMIN_PROMPT stops setup.py blocking on getpass(); it then
+                # generates and PRINTS a temporary admin password we surface.
+                env = {**os.environ, "TRENDVAULT_AI_SKIP_ADMIN_PROMPT": "1",
+                       "PYTHONUNBUFFERED": "1"}
+                if not self._run_stream([VENV_PY, SETUP_PY], "setup", env=env):
+                    self._log("setup.py reported an error — see above.", RED)
+                    return False
+            self._log("Setup complete. Click ▶ Start.", GREEN)
+            return True
         finally:
             self._setting_up = False
-            self._set_status('Ready')
-            self._log_line('--- End ---', ACCENT)
+            self._set_status("Ready")
+            self._log("─── End ───", ACCENT)
 
-    def _stream(self, cmd: list[str], label: str, env: dict | None = None) -> bool:
-        """Run a command in ROOT, stream colour-coded output, return exit==0."""
+    def _setup_deps(self):
+        threading.Thread(target=self._full_setup, daemon=True).start()
+
+    def _run_stream(self, cmd, label, env=None) -> bool:
+        """Run a build command, streaming its output to the console. True on exit 0."""
         try:
             proc = subprocess.Popen(
-                cmd, cwd=ROOT, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                encoding='utf-8', errors='replace', bufsize=1,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if IS_WIN else 0,
-            )
+                cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, encoding="utf-8", errors="replace",
+                bufsize=1, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             for raw in proc.stdout:
                 line = raw.rstrip()
-                if not line:
-                    continue
-                lo = line.lower()
-                if 'password' in lo or 'admin account' in lo or 'admin user' in lo:
-                    color = AMBER          # surface the generated admin credentials
-                elif any(w in lo for w in ('error', 'failed', 'traceback', 'fatal')):
-                    color = RED
-                elif any(w in lo for w in ('successfully installed', '[ok]', 'complete', 'created')):
-                    color = GREEN
-                else:
-                    color = '#a0a0c0'
-                self._log_line(label + ' ' + line, color)
+                if line:
+                    self._log(f"[{label}] {line}", self._line_color(line))
             proc.wait()
             return proc.returncode == 0
         except FileNotFoundError as e:
-            self._log_line(label + ' command not runnable: ' + str(e), RED)
+            self._log(f"[{label}] command not runnable: {e}", RED)
             return False
         except Exception as e:
-            self._log_line(label + ' error: ' + str(e), RED)
+            self._log(f"[{label}] error: {e}", RED)
             return False
 
-    # ── Service control ───────────────────────────────────────────────────────
-    def _start_one(self, key: str):
-        svc = next(s for s in SERVICES if s['key'] == key)
-        if key == 'ollama' and not resolve_ollama():
-            self._prompt_install_ollama()
+    @staticmethod
+    def _line_color(line: str) -> str:
+        lo = line.lower()
+        if "password" in lo or "admin account" in lo or "admin user" in lo:
+            return GOLD          # surface the generated admin credentials
+        if any(w in lo for w in ("error", "traceback", "failed", "fatal")):
+            return RED
+        if any(w in lo for w in ("warning", "deprecat")):
+            return GOLD
+        if any(w in lo for w in ("ready", "started", "running", "listening",
+                                 "complete", "created", "[ok]", "successfully installed",
+                                 "up to date", "success")):
+            return GREEN
+        return TEXT2
+
+    # ── Web UI start / stop ───────────────────────────────────────────────────
+    def _webapp_cmd(self) -> list[str]:
+        py = VENV_PY if os.path.isfile(VENV_PY) else sys.executable
+        return [py, "-m", "uvicorn", "app:app", "--host", self._host,
+                "--port", str(self._port)]
+
+    def _start(self):
+        if port_in_use(self._port):
+            self._log(f"Web UI already running on :{self._port}.", GOLD)
             return
-        if port_in_use(svc['port']):
-            self._log_line(svc['name'] + ' already running on :' + str(svc['port']), AMBER)
-            return
+        with self._lock:
+            if self._proc is not None:
+                self._log("Web UI is already starting.", GOLD)
+                return
 
         def _do():
-            if key == 'app' and not self._ensure_setup():
+            self._set_status("Preparing…")
+            if not self._ensure_deps():
+                self._set_status("Setup failed")
                 return
-            self._launch(svc)
+            self._launch()
         threading.Thread(target=_do, daemon=True).start()
 
-    def _stop_one(self, key: str):
-        svc = next(s for s in SERVICES if s['key'] == key)
-        threading.Thread(target=self._kill, args=(svc,), daemon=True).start()
-
-    def _start_all(self):
-        def _do():
-            if not self._ensure_setup():
-                return
-            # Start Ollama first (so the app can reach it), then the app.
-            for key in ('ollama', 'app'):
-                svc = next(s for s in SERVICES if s['key'] == key)
-                if key == 'ollama' and not resolve_ollama():
-                    continue
-                if port_in_use(svc['port']):
-                    continue
-                threading.Thread(target=self._launch, args=(svc,), daemon=True).start()
-                time.sleep(0.4)
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _stop_all(self):
-        for svc in SERVICES:
-            threading.Thread(target=self._kill, args=(svc,), daemon=True).start()
-
-    def _launch(self, svc: dict):
-        key = svc['key']
-        if port_in_use(svc['port']):
-            self._log_line(svc['name'] + ' already on :' + str(svc['port']), AMBER)
-            return
-
-        cmd = svc['cmd']
-        if key == 'app':
-            venv_py = _venv_python()
-            if not venv_py:
-                self._log_line('venv missing — run 📦 SETUP first.', RED)
-                return
-            cmd = [venv_py, '-m', 'uvicorn', 'app:app', '--host', APP_HOST, '--port', str(APP_PORT)]
-        elif key == 'ollama':
-            ollama_bin = resolve_ollama()
-            if not ollama_bin:
-                self._log_line('Ollama is not installed — skipping', RED)
-                return
-            cmd = [ollama_bin, 'serve']
-
-        self._log_line('Starting ' + svc['name'] + '...', TEXT)
-        self._set_status('Starting ' + svc['name'] + '...')
+    def _launch(self):
+        self._log(f"Starting Web UI on {self._host}:{self._port}…", TEXT)
+        self._set_status("Starting Web UI…")
         try:
-            env = {**os.environ}
-            env.update(svc.get('env', {}))
             flags = 0
             if IS_WIN:
                 flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
             proc = subprocess.Popen(
-                cmd, cwd=ROOT, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                encoding='utf-8', errors='replace', bufsize=1,
-                creationflags=flags,
-            )
+                self._webapp_cmd(), cwd=ROOT, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, encoding="utf-8", errors="replace",
+                bufsize=1, creationflags=flags)
             with self._lock:
-                self._procs[key] = proc
-            if key == 'app':
-                self._auto_opened = False
-                threading.Thread(target=self._app_wait_online, daemon=True).start()
+                self._proc = proc
+            self._auto_opened = False
+            threading.Thread(target=self._wait_online, daemon=True).start()
             for raw in proc.stdout:
                 line = raw.rstrip()
                 if line:
-                    lo = line.lower()
-                    if any(w in lo for w in ('application startup complete', 'uvicorn running',
-                                             'ready', 'started', 'listening')):
-                        color = GREEN
-                    elif any(w in lo for w in ('error', 'traceback', 'critical')):
-                        color = RED
-                    else:
-                        color = '#a0a0c0'
-                    self._log_line('[' + svc['name'] + '] ' + line, color)
+                    self._log(f"[web] {line}", self._line_color(line))
             proc.wait()
-            code = proc.returncode
-            self._log_line(svc['name'] + ' exited (code ' + str(code) + ')',
-                           AMBER if code else MUTED)
+            self._log(f"Web UI exited (code {proc.returncode}).",
+                      GOLD if proc.returncode else MUTED)
         except Exception as e:
-            self._log_line('Failed to start ' + svc['name'] + ': ' + str(e), RED)
+            self._log("Failed to start Web UI: " + str(e), RED)
         finally:
             with self._lock:
-                self._procs.pop(key, None)
-            self._set_status('Ready')
+                self._proc = None
+            self._set_status("Ready")
 
-    def _app_wait_online(self):
-        """Poll the app until it answers, then announce it and open the browser once."""
+    def _wait_online(self):
+        """Poll the app until it answers, announce it, and open the browser once."""
         for _ in range(60):
             time.sleep(1)
             with self._lock:
-                alive = self._procs.get('app') is not None
+                alive = self._proc is not None
             if not alive:
                 return
-            ok, _info = app_http_ok(timeout=2.0)
+            ok, _info = self._app_http_ok(timeout=2.0)
             if ok:
-                self._log_line('TrendVault AI is live at ' + APP_URL, GREEN)
+                self._log("TrendVault AI is live at " + self._app_url(), GREEN)
                 if not self._auto_opened:
                     self._auto_opened = True
-                    webbrowser.open(APP_URL)
+                    webbrowser.open(self._app_url())
                 return
 
-    def _kill(self, svc: dict):
-        self._log_line('Stopping ' + svc['name'] + '...', AMBER)
-        with self._lock:
-            proc = self._procs.get(svc['key'])
-        if proc:
-            _kill_proc_tree(proc)
-        kill_port(svc['port'])
-        self._log_line(svc['name'] + ' stopped', MUTED)
+    def _stop(self):
+        def _do():
+            self._log("Stopping Web UI…", GOLD)
+            with self._lock:
+                proc = self._proc
+            if proc:
+                kill_proc_tree(proc)
+            kill_port(self._port)
+            self._log("Web UI stopped.", MUTED)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _open_app(self):
+        if not port_in_use(self._port):
+            self._log(f"Web UI is not running on :{self._port} — start it first.", GOLD)
+            return
+        webbrowser.open(self._app_url())
+        self._log("Opening " + self._app_url(), ACCENT)
 
     # ── Health check ──────────────────────────────────────────────────────────
     def _health(self):
         def _check():
-            self._log_line('--- Health Check ---', ACCENT)
-            for svc in SERVICES:
-                port_up = port_in_use(svc['port'])
-                probe = svc.get('http_health')
-                if port_up and callable(probe):
-                    ok, info = probe()
-                    status = ('RUNNING (HTTP OK @ ' + info + ')') if ok else \
-                             ('PORT BUSY but no HTTP response from ' + info)
-                    color = GREEN if ok else AMBER
-                else:
-                    status = 'RUNNING' if port_up else 'STOPPED'
-                    color = GREEN if port_up else RED
-                self._log_line(svc['name'].ljust(16) + '  :' + str(svc['port']) + '  ' + status, color)
+            self._log("─── Health Check ───", ACCENT)
+            port_up = port_in_use(self._port)
+            if port_up:
+                ok, info = self._app_http_ok()
+                status = f"RUNNING (HTTP OK @ {info})" if ok else \
+                         f"PORT BUSY but no HTTP response from {info}"
+                self._log("TrendVault AI".ljust(18) + f":{self._port}  " + status,
+                          GREEN if ok else GOLD)
+            else:
+                self._log("TrendVault AI".ljust(18) + f":{self._port}  STOPPED", RED)
 
-            syspy = _resolve_system_python()
-            self._log_line('System Python'.ljust(16) + '  ' +
-                           (' '.join(syspy) if syspy else 'MISSING — install Python 3.11+'),
-                           TEXT if syspy else RED)
-            venv_py = _venv_python()
-            self._log_line('venv'.ljust(16) + '  ' + (venv_py if venv_py else 'MISSING — click 📦 SETUP'),
-                           TEXT if venv_py else AMBER)
-            for label, path in (('.env', os.path.join(ROOT, '.env')),
-                                ('data/', os.path.join(ROOT, 'data')),
-                                ('requirements', os.path.join(ROOT, 'requirements.txt')),
-                                ('app.py', os.path.join(ROOT, 'app.py'))):
+            # External servers (TCP reachability of whatever .env points at).
+            for label, env_key, default in BUILTIN_SERVERS:
+                url = env_get(env_key) or default
+                up = url_reachable(url)
+                self._log(label.strip().ljust(18) + "  " +
+                          ("reachable" if up else "no response") + "  " + url,
+                          GREEN if up else MUTED)
+
+            syspy = system_python()
+            self._log("System Python".ljust(18) + "  " +
+                      (" ".join(syspy) if syspy else "MISSING — install Python 3.11+"),
+                      TEXT2 if syspy else RED)
+            for label, path in (("venv", VENV_PY), (".env", ENV_PATH),
+                                ("data/", DATA_DIR), ("requirements", REQUIREMENTS),
+                                ("app.py", os.path.join(ROOT, "app.py"))):
                 exists = os.path.exists(path)
-                self._log_line(label.ljust(16) + '  ' + ('OK' if exists else 'MISSING'),
-                               TEXT if exists else AMBER)
-            ollama_path = resolve_ollama()
-            self._log_line('Ollama'.ljust(16) + '  ' +
-                           (ollama_path if ollama_path else 'not installed (optional)'),
-                           TEXT if ollama_path else MUTED)
-            self._log_line('--- End ---', ACCENT)
+                self._log(label.ljust(18) + "  " + ("OK" if exists else "MISSING"),
+                          TEXT2 if exists else GOLD)
+            ollama = resolve_ollama()
+            self._log("Ollama binary".ljust(18) + "  " +
+                      (ollama if ollama else "not installed (optional)"),
+                      TEXT2 if ollama else MUTED)
+            self._log("─── End ───", ACCENT)
         threading.Thread(target=_check, daemon=True).start()
 
-    # ── Browser ───────────────────────────────────────────────────────────────
-    def _open_browser(self):
-        if not port_in_use(APP_PORT):
-            self._log_line('TrendVault AI is not running on :' + str(APP_PORT) +
-                           ' — click ▶ Start first', AMBER)
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    def _on_close(self):
+        with self._lock:
+            running = self._proc is not None or port_in_use(self._port)
+        if running and not messagebox.askyesno(
+                "Quit launcher?",
+                "The Web UI is running. Stop it and quit the launcher?"):
             return
-        webbrowser.open(APP_URL)
-        self._log_line('Opening ' + APP_URL, ACCENT)
-
-    # ── Ollama install ────────────────────────────────────────────────────────
-    def _run_install_ollama(self):
-        if resolve_ollama():
-            self._log_line('Ollama is already installed: ' + resolve_ollama(), GREEN)
-            return
-        self._installing_ollama = False
-        self._prompt_install_ollama()
-
-    def _prompt_install_ollama(self):
-        if not IS_WIN:
-            self._log_line('Auto-install is Windows-only — get Ollama from https://ollama.com/download', AMBER)
-            return
-        if self._installing_ollama:
-            self._log_line('Ollama install already in progress...', AMBER)
-            return
-        if not messagebox.askyesno(
-            'Install Ollama?',
-            'Ollama lets TrendVault AI run local models. It was not found on this PC.\n\n'
-            'Download the official installer (~700 MB) from ollama.com and run it now?\n\n'
-            'Click through the Ollama setup window when it appears.',
-        ):
-            self._log_line('Ollama install skipped by user', MUTED)
-            return
-        threading.Thread(target=self._install_ollama, daemon=True).start()
-
-    def _install_ollama(self):
-        import urllib.request, tempfile
-        self._installing_ollama = True
-        try:
-            self._log_line('Downloading Ollama installer...', AMBER)
-            self._set_status('Downloading Ollama...')
-            installer_path = os.path.join(tempfile.gettempdir(), 'OllamaSetup.exe')
-            req = urllib.request.Request(_OLLAMA_INSTALLER_URL,
-                                         headers={'User-Agent': 'TrendVaultAILauncher/1.0'})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                total = int(resp.headers.get('Content-Length', 0) or 0)
-                downloaded = 0
-                last_pct = -1
-                with open(installer_path, 'wb') as f:
-                    while True:
-                        chunk = resp.read(64 * 1024)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total:
-                            pct = int(downloaded * 100 / total)
-                            if pct != last_pct and pct % 5 == 0:
-                                self._set_status('Downloading Ollama... ' + str(pct) + '%')
-                                last_pct = pct
-            self._log_line('Download complete (' + str(downloaded // (1024 * 1024)) + ' MB)', GREEN)
-            self._log_line('Launching installer — complete the setup window to finish', TEXT)
-            self._set_status('Running Ollama installer...')
-            subprocess.Popen([installer_path], shell=False)
-            self._log_line('When it finishes, click ▶ Start on the Ollama card.', ACCENT)
-        except Exception as e:
-            self._log_line('Ollama install failed: ' + str(e), RED)
-        finally:
-            self._installing_ollama = False
-            self._set_status('Ready')
-
-    # ── CLI runner ────────────────────────────────────────────────────────────
-    def _set_cli_busy(self, busy):
-        self._cli_busy = busy
-        def _do():
-            try:
-                self._run_btn.configure(state='disabled' if busy else 'normal')
-                self._stop_btn.configure(state='normal' if busy else 'disabled')
-            except Exception:
-                pass
-        self.after(0, _do)
-
-    def _run_cli(self):
-        cmd = self._prompt_var.get().strip()
-        if not cmd:
-            return
-        if self._cli_busy:
-            self._log_line('A command is still running — click STOP first', AMBER)
-            return
-        if not self._cli_history or self._cli_history[-1] != cmd:
-            self._cli_history.append(cmd)
-            if len(self._cli_history) > 200:
-                self._cli_history = self._cli_history[-200:]
-        self._cli_history_idx = -1
-        self._prompt_var.set('')
-        self._set_cli_busy(True)
-        self._log_line('$ ' + cmd, ACCENT)
-
-        def _run():
-            try:
-                proc = subprocess.Popen(
-                    cmd, cwd=ROOT, shell=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    encoding='utf-8', errors='replace', bufsize=1,
-                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if IS_WIN else 0,
-                )
-                self._cli_proc = proc
-                for raw in proc.stdout:
-                    line = raw.rstrip()
-                    if line:
-                        self._log_line(line, TEXT)
-                proc.wait()
-                self._log_line('(exit ' + str(proc.returncode) + ')', MUTED)
-            except Exception as e:
-                self._log_line('cli error: ' + str(e), RED)
-            finally:
-                self._cli_proc = None
-                self._set_cli_busy(False)
-        threading.Thread(target=_run, daemon=True).start()
-
-    def _history_prev(self):
-        hist = self._cli_history
-        if not hist:
-            return
-        if self._cli_history_idx == -1:
-            self._cli_draft = self._prompt_var.get()
-            self._cli_history_idx = len(hist) - 1
-        elif self._cli_history_idx > 0:
-            self._cli_history_idx -= 1
-        self._prompt_var.set(hist[self._cli_history_idx])
-        self._prompt_entry.icursor('end')
-
-    def _history_next(self):
-        hist = self._cli_history
-        if self._cli_history_idx == -1:
-            return
-        if self._cli_history_idx < len(hist) - 1:
-            self._cli_history_idx += 1
-            self._prompt_var.set(hist[self._cli_history_idx])
-        else:
-            self._cli_history_idx = -1
-            self._prompt_var.set(self._cli_draft)
-        self._prompt_entry.icursor('end')
-
-    def _stop_cli(self):
-        proc = self._cli_proc
-        if proc and proc.poll() is None:
-            try:
-                if IS_WIN:
-                    subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
-                                   capture_output=True, timeout=5)
-                else:
-                    proc.kill()
-            except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-            self._log_line('CLI command stopped', AMBER)
-        else:
-            self._log_line('No CLI command running', MUTED)
+        with self._lock:
+            proc = self._proc
+        if proc:
+            kill_proc_tree(proc)
+        kill_port(self._port)
+        self.destroy()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     TrendVaultAILauncher().mainloop()
