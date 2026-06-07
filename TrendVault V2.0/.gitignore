@@ -25,6 +25,9 @@ public/previews/
 custom-audio/
 data/app.db
 data/llm-settings.json
+# Intelligence Agent ("Clip Tool") runtime: SQLite DB, downloaded videos,
+# extracted frames, rendered clips, exports.
+data/intelligence/
 debug/
 
 # ── OS / build junk ──

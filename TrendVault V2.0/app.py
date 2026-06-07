@@ -30,7 +30,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from core import constants
 from core.constants import (
-    APP_VERSION, BACKGROUNDS_DIR, CAPTIONS_DIR, GENERATED_VOICES, MUSIC_DIR,
+    APP_VERSION, BACKGROUNDS_DIR, CAPTIONS_DIR, GENERATED_VOICES,
+    INTEL_CLIPS_DIR, INTEL_VIDEO_DIR, MUSIC_DIR,
     PREVIEWS_DIR, PUBLIC_AUDIO_DIR, STATIC_DIR, TREND_VAULT_OUT,
 )
 
@@ -59,6 +60,16 @@ async def _lifespan(app: FastAPI):
         init_db()
     except Exception as e:  # noqa: BLE001
         logger.warning("DB init skipped: %s", e)
+    # Intelligence Agent (the "Clip Tool") — own SQLite DB; reap any search left
+    # mid-flight by a previous crash so the UI can offer Retry instead of hanging.
+    try:
+        from services.intelligence import database as intel_db
+        intel_db.init_db()
+        reaped = intel_db.reap_orphan_search_jobs()
+        if reaped:
+            logger.info("Intelligence: recovered %d interrupted search job(s).", reaped)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Intelligence DB init skipped: %s", e)
     # Sweep orphaned job_*.json from a previous crash so they don't confuse the UI.
     for orphan in glob.glob(os.path.join(TREND_VAULT_OUT, "job_*.json")):
         try:
@@ -168,12 +179,16 @@ app.mount("/captions", StaticFiles(directory=CAPTIONS_DIR), name="captions")
 app.mount("/trend-vault-clips", StaticFiles(directory=TREND_VAULT_OUT), name="tv-clips")
 app.mount("/generated-voices", StaticFiles(directory=GENERATED_VOICES), name="gen-voices")
 app.mount("/previews", StaticFiles(directory=PREVIEWS_DIR), name="previews")
+# Intelligence Agent media: extracted frames (per video) + rendered clips (per run).
+app.mount("/intel-media", StaticFiles(directory=INTEL_VIDEO_DIR), name="intel-media")
+app.mount("/intel-clips", StaticFiles(directory=INTEL_CLIPS_DIR), name="intel-clips")
 
 # ========= ROUTERS =========
 from services.media import get_media_service
 from services.render import get_render_service
 from services.script import get_script_service
 from services.tts import get_tts_service
+from routes.intelligence_routes import setup_intelligence_routes
 from routes.llm_routes import setup_llm_routes
 from routes.media_routes import setup_media_routes
 from routes.page_routes import setup_page_routes
@@ -187,6 +202,7 @@ app.include_router(setup_voice_routes(get_tts_service()))
 app.include_router(setup_render_routes(get_render_service()))
 app.include_router(setup_media_routes(get_media_service()))
 app.include_router(setup_llm_routes())
+app.include_router(setup_intelligence_routes())
 app.include_router(setup_auth_routes(auth_manager))
 
 

@@ -36,6 +36,16 @@ PUBLIC_MUSIC_DIR = os.path.join(PUBLIC_DIR, "music")
 DRAFTS_DIR       = os.path.join(DATA_DIR, "drafts")
 GENERATED_VOICES = os.path.join(DATA_DIR, "generated-voices")
 
+# ── Intelligence Agent (the "Clip Tool") — ported YouTube Video Intelligence
+#    Agent. Self-contained data root under data/, mirroring its standalone
+#    layout: per-video working dirs (frames/audio/downloads), exports, rendered
+#    vertical clips grouped by run id, and its own SQLite DB.
+INTEL_DIR        = os.path.join(DATA_DIR, "intelligence")
+INTEL_VIDEO_DIR  = os.path.join(INTEL_DIR, "videos")
+INTEL_EXPORT_DIR = os.path.join(INTEL_DIR, "exports")
+INTEL_CLIPS_DIR  = os.path.join(INTEL_DIR, "clips")
+INTEL_DB_PATH    = os.path.join(INTEL_DIR, "intelligence.db")
+
 # ── Data files (JSON state) ──
 VOICE_PRESETS_FILE     = os.path.join(DATA_DIR, "voice-presets.json")
 CUSTOM_PRESETS_FILE    = os.path.join(DATA_DIR, "custom-presets.json")
@@ -73,6 +83,7 @@ ALL_DIRS = [
     BACKGROUNDS_DIR, MUSIC_DIR, CUSTOM_AUDIO_DIR, TREND_VAULT_OUT,
     PUBLIC_AUDIO_DIR, CAPTIONS_DIR, PREVIEWS_DIR, PUBLIC_BG_DIR, PUBLIC_MUSIC_DIR,
     DRAFTS_DIR, GENERATED_VOICES,
+    INTEL_DIR, INTEL_VIDEO_DIR, INTEL_EXPORT_DIR, INTEL_CLIPS_DIR,
 ]
 
 
