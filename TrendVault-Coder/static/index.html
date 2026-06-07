@@ -686,6 +686,10 @@
         <svg class="sidebar-action-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <span class="grow" style="position:relative;left:-1px;">Search</span>
       </div>
+      <div class="list-item" id="sidebar-chat-btn" title="Chat — plain conversation (no agent tools)">
+        <svg class="sidebar-action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;left:-1px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="grow" style="position:relative;left:-1px;">Chat</span>
+      </div>
       <div class="list-item" id="sidebar-code-btn" title="Code — the agent workspace (files, shell, git)">
         <svg class="sidebar-action-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;left:-1px;"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span class="grow" style="position:relative;left:-1px;">Code</span>
@@ -959,7 +963,7 @@
       var phone = [
         'Tip: Long-press a session for rename, delete, and memory options.',
         'Tip: Tap the eye icon for Nobody mode — no history saved.',
-        'Tip: Switch to Agent mode for web search and code execution.',
+        'Tip: Open the Code section for web search, shell, and file editing.',
         'Tip: Use Compare mode to test different models side by side.',
         'Tip: Attach images or files using the + button next to the input.',
       ];
@@ -1098,10 +1102,14 @@
           </button>
         </div>
         <div class="chat-input-right">
-          <!-- Agent / Chat mode toggle -->
-          <div class="mode-toggle">
-            <button type="button" class="mode-toggle-btn active" id="mode-agent-btn" aria-pressed="true">Agent</button>
-            <button type="button" class="mode-toggle-btn" id="mode-chat-btn" aria-pressed="false">Chat</button>
+          <!-- Agent / Chat mode is now chosen by the sidebar section switcher
+               (Chat vs Code), not an in-composer picker. These buttons stay in
+               the DOM but hidden — they remain the internal "mode engine" the
+               rest of the app drives via toggleState.mode (research mode,
+               backend set_mode events, document mode, the Code section, etc.). -->
+          <div class="mode-toggle" hidden aria-hidden="true">
+            <button type="button" class="mode-toggle-btn active" id="mode-agent-btn" aria-pressed="true" tabindex="-1">Agent</button>
+            <button type="button" class="mode-toggle-btn" id="mode-chat-btn" aria-pressed="false" tabindex="-1">Chat</button>
           </div>
           <button type="submit" form="chat-form" class="send-btn newchat-mode" data-mode="newchat" aria-label="New chat">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="send-btn-label">+ New</span>
@@ -1795,11 +1803,6 @@
                 <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></span>
                 <span class="vis-label">More Tools <span class="vis-hint">Overflow menu</span></span>
                 <input type="checkbox" checked data-ui-key="overflow-plus-btn"><span class="vis-switch"></span>
-              </label>
-              <label class="vis-row">
-                <span class="vis-icon vis-icon-text">A|C</span>
-                <span class="vis-label">Agent / Chat <span class="vis-hint">Mode switcher</span></span>
-                <input type="checkbox" checked data-ui-key="mode-toggle"><span class="vis-switch"></span>
               </label>
               <label class="vis-row">
                 <span class="vis-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>

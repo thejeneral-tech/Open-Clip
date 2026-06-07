@@ -63,12 +63,16 @@ window.addEventListener('pageshow', clearFreshComposerRestore);
       hideOn('#tool-research-btn, #research-toggle-btn', privs.can_use_research);
       // Memory & skills (rail/tool button only — UI/API entry).
       hideOn('#tool-memory-btn', privs.can_manage_memory);
-      // Agent mode toggle — force chat mode by hiding the Agent toggle button.
+      // Agent mode — force chat mode for users who can't use the agent. The
+      // visible Agent/Chat picker is retired, but the hidden engine buttons
+      // still drive mode, so pin them to Chat. Also hide the Code section tab
+      // (and its chat list) since Code IS the agent workspace.
       if (privs.can_use_agent === false) {
         const _agent = document.getElementById('mode-agent-btn');
         const _chat = document.getElementById('mode-chat-btn');
         if (_agent) _agent.style.display = 'none';
         if (_chat) { _chat.classList.add('active'); _chat.click?.(); }
+        hideOn('#sidebar-code-btn, #code-sessions-section', false);
       }
     } catch (_) { /* DOM not ready or unexpected shape — UI gates are non-fatal */ }
   } catch (_) { /* anonymous / loopback mode — nothing to do */ }

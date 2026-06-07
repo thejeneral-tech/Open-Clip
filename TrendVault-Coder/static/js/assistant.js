@@ -980,39 +980,93 @@ function _watchForAssistantActivation() {
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 
-// ── Code sidebar tab — the agent workspace, separate from chat ─────────────
-// Code mode reveals the working-directory bar (the agent's files/shell/git
-// controls) and switches to Agent mode. Normal chat hides the bar entirely.
-function _exitCodeMode() {
-  document.body.classList.remove('code-mode');
-  document.getElementById('sidebar-code-btn')?.classList.remove('active');
+// ── Sidebar section switcher — Chat vs Code, two fully separate spaces ──────
+// Replaces the old in-composer Agent/Chat picker. The section you pick decides
+// the mode: Chat = plain conversation, Code = the agent workspace (files, shell,
+// git) with the working-directory bar. The hidden #mode-agent-btn /
+// #mode-chat-btn are still the underlying "mode engine" the rest of the app
+// reads (toggleState.mode); we just drive them from here instead of a visible
+// toggle. Each section shows only its own conversation list (Chats vs Code
+// chats — see sessions.js / style.css) so the two spaces never bleed together.
+
+function _setSectionButtons(section) {
+  document.getElementById('sidebar-chat-btn')?.classList.toggle('active', section === 'chat');
+  document.getElementById('sidebar-code-btn')?.classList.toggle('active', section === 'code');
 }
-function _enterCodeMode() {
-  document.body.classList.add('code-mode');
-  document.getElementById('sidebar-code-btn')?.classList.add('active');
-  document.getElementById('mode-agent-btn')?.click();   // ensure Agent mode
-  _mountWorkingDirBar();
+
+// Flip the section UI (mode engine + workspace bar + active tab) WITHOUT
+// touching the open conversation. Safe to call from selectSession.
+function _applySection(section) {
+  if (section === 'code') {
+    document.body.classList.add('code-mode');
+    const ab = document.getElementById('mode-agent-btn');
+    if (ab && !ab.classList.contains('active')) ab.click();   // engine → agent
+    _mountWorkingDirBar();
+  } else {
+    document.body.classList.remove('code-mode');
+    const cb = document.getElementById('mode-chat-btn');
+    if (cb && !cb.classList.contains('active')) cb.click();    // engine → chat
+  }
+  _setSectionButtons(section);
 }
-function _wireCodeTab(retries = 0) {
-  const btn = document.getElementById('sidebar-code-btn');
-  if (!btn) { if (retries < 30) setTimeout(() => _wireCodeTab(retries + 1), 250); return; }
-  if (btn._wired) return;
-  btn._wired = true;
-  btn.addEventListener('click', () => {
-    if (document.body.classList.contains('code-mode')) _exitCodeMode();
-    else _enterCodeMode();
-  });
-  // Going back to plain chat leaves Code.
-  document.getElementById('mode-chat-btn')?.addEventListener('click', _exitCodeMode);
-  ['sidebar-new-chat-btn', 'sidebar-brand-btn', 'mobile-new-chat-btn'].forEach((id) => {
-    document.getElementById(id)?.addEventListener('click', _exitCodeMode);
-  });
+
+// Keep the section in sync with whatever conversation just loaded. Called by
+// sessions.selectSession once it knows the session's mode ('agent' → Code).
+function syncToMode(mode) {
+  _applySection(mode === 'agent' ? 'code' : 'chat');
 }
+
+// A section tab was clicked. Switch spaces and keep the open conversation
+// coherent — never leave a Chat showing inside Code (or vice-versa).
+function switchSection(section) {
+  const current = document.body.classList.contains('code-mode') ? 'code' : 'chat';
+  if (section === current) return;
+  _applySection(section);
+
+  const sess = window.sessionModule;
+  if (!sess) return;
+  // On a fresh, unsent chat (welcome screen) just change the mode — the next
+  // message starts a new conversation in this section.
+  if (!sess.getCurrentSessionId?.()) return;
+
+  // Otherwise the open conversation belongs to the section we just left.
+  // Restore this section's most recent conversation, or start a fresh one.
+  const wantAgent = section === 'code';
+  const mine = (sess.getSessions?.() || [])
+    .filter((s) => !s.archived && (wantAgent ? s.mode === 'agent' : s.mode !== 'agent'))
+    .sort((a, b) => {
+      const av = a.last_message_at || a.updated_at || a.created_at || '';
+      const bv = b.last_message_at || b.updated_at || b.created_at || '';
+      return bv.localeCompare(av);
+    });
+  if (mine.length) sess.selectSession(mine[0].id);               // re-applies this section
+  else document.getElementById('sidebar-new-chat-btn')?.click(); // fresh chat, stays here
+}
+
+function _wireSectionTabs(retries = 0) {
+  const codeBtn = document.getElementById('sidebar-code-btn');
+  if (!codeBtn) { if (retries < 30) setTimeout(() => _wireSectionTabs(retries + 1), 250); return; }
+  if (codeBtn._wired) return;
+  codeBtn._wired = true;
+  document.getElementById('sidebar-chat-btn')?.addEventListener('click', () => switchSection('chat'));
+  codeBtn.addEventListener('click', () => switchSection('code'));
+  // Initial section matches the persisted mode engine (agent → Code). Visuals
+  // only — app.js restores toggleState.mode itself, and when a last session
+  // auto-loads, selectSession → syncToMode corrects this anyway.
+  let mode = 'chat';
+  try { mode = (JSON.parse(localStorage.getItem('trendvault-ai-toggles') || '{}').mode) || 'chat'; } catch {}
+  _setSectionButtons(mode === 'agent' ? 'code' : 'chat');
+  if (mode === 'agent') { document.body.classList.add('code-mode'); _mountWorkingDirBar(); }
+}
+
+// Exposed so sessions.selectSession can keep the section in sync with the
+// conversation's mode.
+window.sectionModule = { switchSection, syncToMode };
 
 function _boot() {
   _watchForAssistantActivation();
   _mountWorkingDirBar();
-  _wireCodeTab();
+  _wireSectionTabs();
 }
 
 if (document.readyState === 'loading') {

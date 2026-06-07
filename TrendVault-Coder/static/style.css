@@ -35748,9 +35748,19 @@ body.theme-frosted .modal {
 }
 .agent-wd-strip::-webkit-scrollbar { display: none; }
 body.code-mode .agent-wd-strip { display: flex; }
-/* "Code" sidebar tab active state */
-#sidebar-code-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-#sidebar-code-btn.active .sidebar-action-icon { color: var(--accent); }
+/* Chat / Code sidebar tabs — the section switcher that replaced the in-composer
+   Agent/Chat picker. One section is active at a time; each is its own space. */
+#sidebar-code-btn.active,
+#sidebar-chat-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#sidebar-code-btn.active .sidebar-action-icon,
+#sidebar-chat-btn.active .sidebar-action-icon { color: var(--accent); }
+/* Retired in-composer Agent/Chat picker — kept in the DOM (hidden) as the mode
+   engine, now driven by the Chat/Code section tabs above. */
+.mode-toggle { display: none !important; }
+/* Fully separate spaces: each section shows only its own conversation list.
+   Chat section → "Chats" only; Code section → "Code chats" only. */
+body.code-mode #sessions-section { display: none !important; }
+body:not(.code-mode) #code-sessions-section { display: none !important; }
 .agent-wd-bar {
   display: inline-flex;
   align-items: center;

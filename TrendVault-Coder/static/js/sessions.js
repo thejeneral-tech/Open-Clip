@@ -1544,6 +1544,9 @@ export async function selectSession(id, { keepSidebar = false } = {}) {
       if (presetsModule && presetsModule.onSessionSwitch) presetsModule.onSessionSwitch(id);
     } catch (e) {}
     const meta = sessions.find(s => s.id === id);
+    // Keep the Chat/Code section in sync with this conversation's mode so the
+    // two spaces never show each other's chats (agent sessions → Code section).
+    try { window.sectionModule?.syncToMode?.(meta?.mode); } catch {}
 
     // Detach any in-flight stream to background instead of aborting
     try {
