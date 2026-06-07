@@ -35761,6 +35761,11 @@ body.code-mode .agent-wd-strip { display: flex; }
    Chat section → "Chats" only; Code section → "Code chats" only. */
 body.code-mode #sessions-section { display: none !important; }
 body:not(.code-mode) #code-sessions-section { display: none !important; }
+/* Code is a workspace, not a welcome splash. The chat welcome screen floats the
+   composer up 30vh to center it; in the Code section that left the composer (and
+   the working-dir strip stuck above it) glitching in mid-screen. Anchor it at
+   the bottom instead. */
+body.code-mode .chat-container.welcome-active .chat-input-bar { margin-bottom: 0; }
 .agent-wd-bar {
   display: inline-flex;
   align-items: center;
