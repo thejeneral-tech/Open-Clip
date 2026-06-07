@@ -25,6 +25,8 @@ public/previews/
 custom-audio/
 data/app.db
 data/llm-settings.json
+# Launcher per-machine config (custom server links, bookmarked folders, port)
+data/launcher-config.json
 # Intelligence Agent ("Clip Tool") runtime: SQLite DB, downloaded videos,
 # extracted frames, rendered clips, exports.
 data/intelligence/
