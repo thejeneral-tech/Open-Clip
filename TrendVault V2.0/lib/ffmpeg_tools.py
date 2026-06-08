@@ -116,6 +116,31 @@ def probe_duration_sec(path: str) -> float:
     return 0.0
 
 
+def probe_scene_changes(path: str, *, threshold: float = 0.4,
+                        max_seconds: float = 60.0) -> int:
+    """Count hard cuts (scene changes above `threshold`) in the first `max_seconds`.
+
+    Decodes the clip through ffmpeg's `select='gt(scene,…)',showinfo` filter and
+    counts the selected frames (one per detected cut). Best-effort and bounded to
+    `max_seconds` so a long reference doesn't stall the request. Returns -1 if
+    detection could not run (no ffmpeg, decode error) so callers can fall back."""
+    ff = resolve_ffmpeg()
+    null_sink = "NUL" if os.name == "nt" else "/dev/null"
+    try:
+        args = [ff, "-hide_banner"]
+        if max_seconds and max_seconds > 0:
+            args += ["-t", str(max_seconds)]   # input option: limit data read
+        args += ["-i", path,
+                 "-filter:v", f"select='gt(scene,{threshold})',showinfo",
+                 "-an", "-f", "null", null_sink]
+        r = subprocess.run(args, capture_output=True, text=True,
+                           creationflags=_NO_WINDOW)
+        # showinfo logs one `pts_time:` line per frame that passed the select.
+        return len(re.findall(r"pts_time:", r.stderr or ""))
+    except Exception:
+        return -1
+
+
 def has_audio_stream(path: str) -> bool:
     """True if `path` has at least one audio stream (silent-render guard)."""
     fp = resolve_ffprobe()
