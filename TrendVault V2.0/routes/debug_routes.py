@@ -83,8 +83,11 @@ def setup_debug_routes() -> APIRouter:
         return await asyncio.to_thread(_probe)
 
     @router.get("/ai-selftest")
-    async def ai_selftest():
-        """Run EVERY AI task through the live router with sample input."""
+    async def ai_selftest(task: str = ""):
+        """Run AI tasks through the live router with sample input.
+
+        ``?task=<name>`` runs a single task (bounded call); omit to run them all.
+        """
         from services.ai.router import run_task
 
         samples: Dict[str, Dict[str, Any]] = {
@@ -98,12 +101,20 @@ def setup_debug_routes() -> APIRouter:
             "regenerate-script": {"niche": "Human Psychology", "prompt": "why people self-sabotage", "category": "Dark Psychology"},
         }
 
-        def _run_one(task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        def _run_one(task_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
             t0 = time.time()
-            env = run_task({**payload, "taskType": task})
-            return {"task": task, "ok": env["ok"], "model": env["model"],
+            env = run_task({**payload, "taskType": task_name})
+            return {"task": task_name, "ok": env["ok"], "model": env["model"],
                     "warning": env.get("warning"), "error": env.get("error"),
                     "ms": int((time.time() - t0) * 1000)}
+
+        if task:
+            if task not in samples:
+                return {"build": BUILD_ID, "error": f"unknown task '{task}'",
+                        "known": sorted(samples)}
+            res = await asyncio.to_thread(_run_one, task, samples[task])
+            return {"build": BUILD_ID, "passed": int(res["ok"]), "total": 1,
+                    "results": [res]}
 
         results = await asyncio.to_thread(
             lambda: [_run_one(t, p) for t, p in samples.items()])
