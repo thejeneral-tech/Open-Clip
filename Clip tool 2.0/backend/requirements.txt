@@ -1,0 +1,58 @@
+# ---- Web framework ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+gunicorn==23.0.0
+python-multipart==0.0.20
+email-validator==2.2.0
+
+# ---- Config / validation ----
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# ---- Database ----
+SQLAlchemy==2.0.36
+aiosqlite==0.20.0                 # default (SQLite) backend
+alembic==1.14.0
+# Optional PostgreSQL backend (set DB_BACKEND=postgres):
+# asyncpg==0.30.0
+# psycopg[binary]==3.2.3
+
+# ---- Task queue ----
+# Redis-free: Celery uses a filesystem broker + SQLite result backend.
+celery==5.4.0
+# kombu's filesystem broker locks message files via pywin32 on Windows.
+pywin32==308; sys_platform == "win32"
+
+# ---- Auth ----
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+# bcrypt 4.1 removed __about__.__version__, which passlib 1.7.4 reads -> noisy
+# "(trapped) error reading bcrypt version" on every hash. 4.0.1 keeps it quiet.
+bcrypt==4.0.1
+
+# ---- HTTP / AI ----
+httpx==0.28.1
+
+# ---- Media / vision ----
+ffmpeg-python==0.2.0
+opencv-python-headless==4.10.0.84
+mediapipe==0.10.18
+ultralytics==8.3.55
+numpy==1.26.4
+Pillow==11.0.0
+
+# ---- Transcription ----
+faster-whisper==1.1.0
+# openai-whisper==20240930        # optional reference engine (pulls torch); enable if WHISPER_ENGINE=whisper
+
+# ---- Speaker diarization (optional, heavy) ----
+# pyannote.audio==3.3.2           # enable for ENABLE_DIARIZATION=true
+
+# ---- Ingestion ----
+# NOT hard-pinned on purpose: YouTube changes frequently break older yt-dlp
+# releases ("Requested format is not available"). Keep it current — `pip install
+# -U yt-dlp` whenever downloads start failing.
+yt-dlp>=2026.3.17
+
+# ---- Storage (S3) ----
+boto3==1.35.92
