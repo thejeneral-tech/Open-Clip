@@ -127,25 +127,6 @@ class Settings(BaseSettings):
     ENABLE_DIARIZATION: bool = False
     HUGGINGFACE_TOKEN: str | None = None
 
-    # ---- YouTube ingestion (metadata-first / segment download) ----
-    # When True, YouTube imports skip the full-video download: clips are found
-    # from metadata + analytics (heatmap, comments, captions) and only the
-    # segments that become clips are downloaded. Uploads always use the full path.
-    YOUTUBE_SEGMENT_MODE: bool = True
-    YOUTUBE_HEIGHT_CAP: int = 1440           # matches the legacy bv*[height<=1440] selector
-    YOUTUBE_SEGMENT_PAD: float = 1.5         # seconds of padding downloaded around each clip
-    YOUTUBE_FETCH_HEATMAP: bool = True       # use the "most replayed" heatmap as a signal
-    YOUTUBE_FETCH_COMMENTS: bool = True      # mine comment-mentioned timestamps as a signal
-    YOUTUBE_MAX_COMMENTS: int = 400
-    # Preferred caption languages, tried in order (comma-separated or JSON env).
-    YOUTUBE_CAPTION_LANGS: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["en", "en-US", "en-GB", "en-orig"]
-    )
-    YOUTUBE_COOKIES_FILE: str | None = None  # yt-dlp cookiefile for age-restricted/private
-    # Whisper model used for the short per-segment passes (word-level caption
-    # timing). None -> reuse WHISPER_MODEL.
-    SEGMENT_WHISPER_MODEL: str | None = None
-
     # ---- Video processing ----
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
@@ -196,23 +177,6 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return v
         return []
-
-    @field_validator("YOUTUBE_CAPTION_LANGS", mode="before")
-    @classmethod
-    def _split_caption_langs(cls, v: Any) -> list[str]:
-        if v is None or v == "":
-            return ["en", "en-US", "en-GB", "en-orig"]
-        if isinstance(v, str):
-            s = v.strip()
-            if s.startswith("["):
-                try:
-                    return list(json.loads(s))
-                except json.JSONDecodeError:
-                    return ["en"]
-            return [i.strip() for i in s.split(",") if i.strip()]
-        if isinstance(v, list):
-            return v
-        return ["en"]
 
     @model_validator(mode="after")
     def _resolve_paths(self) -> Settings:

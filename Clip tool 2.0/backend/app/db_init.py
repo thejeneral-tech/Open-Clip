@@ -29,35 +29,6 @@ def _ensure_dirs() -> None:
         os.makedirs(path, exist_ok=True)
 
 
-# Columns added after the initial create_all schema. ``Base.metadata.create_all``
-# only creates *missing tables* — it never ALTERs an existing one — so additive
-# columns on an already-created SQLite DB must be backfilled by hand. Each entry
-# is (column_name, column_ddl); ``_ensure_columns`` adds any that are missing.
-_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
-    "clips": [
-        ("source_segment_path", "VARCHAR(1024)"),
-        ("source_offset", "FLOAT NOT NULL DEFAULT 0"),
-    ],
-    "videos": [
-        ("youtube_meta", "JSON NOT NULL DEFAULT '{}'"),
-    ],
-}
-
-
-def _ensure_columns(engine) -> None:
-    """Add any missing additive columns to existing SQLite tables (idempotent)."""
-    with engine.begin() as conn:
-        for table, columns in _ADDED_COLUMNS.items():
-            existing = {
-                row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")
-            }
-            if not existing:
-                continue  # table not created yet — create_all handles it
-            for name, ddl in columns:
-                if name not in existing:
-                    conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
-
-
 def init_db() -> None:
     """Create the data directories and the database schema (idempotent)."""
     _ensure_dirs()
@@ -67,8 +38,6 @@ def init_db() -> None:
     from app.core.database import Base, sync_engine
 
     Base.metadata.create_all(sync_engine)
-    if settings.is_sqlite:
-        _ensure_columns(sync_engine)
 
 
 if __name__ == "__main__":  # `python -m app.db_init`

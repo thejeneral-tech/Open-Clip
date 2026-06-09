@@ -21,17 +21,10 @@ class Clip(TimestampMixin, Base):
     )
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    # Source timing. start_time/end_time are ALWAYS absolute in the original video.
+    # Source timing.
     start_time: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     end_time: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     duration: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-
-    # Segment-download mode: this clip was rendered from a partial source file
-    # (only the bytes for [source_offset, ...] were downloaded). When set, render
-    # / export / reframe seek into ``source_segment_path`` at ``time - source_offset``.
-    # None means the whole-video flow (use Video.storage_path, offset 0).
-    source_segment_path: Mapped[str | None] = mapped_column(String(1024), default=None)
-    source_offset: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     # Copy / metadata.
     title: Mapped[str | None] = mapped_column(String(512), default=None)
