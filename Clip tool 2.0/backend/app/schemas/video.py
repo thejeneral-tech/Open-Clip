@@ -33,6 +33,12 @@ class ProcessOptions(BaseModel):
     enable_captions: bool = True
     model: str | None = None
 
+    # --- YouTube metadata-first / segment-download (ignored for uploads) ---
+    segment_download: bool = True            # download only clip segments, not the full video
+    use_youtube_signals: bool = True         # blend heatmap + comment timestamps into detection
+    use_youtube_captions: bool = True        # LLM over YouTube captions before the audio-Whisper fallback
+    segment_pad_seconds: float = Field(1.5, ge=0, le=10)
+
 
 class VideoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

@@ -141,7 +141,7 @@ async def import_youtube(
         source_url=str(payload.url),
         title=payload.title,
         status=JobStatus.QUEUED.value,
-        stage="downloading",
+        stage="fetching",
     )
     db.add(video)
     await db.commit()
@@ -207,7 +207,12 @@ async def process_video(
     video = await _owned_video(db, video_id, current_user)
     if video.status == JobStatus.PROCESSING.value:
         raise HTTPException(status_code=409, detail="Video is already processing")
-    if not video.storage_path:
+    # Ready = source bytes on disk (uploads / full-download YouTube) OR a fetched
+    # YouTube analytics bundle (segment mode downloads the clip segments later).
+    ingested = bool(video.storage_path) or (
+        video.source == VideoSource.YOUTUBE.value and bool(video.youtube_meta)
+    )
+    if not ingested:
         raise HTTPException(status_code=409, detail="Video is not ready (still ingesting)")
 
     opts = (options or ProcessOptions()).model_dump(mode="json")

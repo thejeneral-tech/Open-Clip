@@ -43,6 +43,11 @@ def clip_dir(project_id: int, video_id: int, clip_id: int) -> str:
     return f"{video_dir(project_id, video_id)}/clips/{clip_id}"
 
 
+def clip_segment_key(project_id: int, video_id: int, clip_id: int, ext: str = "mp4") -> str:
+    """The partial source segment downloaded for a single clip (segment download mode)."""
+    return f"{clip_dir(project_id, video_id, clip_id)}/segment.{ext.lstrip('.')}"
+
+
 def clip_preview_key(project_id: int, video_id: int, clip_id: int) -> str:
     return f"{clip_dir(project_id, video_id, clip_id)}/preview.mp4"
 

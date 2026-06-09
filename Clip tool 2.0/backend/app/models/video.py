@@ -1,10 +1,11 @@
 """Video model — an ingested source video that the pipeline clips."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from app.core.database import Base
 from app.models.enums import JobStatus, VideoSource
@@ -31,6 +32,11 @@ class Video(TimestampMixin, Base):
     # On-disk locations (storage backend keys).
     storage_path: Mapped[str | None] = mapped_column(String(1024), default=None)
     thumbnail_path: Mapped[str | None] = mapped_column(String(1024), default=None)
+
+    # YouTube analytics bundle (segment-download mode): normalized metadata +
+    # signals used to find clips without downloading the video — heatmap /
+    # most_replayed, chapters, comment-mentioned timestamps, is_live, etc.
+    youtube_meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
     # Probed media properties.
     duration_seconds: Mapped[float | None] = mapped_column(Float, default=None)
