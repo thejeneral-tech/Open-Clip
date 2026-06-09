@@ -14,7 +14,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.services import prompts
-from app.services.ollama_client import OllamaClient, ollama
+from app.services.ollama_client import OllamaClient, OllamaError, ollama
 from app.services.transcript_utils import (
     format_for_llm,
     segments_in_range,
@@ -155,11 +155,14 @@ def detect_viral_clips(
 
     all_candidates: list[CandidateClip] = []
     analyses: list[dict[str, Any]] = []
+    window_errors: list[str] = []
+    windows_attempted = 0
 
     for win_start, win_end in windows:
         win_segments = segments_in_range(segments, win_start, win_end)
         if not win_segments:
             continue
+        windows_attempted += 1
         transcript_text = format_for_llm(win_segments)
         user_prompt = prompts.VIRAL_USER_TEMPLATE.format(
             count=per_window,
@@ -177,6 +180,7 @@ def detect_viral_clips(
             )
         except Exception as exc:
             logger.error("Viral detection failed for window %s-%s: %s", win_start, win_end, exc)
+            window_errors.append(str(exc))
             continue
 
         raw_clips = parsed.get("clips", []) if isinstance(parsed, dict) else []
@@ -191,6 +195,16 @@ def detect_viral_clips(
                 "tokens_eval": meta.get("eval_count"),
                 "duration_ms": meta.get("duration_ms"),
             }
+        )
+
+    # If every window we tried failed to reach the model, that's a technical
+    # failure (model missing, Ollama down, timeouts) — not "this video has no
+    # viral moments". Surface the real cause instead of an empty result that the
+    # caller would report as "No viral clips detected".
+    if not all_candidates and windows_attempted and len(window_errors) == windows_attempted:
+        raise OllamaError(
+            f"Clip detection failed for all {windows_attempted} window(s); "
+            f"last error: {window_errors[-1]}"
         )
 
     deduped = _dedupe_overlaps(all_candidates)

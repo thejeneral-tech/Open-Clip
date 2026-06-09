@@ -1,4 +1,7 @@
+import pytest
+
 from app.services import viral_detection as vd
+from app.services.ollama_client import OllamaError
 from app.services.viral_detection import CandidateClip, detect_viral_clips
 
 
@@ -49,3 +52,20 @@ def test_detect_viral_clips_end_to_end(sample_segments):
     assert len(clips) == 1
     assert clips[0].viral_score == 92
     assert analyses and analyses[0]["analysis_type"] == "viral_detection"
+
+
+class _BrokenClient:
+    """Every call fails — e.g. the configured model isn't installed (404)."""
+
+    def generate_json(self, prompt, *, model=None, system=None, schema=None, options=None, retries=2):
+        raise OllamaError("model 'qwen3:32b' not found")
+
+
+def test_detect_surfaces_model_error_instead_of_empty(sample_segments):
+    # When every window fails to reach the model, the caller must see the real
+    # cause, not a misleading "No viral clips detected" from an empty result.
+    with pytest.raises(OllamaError, match="qwen3:32b"):
+        detect_viral_clips(
+            sample_segments, duration=9.0, target_count=5,
+            min_seconds=5, max_seconds=90, client=_BrokenClient(),
+        )
