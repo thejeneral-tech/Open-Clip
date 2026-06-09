@@ -122,6 +122,22 @@ class Settings(BaseSettings):
     # stricter but never looser. 0 disables the global cap. Default 1800 = 30 min.
     BOT_MAX_VIDEO_DURATION_SECONDS: int = 1800
 
+    # ---- Publishing: YouTube OAuth ----
+    # A Google Cloud OAuth 2.0 *Web application* client with the "YouTube Data
+    # API v3" enabled. Connecting a channel runs a real OAuth consent flow and
+    # stores the returned refresh token on the connector row; uploads use
+    # youtube.videos.insert. Other platforms (TikTok/IG/X/Facebook) are surfaced
+    # in the UI as "coming soon" until their integrations land.
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    # Must EXACTLY match an "Authorized redirect URI" on the OAuth client. Google
+    # redirects the browser here after consent; the backend handles the code.
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/publishing/youtube/callback"
+    # Where the backend sends the browser back to once a channel is connected.
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    # Default privacy for bot-published Shorts ("public" | "unlisted" | "private").
+    YOUTUBE_DEFAULT_PRIVACY: Literal["public", "unlisted", "private"] = "private"
+
     # ---- Transcription ----
     WHISPER_ENGINE: Literal["faster-whisper", "whisper"] = "faster-whisper"
     WHISPER_MODEL: str = "large-v3-turbo"
@@ -241,6 +257,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def youtube_oauth_configured(self) -> bool:
+        """True once a Google OAuth client is present (channels can be connected)."""
+        return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET)
 
 
 @lru_cache

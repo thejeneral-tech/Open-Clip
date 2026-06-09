@@ -389,7 +389,13 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
         return []
 
     pub_cfg = bot.publishing_config or {}
-    platforms = pub_cfg.get("platforms") or ["manual"]
+    requested = pub_cfg.get("platforms") or ["manual"]
+    # Only auto-publish to platforms this bot actually has a connected channel
+    # for (e.g. a connected YouTube channel). Anything else falls back to the
+    # manual download-&-post queue rather than queuing a job that can't post.
+    platforms = [p for p in requested if p == "manual" or _connectors_for(db, bot, p)]
+    if not platforms:
+        platforms = ["manual"]
     threshold = float(pub_cfg.get("auto_publish_threshold", 80))
     spacing = int(pub_cfg.get("schedule_spacing_minutes", 120))
     mode = bot.approval_mode

@@ -21,6 +21,7 @@ import type {
   User,
   UserSettings,
   Video,
+  YouTubeStatus,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
@@ -304,7 +305,14 @@ export const api = {
   listConnectors: () => request<Connector[]>("/publishing/connectors"),
   createConnector: (data: Partial<Connector> & { credentials?: Record<string, unknown> }) =>
     request<Connector>("/publishing/connectors", { method: "POST", body: JSON.stringify(data) }),
+  updateConnector: (id: number, data: { name?: string; config?: Record<string, unknown>; bot_id?: number | null }) =>
+    request<Connector>(`/publishing/connectors/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  assignConnector: (id: number, botId: number | null) =>
+    request<Connector>(`/publishing/connectors/${id}/assign`, { method: "POST", body: JSON.stringify({ bot_id: botId }) }),
   deleteConnector: (id: number) => request<void>(`/publishing/connectors/${id}`, { method: "DELETE" }),
+  youtubeStatus: () => request<YouTubeStatus>("/publishing/youtube/status"),
+  youtubeAuthUrl: (data: { bot_id?: number | null; name?: string }) =>
+    request<{ auth_url: string }>("/publishing/youtube/auth-url", { method: "POST", body: JSON.stringify(data) }),
   listJobs: (botId?: number, status?: string) => {
     const q = new URLSearchParams();
     if (botId) q.set("bot_id", String(botId));

@@ -311,17 +311,33 @@ export interface TrendItem {
   created_at: string;
 }
 
+export type PublishPlatform = "youtube" | "tiktok" | "instagram" | "x" | "facebook" | "manual";
+
+export interface ChannelConfig {
+  channel_id?: string;
+  channel_title?: string;
+  channel_thumbnail?: string | null;
+  privacy?: "public" | "unlisted" | "private";
+  made_for_kids?: boolean;
+  [k: string]: unknown;
+}
+
 export interface Connector {
   id: number;
   owner_id: number;
   bot_id: number | null;
-  platform: SourcePlatform;
+  platform: PublishPlatform;
   name: string;
   status: string;
-  config: Record<string, unknown>;
+  config: ChannelConfig;
   has_credentials: boolean;
   last_error: string | null;
   created_at: string;
+}
+
+export interface YouTubeStatus {
+  configured: boolean;
+  redirect_uri: string;
 }
 
 export interface PublishingJob {

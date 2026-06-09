@@ -1,11 +1,15 @@
-"""External social-platform publishing connectors.
+"""Social-platform publishing connectors.
 
-These require the operator's own credentials on the connector row — the platform
-makes no calls until you connect an account. The YouTube connector implements a
-genuine resumable upload against the Data API v3 (driven by an OAuth access
-token); the others define the same contract and validate credentials, raising a
-clear, actionable error until a full integration/token is supplied. This keeps
-the system honest: it never pretends to post when it can't.
+YouTube is a full integration: a channel is connected via OAuth (see
+``youtube_oauth`` and the ``/publishing/youtube/*`` endpoints), which stores a
+refresh token on the connector row. At publish time we mint a fresh access
+token from that refresh token and upload the rendered clip as a Short via the
+YouTube Data API v3 resumable endpoint.
+
+The other platforms (TikTok / Instagram / X / Facebook) are registered as
+"coming soon" connectors: they validate to a clear, honest error instead of
+pretending to post. The UI surfaces them as disabled so the queue never silently
+drops a clip.
 """
 from __future__ import annotations
 
@@ -22,6 +26,11 @@ from app.services.publishing.base import (
     PublishResult,
 )
 from app.services.publishing.registry import register
+from app.services.publishing.youtube_oauth import (
+    OAuthError,
+    is_configured,
+    refresh_access_token,
+)
 
 if TYPE_CHECKING:
     from app.models.publishing import PublishingConnector, PublishingJob
@@ -32,50 +41,84 @@ logger = get_logger(__name__)
 class YouTubeConnector(PublishConnector):
     """Upload a Short via the YouTube Data API v3 resumable endpoint.
 
-    Expects ``connector.credentials = {"access_token": "...", ...}`` (an OAuth2
-    token with ``youtube.upload`` scope, refreshed by the operator). Token
-    acquisition/refresh is intentionally left to the operator's OAuth setup.
+    The connector row stores ``credentials = {"refresh_token": "...", ...}`` from
+    the OAuth flow. We never persist long-lived access tokens — each publish
+    refreshes one from the refresh token, so a revoked grant surfaces cleanly.
     """
 
     platform = "youtube"
+    requires_credentials = True
+
+    def validate(self, connector: "PublishingConnector") -> tuple[bool, str]:
+        if not is_configured():
+            return False, (
+                "YouTube isn't configured on the server (GOOGLE_CLIENT_ID / "
+                "GOOGLE_CLIENT_SECRET). Ask the operator to set them in .env."
+            )
+        if not (connector.credentials or {}).get("refresh_token"):
+            return False, (
+                "This YouTube channel isn't connected. Open Publishing → Channels "
+                "and click Connect."
+            )
+        return True, "ready"
 
     def publish(
         self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector"
     ) -> PublishResult:
-        token = (connector.credentials or {}).get("access_token")
-        if not token:
+        refresh_token = (connector.credentials or {}).get("refresh_token")
+        if not refresh_token:
             raise ConnectorNotConfigured(
-                "YouTube connector needs an OAuth2 access_token (youtube.upload scope) "
-                "in its credentials. Connect a channel under Publishing → Connectors."
+                "This YouTube channel isn't connected. Reconnect it under "
+                "Publishing → Channels."
             )
         if not asset_path or not os.path.exists(asset_path):
             return PublishResult(success=False, detail="Rendered asset not found")
 
-        privacy = job.payload.get("privacy") or connector.config.get("privacy", "private")
-        tags = job.payload.get("hashtags", []) or []
+        try:
+            token = refresh_access_token(refresh_token)
+        except OAuthError as exc:
+            # Most often invalid_grant: the refresh token was revoked/expired.
+            raise ConnectorNotConfigured(
+                f"YouTube sign-in expired — reconnect the channel. ({exc})"
+            ) from exc
+
+        cfg = connector.config or {}
+        payload = job.payload or {}
+        privacy = payload.get("privacy") or cfg.get("privacy", "private")
+        tags = [t.lstrip("#") for t in (payload.get("hashtags") or [])][:30]
+        if not tags:
+            tags = cfg.get("default_tags") or ["shorts"]
+        # #Shorts in the description (plus a vertical, <=180s clip) tells YouTube
+        # to classify the upload as a Short.
+        base_desc = job.description or ""
+        description = base_desc if "#shorts" in base_desc.lower() else f"{base_desc}\n\n#Shorts"
         body = {
             "snippet": {
                 "title": (job.title or "Short")[:100],
-                "description": job.description or "",
-                "tags": [t.lstrip("#") for t in tags][:15],
-                "categoryId": str(connector.config.get("category_id", "22")),
+                "description": description[:5000],
+                "tags": tags,
+                "categoryId": str(cfg.get("category_id", "22")),
             },
-            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+            "status": {
+                "privacyStatus": privacy,
+                "selfDeclaredMadeForKids": bool(cfg.get("made_for_kids", False)),
+            },
         }
+
         size = os.path.getsize(asset_path)
         init_url = (
             "https://www.googleapis.com/upload/youtube/v3/videos"
             "?uploadType=resumable&part=snippet,status"
         )
-        headers = {
+        init_headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json; charset=UTF-8",
             "X-Upload-Content-Length": str(size),
             "X-Upload-Content-Type": "video/*",
         }
         try:
-            with httpx.Client(timeout=120) as client:
-                init = client.post(init_url, headers=headers, content=json.dumps(body))
+            with httpx.Client(timeout=600) as client:
+                init = client.post(init_url, headers=init_headers, content=json.dumps(body))
                 init.raise_for_status()
                 upload_url = init.headers.get("Location")
                 if not upload_url:
@@ -101,66 +144,43 @@ class YouTubeConnector(PublishConnector):
         )
 
 
-class _CredentialedStub(PublishConnector):
-    """Shared base for platforms whose official upload requires an approved app.
+class ComingSoonConnector(PublishConnector):
+    """Placeholder for platforms we haven't integrated yet.
 
-    Validates credentials and, if a generic ``upload_webhook`` is configured
-    (e.g. a self-hosted relay or Make/n8n endpoint the operator runs), POSTs the
-    asset there. Otherwise it raises a clear not-configured error rather than
-    silently faking a post.
+    Validates to an honest "coming soon" message so a queued clip lands in
+    ``awaiting_approval`` with a clear reason instead of silently failing.
     """
+
+    requires_credentials = False
+    label = "This platform"
+
+    def validate(self, connector: "PublishingConnector") -> tuple[bool, str]:
+        return False, f"{self.label} publishing is coming soon."
 
     def publish(
         self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector"
     ) -> PublishResult:
-        webhook = (connector.config or {}).get("upload_webhook")
-        if not webhook:
-            raise ConnectorNotConfigured(
-                f"{self.platform} publishing requires an approved API app. Configure an "
-                f"'upload_webhook' on the connector (a relay you control) or use the "
-                f"manual queue connector to download and post."
-            )
-        if not asset_path or not os.path.exists(asset_path):
-            return PublishResult(success=False, detail="Rendered asset not found")
-        try:
-            with httpx.Client(timeout=300) as client, open(asset_path, "rb") as fh:
-                resp = client.post(
-                    webhook,
-                    headers={"Authorization": f"Bearer {(connector.credentials or {}).get('token', '')}"},
-                    data={
-                        "title": job.title or "",
-                        "description": job.description or "",
-                        "platform": self.platform,
-                    },
-                    files={"file": (os.path.basename(asset_path), fh, "video/mp4")},
-                )
-                resp.raise_for_status()
-                data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-        except httpx.HTTPError as exc:
-            return PublishResult(success=False, detail=f"{self.platform} relay failed: {exc}")
-        return PublishResult(
-            success=True,
-            external_post_id=data.get("id"),
-            external_url=data.get("url"),
-            detail=f"Relayed to {self.platform}",
-            raw=data,
-        )
+        raise ConnectorNotConfigured(f"{self.label} publishing is coming soon.")
 
 
-class TikTokConnector(_CredentialedStub):
+class TikTokConnector(ComingSoonConnector):
     platform = "tiktok"
+    label = "TikTok"
 
 
-class InstagramConnector(_CredentialedStub):
+class InstagramConnector(ComingSoonConnector):
     platform = "instagram"
+    label = "Instagram"
 
 
-class XConnector(_CredentialedStub):
+class XConnector(ComingSoonConnector):
     platform = "x"
+    label = "X (Twitter)"
 
 
-class FacebookConnector(_CredentialedStub):
+class FacebookConnector(ComingSoonConnector):
     platform = "facebook"
+    label = "Facebook"
 
 
 for _c in (
