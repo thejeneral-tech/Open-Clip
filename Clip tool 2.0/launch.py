@@ -237,6 +237,48 @@ def which(name: str) -> str | None:
     return shutil.which(name)
 
 
+def _node_bin_dir() -> str | None:
+    """Find the directory containing the ``node``/``npm`` executables.
+
+    Version managers (nvm, fnm, Volta, ``n``) install Node under the user's home
+    and only add their bin dir to PATH from an interactive shell's init files.
+    The launcher is frequently started from a context that never sourced those
+    (an IDE, a ``.desktop`` entry, a login shell, ``sudo``), so PATH alone isn't
+    enough — fall back to scanning the usual version-manager locations.
+    """
+    found = shutil.which("npm") or shutil.which("node")
+    if found:
+        return os.path.dirname(found)
+
+    home = Path.home()
+    search: list[Path] = []
+    search += sorted(home.glob(".nvm/versions/node/*/bin"), reverse=True)
+    search += sorted(home.glob(".fnm/node-versions/*/installation/bin"), reverse=True)
+    search += sorted(home.glob(".local/share/fnm/node-versions/*/installation/bin"), reverse=True)
+    search += [home / ".volta" / "bin", home / "n" / "bin",
+               Path("/usr/local/bin"), Path("/opt/homebrew/bin")]
+    npm_name = "npm.cmd" if IS_WIN else "npm"
+    for d in search:
+        if (d / npm_name).exists():
+            return str(d)
+    return None
+
+
+def ensure_node_on_path() -> None:
+    """Make node/npm discoverable even when launched outside an nvm/fnm shell.
+
+    Prepends the resolved node bin dir to ``PATH`` so both ``which()`` checks and
+    every spawned service (which inherit this process's environment) can find
+    ``npm`` — fixing the common "npm not found" failure on Linux/macOS where Node
+    came from a version manager.
+    """
+    if shutil.which("npm"):
+        return
+    bin_dir = _node_bin_dir()
+    if bin_dir:
+        os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+
+
 def run(cmd: list[str], capture: bool = False, cwd: Path | None = None,
         env: dict | None = None) -> tuple[int, str]:
     """Run a command. When capture=False the output streams to the terminal.
@@ -477,10 +519,15 @@ def stop_service(name: str) -> None:
 #  Service definitions
 # --------------------------------------------------------------------------- #
 def npm_argv(*args: str) -> list[str]:
-    """npm is a .cmd on Windows, which needs to run through the shell."""
+    """npm is a .cmd on Windows, which needs to run through the shell.
+
+    On POSIX, resolve npm to an absolute path (``ensure_node_on_path`` has
+    already augmented PATH) so spawning works even when npm lives in a
+    version-manager bin dir rather than a system one.
+    """
     if IS_WIN:
         return [os.environ.get("COMSPEC", "cmd.exe"), "/c", "npm", *args]
-    return ["npm", *args]
+    return [shutil.which("npm") or "npm", *args]
 
 
 def api_cmd() -> list[str]:
@@ -940,6 +987,7 @@ def menu() -> None:
 def main() -> int:
     global PROD
     _setup_io()
+    ensure_node_on_path()
     parser = argparse.ArgumentParser(
         prog="launch.py", description="OpenClip launcher 🎬 (local, no Docker)", add_help=True
     )
