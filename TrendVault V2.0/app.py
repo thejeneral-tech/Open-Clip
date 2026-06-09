@@ -30,7 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from core import constants
 from core.constants import (
-    APP_VERSION, BACKGROUNDS_DIR, CAPTIONS_DIR, GENERATED_VOICES,
+    APP_VERSION, BACKGROUNDS_DIR, BUILD_ID, CAPTIONS_DIR, GENERATED_VOICES,
     INTEL_CLIPS_DIR, INTEL_VIDEO_DIR, MUSIC_DIR,
     PREVIEWS_DIR, PUBLIC_AUDIO_DIR, STATIC_DIR, TREND_VAULT_OUT,
 )
@@ -81,7 +81,18 @@ async def _lifespan(app: FastAPI):
         logger.info("ffmpeg: %s | ffprobe: %s", resolve_ffmpeg(), resolve_ffprobe())
     except Exception as e:  # noqa: BLE001
         logger.warning("ffmpeg resolve failed: %s", e)
-    logger.info("TrendVault Studio v%s ready on port %s", APP_VERSION, constants.__dict__.get("PORT", 3001))
+    # ── BOOT banner — proves which project/build this process is actually running.
+    import sys as _sys
+    from core.config import config as _cfg
+    logger.info("[BOOT] Project root:   %s", constants.BASE_DIR)
+    logger.info("[BOOT] Backend file:   %s", os.path.abspath(__file__))
+    logger.info("[BOOT] Static dir:     %s", STATIC_DIR)
+    logger.info("[BOOT] Trend Vault:    %s", os.path.join(STATIC_DIR, "trend-vault.html"))
+    logger.info("[BOOT] Python exe:     %s", _sys.executable)
+    logger.info("[BOOT] Server URL:     http://127.0.0.1:%s", constants.PORT)
+    logger.info("[BOOT] Process ID:     %s", os.getpid())
+    logger.info("[BOOT] LLM URL:        %s", _cfg.local_llm_url)
+    logger.info("[BOOT] Build/Version:  %s  (v%s)", BUILD_ID, APP_VERSION)
     yield
     # ── shutdown ──
     logger.info("TrendVault Studio shutting down")
@@ -129,7 +140,10 @@ if AUTH_ENABLED:
                    ".ttf", ".map", ".ico", ".webmanifest")
 
     def _is_auth_exempt(path: str) -> bool:
-        return path in AUTH_EXEMPT_EXACT or path.endswith(_STATIC_EXT)
+        # /api/debug/* are localhost-only diagnostics (no secrets/transcripts) and
+        # must work before login so a broken deploy can be diagnosed.
+        return (path in AUTH_EXEMPT_EXACT or path.endswith(_STATIC_EXT)
+                or path.startswith("/api/debug/"))
 
     def _is_trusted_loopback(request: Request) -> bool:
         """True only for a DIRECT loopback connection with no proxy/tunnel
@@ -188,6 +202,8 @@ from services.media import get_media_service
 from services.render import get_render_service
 from services.script import get_script_service
 from services.tts import get_tts_service
+from routes.ai_routes import setup_ai_routes
+from routes.debug_routes import setup_debug_routes
 from routes.intelligence_routes import setup_intelligence_routes
 from routes.llm_routes import setup_llm_routes
 from routes.media_routes import setup_media_routes
@@ -197,6 +213,8 @@ from routes.script_routes import setup_script_routes
 from routes.voice_routes import setup_voice_routes
 
 app.include_router(setup_page_routes())
+app.include_router(setup_ai_routes())
+app.include_router(setup_debug_routes())
 app.include_router(setup_script_routes(get_script_service()))
 app.include_router(setup_voice_routes(get_tts_service()))
 app.include_router(setup_render_routes(get_render_service()))
@@ -208,12 +226,12 @@ app.include_router(setup_auth_routes(auth_manager))
 
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": APP_VERSION}
+    return {"status": "healthy", "version": APP_VERSION, "build": BUILD_ID}
 
 
 @app.get("/api/version")
 async def version():
-    return {"version": APP_VERSION}
+    return {"version": APP_VERSION, "build": BUILD_ID}
 
 
 @app.get("/login")

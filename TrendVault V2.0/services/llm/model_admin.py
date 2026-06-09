@@ -20,6 +20,11 @@ from core.constants import DATA_DIR
 _SETTINGS_FILE = os.path.join(DATA_DIR, "llm-settings.json")
 _PROBE_TIMEOUT = httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=3.0)
 
+# Per-task-role model overrides (e.g. {"improve": "llama3.1:8b", "script": "..."}).
+# Empty by default → every role falls back to config.local_llm_model. Persisted
+# under the "roles" key of llm-settings.json alongside url/model.
+_ROLE_OVERRIDES: Dict[str, str] = {}
+
 
 def _ollama_base() -> str:
     """Host root for Ollama's native API — the config URL with a trailing /v1 removed."""
@@ -66,7 +71,25 @@ def get_status() -> Dict[str, Any]:
         "reachable": backend != "unknown",
         "pullable": backend == "ollama",
         "models": models,
+        "roles": dict(_ROLE_OVERRIDES),
     }
+
+
+def get_role_model(role: str) -> Optional[str]:
+    """Model mapped to a task role (e.g. "improve", "script"), or None if unmapped."""
+    if not role:
+        return None
+    return _ROLE_OVERRIDES.get(role.strip().lower()) or None
+
+
+def _persist() -> None:
+    """Atomically write the current url/model/roles to the settings file."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = _SETTINGS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"url": config.local_llm_url, "model": config.local_llm_model,
+                   "roles": _ROLE_OVERRIDES}, f, indent=2)
+    os.replace(tmp, _SETTINGS_FILE)
 
 
 def save_settings(url: Optional[str] = None, model: Optional[str] = None) -> None:
@@ -75,20 +98,34 @@ def save_settings(url: Optional[str] = None, model: Optional[str] = None) -> Non
         url = url.strip()
         if url:
             config.local_llm_url = url
+            # Backend changed — the LLM client must re-probe native vs /v1 transport.
+            try:
+                from lib import local_llm
+                local_llm.reset_backend_cache()
+            except Exception:  # noqa: BLE001
+                pass
     if model is not None:
         model = model.strip()
         if model:
             config.local_llm_model = model
-    os.makedirs(DATA_DIR, exist_ok=True)
-    tmp = _SETTINGS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"url": config.local_llm_url, "model": config.local_llm_model},
-                  f, indent=2)
-    os.replace(tmp, _SETTINGS_FILE)
+    _persist()
+
+
+def set_role_model(role: str, model: Optional[str]) -> None:
+    """Map a task role to a model (or clear it with a blank/None model). Persists."""
+    role = (role or "").strip().lower()
+    if not role:
+        return
+    model = (model or "").strip()
+    if model:
+        _ROLE_OVERRIDES[role] = model
+    else:
+        _ROLE_OVERRIDES.pop(role, None)
+    _persist()
 
 
 def load_overrides() -> None:
-    """Apply persisted url/model over the .env-derived defaults. Call at startup."""
+    """Apply persisted url/model/roles over the .env-derived defaults. Call at startup."""
     try:
         with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -100,6 +137,12 @@ def load_overrides() -> None:
         config.local_llm_url = url
     if model:
         config.local_llm_model = model
+    roles = data.get("roles")
+    if isinstance(roles, dict):
+        _ROLE_OVERRIDES.clear()
+        for k, v in roles.items():
+            if isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip():
+                _ROLE_OVERRIDES[k.strip().lower()] = v.strip()
 
 
 async def pull_stream(name: str):
