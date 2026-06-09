@@ -18,6 +18,72 @@ def test_build_tokens_skips_blanks():
     assert tokens[0]["word"] == "hi"
 
 
+def test_build_tokens_strips_commas():
+    words = [
+        {"word": "However,", "start": 0, "end": 1},
+        {"word": "1,000", "start": 1, "end": 2},
+        {"word": ",", "start": 2, "end": 3},  # lone comma -> dropped
+    ]
+    tokens = build_tokens(words)
+    assert [t["word"] for t in tokens] == ["However", "1000"]
+
+
+def _style_fields(ass: str) -> list[str]:
+    line = next(l for l in ass.splitlines() if l.startswith("Style: Default"))
+    return line.split(",")
+
+
+def test_render_ass_events_format_field_count_matches_dialogue():
+    # The [Events] Format must declare the same number of fields that each
+    # Dialogue line provides (incl. the empty Name) — otherwise libass shifts
+    # the columns and the Text field absorbs a stray leading comma.
+    ass = render_ass(_tokens(), "hormozi", 1080, 1920)
+    fmt = next(l for l in ass.splitlines()
+               if l.startswith("Format:") and "Text" in l and "Start" in l)
+    assert "Name" in fmt
+    n_fields = len(fmt.split(":", 1)[1].split(","))
+    dialogue = next(l for l in ass.splitlines() if l.startswith("Dialogue"))
+    # values before the Text field == n_fields - 1
+    head = dialogue.split(":", 1)[1].split(",", n_fields - 1)
+    assert len(head) == n_fields
+
+
+def test_render_ass_caption_text_has_no_leading_comma():
+    tokens = build_tokens([
+        {"word": "Well,", "start": 0.0, "end": 0.4},
+        {"word": "1,000", "start": 0.4, "end": 0.8},
+    ])
+    ass = render_ass(tokens, "hormozi", 1080, 1920)
+    fmt = next(l for l in ass.splitlines()
+               if l.startswith("Format:") and "Text" in l and "Start" in l)
+    n_fields = len(fmt.split(":", 1)[1].split(","))
+    for line in ass.splitlines():
+        if line.startswith("Dialogue"):
+            text = line.split(",", n_fields - 1)[n_fields - 1]
+            assert "," not in text
+            assert not text.lstrip().startswith(",")
+
+
+def test_render_ass_size_is_65_percent():
+    style = get_style("hormozi")
+    ass = render_ass(_tokens(), "hormozi", 1080, 1920)
+    fontsize = int(_style_fields(ass)[2])
+    assert fontsize == max(12, round(style.font_scale * 1920 * cap.CAPTION_SIZE_SCALE))
+    assert fontsize < round(style.font_scale * 1920)  # smaller than full size
+
+
+def test_render_ass_anchors_to_lower_third():
+    # All presets render bottom-centered (alignment 2) in the lower third,
+    # regardless of the preset's own placement (hormozi is normally centered).
+    for name in ["hormozi", "modern_tiktok", "minimal", "gaming", "podcast"]:
+        fields = _style_fields(render_ass(_tokens(), name, 1080, 1920))
+        alignment, margin_v = int(fields[-5]), int(fields[-2])
+        assert alignment == 2
+        assert margin_v == round(1920 * cap.CAPTION_MARGIN_V_FRAC)
+        # bottom of the lower third of a 1920-tall frame starts at y=1280
+        assert 1920 - margin_v >= 1280
+
+
 def test_render_ass_has_header_and_events():
     ass = render_ass(_tokens(), "hormozi", 1080, 1920)
     assert "[V4+ Styles]" in ass

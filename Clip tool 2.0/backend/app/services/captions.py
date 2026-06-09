@@ -46,6 +46,15 @@ class StylePreset:
 WHITE = _ass_color(255, 255, 255)
 BLACK = _ass_color(0, 0, 0)
 
+# Global caption layout (applied at render time, on top of every preset):
+#   * size   — 65% of each preset's nominal font size,
+#   * position — anchored bottom-center in the lower third of the frame.
+# These are fractions of the output frame height, so they hold across aspect
+# ratios / resolutions.
+CAPTION_SIZE_SCALE = 0.65
+CAPTION_ALIGNMENT = 2              # ASS numpad: 2 = bottom-center
+CAPTION_MARGIN_V_FRAC = 0.15      # text baseline sits ~15% up from the bottom
+
 STYLES: dict[str, StylePreset] = {
     CaptionStyle.HORMOZI.value: StylePreset(
         fontname="DejaVu Sans", font_scale=0.072, bold=True, uppercase=True,
@@ -84,7 +93,10 @@ def build_tokens(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Initial caption tokens from clip-relative words."""
     tokens: list[dict[str, Any]] = []
     for w in words:
-        word = str(w.get("word", "")).strip()
+        # Captions read cleaner without commas ("however," -> "however",
+        # "1,000" -> "1000"); strip them at the source so every render path
+        # (ASS / SRT / VTT) is comma-free.
+        word = str(w.get("word", "")).replace(",", "").strip()
         if not word:
             continue
         tokens.append(
@@ -200,8 +212,12 @@ def render_ass(
 ) -> str:
     """Render an ASS subtitle document with word-level highlighting."""
     style = get_style(style_name)
-    fontsize = max(12, int(round(style.font_scale * height)))
+    fontsize = max(12, int(round(style.font_scale * height * CAPTION_SIZE_SCALE)))
     bold = -1 if style.bold else 0
+    # Override each preset's own placement so captions always land in the lower
+    # third, bottom-centered, regardless of the chosen style.
+    alignment = CAPTION_ALIGNMENT
+    margin_v = max(0, int(round(height * CAPTION_MARGIN_V_FRAC)))
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -212,10 +228,10 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{style.outline_color},{BLACK},{bold},0,0,0,100,100,0,0,1,{style.outline},{style.shadow},{style.alignment},40,40,{style.margin_v},1
+Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{style.outline_color},{BLACK},{bold},0,0,0,100,100,0,0,1,{style.outline},{style.shadow},{alignment},40,40,{margin_v},1
 
 [Events]
-Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     events: list[str] = []
