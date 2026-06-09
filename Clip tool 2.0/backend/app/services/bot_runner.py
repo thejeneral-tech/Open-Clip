@@ -97,6 +97,13 @@ def run_discovery(db: Session, bot: Bot) -> list[TrendItem]:
     """Poll sources, filter, dedupe, and persist new :class:`TrendItem` rows."""
     disc_cfg = bot.discovery_config or {}
     filters = bot.filter_config or {}
+    # Clamp the bot's max-duration filter to the global ceiling so no bot ever
+    # discovers videos longer than the deployment allows (default 30 min). A bot
+    # may set a stricter limit; it just can't exceed the ceiling.
+    cap = settings.BOT_MAX_VIDEO_DURATION_SECONDS
+    if cap and cap > 0:
+        cur = filters.get("max_duration")
+        filters = {**filters, "max_duration": min(cur, cap) if cur else cap}
     limit = int(disc_cfg.get("max_items_per_source", 25))
     lookback = int(disc_cfg.get("lookback_hours", 168))
 

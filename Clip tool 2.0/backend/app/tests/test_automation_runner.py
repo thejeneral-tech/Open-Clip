@@ -109,6 +109,60 @@ def test_run_discovery_filters_and_dedupes(monkeypatch):
         assert rejected == 1
 
 
+def _duration_items() -> list[DiscoveredItem]:
+    now = datetime.now(timezone.utc)
+    return [
+        DiscoveredItem(platform="youtube", external_id="long", url="https://y/long",
+                       title="ai breakthrough", description="llm", duration_seconds=2400,  # 40 min
+                       published_at=now, metrics={"views": 1000}),
+        DiscoveredItem(platform="youtube", external_id="short", url="https://y/short",
+                       title="ai breakthrough", description="llm", duration_seconds=1200,  # 20 min
+                       published_at=now, metrics={"views": 1000}),
+    ]
+
+
+def test_run_discovery_caps_video_duration_at_global_ceiling(monkeypatch):
+    """The global ceiling rejects >30 min videos even if the bot allows longer."""
+    from app.core.database import session_scope
+
+    monkeypatch.setattr(bot_runner.settings, "BOT_MAX_VIDEO_DURATION_SECONDS", 1800)
+    monkeypatch.setattr(bot_runner, "discover_source", lambda *a, **k: _duration_items())
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id)
+        # A generous per-bot limit is still clamped down to the 1800s ceiling.
+        bot.filter_config = {**bot.filter_config, "max_duration": 10800}
+        db.add(TrendSource(owner_id=u.id, bot_id=bot.id, platform="youtube", name="src",
+                           identifier="@chan", list_mode=SourceListMode.ALLOW.value))
+        db.flush()
+        created = bot_runner.run_discovery(db, bot)
+        assert [c.external_id for c in created] == ["short"]
+        long_item = db.query(TrendItem).filter(
+            TrendItem.bot_id == bot.id, TrendItem.external_id == "long").one()
+        assert long_item.status == TrendItemStatus.REJECTED.value
+        assert "too long" in (long_item.reason or "")
+
+
+def test_run_discovery_ceiling_disabled_with_zero(monkeypatch):
+    """Setting the ceiling to 0 disables the global cap (bot limit applies as-is)."""
+    from app.core.database import session_scope
+
+    monkeypatch.setattr(bot_runner.settings, "BOT_MAX_VIDEO_DURATION_SECONDS", 0)
+    monkeypatch.setattr(bot_runner, "discover_source", lambda *a, **k: _duration_items())
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id)
+        bot.filter_config = {**bot.filter_config, "max_duration": 10800}
+        db.add(TrendSource(owner_id=u.id, bot_id=bot.id, platform="youtube", name="src2",
+                           identifier="@chan2", list_mode=SourceListMode.ALLOW.value))
+        db.flush()
+        created = bot_runner.run_discovery(db, bot)
+        # No global cap → both the 40-min and 20-min videos pass.
+        assert {c.external_id for c in created} == {"long", "short"}
+
+
 def test_run_scoring_approves_above_threshold():
     """Manual/semi-auto bots use the threshold strategy: approve every item >= min_score."""
     from app.core.database import session_scope

@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     # Safety valve: ingestion/processing per bot cycle is capped here regardless
     # of preset settings, so a misconfigured bot can't flood the worker.
     BOT_MAX_VIDEOS_PER_RUN: int = 5
+    # Global ceiling (seconds) on the length of videos a bot will discover. Acts
+    # as an upper bound on each bot's filter ``max_duration`` — a bot may be
+    # stricter but never looser. 0 disables the global cap. Default 1800 = 30 min.
+    BOT_MAX_VIDEO_DURATION_SECONDS: int = 1800
 
     # ---- Transcription ----
     WHISPER_ENGINE: Literal["faster-whisper", "whisper"] = "faster-whisper"
