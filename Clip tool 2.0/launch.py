@@ -529,12 +529,44 @@ def cmd_setup(_=None) -> bool:
         warn(f"Using Python {vlabel}; 3.10–3.12 is recommended (some ML wheels lack "
              f"newer builds). Set OPENCLIP_PYTHON to override.")
 
-    if not venv_python().exists():
+    # A venv whose `python` merely *exists* isn't enough: a pip-less venv (common
+    # on Debian when python3-venv/ensurepip isn't installed) or one built from an
+    # incompatible interpreter would wedge the dependency install below. Validate
+    # and repair/rebuild before trusting it.
+    def _venv_has_pip() -> bool:
+        if not venv_python().exists():
+            return False
+        rc, _ = run([str(venv_python()), "-m", "pip", "--version"], capture=True)
+        return rc == 0
+
+    needs_create = not venv_python().exists()
+    if not needs_create and not _venv_has_pip():
+        with Spinner("Repairing venv (bootstrapping pip via ensurepip)"):
+            run([str(venv_python()), "-m", "ensurepip", "--upgrade"], capture=True)
+        if not _venv_has_pip():
+            warn("Existing venv has no pip and ensurepip failed — rebuilding it")
+            needs_create = True
+    if not needs_create:
+        venv_ver = _py_version(str(venv_python()))
+        if not _compatible(venv_ver) and _compatible(ver):
+            vv = f"{venv_ver[0]}.{venv_ver[1]}" if venv_ver else "?"
+            warn(f"Existing venv is Python {vv}; rebuilding on the compatible {vlabel}")
+            needs_create = True
+
+    if needs_create:
+        if VENV.exists():
+            shutil.rmtree(VENV, ignore_errors=True)
         with Spinner(f"Creating virtualenv (Python {vlabel})"):
             code, out = run([base_py, "-m", "venv", str(VENV)], capture=True)
         if code != 0 or not venv_python().exists():
             err("Failed to create virtualenv")
             print(out)
+            return False
+        if not _venv_has_pip():
+            run([str(venv_python()), "-m", "ensurepip", "--upgrade"], capture=True)
+        if not _venv_has_pip():
+            err("Created the venv but it has no pip. Install your distro's Python "
+                "venv support (e.g. `sudo apt install python3-venv`) and retry.")
             return False
         ok(f"Created backend/.venv (Python {vlabel})")
     else:
