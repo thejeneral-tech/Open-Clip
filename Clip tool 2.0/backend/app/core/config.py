@@ -120,7 +120,7 @@ class Settings(BaseSettings):
 
     # ---- Transcription ----
     WHISPER_ENGINE: Literal["faster-whisper", "whisper"] = "faster-whisper"
-    WHISPER_MODEL: str = "large-v3"
+    WHISPER_MODEL: str = "large-v3-turbo"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_BEAM_SIZE: int = 5
