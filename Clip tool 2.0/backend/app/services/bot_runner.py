@@ -397,8 +397,15 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
     if not platforms:
         platforms = ["manual"]
     threshold = float(pub_cfg.get("auto_publish_threshold", 80))
-    spacing = int(pub_cfg.get("schedule_spacing_minutes", 120))
+    # Spacing between scheduled posts: 0 (default) publishes the whole batch at
+    # once; set >0 to drip the clips out over time via the release scheduler.
+    spacing = max(0, int(pub_cfg.get("schedule_spacing_minutes", 0)))
+    # Only publish the best clips from each video — the top N by ranking score.
+    top_n = max(1, int(pub_cfg.get("max_clips_per_video", 3)))
     mode = bot.approval_mode
+
+    # `clips` is already ordered by ranking_score DESC, so this keeps the best N.
+    clips = clips[:top_n]
 
     ready: list[PublishingJob] = []
     slot = 0
@@ -420,6 +427,12 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
             if status == PublishStatus.SCHEDULED.value:
                 scheduled_at = _now() + timedelta(minutes=spacing * slot)
                 slot += 1
+            # Privacy: an explicit bot setting wins, else the channel/connector's
+            # own configured privacy, else the global default. NOTE: an *unverified*
+            # Google API project force-locks every uploaded video to private
+            # regardless, until the project passes YouTube's API compliance audit.
+            conn_privacy = (connector.config or {}).get("privacy") if connector else None
+            privacy = pub_cfg.get("privacy") or conn_privacy or "private"
             job = PublishingJob(
                 bot_id=bot.id, clip_id=clip.id,
                 connector_id=connector.id if connector else None,
@@ -428,7 +441,7 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
                 payload={
                     "asset_key": clip.preview_path,
                     "hashtags": clip.hashtags or [],
-                    "privacy": pub_cfg.get("privacy", "private"),
+                    "privacy": privacy,
                     "score": score,
                 },
             )
