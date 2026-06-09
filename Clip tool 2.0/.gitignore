@@ -36,7 +36,13 @@ backend/control/
 storage/
 media/
 uploads/
-models/
+# Downloaded ML model *weights* only. Anchored to the repo root + weight file
+# extensions so this never swallows the backend ORM package (backend/app/models/),
+# which is source code and MUST be committed.
+/models/
+*.pt
+*.onnx
+*.gguf
 *.mp4
 *.mov
 *.mkv
