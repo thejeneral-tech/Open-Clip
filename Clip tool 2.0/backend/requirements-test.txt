@@ -1,0 +1,22 @@
+# Lightweight deps for CI unit + API tests.
+# (The heavy ML stack in requirements.txt is only needed to actually run jobs,
+#  and is imported lazily, so it isn't required to import the app or test logic.)
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.4
+pydantic-settings==2.7.1
+SQLAlchemy==2.0.36
+aiosqlite==0.20.0
+alembic==1.14.0
+celery==5.4.0
+httpx==0.28.1
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+email-validator==2.2.0
+python-multipart==0.0.20
+
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-cov==6.0.0
+ruff==0.8.4
