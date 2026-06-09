@@ -1,0 +1,23 @@
+{
+  "name": "storyvault-video-factory",
+  "version": "1.0.0",
+  "description": "Discover, rank, rewrite and turn internet stories into short-form vertical videos using user-uploaded background footage.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "dev": "node --no-warnings --watch server.js",
+    "init-db": "node --no-warnings scripts/init-db.js",
+    "test": "node --no-warnings tests/run-tests.js",
+    "seed": "node --no-warnings scripts/seed.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.1.1"
+  },
+  "author": "StoryVault",
+  "license": "MIT"
+}
