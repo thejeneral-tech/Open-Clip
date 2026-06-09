@@ -2440,7 +2440,7 @@ const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:3001' 
 // Build id — MUST match core/constants.py BUILD_ID. The page checks /api/version
 // on load and warns on screen if the running backend reports a different build,
 // so a stale cache or a server on an old checkout is impossible to miss.
-const FRONTEND_BUILD = 'TV-20260608-AI2';
+const FRONTEND_BUILD = 'TV-20260608-AI3';
 window.FRONTEND_BUILD = FRONTEND_BUILD;
 
 // ── Live AI debug log (drives the VAULT AI DEBUG panel) ──────────────────────
@@ -10201,8 +10201,10 @@ async function saveDraft(){
 async function loadDrafts(){
   try{
     const r = await fetch(`${API_BASE}/api/trend-vault/drafts`);
-    const {drafts} = await r.json();
+    const data = r.ok ? await r.json().catch(()=>({})) : {};
+    const drafts = Array.isArray(data.drafts) ? data.drafts : [];
     const el = document.getElementById('draftsList');
+    if(!el) return;
     if(!drafts.length){
       el.innerHTML='<div style="font-size:.75rem;color:var(--muted)">No saved drafts yet — save your current project to resume later.</div>';
       return;

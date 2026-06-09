@@ -204,6 +204,7 @@ from services.script import get_script_service
 from services.tts import get_tts_service
 from routes.ai_routes import setup_ai_routes
 from routes.debug_routes import setup_debug_routes
+from routes.draft_routes import setup_draft_routes
 from routes.intelligence_routes import setup_intelligence_routes
 from routes.llm_routes import setup_llm_routes
 from routes.media_routes import setup_media_routes
@@ -215,6 +216,7 @@ from routes.voice_routes import setup_voice_routes
 app.include_router(setup_page_routes())
 app.include_router(setup_ai_routes())
 app.include_router(setup_debug_routes())
+app.include_router(setup_draft_routes())
 app.include_router(setup_script_routes(get_script_service()))
 app.include_router(setup_voice_routes(get_tts_service()))
 app.include_router(setup_render_routes(get_render_service()))

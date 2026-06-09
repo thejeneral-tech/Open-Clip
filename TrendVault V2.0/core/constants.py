@@ -10,7 +10,7 @@ APP_VERSION = "2.0.0"
 # Build identifier — bump when shipping a code change. The frontend carries a
 # matching FRONTEND_BUILD constant and warns on screen if the two disagree, so a
 # stale browser cache or a server running an old checkout is immediately visible.
-BUILD_ID = "TV-20260608-AI2"
+BUILD_ID = "TV-20260608-AI3"
 PORT = int(os.getenv("PORT", "3001"))
 
 # ── Base paths ──
