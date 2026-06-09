@@ -21,8 +21,45 @@ def test_normalize_enforces_duration(sample_segments):
     raw = [{"start": 0.0, "end": 3.0, "title": "Hook", "viral_score": 88, "reasoning": "strong"}]
     out = vd._normalize(raw, sample_segments, min_s=5, max_s=90, duration=9.0)
     assert len(out) == 1
-    assert out[0].duration >= 5  # extended to the minimum
+    assert out[0].duration >= 5  # extended past the minimum (capped by the 9s clip)
     assert out[0].transcript_text  # populated from segments
+
+
+_STEP = 5.0  # sentence length in the synthetic transcript below
+
+
+def _long_segments(total: float = 200.0, step: float = _STEP):
+    segs, t, i = [], 0.0, 0
+    while t < total:
+        segs.append({"id": i, "start": t, "end": t + step,
+                     "text": f"sentence {i}.", "words": []})
+        t += step
+        i += 1
+    return segs
+
+
+def test_normalize_biases_toward_high_end():
+    # A 3s hook from the model should be extended toward the high end of the
+    # range (target ~= min + 0.7*(max-min)), not pinned to the minimum.
+    segs = _long_segments()
+    min_s, max_s = 8, 90
+    raw = [{"start": 20.0, "end": 23.0, "title": "Hook", "viral_score": 90, "reasoning": "x"}]
+    out = vd._normalize(raw, segs, min_s=min_s, max_s=max_s, duration=200.0)
+    assert len(out) == 1
+    clip = out[0]
+    target = vd._target_len(min_s, max_s)
+    assert clip.start == 20.0                       # hook preserved
+    assert clip.duration >= target - _STEP          # reached the high-side target
+    assert clip.duration <= max_s                   # within the hard cap
+    assert clip.end % _STEP == 0                     # snapped to a sentence boundary
+
+
+def test_normalize_clamps_overlong_clip_to_max():
+    # A clip the model returns longer than max_s is trimmed back to max_s.
+    segs = _long_segments()
+    raw = [{"start": 0.0, "end": 100.0, "title": "Long", "viral_score": 90, "reasoning": "x"}]
+    out = vd._normalize(raw, segs, min_s=8, max_s=30, duration=200.0)
+    assert out[0].duration <= 30
 
 
 def test_dedupe_overlaps_keeps_highest_score():

@@ -28,7 +28,10 @@ VIRAL_USER_TEMPLATE = """Analyze the transcript below and select the {count} BES
 moments to turn into viral short clips.
 
 Constraints:
-- Each clip must be between {min_seconds} and {max_seconds} seconds long.
+- Each clip must be between {min_seconds} and {max_seconds} seconds long. Favor \
+the longer end of that range (aim for about {target_seconds} seconds): include the \
+full build-up and payoff so the clip stands on its own — not just the single \
+punchline sentence.
 - start and end are timestamps in SECONDS (floats) from the transcript.
 - Clips must not overlap.
 - Prefer moments with a strong opening hook.
