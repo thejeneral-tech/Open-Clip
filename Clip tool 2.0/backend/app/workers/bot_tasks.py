@@ -86,9 +86,8 @@ def run_bot_cycle(self, run_id: int) -> dict[str, Any]:
             _run_event(run, f"Discovered {len(items)} new items")
 
             # --- scoring + approval ---
-            bot_runner.run_scoring(db, bot, items)
+            approved = bot_runner.run_scoring(db, bot, items)
             stats["scored"] = len(items)
-            approved = [i for i in items if i.status == TrendItemStatus.APPROVED.value]
             stats["approved"] = len(approved)
             run.stage = "ingest"
             run.progress = 0.6

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import random
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -109,11 +110,12 @@ def test_run_discovery_filters_and_dedupes(monkeypatch):
 
 
 def test_run_scoring_approves_above_threshold():
+    """Manual/semi-auto bots use the threshold strategy: approve every item >= min_score."""
     from app.core.database import session_scope
 
     with session_scope() as db:
         u = _mk_user(db)
-        bot = _mk_bot(db, u.id)
+        bot = _mk_bot(db, u.id, approval=ApprovalMode.MANUAL)
         bot.scoring_config = {**bot.scoring_config, "min_score": 40, "use_llm_relevance": False}
         item = TrendItem(bot_id=bot.id, platform="youtube", external_id="v",
                          url="https://y/v", title="ai",
@@ -121,9 +123,55 @@ def test_run_scoring_approves_above_threshold():
                          metrics={"views": 200000, "likes": 10000, "comments": 2000})
         db.add(item)
         db.flush()
-        bot_runner.run_scoring(db, bot, [item])
+        approved = bot_runner.run_scoring(db, bot, [item])
         assert item.trend_score > 0
         assert item.status == TrendItemStatus.APPROVED.value
+        assert approved == [item]
+
+
+def test_run_scoring_autonomous_random_pool_approves_2_to_3(monkeypatch):
+    """Autonomous bots randomly approve 2-3 of the items scoring above 49."""
+    from app.core.database import session_scope
+
+    # Deterministic scores: four above the pool threshold, two below it.
+    scores = iter([60.0, 58.0, 55.0, 52.0, 10.0, 5.0])
+    monkeypatch.setattr(bot_runner.scoring, "score_item", lambda *a, **k: (next(scores), {}))
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id, approval=ApprovalMode.AUTONOMOUS)
+        bot.scoring_config = {**bot.scoring_config, "use_llm_relevance": False}
+        items = [TrendItem(bot_id=bot.id, platform="youtube", external_id=f"v{i}",
+                           url=f"https://y/v{i}", title="ai",
+                           published_at=datetime.now(timezone.utc))
+                 for i in range(6)]
+        db.add_all(items)
+        db.flush()
+        approved = bot_runner.run_scoring(db, bot, items)
+
+        # A random subset of the four-item >49 pool — never all four, never the sub-49 two.
+        assert 2 <= len(approved) <= 3
+        assert all(a.status == TrendItemStatus.APPROVED.value for a in approved)
+        assert all(a.trend_score > 49 for a in approved)
+        assert all(it.status != TrendItemStatus.APPROVED.value
+                   for it in items if it.trend_score <= 49)
+
+
+def test_approve_random_pool_only_picks_from_pool():
+    """Unit-level: _approve_random_pool selects 2-3 strictly from items scoring >49."""
+    from app.services.bot_runner import _approve_random_pool
+
+    items = [TrendItem(external_id=f"v{i}", trend_score=s)
+             for i, s in enumerate([80, 70, 60, 50.5, 49, 30, 10])]
+    approved = _approve_random_pool(
+        items, {"threshold": 49, "min": 2, "max": 3}, rng=random.Random(7)
+    )
+    assert 2 <= len(approved) <= 3
+    assert all(a.trend_score > 49 for a in approved)
+    assert all(a.status == TrendItemStatus.APPROVED.value for a in approved)
+    # 49 is NOT above 49, and nothing at/below the threshold is ever approved.
+    assert all(it.status != TrendItemStatus.APPROVED.value
+               for it in items if it.trend_score <= 49)
 
 
 def test_finalize_item_autonomous_creates_jobs():

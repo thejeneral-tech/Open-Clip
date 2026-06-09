@@ -9,6 +9,7 @@ unit-testable without a broker.
 from __future__ import annotations
 
 import math
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -136,8 +137,23 @@ def _to_discovered(item: TrendItem) -> DiscoveredItem:
     )
 
 
-def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> None:
-    """Score each item locally; approve those at/above the configured threshold."""
+def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> list[TrendItem]:
+    """Score each item locally, then approve a subset for ingestion.
+
+    Two approval strategies, chosen per bot via ``scoring_config``:
+
+    * **threshold** (default for manual / semi-auto bots) — approve every item
+      scoring at or above ``min_score``.
+    * **random pool** (default for *autonomous* bots) — from the items scoring
+      above ``random_approval.threshold`` (default 49), approve a random
+      ``random_approval.min``–``max`` (default 2–3) of them. This keeps a
+      fully-autonomous bot from always grabbing the same top-scoring videos and
+      adds variety to what gets clipped. Set
+      ``scoring_config['random_approval']['enabled']`` to force it on/off
+      regardless of approval mode.
+
+    Returns the list of approved items.
+    """
     scfg = bot.scoring_config or {}
     filters = bot.filter_config or {}
     scfg = {**scfg, "max_age_hours": filters.get("max_age_hours", 720)}
@@ -145,9 +161,9 @@ def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> None:
     use_llm = bool(scfg.get("use_llm_relevance", True))
     topic = bot.bot_type
     keywords = filters.get("keywords", [])
-    insights = bot.insights or {}
     hist_default = 50.0
 
+    # 1) score every item; leave it SCORED until the approval pass below runs.
     for item in items:
         d = _to_discovered(item)
         relevance = None
@@ -160,13 +176,64 @@ def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> None:
         )
         item.trend_score = score
         item.score_breakdown = breakdown
-        approved = score >= min_score
-        item.status = (
-            TrendItemStatus.APPROVED.value if approved else TrendItemStatus.SCORED.value
-        )
-        if not approved:
-            item.reason = f"score {score} < threshold {min_score}"
+        item.status = TrendItemStatus.SCORED.value
+
+    # 2) approve a subset per the bot's strategy.
+    rcfg = scfg.get("random_approval") or {}
+    enabled = rcfg.get("enabled")
+    if enabled is None:
+        enabled = bot.approval_mode == ApprovalMode.AUTONOMOUS.value
+
+    if enabled:
+        approved = _approve_random_pool(items, rcfg)
+    else:
+        approved = []
+        for item in items:
+            if item.trend_score >= min_score:
+                item.status = TrendItemStatus.APPROVED.value
+                approved.append(item)
+            else:
+                item.reason = f"score {item.trend_score:g} < threshold {min_score:g}"
     db.flush()
+    return approved
+
+
+def _approve_random_pool(
+    items: list[TrendItem],
+    rcfg: dict[str, Any],
+    *,
+    rng: random.Random | None = None,
+) -> list[TrendItem]:
+    """Approve a random ``min``–``max`` of the items scoring above ``threshold``.
+
+    Items above the threshold but not picked stay SCORED (so a later cycle may
+    still select them); items at or below it are annotated with a reason. If the
+    pool is smaller than the random count, every pooled item is approved.
+    """
+    rand = rng or random
+    threshold = float(rcfg.get("threshold", 49))
+    lo = max(0, int(rcfg.get("min", 2)))
+    hi = max(lo, int(rcfg.get("max", 3)))
+
+    pool: list[TrendItem] = []
+    for item in items:
+        if (item.trend_score or 0) > threshold:
+            pool.append(item)
+        else:
+            item.reason = f"score {item.trend_score:g} ≤ pool threshold {threshold:g}"
+    if not pool:
+        return []
+
+    k = min(rand.randint(lo, hi), len(pool))
+    chosen = set(rand.sample(range(len(pool)), k))
+    approved: list[TrendItem] = []
+    for i, item in enumerate(pool):
+        if i in chosen:
+            item.status = TrendItemStatus.APPROVED.value
+            approved.append(item)
+        else:
+            item.reason = f"in >{threshold:g} pool but not randomly selected this cycle"
+    return approved
 
 
 # ------------------------------------------------------------ ingestion plan
