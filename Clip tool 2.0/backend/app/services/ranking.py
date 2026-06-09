@@ -27,6 +27,29 @@ def _clamp(v: Any, default: float = 50.0) -> float:
         return default
 
 
+def normalize_ranking(parsed: Any) -> dict[str, Any]:
+    """Coerce a raw model ``ranking`` object into the canonical result dict.
+
+    Shared by :func:`rank_clip` and the consolidated ``clip_meta`` call.
+    """
+    if not isinstance(parsed, dict):
+        parsed = {}
+
+    breakdown = {k: _clamp(parsed.get(k)) for k in _WEIGHTS}
+
+    overall = parsed.get("overall_score")
+    if overall is None:
+        overall = sum(breakdown[k] * w for k, w in _WEIGHTS.items())
+    overall = _clamp(overall)
+
+    return {
+        **breakdown,
+        "overall_score": round(overall, 1),
+        "confidence": _clamp(parsed.get("confidence"), 60.0),
+        "explanation": str(parsed.get("explanation") or "").strip(),
+    }
+
+
 def rank_clip(
     *,
     title: str,
@@ -52,20 +75,4 @@ def rank_clip(
         schema=prompts.RANKING_SCHEMA,
         options={"temperature": 0.3},
     )
-    if not isinstance(parsed, dict):
-        parsed = {}
-
-    breakdown = {k: _clamp(parsed.get(k)) for k in _WEIGHTS}
-
-    overall = parsed.get("overall_score")
-    if overall is None:
-        overall = sum(breakdown[k] * w for k, w in _WEIGHTS.items())
-    overall = _clamp(overall)
-
-    result = {
-        **breakdown,
-        "overall_score": round(overall, 1),
-        "confidence": _clamp(parsed.get("confidence"), 60.0),
-        "explanation": str(parsed.get("explanation") or "").strip(),
-    }
-    return result, meta
+    return normalize_ranking(parsed), meta

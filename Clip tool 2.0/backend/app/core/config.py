@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_BEAM_SIZE: int = 5
+    # CTranslate2 intra-op threads for CPU transcription. 0 = let CT2 decide
+    # (~4). On a many-core CPU, set to the number of performance cores for a
+    # meaningful speedup. Ignored on GPU.
+    WHISPER_CPU_THREADS: int = 0
     ENABLE_DIARIZATION: bool = False
     HUGGINGFACE_TOKEN: str | None = None
 
@@ -131,6 +135,11 @@ class Settings(BaseSettings):
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
     HWACCEL: Literal["none", "nvenc", "qsv", "amf"] = "none"
+    # How many clips to enrich+render concurrently within one worker process.
+    # Each clip render is an ffmpeg subprocess, so >1 overlaps the (ffmpeg-bound)
+    # render of one clip with the LLM/reframe work of another. Keep modest: a
+    # hardware encoder (QSV/NVENC) has limited parallel sessions. 1 = sequential.
+    CLIP_CONCURRENCY: int = 1
     DEFAULT_EXPORT_RESOLUTION: str = "1080p"
     DEFAULT_EXPORT_FORMAT: str = "mp4"
     TRACKING_SAMPLE_FPS: int = 5

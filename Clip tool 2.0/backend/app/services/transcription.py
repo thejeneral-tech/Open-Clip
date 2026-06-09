@@ -27,20 +27,29 @@ _diarizer: Any = None
 
 
 def _get_faster_whisper(model_size: str):
-    key = f"fw:{model_size}:{settings.WHISPER_DEVICE}:{settings.WHISPER_COMPUTE_TYPE}"
+    threads = max(0, settings.WHISPER_CPU_THREADS)
+    key = f"fw:{model_size}:{settings.WHISPER_DEVICE}:{settings.WHISPER_COMPUTE_TYPE}:{threads}"
     if key not in _model_cache:
         from faster_whisper import WhisperModel
 
-        logger.info("Loading faster-whisper %s on %s", model_size, settings.WHISPER_DEVICE)
+        # cpu_threads only applies to CPU inference; 0 lets CTranslate2 decide.
+        extra = {"cpu_threads": threads} if threads else {}
+        logger.info(
+            "Loading faster-whisper %s on %s (cpu_threads=%s)",
+            model_size, settings.WHISPER_DEVICE, threads or "auto",
+        )
         try:
             _model_cache[key] = WhisperModel(
                 model_size,
                 device=settings.WHISPER_DEVICE,
                 compute_type=settings.WHISPER_COMPUTE_TYPE,
+                **extra,
             )
         except Exception as exc:  # GPU unavailable → fall back to CPU int8
             logger.warning("GPU load failed (%s); falling back to CPU int8", exc)
-            _model_cache[key] = WhisperModel(model_size, device="cpu", compute_type="int8")
+            _model_cache[key] = WhisperModel(
+                model_size, device="cpu", compute_type="int8", **extra
+            )
     return _model_cache[key]
 
 

@@ -121,7 +121,7 @@ def apply_emphasis(
         )
     except Exception as exc:
         logger.warning("Emphasis generation failed, using heuristic: %s", exc)
-        return _heuristic_emphasis(tokens), {}
+        return heuristic_emphasis(tokens), {}
 
     emphasize = set(parsed.get("emphasize", []) if isinstance(parsed, dict) else [])
     emojis = parsed.get("emojis", {}) if isinstance(parsed, dict) else {}
@@ -134,8 +134,12 @@ def apply_emphasis(
     return tokens, meta
 
 
-def _heuristic_emphasis(tokens: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Fallback: emphasize numbers, long words, and ALL-CAPS words."""
+def heuristic_emphasis(tokens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Emphasize numbers, long words, and ALL-CAPS words — no LLM call.
+
+    Used as both the fallback for :func:`apply_emphasis` and the default,
+    round-trip-free path during bulk processing.
+    """
     for tok in tokens:
         w = tok["word"].strip(".,!?")
         tok["emphasis"] = bool(

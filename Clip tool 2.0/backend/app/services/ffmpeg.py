@@ -52,11 +52,18 @@ _ENCODERS: dict[str, dict[str, list[str]]] = {
 }
 
 # Decode acceleration flags (input side).
+#
+# Deliberately empty: the render filtergraph (crop/scale/ass) runs on the CPU,
+# and there is no QSV/CUDA equivalent of the ASS subtitle filter. Requesting
+# hardware-surface decode (e.g. ``-hwaccel qsv``) makes ffmpeg hand the software
+# filters GPU frames they can't read ("Impossible to convert between the formats
+# ... src: qsv"), so we decode in software and offload only the *encode* (the
+# expensive part) to the hardware encoder. Decoding one short clip is cheap.
 _HWACCEL_DECODE: dict[str, list[str]] = {
     "none": [],
-    "nvenc": ["-hwaccel", "cuda"],
-    "qsv": ["-hwaccel", "qsv"],
-    "amf": ["-hwaccel", "d3d11va"],
+    "nvenc": [],
+    "qsv": [],
+    "amf": [],
 }
 
 

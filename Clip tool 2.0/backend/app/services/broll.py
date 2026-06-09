@@ -10,6 +10,27 @@ from app.services.ollama_client import OllamaClient, ollama
 logger = get_logger(__name__)
 
 
+def normalize_broll(suggestions: Any) -> list[dict[str, Any]]:
+    """Coerce a raw model ``suggestions`` list into clean b-roll dicts.
+
+    Shared by :func:`suggest_broll` and the consolidated ``clip_meta`` call.
+    """
+    out: list[dict[str, Any]] = []
+    for s in suggestions or []:
+        if not isinstance(s, dict):
+            continue
+        out.append(
+            {
+                "start": float(s.get("start", 0) or 0),
+                "end": float(s.get("end", 0) or 0),
+                "search_terms": [str(t) for t in s.get("search_terms", []) if t],
+                "scene_description": str(s.get("scene_description") or ""),
+                "sd_prompt": str(s.get("sd_prompt") or ""),
+            }
+        )
+    return out
+
+
 def suggest_broll(
     *,
     text: str,
@@ -26,21 +47,7 @@ def suggest_broll(
         options={"temperature": 0.7},
     )
     suggestions = parsed.get("suggestions", []) if isinstance(parsed, dict) else []
-
-    out: list[dict[str, Any]] = []
-    for s in suggestions:
-        if not isinstance(s, dict):
-            continue
-        out.append(
-            {
-                "start": float(s.get("start", 0) or 0),
-                "end": float(s.get("end", 0) or 0),
-                "search_terms": [str(t) for t in s.get("search_terms", []) if t],
-                "scene_description": str(s.get("scene_description") or ""),
-                "sd_prompt": str(s.get("sd_prompt") or ""),
-            }
-        )
-    return out, meta
+    return normalize_broll(suggestions), meta
 
 
 def generate_broll_image(prompt: str, output_path: str) -> str | None:

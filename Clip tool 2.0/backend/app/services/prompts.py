@@ -253,3 +253,59 @@ EMPHASIS_SCHEMA = {
     },
     "required": ["emphasize"],
 }
+
+# ---------------------------------------------------- consolidated clip metadata
+# One call that produces ranking + titles + description + b-roll, replacing four
+# separate round-trips. On a local CPU/iGPU model this avoids re-feeding the
+# transcript (and, for reasoning models, re-generating a chain of thought) four
+# times over. The sub-objects mirror the individual schemas above so the same
+# normalizers parse them.
+CLIP_META_SYSTEM = """You are a world-class short-form video producer. For a single \
+clip you simultaneously: (1) score its viral potential, (2) write platform titles, \
+(3) write an SEO description, and (4) suggest B-roll. Be calibrated on scoring \
+(average clips are 40-60; reserve 85+ for genuine virality) and concrete on \
+everything else. Return all four sections in one JSON object."""
+
+CLIP_META_USER_TEMPLATE = """Analyze this clip and return ranking, titles, description, \
+and B-roll suggestions in a single JSON object.
+
+Title: {title}
+Duration: {duration:.1f}s
+Transcript:
+---
+{text}
+---
+
+Return ONLY JSON with this exact shape:
+{{
+  "ranking": {{
+    "hook_strength": int, "emotional_intensity": int, "curiosity_gap": int,
+    "retention_likelihood": int, "platform_suitability": int,
+    "overall_score": int, "confidence": int, "explanation": "string"
+  }},
+  "titles": {{
+    "tiktok": ["..."], "shorts": ["..."], "reels": ["..."],
+    "best": "the single strongest title overall"
+  }},
+  "description": {{
+    "description": "2-4 sentence engaging description with a soft CTA",
+    "hashtags": ["#tag", ...], "keywords": ["...", ...]
+  }},
+  "broll": {{
+    "suggestions": [
+      {{ "start": number, "end": number, "search_terms": ["..."],
+         "scene_description": "what to show", "sd_prompt": "image-gen prompt" }}
+    ]
+  }}
+}}"""
+
+CLIP_META_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ranking": RANKING_SCHEMA,
+        "titles": TITLES_SCHEMA,
+        "description": DESCRIPTION_SCHEMA,
+        "broll": BROLL_SCHEMA,
+    },
+    "required": ["ranking", "titles", "description", "broll"],
+}

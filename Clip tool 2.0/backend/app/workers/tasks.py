@@ -11,6 +11,8 @@ live over WebSocket.
 from __future__ import annotations
 
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from app.core.config import settings
@@ -27,6 +29,7 @@ from app.schemas.video import ProcessOptions
 from app.services import (
     broll as broll_svc,
     captions as captions_svc,
+    clip_meta as clip_meta_svc,
     descriptions as desc_svc,
     ranking as ranking_svc,
     reframing,
@@ -278,67 +281,51 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
     analyses: list[dict[str, Any]] = []
     updates: dict[str, Any] = {}
 
-    # --- ranking ---
+    # --- ranking + titles + description + b-roll (one LLM call) ---
+    # Consolidated into a single round-trip: on a local CPU/iGPU model this avoids
+    # re-feeding the transcript (and re-thinking) four times. regenerate_clip_task
+    # still calls the individual services when a user refreshes one field.
     try:
-        clip_tracker.set(stage="rank", progress=0.1, message="Scoring")
-        result, meta = ranking_svc.rank_clip(
-            title=title or "", text=text, duration=end - start, model=models["ranking"]
+        clip_tracker.set(stage="analyze", progress=0.2, message="Analyzing clip")
+        meta_result, meta = clip_meta_svc.generate_clip_metadata(
+            title=title or "", text=text, duration=end - start, model=models["default"]
         )
-        updates["ranking_score"] = result["overall_score"]
-        updates["confidence"] = result["confidence"]
-        updates["score_breakdown"] = result
+        rank = meta_result["ranking"]
+        updates["ranking_score"] = rank["overall_score"]
+        updates["confidence"] = rank["confidence"]
+        updates["score_breakdown"] = rank
         analyses.append({"analysis_type": "ranking", "model": meta.get("model"),
-                         "result": result, "duration_ms": meta.get("duration_ms")})
-    except Exception as exc:
-        logger.warning("Ranking failed for clip %s: %s", clip_id, exc)
+                         "result": rank, "duration_ms": meta.get("duration_ms")})
 
-    # --- titles ---
-    if opts.generate_titles:
-        try:
-            clip_tracker.set(stage="titles", progress=0.25, message="Writing titles")
-            result, meta = titles_svc.generate_titles(text=text, model=models["default"])
-            updates["title_variations"] = result["all"]
-            if result.get("best"):
-                updates["title"] = result["best"]
-            analyses.append({"analysis_type": "titles", "model": meta.get("model"), "result": result})
-        except Exception as exc:
-            logger.warning("Titles failed for clip %s: %s", clip_id, exc)
+        if opts.generate_titles:
+            tdata = meta_result["titles"]
+            updates["title_variations"] = tdata["all"]
+            if tdata.get("best"):
+                updates["title"] = tdata["best"]
+            analyses.append({"analysis_type": "titles", "model": meta.get("model"), "result": tdata})
 
-    # --- description ---
-    if opts.generate_descriptions:
-        try:
-            clip_tracker.set(stage="description", progress=0.4, message="SEO description")
-            result, meta = desc_svc.generate_description(
-                title=updates.get("title", title) or "", text=text, model=models["default"]
-            )
-            updates["description"] = result["description"]
-            updates["hashtags"] = result["hashtags"]
-            updates["keywords"] = result["keywords"]
-            analyses.append({"analysis_type": "description", "model": meta.get("model"), "result": result})
-        except Exception as exc:
-            logger.warning("Description failed for clip %s: %s", clip_id, exc)
+        if opts.generate_descriptions:
+            ddata = meta_result["description"]
+            updates["description"] = ddata["description"]
+            updates["hashtags"] = ddata["hashtags"]
+            updates["keywords"] = ddata["keywords"]
+            analyses.append({"analysis_type": "description", "model": meta.get("model"), "result": ddata})
 
-    # --- b-roll ---
-    if opts.generate_broll:
-        try:
-            clip_tracker.set(stage="broll", progress=0.5, message="B-roll suggestions")
-            result, meta = broll_svc.suggest_broll(text=text, model=models["default"])
-            updates["broll_suggestions"] = result
+        if opts.generate_broll:
+            bdata = meta_result["broll"]
+            updates["broll_suggestions"] = bdata
             analyses.append({"analysis_type": "broll", "model": meta.get("model"),
-                             "result": {"suggestions": result}})
-        except Exception as exc:
-            logger.warning("B-roll failed for clip %s: %s", clip_id, exc)
+                             "result": {"suggestions": bdata}})
+    except Exception as exc:
+        logger.warning("Clip metadata (rank/titles/desc/broll) failed for clip %s: %s", clip_id, exc)
 
-    # --- captions ---
+    # --- captions (heuristic emphasis — no LLM round-trip) ---
     tokens: list[dict[str, Any]] = []
     if opts.enable_captions:
         try:
             clip_tracker.set(stage="captions", progress=0.6, message="Generating captions")
-            tokens = captions_svc.build_tokens(words)
-            tokens, meta = captions_svc.apply_emphasis(tokens, model=models["default"])
+            tokens = captions_svc.heuristic_emphasis(captions_svc.build_tokens(words))
             updates["captions"] = tokens
-            analyses.append({"analysis_type": "caption_emphasis", "model": meta.get("model"),
-                             "result": {"count": len(tokens)}})
         except Exception as exc:
             logger.warning("Captions failed for clip %s: %s", clip_id, exc)
             tokens = captions_svc.build_tokens(words)
@@ -436,14 +423,39 @@ def process_video_task(self, video_id: int, options: dict[str, Any]) -> dict[str
         segments = transcript["segments"]
 
         total = len(clip_ids)
-        for i, clip_id in enumerate(clip_ids):
-            tracker.set(
-                stage="enrich",
-                progress=_lerp(_ENRICH, i / total),
-                message=f"Producing clip {i + 1}/{total}",
-                data={"current": i + 1, "total": total},
-            )
-            _enrich_clip(clip_id, source_path, segments, opts, models)
+        concurrency = max(1, min(settings.CLIP_CONCURRENCY, total))
+        tracker.set(stage="enrich", progress=_ENRICH[0],
+                    message=f"Producing {total} clips", data={"current": 0, "total": total})
+
+        if concurrency == 1:
+            for i, clip_id in enumerate(clip_ids):
+                _enrich_clip(clip_id, source_path, segments, opts, models)
+                tracker.set(stage="enrich", progress=_lerp(_ENRICH, (i + 1) / total),
+                            message=f"Produced clip {i + 1}/{total}",
+                            data={"current": i + 1, "total": total})
+        else:
+            # Each render is an ffmpeg subprocess, so threads overlap one clip's
+            # (ffmpeg-bound) render with another's LLM/reframe work. SQLite runs in
+            # WAL mode with a 10s busy_timeout, so the short per-clip writes
+            # serialize safely. _enrich_clip records its own per-clip failures.
+            done = 0
+            lock = threading.Lock()
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futures = {
+                    pool.submit(_enrich_clip, cid, source_path, segments, opts, models): cid
+                    for cid in clip_ids
+                }
+                for fut in as_completed(futures):
+                    cid = futures[fut]
+                    try:
+                        fut.result()
+                    except Exception:
+                        logger.exception("Clip %s enrichment crashed", cid)
+                    with lock:
+                        done += 1
+                        tracker.set(stage="enrich", progress=_lerp(_ENRICH, done / total),
+                                    message=f"Produced clip {done}/{total}",
+                                    data={"current": done, "total": total})
 
         tracker.complete(stage="done", message=f"Generated {total} clips",
                          data={"clip_count": total})
