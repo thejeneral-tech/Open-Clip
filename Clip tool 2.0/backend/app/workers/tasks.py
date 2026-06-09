@@ -71,6 +71,17 @@ def _lerp(band: tuple[float, float], frac: float) -> float:
     return band[0] + (band[1] - band[0]) * max(0.0, min(1.0, frac))
 
 
+# AIAnalysis is an audit table with a fixed column set; the analysis dicts that
+# services emit may carry extra keys (e.g. viral_detection adds ``prompt`` /
+# ``tokens_eval``). Keep only real columns so persistence never raises.
+_AI_ANALYSIS_FIELDS = {c.key for c in AIAnalysis.__table__.columns}
+
+
+def _make_analysis(video_id: int, *, clip_id: int | None = None, **fields: Any) -> AIAnalysis:
+    data = {k: v for k, v in fields.items() if k in _AI_ANALYSIS_FIELDS}
+    return AIAnalysis(video_id=video_id, clip_id=clip_id, **data)
+
+
 def _owner_models(video: Video) -> dict[str, str]:
     """Resolve the model names to use, honoring the owner's settings."""
     out = {
@@ -251,7 +262,7 @@ def _persist_candidates(video_id: int, candidates: list[Any], analyses: list[dic
     aspect = opts.aspect_ratios[0].value if opts.aspect_ratios else "9:16"
     with session_scope() as db:
         for a in analyses:
-            db.add(AIAnalysis(video_id=video_id, **a))
+            db.add(_make_analysis(video_id, **a))
         for idx, cand in enumerate(candidates):
             clip = Clip(
                 video_id=video_id,
@@ -411,7 +422,7 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
         for key, value in updates.items():
             setattr(clip, key, value)
         for a in analyses:
-            db.add(AIAnalysis(video_id=video_id, clip_id=clip_id, **a))
+            db.add(_make_analysis(video_id, clip_id=clip_id, **a))
 
     # --- render preview ---
     try:
