@@ -18,8 +18,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from celery import chain
-
 from app.core.config import settings
 from app.core.database import session_scope
 from app.core.events import publish_progress
@@ -113,13 +111,14 @@ def run_bot_cycle(self, run_id: int) -> dict[str, Any]:
             run.stats = stats
             return {"run_id": run_id, "error": str(exc)}
 
-    # Dispatch chains outside the transaction so ids are committed first.
-    for item_id, video_id, url in dispatched:
-        chain(
-            ingest_youtube_task.s(video_id, url),
-            process_video_task.si(video_id, opts),
-            bot_finalize_item.si(item_id, run_id),
-        ).apply_async()
+    # Generate the dispatched videos one at a time. A single GPU box can't run
+    # several transcribe/detect/render pipelines at once, so rather than firing an
+    # independent chain per video (which the worker would run in parallel up to its
+    # concurrency), hand the whole batch to one self-advancing task: it processes a
+    # video end-to-end, then dispatches the next. ids are committed (the transaction
+    # has closed) before the task picks them up.
+    if dispatched:
+        bot_process_video.apply_async((dispatched, opts, run_id))
 
     with session_scope() as db:
         run = db.get(BotRun, run_id)
@@ -142,6 +141,48 @@ def run_bot_cycle(self, run_id: int) -> dict[str, Any]:
         agg["runs"] = agg.get("runs", 0) + 1
         bot.stats = agg
     return {"run_id": run_id, **stats}
+
+
+# =====================================================================
+# Generate one dispatched video, then hand off to the next
+# =====================================================================
+@celery_app.task(bind=True, name="app.workers.bot_tasks.bot_process_video")
+def bot_process_video(self, queue: list[Any], opts: dict[str, Any], run_id: int) -> dict[str, Any]:
+    """Run ONE dispatched video end-to-end, then dispatch the next in the queue.
+
+    The bot processes its videos serially: ``ingest → process → finalize`` for one
+    video completes before the next starts, so a single GPU box is never running
+    several transcribe/clip/render pipelines at once. Each video is isolated — a
+    failure is logged and the item marked FAILED, and the batch still advances to
+    the remaining videos.
+
+    ``queue`` is a list of ``[item_id, video_id, url]`` triples (JSON-decoded from
+    the tuples ``run_bot_cycle`` built); the head is processed now and the tail is
+    re-queued as a fresh task so only one video is ever in flight.
+    """
+    if not queue:
+        return {"run_id": run_id, "remaining": 0}
+    (item_id, video_id, url), *rest = queue
+    try:
+        # Called synchronously (not via the broker) so the stages share this one
+        # worker slot and run strictly back-to-back; each task propagates its own
+        # failures, which we catch below to keep the batch moving.
+        ingest_youtube_task(video_id, url)
+        process_video_task(video_id, opts)
+        bot_finalize_item(item_id, run_id)
+    except Exception as exc:
+        logger.exception("Bot video %s failed; continuing with the next", video_id)
+        with session_scope() as db:
+            item = db.get(TrendItem, item_id)
+            if item and item.status not in (
+                TrendItemStatus.PROCESSED.value, TrendItemStatus.PUBLISHED.value
+            ):
+                item.status = TrendItemStatus.FAILED.value
+                item.reason = f"processing failed: {exc}"
+    finally:
+        if rest:
+            bot_process_video.apply_async((rest, opts, run_id))
+    return {"video_id": video_id, "remaining": len(rest)}
 
 
 # =====================================================================
