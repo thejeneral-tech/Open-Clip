@@ -1,48 +1,44 @@
-import { type ClassValue, clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Human-readable byte size. */
-export function formatBytes(bytes?: number | null): string {
-  if (!bytes || bytes <= 0) return "—";
+export function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds < 0) return "0:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+export function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
   let i = 0;
-  let n = bytes;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
     i++;
   }
-  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+  return `${value.toFixed(value < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-/** Seconds → mm:ss / h:mm:ss. */
-export function formatDuration(seconds?: number | null): string {
-  if (seconds == null || seconds <= 0) return "—";
-  const s = Math.round(seconds);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+export function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const diff = (Date.now() - date.getTime()) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return date.toLocaleDateString();
 }
 
-/** Compact relative time ("3m ago", "2d ago"). */
-export function timeAgo(iso?: string | null): string {
-  if (!iso) return "—";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
-  const diff = Date.now() - then;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d ago`;
-  const mo = Math.floor(day / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
+export function scoreColor(score: number): string {
+  if (score >= 80) return "text-emerald-500";
+  if (score >= 60) return "text-amber-500";
+  if (score >= 40) return "text-orange-500";
+  return "text-rose-500";
 }

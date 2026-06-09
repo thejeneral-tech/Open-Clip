@@ -13,25 +13,37 @@ const config: Config = {
     container: { center: true, padding: "2rem", screens: { "2xl": "1400px" } },
     extend: {
       colors: {
-        // Odysseus core palette (runtime-swapped CSS vars)
+        // ── Odysseus core palette (runtime-swapped CSS vars) ──
         bg: "var(--bg)",
         fg: "var(--fg)",
         panel: "var(--panel)",
-        border: "var(--border)",
-        muted: "var(--muted-fg)",
-        accent: {
-          DEFAULT: "var(--red)",
-          hover: "var(--send-btn-hover)",
-          fg: "var(--accent-contrast)",
-        },
         sidebar: "var(--sidebar-bg)",
         brand: "var(--brand-color)",
-        input: "var(--input-bg)",
         "input-border": "var(--input-border)",
         code: {
           bg: "var(--code-bg)",
           fg: "var(--code-fg)",
         },
+
+        // ── shadcn-compatible aliases, mapped onto the Odysseus palette ──
+        // The restored dashboard components use these tokens (bg-card, bg-primary,
+        // text-muted-foreground …); pointing them at the Odysseus vars lets the
+        // whole old UI re-theme at runtime with the theme engine.
+        border: "var(--border)",
+        input: "var(--input-border)",
+        ring: "var(--red)",
+        background: "var(--bg)",
+        foreground: "var(--fg)",
+        primary: { DEFAULT: "var(--red)", foreground: "var(--accent-contrast)" },
+        secondary: { DEFAULT: "var(--hover-bg)", foreground: "var(--fg)" },
+        destructive: { DEFAULT: "var(--red)", foreground: "var(--accent-contrast)" },
+        // `muted` keeps the Odysseus meaning for `text-muted` (DEFAULT) while also
+        // serving shadcn's `text-muted-foreground`.
+        muted: { DEFAULT: "var(--muted-fg)", foreground: "var(--muted-fg)" },
+        // shadcn `accent` is a subtle hover surface (not the Odysseus red action).
+        accent: { DEFAULT: "var(--hover-bg)", foreground: "var(--fg)" },
+        popover: { DEFAULT: "var(--panel)", foreground: "var(--fg)" },
+        card: { DEFAULT: "var(--panel)", foreground: "var(--fg)" },
       },
       fontFamily: {
         theme: "var(--font-family)",

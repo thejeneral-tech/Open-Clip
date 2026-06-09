@@ -1,97 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { Clapperboard, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Clapperboard, Loader2, Palette } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
-import { ThemeModal } from "@/components/theme/ThemeModal";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
+  const { login, user, loading } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("admin@openclip.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!loading && user) router.replace("/dashboard");
+  }, [user, loading, router]);
+
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setSubmitting(true);
     try {
-      await api.login(email.trim(), password);
-      router.replace("/");
+      await login(email, password);
+      router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Login failed");
+      toast.error(err instanceof Error ? err.message : "Login failed");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="relative z-10 grid min-h-screen place-items-center p-4">
-      <button
-        type="button"
-        onClick={() => setThemeOpen(true)}
-        className="oc-btn oc-btn-ghost absolute right-4 top-4 h-9 w-9 !p-0"
-        aria-label="Themes"
-        title="Themes"
-      >
-        <Palette size={18} />
-      </button>
-
-      <div className="oc-surface w-full max-w-sm rounded-2xl p-7 shadow-2xl animate-pop-in">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 grid h-12 w-12 place-items-center rounded-xl" style={{ background: "var(--brand-color)" }}>
-            <Clapperboard size={24} className="text-[var(--accent-contrast)]" />
-          </span>
-          <h1 className="text-xl font-semibold text-fg">Welcome to OpenClip</h1>
-          <p className="mt-1 text-sm text-muted">Sign in to your clip studio</p>
-        </div>
-
-        <form onSubmit={submit} className="space-y-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">Email</span>
-            <input
-              type="email"
-              className="oc-input w-full"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted">Password</span>
-            <input
-              type="password"
-              className="oc-input w-full"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              required
-            />
-          </label>
-
-          {error && (
-            <p className="rounded-md border border-[var(--red)] bg-[color-mix(in_srgb,var(--red)_12%,transparent)] px-3 py-2 text-xs text-[var(--red)]">
-              {error}
-            </p>
-          )}
-
-          <button type="submit" className="oc-btn oc-btn-primary w-full" disabled={loading}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : null}
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-
-        <p className="mt-5 text-center text-[11px] text-muted">
-          First boot seeds <span className="font-mono text-fg">admin@openclip.local</span> / <span className="font-mono text-fg">changeme</span>
-        </p>
-      </div>
-
-      <ThemeModal open={themeOpen} onClose={() => setThemeOpen(false)} />
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/10 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-2 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15">
+            <Clapperboard className="h-6 w-6 text-primary" />
+          </div>
+          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <CardDescription>Sign in to your OpenClip studio</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="admin@openclip.local"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Sign in
+            </Button>
+          </form>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            No account?{" "}
+            <Link href="/register" className="text-primary hover:underline">
+              Create one
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

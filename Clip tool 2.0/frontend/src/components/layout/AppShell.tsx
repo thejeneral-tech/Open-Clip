@@ -2,46 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import { Menu, X } from "lucide-react";
-import { api } from "@/lib/api";
-import { clearTokens, getUserEmail, isAuthed } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { Sidebar } from "./Sidebar";
 import { ThemeModal } from "@/components/theme/ThemeModal";
 import { cn } from "@/lib/utils";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { user, loading, logout: authLogout } = useAuth();
   const [themeOpen, setThemeOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Auth gate — bounce to /login when there's no token.
+  // Auth gate — bounce to /login once we know there's no authenticated user.
   useEffect(() => {
-    if (!isAuthed()) {
-      router.replace("/login");
-      return;
-    }
-    setReady(true);
-  }, [router]);
+    if (!loading && !user) router.replace("/login");
+  }, [loading, user, router]);
 
-  const { data: user } = useQuery({
-    queryKey: ["me"],
-    queryFn: api.me,
-    enabled: ready,
-    retry: false,
-  });
-
-  // Prefer the live /auth/me email; fall back to the remembered login email
-  // (the seeded `.local` admin makes /auth/me 500 on the backend).
-  const displayEmail = user?.email ?? getUserEmail() ?? undefined;
+  const displayEmail = user?.email ?? undefined;
 
   const logout = () => {
-    clearTokens();
+    authLogout();
     router.replace("/login");
   };
 
-  if (!ready) {
+  if (loading || !user) {
     return (
       <div className="grid h-screen place-items-center text-muted">
         <span className="animate-pulse text-sm">Loading…</span>

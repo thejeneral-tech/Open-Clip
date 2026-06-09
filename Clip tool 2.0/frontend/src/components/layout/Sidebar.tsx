@@ -7,13 +7,12 @@ import {
   Clapperboard,
   Compass,
   Cpu,
+  FolderKanban,
   LayoutDashboard,
   LogOut,
   Palette,
-  Scissors,
   Send,
   Settings,
-  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,14 +24,13 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/videos", label: "Videos", icon: Video },
-  { href: "/clips", label: "Clips", icon: Scissors, soon: true },
-  { href: "/bots", label: "Bots", icon: Bot, soon: true },
-  { href: "/discovery", label: "Discovery", icon: Compass, soon: true },
-  { href: "/publishing", label: "Publishing", icon: Send, soon: true },
-  { href: "/models", label: "Models & GPU", icon: Cpu, soon: true },
-  { href: "/settings", label: "Settings", icon: Settings, soon: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/bots", label: "Bots", icon: Bot },
+  { href: "/discovery", label: "Discovery", icon: Compass },
+  { href: "/publishing", label: "Publishing", icon: Send },
+  { href: "/models", label: "Models & GPU", icon: Cpu },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({
