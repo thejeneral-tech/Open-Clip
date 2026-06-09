@@ -165,6 +165,12 @@ class Settings(BaseSettings):
     TRACKING_SAMPLE_FPS: int = 5
     ENABLE_YOLO: bool = True
     YOLO_MODEL: str = "yolov8n.pt"
+    # Device for YOLO person detection in smart-reframe. Default "cpu": this box's
+    # Tesla P100 is compute capability sm_60, which the installed PyTorch build
+    # has no kernels for (CUDA "no kernel image is available" → crash). yolov8n on
+    # CPU is plenty fast at the ~5fps tracking sample rate. Set "cuda"/"0" only on
+    # a GPU whose CC is supported by the installed torch.
+    YOLO_DEVICE: str = "cpu"
 
     # ---- Reframe smoothing / render ----
     # Dense sendcmd grid ceiling (Hz). The crop is animated at min(this, source

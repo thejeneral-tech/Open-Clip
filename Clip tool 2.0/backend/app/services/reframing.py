@@ -104,7 +104,9 @@ def _detect_persons_yolo(model, frame, w: int, h: int) -> list[tuple[float, floa
     height), not the box centre (torso) — so a face↔person fallback flip barely
     moves cy instead of lurching between head and torso.
     """
-    results = model(frame, classes=[0], verbose=False)  # class 0 = person
+    # device pinned (default cpu): the P100 (sm_60) isn't supported by the
+    # installed torch, so GPU inference raises "no kernel image is available".
+    results = model(frame, classes=[0], verbose=False, device=settings.YOLO_DEVICE)  # class 0 = person
     out: list[tuple[float, float, float]] = []
     frac = settings.REFRAME_PERSON_HEAD_FRAC
     for r in results:
