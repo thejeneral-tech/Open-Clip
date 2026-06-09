@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import UserRole
+from app.schemas.types import Email
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: Email
     full_name: str | None = None
     role: UserRole = UserRole.EDITOR
     is_active: bool = True

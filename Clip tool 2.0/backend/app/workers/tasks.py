@@ -63,6 +63,23 @@ def _lerp(band: tuple[float, float], frac: float) -> float:
     return band[0] + (band[1] - band[0]) * max(0.0, min(1.0, frac))
 
 
+# Columns AIAnalysis actually accepts. Service layers (viral detection, clip
+# metadata) attach extra audit fields like ``prompt``/``tokens_eval`` to their
+# analysis dicts; those are not ORM columns, so fold them into ``result`` instead
+# of letting ``AIAnalysis(**a)`` crash on an unexpected keyword.
+_AI_ANALYSIS_FIELDS = {"analysis_type", "model", "result", "duration_ms"}
+
+
+def _ai_analysis(video_id: int, clip_id: int | None = None, **fields: Any) -> AIAnalysis:
+    known = {k: v for k, v in fields.items() if k in _AI_ANALYSIS_FIELDS}
+    extra = {k: v for k, v in fields.items() if k not in _AI_ANALYSIS_FIELDS}
+    if extra:
+        result = dict(known.get("result") or {})
+        result.setdefault("_audit", {}).update(extra)
+        known["result"] = result
+    return AIAnalysis(video_id=video_id, clip_id=clip_id, **known)
+
+
 def _owner_models(video: Video) -> dict[str, str]:
     """Resolve the model names to use, honoring the owner's settings."""
     out = {
@@ -239,7 +256,7 @@ def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
     aspect = opts.aspect_ratios[0].value if opts.aspect_ratios else "9:16"
     with session_scope() as db:
         for a in analyses:
-            db.add(AIAnalysis(video_id=video_id, **a))
+            db.add(_ai_analysis(video_id, **a))
         for idx, cand in enumerate(candidates):
             clip = Clip(
                 video_id=video_id,
@@ -351,7 +368,7 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
         for key, value in updates.items():
             setattr(clip, key, value)
         for a in analyses:
-            db.add(AIAnalysis(video_id=video_id, clip_id=clip_id, **a))
+            db.add(_ai_analysis(video_id, clip_id, **a))
 
     # --- render preview ---
     try:

@@ -39,10 +39,26 @@ class RenderResult:
     size_bytes: int
 
 
+# Human-friendly resolution labels → the canonical "<height>p" keys. Without
+# this, an unrecognised label (e.g. "4k") silently falls back to 1080p, quietly
+# downscaling the export.
+_RESOLUTION_ALIASES = {
+    "4k": "2160p",
+    "uhd": "2160p",
+    "2k": "1440p",
+    "qhd": "1440p",
+    "fhd": "1080p",
+    "fullhd": "1080p",
+    "hd": "720p",
+}
+
+
 def output_dimensions(aspect_ratio: str, resolution: str) -> tuple[int, int]:
     """Compute (width, height) for an aspect ratio at a quality target."""
     aw, ah = ASPECT_DIMENSIONS.get(aspect_ratio, (9, 16))
-    base = RESOLUTION_HEIGHTS.get(resolution, 1080)
+    res = resolution.strip().lower()
+    res = _RESOLUTION_ALIASES.get(res, res)
+    base = RESOLUTION_HEIGHTS.get(res, 1080)
     if aw > ah:  # landscape → base is the height
         height = base
         width = round(base * aw / ah)
