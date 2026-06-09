@@ -114,7 +114,20 @@ router.get('/backgrounds/:id', wrap(async (req, res) => {
   res.json(withMedia({ ...bg, segments: segSvc.listForBackground(bg.id) }));
 }));
 router.patch('/backgrounds/:id', wrap(async (req, res) => res.json(withMedia(bgSvc.update(req.params.id, req.body || {})))));
-router.delete('/backgrounds/:id', wrap(async (req, res) => res.json({ ok: bgSvc.remove(req.params.id) })));
+// Delete → trash by default; ?permanent=1 hard-removes file + segments.
+router.delete('/backgrounds/:id', wrap(async (req, res) => {
+  if (req.query.permanent) return res.json({ ok: bgSvc.remove(req.params.id) });
+  return res.json({ ok: !!require('../services/trash').softDelete('backgrounds', [req.params.id]) });
+}));
+// Bulk trash actions: delete (→trash) | restore | purge (file+segments removed).
+router.post('/backgrounds/bulk', wrap(async (req, res) => {
+  const { ids = [], action } = req.body || {};
+  const trash = require('../services/trash');
+  if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('backgrounds', ids) });
+  if (action === 'restore') return res.json({ ok: true, count: trash.restore('backgrounds', ids) });
+  if (action === 'purge') { let n = 0; ids.forEach((id) => { if (bgSvc.remove(id)) n++; }); return res.json({ ok: true, count: n }); }
+  throw new Error('Unknown action.');
+}));
 
 // Split a background into usable segments (spec §11).
 router.post('/backgrounds/:id/segments', wrap(async (req, res) => {

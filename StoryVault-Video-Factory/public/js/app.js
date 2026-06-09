@@ -5,15 +5,18 @@
   const NAV = [
     { sep: 'Workspace' },
     { id: 'command', label: 'Command Center', ico: '◎' },
-    { id: 'discovery', label: 'Story Finder', ico: '🔎' },
     { id: 'library', label: 'Story Library', ico: '📚' },
     { id: 'backgrounds', label: 'Footage Library', ico: '🎞' },
     { id: 'templates', label: 'Templates', ico: '▦' },
+    { id: 'presets', label: 'Presets', ico: '✦' },
     { sep: 'Production' },
     { id: 'composer', label: 'Video Studio', ico: '🎬' },
     { id: 'batch', label: 'Batch Factory', ico: '⚙' },
     { id: 'review', label: 'Review Queue', ico: '✅' },
     { id: 'exports', label: 'Exports', ico: '📤' },
+    { sep: 'Voice' },
+    { id: 'voices', label: 'Voices', ico: '🎙' },
+    { id: 'fishspeech', label: 'Fish Speech', ico: '🐟' },
     { sep: 'System' },
     { id: 'jobs', label: 'Job Monitor', ico: '📈' },
     { id: 'accounts', label: 'Accounts', ico: '🔑' },
@@ -47,7 +50,8 @@
   }
 
   async function route() {
-    const page = (location.hash.replace(/^#\/?/, '').split('/')[0]) || 'dashboard';
+    let page = (location.hash.replace(/^#\/?/, '').split('/')[0]) || 'dashboard';
+    if (page === 'discovery') { location.hash = '#/library'; return; } // Story Finder folded into Library
     const param = location.hash.split('/')[2] || null;
     setActive(page);
     document.getElementById('sidebar').classList.remove('open');

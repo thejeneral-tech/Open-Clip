@@ -17,11 +17,16 @@ const log = require('./logger');
 const overlays = require('./overlays');
 const tts = require('./tts');
 
+// Crossfade duration between footage clips; selections add a small buffer so the xfade
+// overlap (which shortens total footage) never leaves the video shorter than the audio.
+const TRANSITION = 0.35;
+function withTransitionBuffer(dur) { return dur * 1.04 + 3; }
+
 // Create the video (project) record linking all artefacts + a footage plan.
 function createVideo({ story, script, narration, caption, opts = {} }) {
   const targetDur = narration.duration;
   const seedRng = rng.mulberry32(rng.seedFrom(`${narration.id}|${opts.variationSeed || 0}`));
-  const sel = segSvc.selectForDuration(targetDur, {
+  const sel = segSvc.selectForDuration(withTransitionBuffer(targetDur), {
     avoidSegmentIds: opts.avoidSegmentIds || [],
     backgroundIds: opts.backgroundIds || null,
     category: opts.backgroundCategory || null,
@@ -70,16 +75,19 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
 
   const isQuora = /quora/i.test(story.source_type || '') || /quora/i.test(story.community || '');
   const platform = isQuora ? 'quora' : 'reddit';
-  const voiceOpts = { voice: ttsOpts.voice, speed: ttsOpts.speed, style: ttsOpts.style };
+  const voiceOpts = { provider: ttsOpts.provider, voice: ttsOpts.voice, speed: ttsOpts.speed, style: ttsOpts.style, refPath: ttsOpts.refPath, temperature: ttsOpts.temperature };
 
   // Stage 1 audio — the title.
   const title = (story.title || 'Untitled story').trim();
   const titleSynth = await tts.synth(cleanForSpeech(title), { ...voiceOpts, out: path.join(PATHS.tmp, `${video.id}_title.wav`) });
   const dT = titleSynth.duration;
 
-  // Stage 2 audio — "Posted by <author>" (only when the author is known and the stage is on).
+  // Stage 2 audio — "Posted by <author>". Every post gets a username: the real author when
+  // known, otherwise a deterministic believable handle (so cards never say "User submitted").
   let dA = 0; let authorWav = null;
-  const author = story.author && !/^\[?deleted\]?$/i.test(story.author) ? String(story.author) : null;
+  const author = (story.author && !/^\[?deleted\]?$/i.test(story.author))
+    ? String(story.author).replace(/^u\//i, '')
+    : generateHandle(story, isQuora);
   if (ai.enabled !== false && author) {
     const prefix = isQuora ? (ai.prefixQuora || 'Written by') : (ai.prefixReddit || 'Posted by');
     const aSynth = await tts.synth(`${prefix}, ${humanizeHandle(author)}.`, { ...voiceOpts, out: path.join(PATHS.tmp, `${video.id}_author.wav`) });
@@ -104,7 +112,7 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
 
   // Re-select footage to cover the FULL (intro + body) duration.
   const seedRng = rng.mulberry32(rng.seedFrom(`${narration.id}|${selectOpts.variationSeed || 0}|tpl`));
-  const sel = segSvc.selectForDuration(total, {
+  const sel = segSvc.selectForDuration(withTransitionBuffer(total), {
     avoidSegmentIds: selectOpts.avoidSegmentIds || [], backgroundIds: selectOpts.backgroundIds || null,
     category: selectOpts.backgroundCategory || null, seedRng,
   });
@@ -120,6 +128,20 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
 
 function cleanForSpeech(s) {
   return String(s || '').replace(/https?:\S+/g, '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim() || 'Untitled story';
+}
+// Deterministic, believable username for user-submitted stories (so every card has an
+// author + avatar instead of "User submitted"). Same story id → same handle every time.
+function generateHandle(story, isQuora) {
+  const r = rng.mulberry32(rng.seedFrom('handle|' + (story.id || story.title || 'x')));
+  const pick = (arr) => arr[Math.floor(r() * arr.length)];
+  if (isQuora) {
+    const first = ['Jordan', 'Alex', 'Sam', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Jamie', 'Drew', 'Quinn', 'Avery', 'Reese'];
+    const last = ['Bennett', 'Carter', 'Hughes', 'Patel', 'Nguyen', 'Reyes', 'Foster', 'Brooks', 'Hayes', 'Mercer', 'Cole', 'Ward'];
+    return `${pick(first)} ${pick(last)}`;
+  }
+  const adj = ['Quiet', 'Brave', 'Sleepy', 'Lucky', 'Salty', 'Cosmic', 'Grumpy', 'Mellow', 'Witty', 'Rusty', 'Silent', 'Frosty', 'Hidden', 'Spicy'];
+  const noun = ['Walrus', 'Otter', 'Falcon', 'Pickle', 'Comet', 'Badger', 'Maple', 'Raven', 'Cactus', 'Lobster', 'Penguin', 'Yeti', 'Marble', 'Goblin'];
+  return `${pick(adj)}-${pick(noun)}-${1000 + Math.floor(r() * 9000)}`;
 }
 function humanizeHandle(h) {
   const out = String(h).replace(/^u\//i, '').replace(/[_-]+/g, ' ').replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -175,8 +197,20 @@ function buildArgs(plan, narrationPath, assBasename, { width, height, fps, crf, 
     labels.push(`[v${i}]`);
   }
   let chain = parts.join(';');
-  if (plan.length > 1) chain += `;${labels.join('')}concat=n=${plan.length}:v=1:a=0[bg]`;
-  else chain += `;[v0]copy[bg]`;
+  if (plan.length === 1) {
+    chain += `;[v0]copy[bg]`;
+  } else {
+    // Seamless crossfade between consecutive clips — no hard cuts / colour flashes.
+    let prev = 'v0';
+    let acc = plan[0].duration;             // cumulative duration of the chain built so far
+    for (let i = 1; i < plan.length; i++) {
+      const out = (i === plan.length - 1) ? 'bg' : `xf${i}`;
+      const offset = Math.max(0, acc - TRANSITION).toFixed(3);
+      chain += `;[${prev}][v${i}]xfade=transition=fade:duration=${TRANSITION}:offset=${offset}[${out}]`;
+      acc += plan[i].duration - TRANSITION; // each xfade overlaps by TRANSITION seconds
+      prev = out;
+    }
+  }
   // burn captions (ass referenced by basename; ffmpeg cwd set to captions dir)
   chain += `;[bg]subtitles=${assBasename}[vout]`;
 

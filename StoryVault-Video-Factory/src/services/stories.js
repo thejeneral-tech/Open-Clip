@@ -154,16 +154,35 @@ function hydrate(row) {
 // --- CRUD --------------------------------------------------------------------
 function getStory(storyId) { return hydrate(db.get('SELECT * FROM stories WHERE id = ?', [storyId])); }
 
-function list({ status, category, source_type, minScore, limit = 200, search } = {}) {
+function list({ status, category, source_type, minScore, limit = 200, search, trash } = {}) {
   let sql = 'SELECT * FROM stories WHERE 1=1';
   const p = [];
+  sql += trash ? ' AND deleted_at IS NOT NULL' : ' AND deleted_at IS NULL';
   if (status) { sql += ' AND status = ?'; p.push(status); }
   if (category) { sql += ' AND category = ?'; p.push(category); }
   if (source_type) { sql += ' AND source_type = ?'; p.push(source_type); }
   if (minScore) { sql += ' AND score_overall >= ?'; p.push(minScore); }
   if (search) { sql += ' AND (title LIKE ? OR body LIKE ?)'; p.push('%' + search + '%', '%' + search + '%'); }
-  sql += ' ORDER BY score_overall DESC, created_at DESC LIMIT ?'; p.push(limit);
+  sql += ' ORDER BY score_overall DESC, created_at DESC LIMIT ?'; p.push(Number(limit) || 200);
   return db.all(sql, p).map(hydrate);
+}
+
+// How many usable (unused, non-duplicate, non-deleted) stories are available.
+function availableCount(filter = {}) {
+  return list({ ...filter, limit: 1000 }).filter((s) => s.status !== 'excluded' && s.status !== 'used' && !s.duplicate_of).length;
+}
+
+// Generate fresh long-form stories locally (workaround for no live Reddit/Quora API) and
+// ingest them. Used by the Story Library "Refresh" + auto-replenish.
+function replenish(count = 12, opts = {}) {
+  const storyForge = require('./storyForge');
+  const candidates = storyForge.batch(count, {
+    category: opts.category || null,
+    targetMinutes: opts.targetMinutes || undefined,
+    source: opts.source || 'pasted',
+  });
+  const r = ingest(candidates, { sourceType: 'forge', applyPrefs: false });
+  return { added: r.stories.length, duplicates: r.duplicates, stories: r.stories };
 }
 
 function setStatus(storyId, status) {
@@ -176,4 +195,4 @@ function pickBest(n, filter = {}) {
   return candidates.slice(0, n);
 }
 
-module.exports = { ingest, getStory, list, setStatus, pickBest, hydrate, sortStories, ensureSource };
+module.exports = { ingest, getStory, list, setStatus, pickBest, hydrate, sortStories, ensureSource, replenish, availableCount };

@@ -36,8 +36,10 @@ const REFERENCE_TEMPLATE = {
   },
   captions: {
     enabled: true, style: 'reference', size: 80, outline: 7, marginV: 520,
+    centerY: 1150, // captions are positioned dead-centre horizontally at this Y (≈60% height)
     maxWords: 4, maxChars: 18, highlight: C.yellow, primary: C.white,
   },
+  transition: { type: 'fade', seconds: 0.35 }, // seamless crossfade between footage clips
   export: { vcodec: 'libx264', acodec: 'aac', crf: 20, audioBitrate: '160k' },
 };
 

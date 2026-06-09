@@ -68,12 +68,15 @@ window.PAGES = window.PAGES || {};
       scoreBars(s),
       s.score_reasons && s.score_reasons.length ? el('div.tiny.muted', '✓ ' + s.score_reasons.slice(0, 2).join(' · ')) : null,
       el('div.tiny', { style: { marginTop: '2px' }, onclick: () => scoreModal(s) }, [el('a', { style: { cursor: 'pointer', color: 'var(--accent)' } }, 'Why this score?')]),
-      el('div.card-actions', [
+      el('div.card-actions', opts.trash ? [
+        btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/stories/bulk', { ids: [s.id], action: 'restore' }); toast('Restored', 'ok'); opts.onChange && opts.onChange(); } }),
+        btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Permanently delete this story? This cannot be undone.', async () => { await API.post('/stories/bulk', { ids: [s.id], action: 'purge' }); toast('Deleted'); opts.onChange && opts.onChange(); }, 'Delete') }),
+      ] : [
         btn('👁 Review', { cls: 'sm', onClick: () => storyDetail(s.id) }),
         btn('✦ Create Video', { cls: 'sm primary', onClick: () => createVideoModal(s.id) }),
         btn('🧠 Analyze', { cls: 'sm ghost', onClick: () => analyzeModal(s.id) }),
         btn('💾 Save', { cls: 'sm ghost', onClick: async () => { await API.post(`/stories/${s.id}/status`, { status: 'saved' }); toast('Saved', 'ok'); } }),
-        btn('🚫 Exclude', { cls: 'sm ghost', onClick: async () => { await API.post(`/stories/${s.id}/status`, { status: 'excluded' }); toast('Excluded'); card.style.opacity = .5; } }),
+        btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.post('/stories/bulk', { ids: [s.id], action: 'delete' }); toast('Moved to trash'); opts.onChange ? opts.onChange() : (card.style.display = 'none'); } }),
         s.url ? el('a.btn.sm.ghost', { href: s.url, target: '_blank' }, '🔗 Open Source') : null,
       ]),
       opts.selectable ? el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (e) => opts.onSelect(s.id, e.target.checked) }), el('span', 'Select')]) : null,
@@ -305,26 +308,90 @@ window.PAGES = window.PAGES || {};
     }
   };
 
-  // ===================== STORY LIBRARY (§6) =====================
+  // ===================== STORY LIBRARY (§6) — auto-replenishing =====================
   PAGES.library = async function (view) {
     const m = meta();
-    const filters = { status: '', category: '', search: '' };
+    const state = { status: '', category: '', search: '', trash: false, length: 30, _t: null };
+    const selected = new Set();
     clear(view);
     const grid = el('div.grid.cards.mt');
-    async function load() {
-      clear(grid); grid.append(UI.spinner());
-      const stories = await API.get('/stories?' + new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v))).toString());
-      clear(grid);
-      if (!stories.length) { grid.append(empty('📚', 'No saved stories', 'Discover and save stories first.')); return; }
-      stories.forEach((s) => grid.append(storyCard(s)));
+    const countLine = el('span.tiny.muted', { style: { marginLeft: '8px' } });
+    const trashBtn = btn('🗑 Trash', { onClick: () => { state.trash = !state.trash; trashBtn.textContent = state.trash ? '← Back to library' : '🗑 Trash'; bulkBar.style.display = ''; load(); } });
+    const bulkBar = el('div.spread.mt');
+
+    function qs() {
+      const q = new URLSearchParams(); q.set('limit', '300');
+      if (state.trash) { q.set('trash', '1'); return q; }
+      if (state.status) q.set('status', state.status);
+      if (state.category) q.set('category', state.category);
+      if (state.search) q.set('search', state.search);
+      return q;
     }
+    async function load() {
+      clear(grid); grid.append(UI.spinner()); selected.clear();
+      let list = await API.get('/stories?' + qs().toString());
+      // Auto-replenish a thin library (spec: "always replenish").
+      if (!state.trash && !state.search && list.length < 8) {
+        clear(grid); grid.append(empty('🔄', 'Stocking the library…', 'Generating fresh long-form stories.'));
+        try { await API.post('/stories/replenish', { count: 12, targetMinutes: state.length }); list = await API.get('/stories?' + qs().toString()); } catch (e) { /* */ }
+      }
+      clear(grid);
+      countLine.textContent = list.length + (state.trash ? ' in trash' : ' stories');
+      renderBulk();
+      if (!list.length) { grid.append(empty('📚', state.trash ? 'Trash is empty' : 'No stories yet', state.trash ? 'Deleted stories appear here.' : 'Click “Refresh / Replenish”.')); return; }
+      list.forEach((s) => grid.append(storyCard(s, { selectable: true, trash: state.trash, onSelect: (id, on) => on ? selected.add(id) : selected.delete(id), onChange: load })));
+    }
+    function renderBulk() {
+      clear(bulkBar);
+      bulkBar.append(el('strong', 'Bulk actions'), el('div.btn-group', state.trash ? [
+        btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }),
+        btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => selected.size ? UI.confirmModal('Delete forever', `Permanently delete ${selected.size} story(ies)?`, () => bulk('purge'), 'Delete') : toast('Select stories first', 'warn') }),
+      ] : [
+        btn('💾 Save', { cls: 'sm', onClick: () => bulk('save') }),
+        btn('✦ Create videos', { cls: 'sm primary', onClick: createBatchFromSelected }),
+        btn('🚫 Exclude', { cls: 'sm ghost', onClick: () => bulk('exclude') }),
+        btn('🗑 Delete', { cls: 'sm danger', onClick: () => bulk('delete') }),
+        el('a.btn.sm.ghost', { href: '/api/stories/export/csv' }, 'Export CSV'),
+      ]));
+    }
+    async function bulk(action) {
+      if (!selected.size) return toast('Select some stories first', 'warn');
+      const n = selected.size;
+      await API.post('/stories/bulk', { ids: [...selected], action });
+      toast(`${action} applied to ${n} stor${n === 1 ? 'y' : 'ies'}`, 'ok');
+      load();
+    }
+    function createBatchFromSelected() {
+      if (!selected.size) return toast('Select stories first', 'warn');
+      sessionStorage.setItem('batchStoryIds', JSON.stringify([...selected]));
+      App.go('batch');
+    }
+    async function replenish(ev) {
+      if (ev) ev.target.disabled = true;
+      clear(grid); grid.append(empty('🔄', `Generating ~${state.length}-minute stories…`, 'Local generator — no API needed.'));
+      try {
+        const r = await API.post('/stories/replenish', { count: 12, targetMinutes: state.length, category: state.category || null });
+        toast(`Added ${r.added} stories${r.duplicates ? ` (${r.duplicates} dupes skipped)` : ''}`, 'ok');
+      } catch (e) { toast('Replenish failed: ' + e.message, 'err'); }
+      finally { if (ev) ev.target.disabled = false; load(); }
+    }
+
     view.append(
-      pageHead('📚 Story Library', 'Every discovered story, ranked and filterable.'),
-      el('div.panel', el('div.form-grid', [
-        field('Status', select([{ id: '', label: 'All' }, 'new', 'saved', 'approved', 'used', 'excluded'], { onChange: (e) => { filters.status = e.target.value; load(); } })),
-        field('Category', select([{ id: '', label: 'All' }].concat(m.categories), { onChange: (e) => { filters.category = e.target.value; load(); } })),
-        field('Search', input({ placeholder: 'title or text…', onInput: (e) => { filters.search = e.target.value; clearTimeout(filters._t); filters._t = setTimeout(load, 350); } })),
-      ])),
+      pageHead('📚 Story Library', 'Auto-replenishing library of long-form stories. Generated locally — no Reddit/Quora API required.'),
+      el('div.panel', [
+        el('div.form-grid', [
+          field('Status', select([{ id: '', label: 'All' }, 'new', 'saved', 'approved', 'used', 'excluded'], { value: state.status, onChange: (e) => { state.status = e.target.value; load(); } })),
+          field('Category', select([{ id: '', label: 'All' }].concat(m.categories), { value: state.category, onChange: (e) => { state.category = e.target.value; load(); } })),
+          field('Story length', select([{ id: 3, label: '~3 min' }, { id: 10, label: '~10 min' }, { id: 20, label: '~20 min' }, { id: 30, label: '~30 min' }], { value: state.length, onChange: (e) => state.length = +e.target.value })),
+          field('Search', input({ placeholder: 'title or text…', onInput: (e) => { state.search = e.target.value; clearTimeout(state._t); state._t = setTimeout(load, 350); } })),
+        ]),
+        el('div.btn-group.mt', [
+          btn('🔄 Refresh / Replenish', { cls: 'primary', onClick: replenish }),
+          trashBtn,
+          countLine,
+        ]),
+        bulkBar,
+      ]),
       grid,
     );
     load();
@@ -774,16 +841,40 @@ window.PAGES = window.PAGES || {};
 
   // ===================== EXPORTS (§19) =====================
   PAGES.exports = async function (view) {
-    const list = await API.get('/exports');
     clear(view);
-    view.append(pageHead('📤 Exports', 'Finished, approved videos ready to download and publish manually.'));
-    if (!list.length) { view.append(empty('📤', 'No exports yet', 'Approve videos in the Review Queue.')); return; }
-    view.append(el('div.grid.cards', list.map((e) => el('div.card', [
-      e.render_url ? el('video.thumb.v', { src: e.render_url, controls: true, style: { width: '100%', maxHeight: '340px', aspectRatio: '9/16' } }) : el('div.thumb.v'),
-      el('div.spread.mt', [el('strong', e.title || 'Video'), pill(e.platform, 'accent')]),
-      el('div.tiny.muted.mt', e.width + '×' + e.height + ' · ' + fmtDuration(e.duration) + ' · ' + fmtBytes(e.size_bytes) + ' · ' + ago(e.created_at)),
-      el('div.card-actions.mt', [el('a.btn.sm.primary', { href: '/api/exports/' + e.id + '/download' }, '⬇ Download'), el('a.btn.sm.ghost', { href: e.render_url, target: '_blank' }, '▶ Open')]),
-    ]))));
+    const state = { trash: false };
+    const sel = new Set();
+    const grid = el('div.grid.cards.mt');
+    async function load() {
+      clear(grid); grid.append(UI.spinner()); sel.clear();
+      const list = await API.get('/exports' + (state.trash ? '?trash=1' : ''));
+      clear(grid);
+      if (!list.length) { grid.append(empty('📤', state.trash ? 'Trash empty' : 'No exports yet', state.trash ? '' : 'Approve videos in the Review Queue.')); return; }
+      list.forEach((e) => grid.append(el('div.card', [
+        e.render_url ? el('video.thumb.v', { src: e.render_url, controls: true, style: { width: '100%', maxHeight: '340px', aspectRatio: '9/16' } }) : el('div.thumb.v'),
+        el('div.spread.mt', [el('strong', e.title || 'Video'), pill(e.platform, 'accent')]),
+        el('div.tiny.muted.mt', e.width + '×' + e.height + ' · ' + fmtDuration(e.duration) + ' · ' + fmtBytes(e.size_bytes) + ' · ' + ago(e.created_at)),
+        el('div.card-actions.mt', state.trash ? [
+          btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/exports/bulk', { ids: [e.id], action: 'restore' }); load(); } }),
+          btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Delete this export + its file permanently?', async () => { await API.post('/exports/bulk', { ids: [e.id], action: 'purge' }); load(); }, 'Delete') }),
+        ] : [
+          el('a.btn.sm.primary', { href: '/api/exports/' + e.id + '/download' }, '⬇ Download'),
+          el('a.btn.sm.ghost', { href: e.render_url, target: '_blank' }, '▶ Open'),
+          btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.del('/exports/' + e.id); toast('Moved to trash'); load(); } }),
+        ]),
+        el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (ev) => ev.target.checked ? sel.add(e.id) : sel.delete(e.id) }), el('span', 'Select')]),
+      ])));
+    }
+    async function bulk(action) { if (!sel.size) return toast('Select exports first', 'warn'); await API.post('/exports/bulk', { ids: [...sel], action }); load(); }
+    view.append(
+      pageHead('📤 Exports', 'Finished, approved videos ready to download and publish manually.'),
+      el('div.panel', el('div.spread', [
+        el('div.btn-group', state.trash ? [btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }), btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') })] : [btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') })]),
+        btn(state.trash ? '← Back' : '🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
+      ])),
+      grid,
+    );
+    load();
   };
 
   // ===================== PREFERENCES (§4) =====================
@@ -999,7 +1090,7 @@ window.PAGES = window.PAGES || {};
         (t.audio?.musicVolume ? null : tag('No music')),
       ].filter(Boolean)),
       el('div.card-actions.mt', [
-        btn(isActive ? '★ Default' : 'Set Default', { cls: isActive ? 'sm ok' : 'sm', disabled: isActive, onClick: async () => { await API.put('/preferences', { ...App.prefs, templateId: t.id }); App.prefs = await API.get('/preferences'); toast('Default template set', 'ok'); reload(); } }),
+        btn(isActive ? '★ Default' : 'Set Default', { cls: isActive ? 'sm ok' : 'sm', disabled: isActive, onClick: async () => { await API.post('/templates/' + t.id + '/default', {}); try { await API.put('/preferences', { ...App.prefs, templateId: t.id }); App.prefs = await API.get('/preferences'); } catch (e) { /* */ } if (App.refreshMeta) await App.refreshMeta(); toast('Default template set', 'ok'); reload(); } }),
         btn('✎ Edit', { cls: 'sm', onClick: () => editTemplate(t, reload) }),
         btn('⧉ Duplicate', { cls: 'sm ghost', onClick: async () => { await API.post('/templates/' + t.id + '/duplicate', {}); toast('Duplicated', 'ok'); reload(); } }),
         t.builtin ? null : btn('🗑', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete template', `Delete "${t.name}"?`, async () => { await API.del('/templates/' + t.id); toast('Deleted'); reload(); }, 'Delete') }),
@@ -1126,6 +1217,216 @@ window.PAGES = window.PAGES || {};
       ])),
       listBox,
     );
+    load();
+  };
+
+  // ===================== PRESETS (template chooser, Studio-styled) =====================
+  PAGES.presets = async function (view) {
+    clear(view);
+    let templates = await API.get('/templates');
+    let sel = templates.find((t) => t.isDefault) || templates[0];
+    const left = el('div.col'), center = el('div.col'), right = el('div.col');
+
+    function summary(t) {
+      const tc = t.topicCard || {}, cap = t.captions || {}, cv = t.canvas || {};
+      return [
+        ['Topic card', `${tc.minSeconds ?? '–'}–${tc.maxSeconds ?? '–'}s · ${tc.avatar ? 'avatar' : 'no avatar'}`],
+        ['Author intro', (t.authorIntro && t.authorIntro.enabled !== false) ? 'on' : 'off'],
+        ['Captions', `${cap.size || 80}px · centered`],
+        ['Canvas', `${cv.width || 1080}×${cv.height || 1920} @ ${cv.fps || 30}fps`],
+        ['Music', 'disabled'],
+      ];
+    }
+    function renderLeft() {
+      clear(left);
+      left.append(el('div.small.muted.mb', 'Templates'));
+      templates.forEach((t) => {
+        const active = sel && sel.id === t.id;
+        left.append(el('div.card.hover' + (active ? ' kb-focus' : ''), { style: { cursor: 'pointer', padding: '10px 12px' }, onclick: () => { sel = t; render(); } }, [
+          el('div.spread', [el('strong', t.name), t.isDefault ? pill('Default ★', 'ok') : (t.builtin ? pill('Built-in', 'info') : pill('Custom', 'accent'))]),
+        ]));
+      });
+    }
+    function renderCenter() {
+      clear(center);
+      if (!sel) { center.append(empty('▦', 'No template selected', '')); return; }
+      center.append(
+        el('div.small.muted.mb', 'Preview — ' + sel.name),
+        el('div.phone', { style: { margin: '0 auto' } }, [
+          el('div', { style: { position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#1b2330,#0e1420)' } }),
+          el('div', { style: { position: 'absolute', left: '12%', right: '12%', top: '30%', background: '#fff', color: '#141414', borderRadius: '12px', padding: '10px', fontSize: '9px', boxShadow: '0 6px 18px rgba(0,0,0,.5)' } }, [
+            el('div', { style: { fontWeight: '700' } }, '● Salty-Yeti-4489 ✓'),
+            el('div', { style: { fontWeight: '700', marginTop: '4px' } }, 'AITA for charging my family…'),
+            el('div', { style: { color: '#777', marginTop: '4px' } }, '♥ 99+   🗨 99+'),
+          ]),
+          el('div', { style: { position: 'absolute', left: 0, right: 0, top: '60%', textAlign: 'center', color: '#fff', fontWeight: '800', fontSize: '13px', textShadow: '0 0 4px #000,2px 2px 0 #000' } }, [document.createTextNode('then I '), el('span', { style: { color: '#ffd400' } }, 'discovered')]),
+        ]),
+      );
+    }
+    function renderRight() {
+      clear(right);
+      if (!sel) return;
+      right.append(
+        el('div.small.muted.mb', 'Settings'),
+        el('table', el('tbody', summary(sel).map(([k, v]) => el('tr', [el('td', { style: { color: 'var(--muted)', padding: '3px 10px 3px 0' } }, k), el('td', String(v))])))),
+        el('div.btn-group.mt', [
+          btn(sel.isDefault ? '★ Default' : 'Use for next run', { cls: sel.isDefault ? 'ok' : 'primary', disabled: sel.isDefault, onClick: async () => { await API.post('/templates/' + sel.id + '/default', {}); if (App.refreshMeta) await App.refreshMeta(); toast('Set as default template', 'ok'); templates = await API.get('/templates'); sel = templates.find((t) => t.id === sel.id); render(); } }),
+          btn('✦ Create video with this', { cls: 'sm', onClick: () => { sessionStorage.setItem('studioTemplateId', sel.id); App.go('composer'); } }),
+          btn('⧉ Duplicate', { cls: 'sm ghost', onClick: async () => { await API.post('/templates/' + sel.id + '/duplicate', {}); templates = await API.get('/templates'); render(); toast('Duplicated', 'ok'); } }),
+          btn('🛠 Open Templates editor', { cls: 'sm ghost', onClick: () => App.go('templates') }),
+        ]),
+      );
+    }
+    function render() { renderLeft(); renderCenter(); renderRight(); }
+    render();
+    view.append(
+      pageHead('✦ Presets', 'Pick the video template that drives every new video. The default is used automatically.'),
+      el('div.studio', [el('div.panel', left), el('div.panel', center), el('div.panel', right)]),
+    );
+  };
+
+  // ===================== VOICES (presets + cloning) =====================
+  PAGES.voices = async function (view) {
+    clear(view);
+    const state = { trash: false };
+    const grid = el('div.grid.cards.mt');
+    const sel = new Set();
+    let data = { presets: [], clones: [], sapiVoices: [], fish: {} };
+
+    async function load() {
+      clear(grid); grid.append(UI.spinner()); sel.clear();
+      data = await API.get('/voices/presets' + (state.trash ? '?trash=1' : ''));
+      clear(grid);
+      if (!data.presets.length) { grid.append(empty('🎙', state.trash ? 'Trash empty' : 'No voice presets', state.trash ? '' : 'Create one below, or clone a voice.')); }
+      data.presets.forEach((p) => grid.append(voiceCard(p)));
+    }
+    function play(url) { if (url) { const a = new Audio(url); a.play().catch(() => toast('No preview yet — click Preview', 'warn')); } }
+    function voiceCard(p) {
+      const enginePill = pill(p.engine === 'sapi' ? 'SAPI' : (p.engine === 'fish-clone' ? 'Cloned' : 'Fish'), p.engine === 'sapi' ? 'info' : 'accent');
+      return el('div.card', [
+        el('div.spread', [el('strong', (p.icon || '🎙') + ' ' + p.name), p.is_default ? pill('Default ★', 'ok') : enginePill]),
+        el('div.tiny.muted.mt', `${p.voice || p.engine} · speed ${p.speed}`),
+        el('div.card-actions.mt', state.trash ? [
+          btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'restore' }); load(); } }),
+          btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Permanently delete this voice?', async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'purge' }); load(); }, 'Delete') }),
+        ] : [
+          btn('▶ Preview', { cls: 'sm primary', onClick: async (e) => { e.target.disabled = true; try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); play(r.url); } catch (er) { toast(er.message, 'err'); } e.target.disabled = false; } }),
+          p.preview_url ? btn('🔊', { cls: 'sm ghost', title: 'Play last preview', onClick: () => play(p.preview_url) }) : null,
+          btn(p.is_default ? '★' : 'Set Default', { cls: 'sm', disabled: p.is_default, onClick: async () => { await API.post('/voices/presets/' + p.id + '/default', {}); toast('Default voice set — used for the next run', 'ok'); load(); } }),
+          btn('✎ Edit', { cls: 'sm ghost', onClick: () => editVoice(p) }),
+          btn('🗑', { cls: 'sm danger', onClick: async () => { await API.del('/voices/presets/' + p.id); toast('Moved to trash'); load(); } }),
+        ].filter(Boolean)),
+        el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (e) => e.target.checked ? sel.add(p.id) : sel.delete(p.id) }), el('span', 'Select')]),
+      ]);
+    }
+    function editVoice(p) {
+      const d = { name: p.name, voice: p.voice, speed: p.speed, style: p.style, temperature: p.temperature, engine: p.engine };
+      const m2 = modal('✎ ' + p.name, [
+        field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+        p.engine === 'sapi' ? field('SAPI voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })) : field('Temperature', input({ type: 'number', step: '0.05', value: d.temperature ?? 0.3, onInput: (e) => d.temperature = +e.target.value })),
+        field('Speed', input({ type: 'number', step: '0.05', min: '0.6', max: '1.5', value: d.speed, onInput: (e) => d.speed = +e.target.value })),
+        field('Style', select(['Calm storyteller', 'Dramatic', 'Suspenseful', 'Funny', 'Energetic'], { value: d.style, onChange: (e) => d.style = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Save', { cls: 'primary', onClick: async () => { await API.put('/voices/presets/' + p.id, d); m2.close(); toast('Saved', 'ok'); load(); } })]),
+      ], { width: '520px' });
+    }
+    function newVoiceModal() {
+      const d = { name: 'New voice', engine: 'sapi', voice: (data.sapiVoices[0] || {}).name, speed: 1.0, style: 'Calm storyteller', temperature: 0.3 };
+      const body = el('div.form-grid');
+      const m2 = modal('＋ New voice preset', [body, el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create & preview', { cls: 'primary', onClick: async () => { const p = await API.post('/voices/presets', d); try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); play(r.url); } catch (e) { /* */ } m2.close(); toast('Voice created', 'ok'); load(); } })])], { width: '520px' });
+      function rb() {
+        clear(body);
+        body.append(
+          field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+          field('Engine', select([{ id: 'sapi', label: 'SAPI (local, always available)' }, { id: 'fish', label: 'Fish Speech (needs model)' }], { value: d.engine, onChange: (e) => { d.engine = e.target.value; rb(); } })),
+          d.engine === 'sapi' ? field('Voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })) : field('Temperature', input({ type: 'number', step: '0.05', value: d.temperature, onInput: (e) => d.temperature = +e.target.value })),
+          field('Speed', input({ type: 'number', step: '0.05', min: '0.6', max: '1.5', value: d.speed, onInput: (e) => d.speed = +e.target.value })),
+          field('Style', select(['Calm storyteller', 'Dramatic', 'Suspenseful', 'Funny', 'Energetic'], { value: d.style, onChange: (e) => d.style = e.target.value })),
+        );
+      }
+      rb();
+    }
+    function cloneModal() {
+      const d = { name: 'My cloned voice', transcript: '' };
+      let file = null;
+      const m2 = modal('🧬 Clone a voice', [
+        el('div.small.muted.mb', 'Upload a short, clean voice sample (10–30s, WAV/MP3). Fish Speech uses it as the reference voice. By uploading you confirm you have the right to use this voice.'),
+        field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+        field('Reference audio', el('input', { type: 'file', accept: 'audio/*,.wav,.mp3', onchange: (e) => file = e.target.files[0] })),
+        field('Transcript (optional, improves quality)', textarea({ rows: 3, onInput: (e) => d.transcript = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create clone', { cls: 'primary', onClick: async (e) => {
+          if (!file) return toast('Choose a reference audio file', 'warn');
+          e.target.disabled = true;
+          const fd = new FormData(); fd.append('reference', file); fd.append('name', d.name); fd.append('transcript', d.transcript);
+          try { await API.uploadProgress('/voices/clone', fd, () => {}); m2.close(); toast('Voice cloned — preset created', 'ok'); load(); }
+          catch (er) { toast('Clone failed: ' + er.message, 'err'); e.target.disabled = false; }
+        } })]),
+      ], { width: '560px' });
+    }
+    async function bulk(action) { if (!sel.size) return toast('Select voices first', 'warn'); await API.post('/voices/presets/bulk', { ids: [...sel], action }); load(); }
+
+    view.append(
+      pageHead('🎙 Voices', 'Voice presets for narration — SAPI (built-in) and Fish Speech (incl. cloned voices). Set a default and it is used automatically on the next run.'),
+      el('div.panel', [
+        el('div.spread', [
+          el('div.btn-group', [
+            btn('＋ New voice preset', { cls: 'primary', onClick: newVoiceModal }),
+            btn('🧬 Clone a voice', { onClick: cloneModal }),
+            btn('🐟 Fish Speech setup', { cls: 'ghost', onClick: () => App.go('fishspeech') }),
+          ]),
+          btn(state.trash ? '← Back' : '🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
+        ]),
+        el('div.btn-group.mt', state.trash ? [btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }), btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') })] : [btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') })]),
+      ]),
+      grid,
+    );
+    load();
+  };
+
+  // ===================== FISH SPEECH =====================
+  PAGES.fishspeech = async function (view) {
+    clear(view);
+    const box = el('div.col.mt');
+    async function load() {
+      clear(box); box.append(UI.spinner());
+      const s = await API.get('/fishspeech/status');
+      clear(box);
+      const row = (k, ok, v) => el('div.spread', { style: { padding: '6px 0', borderBottom: '1px solid var(--border)' } }, [el('span', k), el('span', [pill(ok ? 'OK' : 'Missing', ok ? 'ok' : 'warn'), v ? el('span.tiny.muted', { style: { marginLeft: '8px' } }, v) : null])]);
+      box.append(el('div.panel', [
+        el('strong', 'Status'),
+        row('huggingface_hub installed', s.hubInstalled, ''),
+        row('Model downloaded', s.modelPresent, s.files && s.files.length ? s.files.length + ' files' : 'not yet'),
+        row('Server reachable', s.serverRunning, s.serverUrl),
+        row('Server binary configured', s.serverConfigured, s.serverConfigured ? '' : 'set FISH_S2_BIN'),
+        el('div.tiny.muted.mt', 'Model: ' + s.repo + '  →  ' + s.modelDir),
+      ]));
+      const prog = el('div.mt');
+      box.append(el('div.panel.mt', [
+        el('strong', 'Setup'),
+        el('div.btn-group.mt', [
+          btn(s.modelPresent ? '↻ Re-download model' : '⬇ Download model (GGUF)', { cls: 'primary', onClick: () => download(prog) }),
+          btn('▶ Start server', { onClick: async () => { try { const r = await API.post('/fishspeech/server/start', {}); toast(r.already ? 'Already running' : 'Server started', 'ok'); load(); } catch (e) { toast(e.message, 'err'); } } }),
+          btn('■ Stop server', { cls: 'ghost', onClick: async () => { await API.post('/fishspeech/server/stop', {}); load(); } }),
+          s.serverRunning ? btn('🔊 Test voice', { cls: 'ghost', onClick: async () => { try { const r = await API.post('/fishspeech/test', {}); new Audio(r.url).play(); } catch (e) { toast(e.message, 'err'); } } }) : null,
+        ].filter(Boolean)),
+        prog,
+        el('div.tiny.muted.mt', 'Fish Speech runs a local GGUF inference server. After downloading the model, set FISH_S2_BIN to the s2 server executable (or point FISH_TTS_URL at a running Fish server), then Start server. Cloned voices use a reference clip as the prompt voice. Narration falls back to SAPI when Fish Speech is unavailable.'),
+      ]));
+    }
+    function download(prog) {
+      clear(prog);
+      const fill = el('div.fill', { style: { width: '0%' } });
+      const label = el('div.small.muted.mb', 'Starting download… (the GGUF model is large — this can take a while)');
+      prog.append(label, el('div.progress', fill));
+      const off = App.on('progress', (p) => {
+        if (p.channel !== 'fish') return;
+        if (p.stage === 'done') { App.off('progress', off); toast('Model downloaded', 'ok'); load(); return; }
+        if (p.stage === 'error') { App.off('progress', off); toast('Download failed: ' + p.error, 'err', 9000); return; }
+        if (typeof p.percent === 'number') fill.style.width = Math.round(p.percent) + '%';
+        if (p.line) label.textContent = p.line;
+      });
+      API.post('/fishspeech/download', {}).catch((e) => { App.off('progress', off); toast(e.message, 'err'); });
+    }
+    view.append(pageHead('🐟 Fish Speech', 'Local neural TTS + voice cloning (S2-Pro GGUF). Download the model, start the server, then use Fish/cloned voices on the Voices page.'), box);
     load();
   };
 

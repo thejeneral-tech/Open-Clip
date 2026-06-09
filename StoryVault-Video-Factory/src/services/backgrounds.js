@@ -71,8 +71,9 @@ function hydrate(row) {
 
 function get(bgId) { return hydrate(db.get('SELECT * FROM backgrounds WHERE id = ?', [bgId])); }
 
-function list({ category, archived = 0, favorite } = {}) {
+function list({ category, archived = 0, favorite, trash } = {}) {
   let sql = 'SELECT * FROM backgrounds WHERE archived = ?'; const p = [archived ? 1 : 0];
+  sql += trash ? ' AND deleted_at IS NOT NULL' : ' AND deleted_at IS NULL';
   if (category) { sql += ' AND category = ?'; p.push(category); }
   if (favorite != null) { sql += ' AND favorite = ?'; p.push(favorite ? 1 : 0); }
   sql += ' ORDER BY created_at DESC';

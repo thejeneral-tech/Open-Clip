@@ -102,6 +102,34 @@ function run(db, nowIso) {
       last_heartbeat TEXT,
       started_at     TEXT
     );
+
+    -- Voice presets (SAPI + Fish Speech) and cloned voices.
+    CREATE TABLE IF NOT EXISTS voice_presets (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      engine       TEXT NOT NULL DEFAULT 'sapi',  -- sapi | fish | fish-clone
+      voice        TEXT,                          -- engine voice id / SAPI voice name
+      icon         TEXT,
+      speed        REAL DEFAULT 1.0,
+      temperature  REAL,
+      pitch        REAL DEFAULT 0,
+      style        TEXT,
+      clone_id     TEXT,                          -- → voice_clones.id when engine = fish-clone
+      settings     TEXT,                          -- JSON: extra knobs
+      preview_path TEXT,
+      is_default   INTEGER DEFAULT 0,
+      builtin      INTEGER DEFAULT 0,
+      created_at   TEXT NOT NULL,
+      updated_at   TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS voice_clones (
+      id             TEXT PRIMARY KEY,
+      name           TEXT NOT NULL,
+      reference_path TEXT NOT NULL,                -- uploaded reference WAV
+      transcript     TEXT,
+      status         TEXT DEFAULT 'ready',
+      created_at     TEXT NOT NULL
+    );
   `);
 
   // --- additive columns on existing tables ----------------------------------
@@ -122,6 +150,13 @@ function run(db, nowIso) {
   // Exports: structured filename + JSON sidecar metadata (spec §20 deliverable).
   ensureColumn(db, 'exports', 'filename', 'filename TEXT');
   ensureColumn(db, 'exports', 'sidecar_path', 'sidecar_path TEXT');
+  // Soft-delete (trash bin) across the user-facing libraries.
+  ensureColumn(db, 'stories', 'deleted_at', 'deleted_at TEXT');
+  ensureColumn(db, 'backgrounds', 'deleted_at', 'deleted_at TEXT');
+  ensureColumn(db, 'templates', 'deleted_at', 'deleted_at TEXT');
+  ensureColumn(db, 'exports', 'deleted_at', 'deleted_at TEXT');
+  // Voice presets (custom + cloned) — Fish Speech / SAPI.
+  ensureColumn(db, 'voice_presets', 'deleted_at', 'deleted_at TEXT');
 
   // --- seed built-in templates (idempotent by id) ---------------------------
   const exists = db.prepare('SELECT id FROM templates WHERE id = ?');

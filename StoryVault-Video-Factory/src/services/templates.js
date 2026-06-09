@@ -11,8 +11,9 @@ function hydrate(row) {
   return { ...data, id: row.id, name: row.name, builtin: !!row.builtin, isDefault: !!row.is_default };
 }
 
-function list() {
-  return db.all('SELECT * FROM templates ORDER BY is_default DESC, builtin DESC, name').map(hydrate);
+function list({ trash } = {}) {
+  const where = trash ? 'WHERE deleted_at IS NOT NULL' : 'WHERE deleted_at IS NULL';
+  return db.all(`SELECT * FROM templates ${where} ORDER BY is_default DESC, builtin DESC, name`).map(hydrate);
 }
 function get(tplId) {
   return hydrate(db.get('SELECT * FROM templates WHERE id = ?', [tplId]));
@@ -39,6 +40,22 @@ function update(tplId, patch) {
   db.update('templates', tplId, { name: merged.name || row.name, data: JSON.stringify(merged), updated_at: db.nowIso() });
   return get(tplId);
 }
+// Make a template the active default (drives every new video).
+function setDefault(tplId) {
+  const row = db.get('SELECT * FROM templates WHERE id = ?', [tplId]);
+  if (!row) throw new Error('Template not found.');
+  db.run('UPDATE templates SET is_default = 0');
+  db.update('templates', tplId, { is_default: 1, updated_at: db.nowIso() });
+  return get(tplId);
+}
+// Soft-delete a CUSTOM template (→ trash). Built-ins cannot be removed.
+function softRemove(tplId) {
+  const row = db.get('SELECT * FROM templates WHERE id = ?', [tplId]);
+  if (!row) throw new Error('Template not found.');
+  if (row.builtin) throw new Error('Built-in templates cannot be deleted. Duplicate it and edit the copy instead.');
+  db.update('templates', tplId, { deleted_at: db.nowIso(), is_default: 0, updated_at: db.nowIso() });
+  return { ok: true };
+}
 function remove(tplId) {
   const row = db.get('SELECT * FROM templates WHERE id = ?', [tplId]);
   if (!row) throw new Error('Template not found.');
@@ -52,4 +69,4 @@ function duplicate(tplId, name) {
   return create(name || (src.name + ' copy'), { ...src });
 }
 
-module.exports = { list, get, getDefault, resolve, create, update, remove, duplicate };
+module.exports = { list, get, getDefault, resolve, create, update, remove, softRemove, setDefault, duplicate };

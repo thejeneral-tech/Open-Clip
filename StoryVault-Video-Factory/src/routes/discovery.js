@@ -35,7 +35,17 @@ router.post('/discovery/import-urls', wrap(async (req, res) => {
 router.post('/discovery/save/:searchId', wrap(async (req, res) => res.json(discovery.saveSearch(req.params.searchId, req.body?.name))));
 router.get('/discovery/searches', wrap(async (req, res) => res.json(discovery.listSearches())));
 
-// --- Story library (spec §6) ---
+// Replenish the library with fresh long-form stories (workaround for no live API).
+router.post('/stories/replenish', wrap(async (req, res) => {
+  const count = Math.max(1, Math.min(50, Number(req.body?.count) || 12));
+  res.json(stories.replenish(count, {
+    category: req.body?.category || null,
+    targetMinutes: Number(req.body?.targetMinutes) || undefined,
+    source: req.body?.source,
+  }));
+}));
+
+// --- Story library (spec §6) --- (trash view via ?trash=1)
 router.get('/stories', wrap(async (req, res) => res.json(stories.list(req.query))));
 router.get('/stories/:id', wrap(async (req, res) => {
   const s = stories.getStory(req.params.id);
@@ -59,14 +69,18 @@ router.post('/stories/:id/analyze', wrap(async (req, res) => {
   res.json(a);
 }));
 
-// Bulk actions (spec §6).
+// Bulk actions (spec §6) incl. soft-delete / restore / purge (trash bin).
 router.post('/stories/bulk', wrap(async (req, res) => {
   const { ids = [], action } = req.body;
-  const map = { approve: 'approved', save: 'saved', exclude: 'excluded' };
+  const trash = require('../services/trash');
   if (action === 'export') {
     const rows = ids.map((id) => stories.getStory(id)).filter(Boolean);
     return res.json({ csv: toCsv(rows) });
   }
+  if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('stories', ids) });
+  if (action === 'restore') return res.json({ ok: true, count: trash.restore('stories', ids) });
+  if (action === 'purge') return res.json({ ok: true, count: trash.purge('stories', ids) });
+  const map = { approve: 'approved', save: 'saved', exclude: 'excluded', prepare: 'saved' };
   if (!map[action]) throw new Error('Unknown bulk action.');
   ids.forEach((id) => stories.setStatus(id, map[action]));
   res.json({ ok: true, count: ids.length });

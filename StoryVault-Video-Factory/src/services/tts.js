@@ -128,7 +128,13 @@ async function generate(script, opts = {}) {
     wordTimings = buildTimingsFromSapi(timingsPath, meta.duration, scriptText);
     cleanup(timingsPath);
     var duration = meta.duration;
-  } else if (provider === 'fish' || provider === 'kokoro' || provider === 'http') {
+  } else if (provider === 'fish' || provider === 'fish-clone') {
+    const fishspeech = require('./fishspeech');
+    await fishspeech.synth(scriptText, wavPath, { temperature: opts.temperature, refPath: opts.refPath, voice });
+    const meta = await ff.probe(wavPath);
+    duration = meta.duration;
+    wordTimings = estimateTimings(scriptText, duration);
+  } else if (provider === 'kokoro' || provider === 'http') {
     duration = await generateViaHttp(provider, scriptText, wavPath, { voice, speed, style });
     const meta = await ff.probe(wavPath);
     duration = meta.duration || duration;
@@ -178,6 +184,12 @@ async function synth(textStr, opts = {}) {
     const wordTimings = buildTimingsFromSapi(timingsPath, meta.duration, String(textStr));
     cleanup(timingsPath);
     return { path: outWav, duration: round(meta.duration), wordTimings };
+  }
+  if (provider === 'fish' || provider === 'fish-clone') {
+    const fishspeech = require('./fishspeech');
+    await fishspeech.synth(String(textStr), outWav, { temperature: opts.temperature, refPath: opts.refPath, voice });
+    const meta = await ff.probe(outWav);
+    return { path: outWav, duration: round(meta.duration), wordTimings: estimateTimings(String(textStr), meta.duration) };
   }
   const fallbackDur = await generateViaHttp(provider, String(textStr), outWav, { voice, speed, style });
   const meta = await ff.probe(outWav);

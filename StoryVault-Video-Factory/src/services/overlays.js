@@ -61,6 +61,20 @@ function roundedRect(x, y, w, h, r) {
   ].join(' ');
 }
 
+// Deterministic avatar colour from the handle (ASS &HAABBGGRR).
+function avatarColor(seed) {
+  const palette = ['&H00B36B3A&', '&H003A6BB3&', '&H003AB36B&', '&H00A33AB3&', '&H00B33A6B&', '&H003AB3B3&', '&H00B3953A&', '&H005A3AB3&'];
+  let h = 0; const s = String(seed || 'x');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+// The display username for the card — the real author, else the display name, never blank.
+function displayHandle(opts, isQuora) {
+  if (opts.author && !/^\[?deleted\]?$/i.test(opts.author)) return String(opts.author).replace(/^u\//i, '');
+  if (opts.displayName) return String(opts.displayName).replace(/^(r\/|u\/)/i, '');
+  return isQuora ? 'Quora User' : 'reddit_user';
+}
+
 // Fit a single line to a target pixel width by choosing an Arial-Black font size.
 function fitSize(text, targetPx, min, max) {
   const len = Math.max(1, esc(text).length);
@@ -71,9 +85,11 @@ function fitSize(text, targetPx, min, max) {
 // --- karaoke body captions (Stage 3) --------------------------------------
 // Reuses the proven word-grouping from captions.js; emits cumulative \k cues so already-
 // spoken words are yellow and upcoming words white (current-word highlight effect).
-function captionEvents(bodyTimings, tpl, censor) {
+function captionEvents(bodyTimings, tpl, censor, W, centerY) {
   if (!bodyTimings || !bodyTimings.length) return [];
   const groups = captions.groupWords(bodyTimings, { maxWords: tpl.maxWords, maxChars: Math.round((tpl.maxChars || 18) / 2) });
+  const cx = Math.round((W || 1080) / 2);
+  const cy = Math.round(centerY || 1150);
   const out = [];
   for (const g of groups) {
     const text = g.words.map((w) => {
@@ -81,7 +97,8 @@ function captionEvents(bodyTimings, tpl, censor) {
       const word = censor ? require('./safety').censorText(w.word) : w.word;
       return `{\\k${cs}}${esc(word)} `;
     }).join('').trim();
-    out.push(`Dialogue: 0,${assTime(g.start)},${assTime(g.end)},Caption,,0,0,0,,${text}`);
+    // Dead-centre horizontally via \an5 + \pos(W/2, centerY) (overrides the style's align/margins).
+    out.push(`Dialogue: 0,${assTime(g.start)},${assTime(g.end)},Caption,,0,0,0,,{\\an5\\pos(${cx},${cy})}${text}`);
   }
   return out;
 }
@@ -102,71 +119,81 @@ function buildAss(opts = {}) {
   const W = tpl.canvas.width;
   const events = [];
 
-  // ---- Stage 1: topic card --------------------------------------------------
+  // ---- Stage 1: topic card (X / "ScalingStories"-style) --------------------
   if (tpl.topicCard.enabled) {
     const cw = tpl.topicCard.width;
     const cx = Math.round((W - cw) / 2);
-    const pad = 46;
-    const avatar = tpl.topicCard.avatar;
-    const titleLeft = cx + pad;
-    const metaLeft = cx + pad + (avatar ? 84 : 0);
+    const pad = 44;
+    const innerLeft = cx + pad;
     const innerW = cw - pad * 2;
-    const maxChars = Math.floor(innerW / (tpl.topicCard.titleSize * 0.50));
-    const title = wrap(opts.title || 'Untitled story', maxChars, 5);
-    const lineH = Math.round(tpl.topicCard.titleSize * 1.18);
     const fa = `\\fad(${tpl.topicCard.fade},${tpl.topicCard.fade})`;
     const t0 = assTime(0), t1 = assTime(topicEnd);
 
-    const sourceLabel = isQuora
-      ? (opts.subreddit || 'Quora') + (opts.author ? '  •  ' + opts.author : '')
-      : (opts.subreddit || opts.displayName || 'r/AskReddit') + (opts.author ? '  •  u/' + opts.author : '');
+    // Identity: a real username + avatar (never "User submitted").
+    const handle = displayHandle(opts, isQuora);
+    const initial = esc(handle).replace(/^(u\/|@)/i, '').slice(0, 1).toUpperCase() || (isQuora ? 'Q' : 'R');
+    const nameTxt = esc(handle.replace(/^u\//i, ''));
 
-    const metricParts = [];
-    if (opts.metrics) {                                       // only real values — never fabricated
-      if (opts.metrics.upvotes != null) metricParts.push('▲ ' + compact(opts.metrics.upvotes));
-      if (opts.metrics.comments != null) metricParts.push('🗨 ' + compact(opts.metrics.comments));
-      if (opts.metrics.views != null) metricParts.push('👁 ' + compact(opts.metrics.views));
-    }
+    // Title wrap.
+    const titleSize = tpl.topicCard.titleSize;
+    const maxChars = Math.floor(innerW / (titleSize * 0.52));
+    const title = wrap(opts.title || 'Untitled story', maxChars, 5);
+    const lineH = Math.round(titleSize * 1.16);
 
-    // Lay the card out top-down with a running cursor so nothing overlaps.
-    const padTop = 36, gapAfterMeta = 30, gapAfterTitle = 14, gapAfterEmph = 16, padBottom = 38;
-    const metaH = 40;
-    const emphH = opts.emphasis ? lineH : 0;
-    const metricsH = metricParts.length ? 44 : 0;
-    const ch = padTop + metaH + gapAfterMeta + title.lineCount * lineH
-      + (emphH ? gapAfterTitle + emphH : 0)
-      + (metricsH ? gapAfterTitle + metricsH : 0) + padBottom;
+    // Engagement: real values where present, else stylised 99+ (matches the reference card).
+    let likeStr = '99+', cmtStr = '99+';
+    if (opts.metrics && opts.metrics.upvotes != null) likeStr = compact(opts.metrics.upvotes);
+    if (opts.metrics && opts.metrics.comments != null) cmtStr = compact(opts.metrics.comments);
+
+    // Top-down layout cursor (nothing overlaps).
+    const padTop = 34, avR = 38, headH = 86, awardsH = 30, gapAfterHead = 16, gapAfterAwards = 18,
+      gapAfterTitle = 14, emphH = opts.emphasis ? lineH : 0, metricsH = 44, padBottom = 34;
+    const ch = padTop + headH + gapAfterHead + awardsH + gapAfterAwards
+      + title.lineCount * lineH + (emphH ? gapAfterTitle + emphH : 0)
+      + gapAfterTitle + metricsH + padBottom;
     const cy = Math.round(tpl.topicCard.centerY - ch / 2);
 
-    let y = cy + padTop;
-    const metaY = y;
-    const titleY = metaY + metaH + gapAfterMeta;
-    let emphY = null, metricsY = null;
-    let after = titleY + title.lineCount * lineH;
-    if (emphH) { emphY = after + gapAfterTitle; after = emphY + emphH; }
-    if (metricsH) { metricsY = after + (emphH ? gapAfterEmph : gapAfterTitle); }
+    // Card background + soft shadow.
+    events.push(`Dialogue: 0,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${C.cardFill}\\bord0\\shad14\\4c${C.shadow}}${roundedRect(cx, cy, cw, ch, tpl.topicCard.radius)}{\\p0}`);
 
-    // shadow + white rounded card
-    events.push(`Dialogue: 0,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${C.cardFill}\\bord0\\shad10\\4c${C.shadow}}${roundedRect(cx, cy, cw, ch, tpl.topicCard.radius)}{\\p0}`);
-    // optional avatar (filled circle with initial)
-    if (avatar) {
-      const ar = 28, ax = cx + pad + ar, ay = metaY + 14;
-      events.push(`Dialogue: 1,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c&H00B36B3A&\\bord0}${roundedRect(ax - ar, ay - ar, ar * 2, ar * 2, ar)}{\\p0}`);
-      const initial = esc((opts.displayName || opts.subreddit || (isQuora ? 'Q' : 'r')).replace(/^(r\/|u\/)/i, '')).slice(0, 1).toUpperCase() || (isQuora ? 'Q' : 'R');
-      events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an5\\pos(${ax},${ay})\\fs32\\b1\\1c${C.white}}${initial}`);
+    // Avatar circle + initial.
+    const y = cy + padTop;
+    const ax = innerLeft + avR, ay = y + avR;
+    events.push(`Dialogue: 1,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${avatarColor(handle)}\\bord0}${roundedRect(ax - avR, ay - avR, avR * 2, avR * 2, avR)}{\\p0}`);
+    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an5\\pos(${ax},${ay})\\fs44\\b1\\1c${C.white}}${initial}`);
+
+    // Name + verified badge.
+    const nameSize = 42;
+    const nameX = innerLeft + avR * 2 + 22;
+    const nameMidY = ay - 8;
+    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an4\\pos(${nameX},${nameMidY})\\fs${nameSize}\\b1\\1c${C.cardTitle}}${nameTxt}`);
+    const bx = nameX + Math.round(nameTxt.length * nameSize * 0.56) + 24, by = nameMidY, br = 17;
+    events.push(`Dialogue: 1,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c&H00E8961D&\\bord0}${roundedRect(bx - br, by - br, br * 2, br * 2, br)}{\\p0}`);
+    events.push(`Dialogue: 3,${t0},${t1},Card,,0,0,0,,{${fa}\\an5\\pos(${bx},${by})\\fs22\\b1\\1c${C.white}}✓`);
+    // Sub-handle line under the name.
+    const sub = isQuora ? 'Quora' : ('u/' + handle.replace(/^u\//i, ''));
+    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an4\\pos(${nameX},${ay + 26})\\fs${tpl.topicCard.metaSize}\\1c${C.cardMeta}}${esc(sub)}`);
+
+    // Awards row (stylised colored chips).
+    const awY = y + headH + gapAfterHead + Math.round(awardsH / 2);
+    ['&H0024B6FF&', '&H00C8C8C8&', '&H003E84CC&', '&H0066D06B&', '&H00E0A6F0&', '&H00F0C040&'].forEach((col, i) => {
+      const acx = innerLeft + 14 + i * 38, acr = 13;
+      events.push(`Dialogue: 1,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${col}\\bord3\\3c${C.cardFill}}${roundedRect(acx - acr, awY - acr, acr * 2, acr * 2, acr)}{\\p0}`);
+    });
+
+    // Title (bold, near-black).
+    const titleY = y + headH + gapAfterHead + awardsH + gapAfterAwards;
+    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an7\\pos(${innerLeft},${titleY})\\fs${titleSize}\\b1\\1c${C.cardTitle}}${title.text}`);
+
+    let after = titleY + title.lineCount * lineH;
+    if (emphH) {
+      const emphY = after + gapAfterTitle;
+      events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an7\\pos(${innerLeft},${emphY})\\fs${titleSize}\\b1\\1c${C.cardRed}}${esc(opts.emphasis)}`);
+      after = emphY + emphH;
     }
-    // meta line
-    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an4\\pos(${metaLeft},${metaY + 20})\\fs${tpl.topicCard.metaSize}\\1c${C.cardMeta}}${esc(sourceLabel)}`);
-    // title (bold, near-black)
-    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an7\\pos(${titleLeft},${titleY})\\fs${tpl.topicCard.titleSize}\\b1\\1c${C.cardTitle}}${title.text}`);
-    // optional emphasis line in red (e.g. "Plus ten updates.")
-    if (emphY != null) {
-      events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an7\\pos(${titleLeft},${emphY})\\fs${tpl.topicCard.titleSize}\\b1\\1c${C.cardRed}}${esc(opts.emphasis)}`);
-    }
-    // metrics row (only when real values are provided)
-    if (metricsY != null) {
-      events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an7\\pos(${titleLeft},${metricsY})\\fs34\\1c${C.cardMeta}}${esc(metricParts.join('     '))}`);
-    }
+    // Engagement row: ♥ likes   🗨 comments.
+    const metY = after + gapAfterTitle + 18;
+    events.push(`Dialogue: 2,${t0},${t1},Card,,0,0,0,,{${fa}\\an4\\pos(${innerLeft},${metY})\\fs36\\1c${C.cardRed}}♥ {\\1c${C.cardMeta}}${esc(likeStr)}      {\\1c${C.cardMeta}}🗨 ${esc(cmtStr)}`);
   }
 
   // ---- Stage 2: author intro -----------------------------------------------
@@ -187,7 +214,8 @@ function buildAss(opts = {}) {
 
   // ---- Stage 3: body captions ----------------------------------------------
   const bodyTimings = (opts.wordTimings || []).filter((w) => w.start >= introEnd - 0.001);
-  const capEvents = captionEvents(bodyTimings, tpl.captions, opts.censor);
+  const capCenterY = tpl.captions.centerY || (tpl.canvas.height - tpl.captions.marginV);
+  const capEvents = captionEvents(bodyTimings, tpl.captions, opts.censor, W, capCenterY);
 
   return header(tpl) + '\n' + events.concat(capEvents).join('\n') + '\n';
 }

@@ -14,7 +14,7 @@
       if (v == null || v === false) continue;
       if (k === 'class') node.className += ' ' + v;
       else if (k === 'html') node.innerHTML = v;
-      else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+      else if (k === 'style' && typeof v === 'object') { for (const sk in v) { if (sk.charCodeAt(0) === 45 && sk.charCodeAt(1) === 45) node.style.setProperty(sk, v[sk]); else node.style[sk] = v[sk]; } } // '--' custom props need setProperty
       else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'value') node.value = v;
       else if (k === 'checked' || k === 'disabled' || k === 'selected') { if (v) node.setAttribute(k, k); node[k] = !!v; }
@@ -66,8 +66,17 @@
   }
   function ministat(value, label) { return el('div.ministat', [el('div.v', String(value)), el('div.l', label)]); }
 
+  function scoreColor(v) {
+    v = Math.round(v || 0);
+    if (v >= 90) return '#22c55e';   // exceptional — green
+    if (v >= 80) return '#38bdf8';   // strong — sky
+    if (v >= 70) return '#8b8bff';   // usable — accent
+    if (v >= 60) return '#eab308';   // weak — yellow
+    return '#ef4444';                // reject — red
+  }
   function scoreRing(value) {
-    return el('div.score', { style: { '--p': value } }, el('span', String(Math.round(value))));
+    const c = scoreColor(value);
+    return el('div.score', { style: { '--p': value, '--c': c } }, el('span', { style: { color: c } }, String(Math.round(value))));
   }
   function bar(label, value) {
     return el('div.bar', [el('span.lbl', label), el('div.track', el('div.fill', { style: { width: value + '%' } })), el('span', { style: { width: '26px', color: 'var(--muted)' } }, String(Math.round(value)))]);
@@ -121,5 +130,5 @@
     if (d < 86400) return Math.floor(d / 3600) + 'h ago'; return Math.floor(d / 86400) + 'd ago';
   }
 
-  window.UI = { el, clear, esc, append, btn, pill, tag, field, input, textarea, select, checkbox, toggle, collapse, ministat, scoreRing, bar, statTile, empty, spinner, toast, modal, confirmModal, fmtDuration, fmtBytes, ago };
+  window.UI = { el, clear, esc, append, btn, pill, tag, field, input, textarea, select, checkbox, toggle, collapse, ministat, scoreRing, scoreColor, bar, statTile, empty, spinner, toast, modal, confirmModal, fmtDuration, fmtBytes, ago };
 })();

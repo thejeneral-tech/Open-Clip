@@ -16,16 +16,26 @@ const log = require('./logger');
 
 function resolveSettings(overrides = {}) {
   const prefs = prefsSvc.get();
+  // A chosen voice preset (SAPI or Fish Speech / cloned voice) overrides the raw voice fields.
+  let preset = null;
+  const presetId = overrides.voicePresetId || prefs.voicePresetId;
+  if (presetId) { try { preset = require('./voices').getPreset(presetId); } catch { /* voices not ready */ } }
+  let refPath = null;
+  if (preset && preset.engine === 'fish-clone' && preset.clone_id) {
+    try { const c = require('../db/database').get('SELECT reference_path FROM voice_clones WHERE id = ?', [preset.clone_id]); refPath = c && c.reference_path; } catch { /* */ }
+  }
   return {
     durationSeconds: overrides.durationSeconds || prefs.targetVideoLength || 60,
     hookStyle: overrides.hookStyle || 'conflict',
     dramaLevel: overrides.dramaLevel || 3,
     safeMode: overrides.safeMode != null ? overrides.safeMode : (prefs.profanity === 'censor'),
     variationSeed: overrides.variationSeed || 0,
-    provider: overrides.provider || 'sapi',
-    voice: overrides.voice || prefs.preferredVoice || 'Microsoft Zira Desktop',
-    speed: overrides.speed != null ? overrides.speed : 1.0,
-    narrationStyle: overrides.narrationStyle || 'Calm storyteller',
+    provider: overrides.provider || (preset && preset.engine) || 'sapi',
+    voice: overrides.voice || (preset && preset.voice) || prefs.preferredVoice || 'Microsoft Zira Desktop',
+    speed: overrides.speed != null ? overrides.speed : (preset && preset.speed != null ? preset.speed : 1.0),
+    temperature: overrides.temperature != null ? overrides.temperature : (preset && preset.temperature),
+    cloneRef: refPath,
+    narrationStyle: overrides.narrationStyle || (preset && preset.style) || 'Calm storyteller',
     captionStyle: overrides.captionStyle || prefs.preferredCaptionStyle || 'bold',
     captionPosition: overrides.captionPosition || 'bottom',
     captionSize: overrides.captionSize || null,
@@ -62,7 +72,7 @@ async function createVideoForStory(storyOrId, overrides = {}, { stage = () => {}
   stage('Generating audio', 'Synthesizing narration');
   const narration = await ck.step({
     name: 'narration',
-    run: () => tts.generate(script, { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle }),
+    run: () => tts.generate(script, { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, refPath: s.cloneRef, temperature: s.temperature }),
     revive: (o) => tts.getNarration(o.id),
   });
 
@@ -95,7 +105,7 @@ async function createVideoForStory(storyOrId, overrides = {}, { stage = () => {}
         try {
           return await composer.applyTemplateIntro(video, {
             story, narration, template,
-            ttsOpts: { voice: s.voice, speed: s.speed, style: s.narrationStyle, censor: s.censorCaptions },
+            ttsOpts: { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, censor: s.censorCaptions, refPath: s.cloneRef, temperature: s.temperature },
             selectOpts: { avoidSegmentIds: s.avoidSegmentIds, backgroundCategory: s.backgroundCategory, backgroundIds: s.backgroundIds, variationSeed: s.variationSeed },
           });
         } catch (e) {

@@ -86,15 +86,30 @@ router.post('/batch/:id/stop', wrap(async (req, res) => res.json(batch.stop(req.
 router.post('/batch/items/:itemId/cancel', wrap(async (req, res) => res.json(batch.cancelItem(req.params.itemId))));
 router.post('/batch/items/:itemId/retry', wrap(async (req, res) => res.json(await batch.retryItem(req.params.itemId))));
 
-// --- Exports (spec §19) ---
+// --- Exports (spec §19/§20) --- (trash view via ?trash=1)
 router.get('/exports', wrap(async (req, res) => {
-  const rows = db.all('SELECT e.*, v.title FROM exports e LEFT JOIN videos v ON v.id = e.video_id ORDER BY e.created_at DESC LIMIT 200');
+  const where = req.query.trash ? 'WHERE e.deleted_at IS NOT NULL' : 'WHERE e.deleted_at IS NULL';
+  const rows = db.all(`SELECT e.*, v.title FROM exports e LEFT JOIN videos v ON v.id = e.video_id ${where} ORDER BY e.created_at DESC LIMIT 200`);
   res.json(withMedia(rows));
 }));
 router.get('/exports/:id/download', wrap(async (req, res) => {
   const ex = db.get('SELECT * FROM exports WHERE id = ?', [req.params.id]);
   if (!ex || !ex.path) throw new Error('Export not found.');
-  res.download(ex.path, path.basename(ex.path));
+  res.download(ex.path, ex.filename || path.basename(ex.path));
+}));
+// Delete → trash by default; bulk delete/restore/purge (purge removes mp4 + sidecar).
+router.delete('/exports/:id', wrap(async (req, res) => {
+  const trash = require('../services/trash');
+  if (req.query.permanent) return res.json({ ok: !!trash.purge('exports', [req.params.id], ['path', 'sidecar_path']) });
+  return res.json({ ok: !!trash.softDelete('exports', [req.params.id]) });
+}));
+router.post('/exports/bulk', wrap(async (req, res) => {
+  const { ids = [], action } = req.body || {};
+  const trash = require('../services/trash');
+  if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('exports', ids) });
+  if (action === 'restore') return res.json({ ok: true, count: trash.restore('exports', ids) });
+  if (action === 'purge') return res.json({ ok: true, count: trash.purge('exports', ids, ['path', 'sidecar_path']) });
+  throw new Error('Unknown action.');
 }));
 
 module.exports = router;

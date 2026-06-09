@@ -136,7 +136,7 @@ textarea { resize: vertical; min-height: 90px; }
 .chip .x { color: var(--muted); }
 
 /* Score ring */
-.score { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; font-weight: 700; font-size: 14px; background: conic-gradient(var(--accent) calc(var(--p,0)*1%), #2a3344 0); position: relative; flex: none; }
+.score { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; font-weight: 700; font-size: 14px; background: conic-gradient(var(--c, var(--accent)) calc(var(--p,0)*1%), #2a3344 0); position: relative; flex: none; }
 .score::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--card); }
 .score span { position: relative; z-index: 1; }
 

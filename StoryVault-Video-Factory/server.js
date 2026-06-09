@@ -19,6 +19,7 @@ app.use('/api', require('./src/routes/meta'));
 app.use('/api', require('./src/routes/discovery'));
 app.use('/api', require('./src/routes/library'));
 app.use('/api', require('./src/routes/production'));
+app.use('/api', require('./src/routes/voice'));
 
 // Serve generated media (previews, renders, thumbnails) read-only.
 app.use('/media', express.static(PATHS.data, {
