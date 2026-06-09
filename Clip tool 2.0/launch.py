@@ -725,9 +725,15 @@ def cmd_up(args=None) -> bool:
     ensure_ollama()
 
     if not which("ffmpeg") or not which("ffprobe"):
+        if IS_WIN:
+            hint = "winget install Gyan.FFmpeg"
+        elif sys.platform == "darwin":
+            hint = "brew install ffmpeg"
+        else:
+            hint = "sudo apt install ffmpeg (or a static build dropped into ~/.local/bin if you lack root)"
         warn("ffmpeg/ffprobe not found on PATH — REQUIRED for video import, "
              "transcription, rendering, and export. The app will start but jobs will "
-             "fail until you install it (Windows: `winget install Gyan.FFmpeg`).")
+             f"fail until you install it: {hint}")
 
     if PROD:
         step("Building the frontend (next build)…")
