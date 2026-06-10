@@ -1,17 +1,25 @@
 """Smart reframing.
 
 Samples the video, locates the primary subject in each sampled frame (face via
-MediaPipe → person via YOLO → centre fallback), then produces a **smoothed,
-normalized centre trajectory**. Export later turns that trajectory into a sliding
+MediaPipe → person via YOLO → centre fallback), then produces a **locked,
+piecewise-static centre trajectory**. Export later turns that trajectory into a
 crop window for any target aspect ratio.
 
-Smoothing is done in an **offline post-pass** (the whole clip is sampled before
-rendering), which lets us:
+The guiding rule is *a parked camera beats a wandering one*: the crop locks
+onto the subject and **does not move at all** while the shot lasts. It moves in
+exactly two cases:
 
-* **hold** the framing through a detection dropout instead of snapping to centre,
-* **lock** onto one subject (dwell/commit before switching to a new one), and
-* run a per-segment **One-Euro** filter — an adaptive low-pass that is steady
-  when the subject is still and responsive on fast pans, with no fixed lag.
+* a **scene cut** (detected via HSV-histogram correlation between samples) —
+  the crop snaps instantly to the new shot's subject, which is invisible
+  because the picture changes completely anyway; or
+* the subject **sustainably leaves a deadband** around the locked centre (or
+  the subject lock commits to a different person) — one short smoothstep glide
+  re-centres the crop, then it locks again.
+
+Detection jitter, single-frame impulses and dropouts therefore never reach the
+rendered crop. Smoothing is an offline post-pass (the whole clip is sampled
+before rendering), so re-anchoring can look *ahead* and settle where the
+subject is about to be.
 
 The output stored on the clip (``reframe_data``)::
 
@@ -25,6 +33,7 @@ The output stored on the clip (``reframe_data``)::
 from __future__ import annotations
 
 import math
+import statistics
 from collections.abc import Callable
 from typing import Any
 
@@ -35,49 +44,6 @@ from app.models.enums import ASPECT_DIMENSIONS
 logger = get_logger(__name__)
 
 ProgressCb = Callable[[float], None]
-
-
-# --------------------------------------------------------------------------- #
-#  One-Euro filter (Casiez et al. 2012) — adaptive low-pass for 2D centres.
-#  Pure-Python, no SciPy. cx/cy share a single speed-driven cutoff so the two
-#  axes stay coupled (no axis-decoupled stair-stepping).
-# --------------------------------------------------------------------------- #
-def _one_euro_alpha(cutoff: float, dt: float) -> float:
-    tau = 1.0 / (2.0 * math.pi * max(1e-6, cutoff))
-    return 1.0 / (1.0 + tau / max(1e-6, dt))
-
-
-class _OneEuro2D:
-    def __init__(self, min_cutoff: float, beta: float, d_cutoff: float) -> None:
-        self.min_cutoff = min_cutoff
-        self.beta = beta
-        self.d_cutoff = d_cutoff
-        self._x: tuple[float, float] | None = None
-        self._dx = (0.0, 0.0)
-        self._t_prev: float | None = None
-
-    def filter(self, x: float, y: float, t: float) -> tuple[float, float]:
-        if self._x is None or self._t_prev is None:
-            self._x = (x, y)
-            self._t_prev = t
-            return x, y
-        dt = t - self._t_prev
-        if dt <= 0:
-            dt = 1e-3
-        # Filter the derivative first, then derive the speed-adaptive cutoff
-        # from the FILTERED velocity (raw velocity is too noisy to drive it).
-        a_d = _one_euro_alpha(self.d_cutoff, dt)
-        dx = a_d * ((x - self._x[0]) / dt) + (1 - a_d) * self._dx[0]
-        dy = a_d * ((y - self._x[1]) / dt) + (1 - a_d) * self._dx[1]
-        speed = math.hypot(dx, dy)
-        cutoff = self.min_cutoff + self.beta * speed
-        a = _one_euro_alpha(cutoff, dt)
-        x_hat = a * x + (1 - a) * self._x[0]
-        y_hat = a * y + (1 - a) * self._x[1]
-        self._x = (x_hat, y_hat)
-        self._dx = (dx, dy)
-        self._t_prev = t
-        return x_hat, y_hat
 
 
 def _detect_faces(detector, frame) -> list[tuple[float, float, float]]:
@@ -130,8 +96,9 @@ def _select_subject(candidates, lock, switch_state):
     if not candidates:
         return None, lock, 0.0, None, False
 
-    if lock is None:  # first acquisition → largest subject
-        c = max(candidates, key=lambda k: k[2])
+    if lock is None:  # first acquisition → largest face, else largest subject
+        faces = [k for k in candidates if k[3] == "face"]
+        c = max(faces or candidates, key=lambda k: k[2])
         switch_state["cand"] = None
         switch_state["count"] = 0
         conf = 1.0 if c[3] == "face" else 0.7
@@ -146,7 +113,8 @@ def _select_subject(candidates, lock, switch_state):
         return (nearest[0], nearest[1]), (nearest[0], nearest[1]), conf, nearest[3], False
 
     # The locked subject is gone; a far candidate must persist before we commit.
-    far = max(candidates, key=lambda k: k[2])
+    faces = [k for k in candidates if k[3] == "face"]
+    far = max(faces or candidates, key=lambda k: k[2])
     prev = switch_state.get("cand")
     if prev is not None and math.hypot(far[0] - prev[0], far[1] - prev[1]) <= settings.REFRAME_SWITCH_DIST:
         switch_state["count"] += 1
@@ -162,9 +130,18 @@ def _select_subject(candidates, lock, switch_state):
 
 
 def _smooth_centers(raw: list[dict[str, Any]], sample_fps: float) -> list[dict[str, Any]]:
-    """Offline smoothing: back-fill leads, hold dropouts (ease after a limit),
-    segment at subject switches / long gaps, and run a forward One-Euro per
-    segment. Input ``raw`` items: {t, cx|None, cy|None, conf, switch}."""
+    """Offline lock-and-hold pass producing a piecewise-static trajectory.
+
+    Per scene segment (split at scene cuts) the crop locks onto a robust anchor
+    — the median of the first lookahead window — and holds it through detection
+    jitter and dropouts. It moves only when the subject sustainably leaves the
+    deadband or the subject lock hard-switches: one smoothstep glide to the
+    median of the *upcoming* window, then it locks again. At scene cuts an
+    epsilon keyframe pins the old centre 1 ms before the new segment so the
+    renderer snaps instead of smearing the jump into a visible pan.
+
+    Input ``raw`` items: {t, cx|None, cy|None, conf, switch, scene}.
+    """
     n = len(raw)
     if n == 0:
         return [{"t": 0.0, "cx": 0.5, "cy": 0.5, "conf": 0.0}]
@@ -173,61 +150,76 @@ def _smooth_centers(raw: list[dict[str, Any]], sample_fps: float) -> list[dict[s
     if first_valid is None:  # nothing was ever detected
         return [{"t": round(r["t"], 3), "cx": 0.5, "cy": 0.5, "conf": 0.0} for r in raw]
 
-    max_hold = max(1, int(round(settings.REFRAME_MAX_HOLD_SECONDS * sample_fps)))
-    reacquire_gap = max(1, int(round(settings.REFRAME_REACQUIRE_GAP_SECONDS * sample_fps)))
-
-    # 1) Fill misses: back-fill leading misses to the first valid centre; hold
-    #    the last valid centre across internal misses, easing toward (0.5,0.5)
-    #    after `max_hold` continuous misses.
+    # 1) Fill misses: back-fill leading misses to the first valid centre and
+    #    hold the last valid centre across dropouts. The crop never drifts to
+    #    frame centre — a parked crop is calmer than a slow unexplained pan.
     filled: list[dict[str, Any]] = []
     last_cx, last_cy = raw[first_valid]["cx"], raw[first_valid]["cy"]
-    miss_run = 0
-    for i, r in enumerate(raw):
-        if r["cx"] is not None:
-            cx, cy, conf = r["cx"], r["cy"], r["conf"]
-            last_cx, last_cy = cx, cy
-            miss_run = 0
-        elif i < first_valid:
-            cx, cy, conf = raw[first_valid]["cx"], raw[first_valid]["cy"], 0.0
-        else:
-            miss_run += 1
-            if miss_run <= max_hold:
-                cx, cy = last_cx, last_cy
-            else:
-                ease = min(1.0, (miss_run - max_hold) / max_hold)
-                cx = last_cx + (0.5 - last_cx) * ease
-                cy = last_cy + (0.5 - last_cy) * ease
-            conf = 0.0
-        filled.append({"t": r["t"], "cx": cx, "cy": cy, "conf": conf,
-                       "miss": r["cx"] is None, "switch": bool(r.get("switch"))})
+    for r in raw:
+        miss = r["cx"] is None
+        if not miss:
+            last_cx, last_cy = r["cx"], r["cy"]
+        filled.append({"t": r["t"], "cx": last_cx, "cy": last_cy,
+                       "conf": 0.0 if miss else r["conf"], "miss": miss,
+                       "switch": bool(r.get("switch")), "scene": bool(r.get("scene"))})
 
-    # 2) Segment boundaries: hard subject switches and re-acquisition after a
-    #    long detection gap (reset the filter so it snaps cleanly, no pre-echo).
-    boundaries = {0}
-    run = 0
-    for i, f in enumerate(filled):
-        if f["switch"]:
-            boundaries.add(i)
-        if f["miss"]:
-            run += 1
-        else:
-            if run >= reacquire_gap:
-                boundaries.add(i)
-            run = 0
-    bounds = sorted(boundaries)
+    # 2) Segment ONLY at scene cuts. Everything inside a shot is handled by the
+    #    deadband (hold) / glide (re-centre) logic below.
+    bounds = sorted({0} | {i for i in range(1, n) if filled[i]["scene"]})
 
-    # 3) Forward One-Euro per segment.
+    look = max(1, int(round(settings.REFRAME_LOOKAHEAD_SECONDS * sample_fps)))
+    need = max(1, int(round(settings.REFRAME_RETARGET_SECONDS * sample_fps)))
+    ease_n = max(1, int(round(settings.REFRAME_EASE_SECONDS * sample_fps)))
+    deadband = settings.REFRAME_DEADBAND
+
+    def _anchor(seg: list[dict[str, Any]], i: int) -> tuple[float, float]:
+        win = [g for g in seg[i:i + look] if not g["miss"]] or seg[i:i + look]
+        return (statistics.median(g["cx"] for g in win),
+                statistics.median(g["cy"] for g in win))
+
+    # 3) Deadband-hold per segment.
     out: list[dict[str, Any]] = []
     for k, s in enumerate(bounds):
         e = bounds[k + 1] if k + 1 < len(bounds) else n
-        euro = _OneEuro2D(settings.REFRAME_MIN_CUTOFF, settings.REFRAME_BETA, settings.REFRAME_D_CUTOFF)
-        for i in range(s, e):
-            f = filled[i]
-            sx, sy = euro.filter(f["cx"], f["cy"], f["t"])
+        seg = filled[s:e]
+        if not seg:
+            continue
+        if out:  # pin the previous centre 1 ms before the cut → clean snap
+            out.append({"t": round(seg[0]["t"] - 0.001, 3),
+                        "cx": out[-1]["cx"], "cy": out[-1]["cy"], "conf": out[-1]["conf"]})
+        cur = _anchor(seg, 0)
+        glide_from = cur
+        glide_target: tuple[float, float] | None = None
+        glide_step = 0
+        breach = 0
+        for i, f in enumerate(seg):
+            if glide_target is not None:
+                glide_step += 1
+                u = min(1.0, glide_step / ease_n)
+                u = u * u * (3.0 - 2.0 * u)  # smoothstep: zero velocity at both ends
+                cur = (glide_from[0] + (glide_target[0] - glide_from[0]) * u,
+                       glide_from[1] + (glide_target[1] - glide_from[1]) * u)
+                if glide_step >= ease_n:
+                    cur = glide_target
+                    glide_target = None
+                    breach = 0
+            else:
+                if f["switch"]:
+                    breach = need  # the subject lock already dwelled — retarget now
+                elif not f["miss"] and math.hypot(f["cx"] - cur[0], f["cy"] - cur[1]) > deadband:
+                    breach += 1
+                else:
+                    breach = 0
+                if breach >= need:
+                    target = _anchor(seg, i)
+                    breach = 0
+                    # Ignore retargets that barely move the crop.
+                    if math.hypot(target[0] - cur[0], target[1] - cur[1]) > deadband / 2:
+                        glide_from, glide_target, glide_step = cur, target, 0
             out.append({
                 "t": round(f["t"], 3),
-                "cx": round(min(1.0, max(0.0, sx)), 4),
-                "cy": round(min(1.0, max(0.0, sy)), 4),
+                "cx": round(min(1.0, max(0.0, cur[0])), 4),
+                "cy": round(min(1.0, max(0.0, cur[1])), 4),
                 "conf": f["conf"],
             })
     return out
@@ -281,6 +273,7 @@ def compute_trajectory(
     method_used = "center"
     lock: tuple[float, float] | None = None
     switch_state: dict[str, Any] = {"cand": None, "count": 0}
+    prev_hist = None
 
     start_frame = int(start * src_fps)
     end_frame = int(end * src_fps) if end else total_frames
@@ -293,6 +286,22 @@ def compute_trajectory(
             break
         if (frame_idx - start_frame) % frame_step == 0:
             t = frame_idx / src_fps - start
+
+            # Scene-cut detection: HSV hue/saturation histogram correlation
+            # between consecutive samples. Robust to subject/camera motion
+            # (same shot keeps its palette), cheap at the sample rate.
+            small = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
+            hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
+            hist = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
+            cv2.normalize(hist, hist)
+            scene_cut = False
+            if prev_hist is not None:
+                correl = float(cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL))
+                scene_cut = correl < settings.REFRAME_SCENE_CORREL
+            prev_hist = hist
+            if scene_cut:  # new shot → drop the old lock, acquire fresh
+                lock = None
+                switch_state = {"cand": None, "count": 0}
 
             candidates: list[tuple[float, float, float, str]] = []
             for fcx, fcy, area in (_detect_faces(face_detector, frame) if face_detector else []):
@@ -318,7 +327,8 @@ def compute_trajectory(
                 cx_out, cy_out, conf = None, None, 0.0
                 is_miss = True
 
-            raw.append({"t": t, "cx": cx_out, "cy": cy_out, "conf": conf, "switch": hard_switch})
+            raw.append({"t": t, "cx": cx_out, "cy": cy_out, "conf": conf,
+                        "switch": hard_switch, "scene": scene_cut})
 
             if on_progress and end_frame > start_frame:
                 on_progress(min(0.99, (frame_idx - start_frame) / (end_frame - start_frame)))
