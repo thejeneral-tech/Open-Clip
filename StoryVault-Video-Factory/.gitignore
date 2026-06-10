@@ -12,6 +12,7 @@ data/renders/
 data/thumbnails/
 data/logs/
 data/tmp/
+data/models/
 *.log
 *.key
 secret.key
