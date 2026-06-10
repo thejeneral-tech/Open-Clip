@@ -15,6 +15,31 @@ window.PAGES = window.PAGES || {};
     return (warnings || []).map((w) => pill(w, 'warn'));
   }
 
+  // ---- Unified voice picker: saved presets (Fish/cloned/SAPI) + system SAPI voices ----
+  // Option values encode the source: 'preset:<id>' or 'sapi:<name>'. applyVoiceValue()
+  // writes the right field onto the settings object so the pipeline (resolveSettings)
+  // picks it up: voicePresetId for a preset, voice for a system voice.
+  function voiceOptions() {
+    const m = meta();
+    const opts = [];
+    (m.voicePresets || []).forEach((p) => opts.push({ value: 'preset:' + p.id, label: (p.icon || '🎙') + ' ' + p.name + ' · ' + (p.engine === 'fish-clone' ? 'cloned' : p.engine) }));
+    (m.voices || []).forEach((v) => opts.push({ value: 'sapi:' + v.name, label: v.name + ' · system' }));
+    return opts.length ? opts : [{ value: 'sapi:', label: '(no voices)' }];
+  }
+  function currentVoiceValue(st) {
+    if (st.voicePresetId) return 'preset:' + st.voicePresetId;
+    if (st.voice) return 'sapi:' + st.voice;
+    return voiceOptions()[0].value;
+  }
+  function applyVoiceValue(st, val) {
+    if (val && val.indexOf('preset:') === 0) { st.voicePresetId = val.slice(7); st.voice = undefined; }
+    else { st.voice = (val || '').replace(/^sapi:/, ''); st.voicePresetId = undefined; }
+  }
+  // A drop-in replacement for the old `field('Voice', select(m.voices...))`.
+  function voiceField(st, label) {
+    return field(label || 'Voice', select(voiceOptions(), { value: currentVoiceValue(st), onChange: (e) => applyVoiceValue(st, e.target.value) }));
+  }
+
   // ---- Shared story card (spec §6) ----------------------------------------
   function scoreBars(s) {
     return el('div.bars', [
@@ -79,9 +104,24 @@ window.PAGES = window.PAGES || {};
         btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.post('/stories/bulk', { ids: [s.id], action: 'delete' }); toast('Moved to trash'); opts.onChange ? opts.onChange() : (card.style.display = 'none'); } }),
         s.url ? el('a.btn.sm.ghost', { href: s.url, target: '_blank' }, '🔗 Open Source') : null,
       ]),
-      opts.selectable ? el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (e) => opts.onSelect(s.id, e.target.checked) }), el('span', 'Select')]) : null,
+      opts.selectable ? selectPill(s.id, opts.onSelect) : null,
     ]);
     return card;
+  }
+
+  // A pill-style select toggle for cards — fills with the accent gradient and shows
+  // a checkmark when chosen, so a card's selected state is easy to read at a glance.
+  function selectPill(id, onSelect) {
+    const cb = el('input', { type: 'checkbox' });
+    const lbl = el('span.lbl', 'Select');
+    const pill = el('label.select-pill', [cb, el('span.box', '✓'), lbl]);
+    cb.addEventListener('change', (e) => {
+      const on = e.target.checked;
+      pill.classList.toggle('on', on);
+      lbl.textContent = on ? 'Selected' : 'Select';
+      onSelect && onSelect(id, on);
+    });
+    return pill;
   }
 
   async function scoreModal(s) {
@@ -138,7 +178,7 @@ window.PAGES = window.PAGES || {};
       field('Template', select((m.templates || []).map((t) => ({ id: t.id, label: t.name + (t.isDefault ? ' ★' : '') })), { value: st.templateId, onChange: (e) => st.templateId = e.target.value })),
       field('Duration', select(m.scriptDurations.map((d) => ({ id: d, label: d + 's' })), { value: st.durationSeconds, onChange: (e) => st.durationSeconds = +e.target.value })),
       field('Hook style', select(m.hookStyles, { value: st.hookStyle, onChange: (e) => st.hookStyle = e.target.value })),
-      field('Voice', select((m.voices || []).map((v) => v.name), { value: st.voice, onChange: (e) => st.voice = e.target.value })),
+      voiceField(st),
       field('Narration style', select(m.narrationStyles, { value: st.narrationStyle, onChange: (e) => st.narrationStyle = e.target.value })),
       field('Background type', select(m.gameplayCategories || m.backgroundTypes, { value: st.backgroundCategory, onChange: (e) => st.backgroundCategory = e.target.value })),
       field('Speed', input({ type: 'number', value: st.speed, step: '0.05', min: '0.7', max: '1.4', onInput: (e) => st.speed = +e.target.value })),
@@ -368,10 +408,11 @@ window.PAGES = window.PAGES || {};
     }
     async function replenish(ev) {
       if (ev) ev.target.disabled = true;
-      clear(grid); grid.append(empty('🔄', `Generating ~${state.length}-minute stories…`, 'Local generator — no API needed.'));
+      clear(grid); grid.append(empty('🔄', `Finding fresh ~${state.length}-minute stories…`, 'Inventing brand-new, well-rated stories you can cut into clips.'));
       try {
         const r = await API.post('/stories/replenish', { count: 12, targetMinutes: state.length, category: state.category || null });
-        toast(`Added ${r.added} stories${r.duplicates ? ` (${r.duplicates} dupes skipped)` : ''}`, 'ok');
+        const how = r.usedAi ? 'AI-invented' : 'generated';
+        toast(`Added ${r.added} ${how} stories${r.duplicates ? ` (${r.duplicates} dupes skipped)` : ''}`, 'ok');
       } catch (e) { toast('Replenish failed: ' + e.message, 'err'); }
       finally { if (ev) ev.target.disabled = false; load(); }
     }
@@ -621,7 +662,7 @@ window.PAGES = window.PAGES || {};
       el('div.col', [
         field('Duration', select(m.scriptDurations.map((d) => ({ id: d, label: d + 's' })), { value: st.durationSeconds, onChange: (e) => st.durationSeconds = +e.target.value })),
         field('Hook style', select(m.hookStyles, { value: st.hookStyle, onChange: (e) => st.hookStyle = e.target.value })),
-        field('Voice', select((m.voices || []).map((v) => v.name), { value: st.voice, onChange: (e) => st.voice = e.target.value })),
+        voiceField(st),
         field('Caption style', select(m.captionStyles, { value: st.captionStyle, onChange: (e) => st.captionStyle = e.target.value })),
         field('Background type', select(m.backgroundTypes, { value: st.backgroundCategory, onChange: (e) => st.backgroundCategory = e.target.value })),
         checkbox('Safe mode (censor profanity)', st.safeMode, (v) => st.safeMode = v),
@@ -899,7 +940,7 @@ window.PAGES = window.PAGES || {};
       ]),
       el('div.panel.mt', [el('div.section-title', '🎬 Generation defaults'), el('div.form-grid', [
         field('Target video length', select(m.scriptDurations.map((d) => ({ id: d, label: d + 's' })), { value: get('targetVideoLength', 60), onChange: (e) => draft.targetVideoLength = +e.target.value })),
-        field('Preferred voice', select((m.voices || []).map((v) => v.name), { value: get('preferredVoice'), onChange: (e) => draft.preferredVoice = e.target.value })),
+        field('Preferred voice', select(voiceOptions(), { value: (get('voicePresetId') ? 'preset:' + get('voicePresetId') : 'sapi:' + (get('preferredVoice') || '')), onChange: (e) => { const val = e.target.value; if (val.indexOf('preset:') === 0) { draft.voicePresetId = val.slice(7); } else { draft.preferredVoice = val.slice(5); draft.voicePresetId = null; } } })),
         field('Preferred background', select(m.backgroundTypes, { value: get('preferredBackground'), onChange: (e) => draft.preferredBackground = e.target.value })),
         field('Preferred caption style', select(m.captionStyles, { value: get('preferredCaptionStyle'), onChange: (e) => draft.preferredCaptionStyle = e.target.value })),
         field('Desired emotion', select(['any', 'shocking', 'satisfying', 'emotional', 'funny', 'suspenseful'], { value: get('desiredEmotion', 'any'), onChange: (e) => draft.desiredEmotion = e.target.value })),
@@ -973,7 +1014,7 @@ window.PAGES = window.PAGES || {};
           field('Category', select([{ id: '', label: 'Any' }].concat(m.categories), { value: cfg.category, onChange: (e) => cfg.category = e.target.value })),
           field('Target duration', select(m.scriptDurations.map((d) => ({ id: d, label: d + 's' })), { value: cfg.duration, onChange: (e) => cfg.duration = +e.target.value })),
           field('Gameplay', select(m.gameplayCategories || m.backgroundTypes, { value: cfg.background, onChange: (e) => cfg.background = e.target.value })),
-          field('Voice', select((m.voices || []).map((v) => v.name), { value: cfg.voice, onChange: (e) => cfg.voice = e.target.value })),
+          voiceField(cfg),
           field('Min quality score', input({ type: 'number', value: cfg.minScore, min: '0', max: '100', onInput: (e) => cfg.minScore = +e.target.value })),
           field('Reddit communities', input({ value: cfg.communities, placeholder: 'AmItheAsshole, tifu…', onInput: (e) => cfg.communities = e.target.value })),
         ]),
@@ -1062,23 +1103,27 @@ window.PAGES = window.PAGES || {};
   // ===================== TEMPLATES =====================
   PAGES.templates = async function (view) {
     clear(view);
+    const state = { trash: false };
     const grid = el('div.grid.cards.mt');
     const activeId = (App.prefs && App.prefs.templateId) || null;
     async function load() {
       clear(grid); grid.append(UI.spinner());
-      const list = await API.get('/templates');
+      const list = await API.get('/templates' + (state.trash ? '?trash=1' : ''));
       clear(grid);
-      list.forEach((t) => grid.append(templateCard(t, activeId, load)));
+      if (!list.length) { grid.append(empty('🗂', state.trash ? 'Trash is empty' : 'No templates yet', state.trash ? 'Deleted templates appear here — restore them or delete them for good.' : 'Create one with “＋ New Template”.')); return; }
+      list.forEach((t) => grid.append(templateCard(t, activeId, load, state.trash)));
     }
+    const trashBtn = btn('🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; trashBtn.textContent = state.trash ? '← Back to templates' : '🗑 Trash'; load(); } });
     view.append(
       pageHead('Templates', 'Reusable video layouts. The default drives every new video. ★ = active default.', [
         btn('＋ New Template', { cls: 'primary', onClick: async () => { const name = prompt('Template name', 'My Template'); if (!name) return; const base = (await API.get('/templates')).find((x) => x.isDefault); const t = await API.post('/templates', { name, data: base }); toast('Created', 'ok'); editTemplate(t, load); } }),
+        trashBtn,
       ]),
       grid,
     );
     load();
   };
-  function templateCard(t, activeId, reload) {
+  function templateCard(t, activeId, reload, trash) {
     const isActive = (activeId && activeId === t.id) || (!activeId && t.isDefault);
     return el('div.card', [
       el('div.spread', [el('strong', t.name), isActive ? pill('Default ★', 'ok') : (t.builtin ? pill('Built-in', 'info') : pill('Custom', 'accent'))]),
@@ -1089,11 +1134,14 @@ window.PAGES = window.PAGES || {};
         t.captions?.enabled !== false ? tag('Captions') : null,
         (t.audio?.musicVolume ? null : tag('No music')),
       ].filter(Boolean)),
-      el('div.card-actions.mt', [
+      el('div.card-actions.mt', trash ? [
+        btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/templates/bulk', { ids: [t.id], action: 'restore' }); toast('Restored', 'ok'); reload(); } }),
+        btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', `Permanently delete "${t.name}"? This cannot be undone.`, async () => { await API.del('/templates/' + t.id + '?permanent=1'); toast('Deleted'); reload(); }, 'Delete') }),
+      ] : [
         btn(isActive ? '★ Default' : 'Set Default', { cls: isActive ? 'sm ok' : 'sm', disabled: isActive, onClick: async () => { await API.post('/templates/' + t.id + '/default', {}); try { await API.put('/preferences', { ...App.prefs, templateId: t.id }); App.prefs = await API.get('/preferences'); } catch (e) { /* */ } if (App.refreshMeta) await App.refreshMeta(); toast('Default template set', 'ok'); reload(); } }),
         btn('✎ Edit', { cls: 'sm', onClick: () => editTemplate(t, reload) }),
         btn('⧉ Duplicate', { cls: 'sm ghost', onClick: async () => { await API.post('/templates/' + t.id + '/duplicate', {}); toast('Duplicated', 'ok'); reload(); } }),
-        t.builtin ? null : btn('🗑', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete template', `Delete "${t.name}"?`, async () => { await API.del('/templates/' + t.id); toast('Deleted'); reload(); }, 'Delete') }),
+        btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.del('/templates/' + t.id); toast('Moved to trash'); reload(); } }),
       ].filter(Boolean)),
     ]);
   }
@@ -1227,16 +1275,132 @@ window.PAGES = window.PAGES || {};
     let sel = templates.find((t) => t.isDefault) || templates[0];
     const left = el('div.col'), center = el('div.col'), right = el('div.col');
 
+    // ASS colour (&HAABBGGRR) → CSS #RRGGBB. Mirrors overlays.js so the preview
+    // shows the exact caption/highlight hues the burned video will use.
+    function assToCss(ass, fallback) {
+      if (!ass || typeof ass !== 'string') return fallback;
+      let hex = ass.replace(/[&Hh]/g, '').trim();
+      if (hex.length === 8) hex = hex.slice(2); // drop alpha → BBGGRR
+      if (!/^[0-9a-fA-F]{6}$/.test(hex)) return fallback;
+      return '#' + hex.slice(4, 6) + hex.slice(2, 4) + hex.slice(0, 2); // BBGGRR → RRGGBB
+    }
+    // 8-direction solid stroke approximating the ASS \bord outline.
+    function outline(px, col) {
+      const o = Math.max(1, Math.round(px)); col = col || '#000'; const s = [];
+      for (const dx of [-o, 0, o]) for (const dy of [-o, 0, o]) if (dx || dy) s.push(`${dx}px ${dy}px 0 ${col}`);
+      return s.join(',');
+    }
+    // Caption vertical placement, as % of frame height. Matches overlays.js:
+    // centerY when set, else (canvasHeight − marginV).
+    function posInfo(t) {
+      const cap = t.captions || {}, CH = (t.canvas || {}).height || 1920;
+      const y = cap.centerY || (CH - (cap.marginV || 520));
+      const pct = Math.round((y / CH) * 100);
+      return { y, pct, label: pct <= 52 ? `centered (${pct}%)` : `lower (${pct}%)` };
+    }
+
     function summary(t) {
-      const tc = t.topicCard || {}, cap = t.captions || {}, cv = t.canvas || {};
+      const tc = t.topicCard || {}, cap = t.captions || {}, cv = t.canvas || {}, gp = t.gameplay || {}, au = t.audio || {};
+      const style = cap.style === 'pop' ? 'Pop word' : 'Karaoke';
       return [
-        ['Topic card', `${tc.minSeconds ?? '–'}–${tc.maxSeconds ?? '–'}s · ${tc.avatar ? 'avatar' : 'no avatar'}`],
+        ['Layout', gp.mode === 'split_bottom' ? 'Split (gameplay ½)' : 'Full-screen gameplay'],
+        ['Topic card', tc.enabled === false ? 'off' : `${tc.minSeconds ?? '–'}–${tc.maxSeconds ?? '–'}s · ${tc.avatar === false ? 'no avatar' : 'avatar'} · ${tc.width ?? 820}px`],
         ['Author intro', (t.authorIntro && t.authorIntro.enabled !== false) ? 'on' : 'off'],
-        ['Captions', `${cap.size || 80}px · centered`],
+        ['Captions', `${cap.size || 80}px · ${style}`],
+        ['Position', posInfo(t).label],
         ['Canvas', `${cv.width || 1080}×${cv.height || 1920} @ ${cv.fps || 30}fps`],
-        ['Music', 'disabled'],
+        ['Music', au.musicVolume > 0 ? 'on' : 'disabled'],
       ];
     }
+    // One-line descriptor under each template name in the list.
+    function tagline(t) {
+      const cap = t.captions || {}, gp = t.gameplay || {};
+      const style = cap.style === 'pop' ? 'Pop' : 'Karaoke';
+      return `${style} · ${cap.size || 80}px · ${posInfo(t).pct}%${gp.mode === 'split_bottom' ? ' · split' : ''}`;
+    }
+
+    // Build a to-scale 9:16 mock of what THIS template renders: gameplay layer +
+    // topic card + body caption, every size/position/colour scaled from canvas px
+    // by k = previewWidth / canvasWidth. Geometry & colours track overlays.js.
+    function buildPhone(t) {
+      const cv = t.canvas || {}, tc = t.topicCard || {}, cap = t.captions || {}, gp = t.gameplay || {}, safe = t.safe || {};
+      const CW = cv.width || 1080, CH = cv.height || 1920;
+      const PW = 252, k = PW / CW, PH = CH * k;
+      const split = gp.mode === 'split_bottom';
+      const px = (n) => n + 'px';
+
+      const gameGrad = 'linear-gradient(150deg,#28374f 0%,#16202f 55%,#0c121c 100%)';
+      const layers = [];
+      if (split) {
+        layers.push(el('div', { style: { position: 'absolute', left: 0, right: 0, top: 0, height: '50%', background: '#0a0f17' } }));
+        layers.push(el('div', { style: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '50%', background: gameGrad } }));
+        layers.push(el('div', { style: { position: 'absolute', left: 0, right: 0, top: '50%', height: '2px', background: 'rgba(255,255,255,.22)' } }));
+      } else {
+        layers.push(el('div', { style: { position: 'absolute', inset: 0, background: gameGrad } }));
+      }
+      layers.push(el('div', { style: { position: 'absolute', right: '6px', bottom: '5px', fontSize: '7px', letterSpacing: '.5px', fontWeight: '700', color: 'rgba(255,255,255,.3)' } }, '▶ GAMEPLAY'));
+
+      // ---- Stage 1: topic card ----
+      if (tc.enabled !== false) {
+        const cardW = (tc.width || 820) * k;
+        const titleSize = (tc.titleSize || 50) * k;
+        const metaSize = (tc.metaSize || 34) * k;
+        const nameSize = 42 * k, avR = 30 * k;
+        const showAvatar = tc.avatar !== false;
+        const cy = (tc.centerY || 760) * k;
+        const header = el('div', { style: { display: 'flex', alignItems: 'center', gap: px(10 * k), marginBottom: px(10 * k) } }, [
+          showAvatar ? el('div', { style: { width: px(avR * 2), height: px(avR * 2), borderRadius: '50%', background: '#3a95b3', color: '#fff', fontWeight: '800', fontSize: px(nameSize), display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' } }, 'S') : null,
+          el('div', { style: { minWidth: 0 } }, [
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: px(6 * k) } }, [
+              el('span', { style: { fontWeight: '800', color: '#141414', fontSize: px(nameSize), whiteSpace: 'nowrap' } }, 'Salty-Yeti-4489'),
+              el('span', { style: { width: px(20 * k), height: px(20 * k), borderRadius: '50%', background: '#1d96e8', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: px(13 * k), flex: '0 0 auto' } }, '✓'),
+            ]),
+            el('div', { style: { color: '#777', fontSize: px(metaSize), marginTop: px(2 * k) } }, 'u/Salty-Yeti-4489'),
+          ]),
+        ]);
+        const title = el('div', { style: { fontWeight: '800', color: '#141414', fontSize: px(titleSize), lineHeight: '1.16', marginBottom: px(10 * k) } }, 'AITA for charging my family rent after they moved in?');
+        const metrics = el('div', { style: { fontSize: px(metaSize), color: '#777' } }, [
+          el('span', { style: { color: '#e02430', fontWeight: '700' } }, '♥ '), '99+',
+          el('span', { style: { display: 'inline-block', width: px(18 * k) } }), '🗨 99+',
+        ]);
+        layers.push(el('div', { style: {
+          position: 'absolute', left: '50%', top: px(cy), transform: 'translate(-50%,-50%)',
+          width: px(cardW), boxSizing: 'border-box', background: '#fff', color: '#141414',
+          borderRadius: px((tc.radius || 46) * k), padding: `${px(30 * k)} ${px(40 * k)}`,
+          boxShadow: '0 6px 18px rgba(0,0,0,.5)',
+        } }, [header, title, metrics]));
+      }
+
+      // ---- Stage 3: body captions ----
+      if (cap.enabled !== false) {
+        const capY = posInfo(t).y * k;
+        const fs = (cap.size || 80) * k;
+        const pop = cap.style === 'pop';
+        const primary = assToCss(cap.primary, '#fff');
+        const highlight = assToCss(cap.highlight, '#ffd400');
+        const ow = (cap.outline || 7) * k;
+        const fontStack = pop
+          ? '"Arial Rounded MT Bold","Arial Rounded MT",Arial,sans-serif'
+          : (cap.font ? `"${cap.font}",Arial,sans-serif` : 'Arial,sans-serif');
+        const maxW = (CW - 2 * (safe.side || 60)) * k;
+        const base = ['then', 'I', 'discovered'];
+        const n = Math.max(1, Math.min(base.length, cap.maxWords || (pop ? 2 : 4)));
+        const words = base.slice(base.length - n);
+        // 'reference' = karaoke: leading (just-spoken) word highlighted, rest primary.
+        // 'pop' = single short white cue, all primary.
+        const children = pop
+          ? [words.join(' ')]
+          : words.map((w, i) => el('span', { style: { color: i === words.length - 1 ? highlight : primary } }, w + (i < words.length - 1 ? ' ' : '')));
+        layers.push(el('div', { style: {
+          position: 'absolute', left: '50%', top: px(capY), transform: 'translate(-50%,-50%)',
+          width: px(maxW), textAlign: 'center', color: primary, fontWeight: '800',
+          fontFamily: fontStack, fontSize: px(fs), lineHeight: '1.1', textShadow: outline(ow, '#000'),
+        } }, children));
+      }
+
+      return el('div.phone', { style: { width: px(PW), height: px(PH), margin: '0 auto' } }, layers);
+    }
+
     function renderLeft() {
       clear(left);
       left.append(el('div.small.muted.mb', 'Templates'));
@@ -1244,6 +1408,7 @@ window.PAGES = window.PAGES || {};
         const active = sel && sel.id === t.id;
         left.append(el('div.card.hover' + (active ? ' kb-focus' : ''), { style: { cursor: 'pointer', padding: '10px 12px' }, onclick: () => { sel = t; render(); } }, [
           el('div.spread', [el('strong', t.name), t.isDefault ? pill('Default ★', 'ok') : (t.builtin ? pill('Built-in', 'info') : pill('Custom', 'accent'))]),
+          el('div.tiny.muted', { style: { marginTop: '3px' } }, tagline(t)),
         ]));
       });
     }
@@ -1252,15 +1417,8 @@ window.PAGES = window.PAGES || {};
       if (!sel) { center.append(empty('▦', 'No template selected', '')); return; }
       center.append(
         el('div.small.muted.mb', 'Preview — ' + sel.name),
-        el('div.phone', { style: { margin: '0 auto' } }, [
-          el('div', { style: { position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#1b2330,#0e1420)' } }),
-          el('div', { style: { position: 'absolute', left: '12%', right: '12%', top: '30%', background: '#fff', color: '#141414', borderRadius: '12px', padding: '10px', fontSize: '9px', boxShadow: '0 6px 18px rgba(0,0,0,.5)' } }, [
-            el('div', { style: { fontWeight: '700' } }, '● Salty-Yeti-4489 ✓'),
-            el('div', { style: { fontWeight: '700', marginTop: '4px' } }, 'AITA for charging my family…'),
-            el('div', { style: { color: '#777', marginTop: '4px' } }, '♥ 99+   🗨 99+'),
-          ]),
-          el('div', { style: { position: 'absolute', left: 0, right: 0, top: '60%', textAlign: 'center', color: '#fff', fontWeight: '800', fontSize: '13px', textShadow: '0 0 4px #000,2px 2px 0 #000' } }, [document.createTextNode('then I '), el('span', { style: { color: '#ffd400' } }, 'discovered')]),
-        ]),
+        buildPhone(sel),
+        el('div.tiny.muted', { style: { textAlign: 'center', marginTop: '8px' } }, 'To-scale mock of the card + caption styling. Gameplay footage is a placeholder.'),
       );
     }
     function renderRight() {
@@ -1285,149 +1443,504 @@ window.PAGES = window.PAGES || {};
     );
   };
 
-  // ===================== VOICES (presets + cloning) =====================
-  PAGES.voices = async function (view) {
+  // ===================== VOICE LAB (Fish Speech S2 Pro) =====================
+  // Consolidated voice studio: built-in style presets, voice cloning (upload →
+  // transcript → generate → save), saved presets, and the Fish Speech setup panel.
+  const CLONE_STAGE_LABELS = {
+    queued: 'Queued', starting: 'Starting engine', encoding_reference: 'Encoding reference',
+    building_prompt: 'Building prompt', generating: 'Generating speech', decoding: 'Decoding audio',
+    finalizing: 'Finalizing', complete: 'Complete', error: 'Error',
+  };
+  function playAudio(url, onErr) { if (!url) return; const a = new Audio(url); a.play().catch(() => onErr && onErr()); }
+
+  // Rough up-front estimate of synthesis time (seconds) from the text length.
+  // Only a starting point — update() corrects it from real progress.
+  const estSpeechSeconds = (text) => Math.min(120, Math.max(12, Math.round(12 + (text ? text.length : 0) * 0.2)));
+
+  // Small combined indicator: a colored spinning ring + "percent + state". The
+  // percent is ANCHORED to the real backend progress that update() feeds in — it
+  // only creeps a little above the last reported percent so a long stage doesn't
+  // look frozen, and that creep is capped short of the next milestone. So the bar
+  // can never reach 99% / "finishing…" until the job actually reports its final
+  // stage — no more parking at "99% · finishing…" while synthesis is still running.
+  // The up-front estSeconds only tunes how fast the between-update creep moves and
+  // drives the soft "~Ns left" hint; it no longer decides the percent.
+  // opts: { prefix, estSeconds, showPct }
+  function busyChip(opts) {
+    opts = opts || {};
+    const txt = el('span.busy-txt', '');
+    const node = el('span.busy-chip', [el('span.spin-ring'), txt]);
+    const start = performance.now();
+    const showPct = opts.showPct !== false;
+    const estTotal = Math.max(2, opts.estSeconds || 12);
+    let label = opts.prefix || '';
+    let timer = null;
+    const secs = () => (performance.now() - start) / 1000;
+
+    // Last real percent the backend reported, and the elapsed time it arrived at.
+    let anchorPct = 0, anchorAt = 0, displayed = 0, done = false;
+
+    function paint() {
+      const e = secs();
+      let pct;
+      if (done) {
+        pct = 100;
+      } else {
+        // Asymptotically creep above the anchor so a slow stage stays alive, but
+        // cap it short of the next backend milestone (and below 95) so the bar
+        // can't claim to be finishing before the job genuinely reports it is.
+        const ceil = anchorPct >= 95 ? 99 : Math.min(94, anchorPct + 29);
+        const tau = Math.max(4, estTotal * 0.6);
+        pct = anchorPct + (ceil - anchorPct) * (1 - Math.exp(-(e - anchorAt) / tau));
+      }
+      if (pct > displayed) displayed = pct; // monotonic — never backtracks
+      // "finishing…" only once the backend is truly in its final stage; while it's
+      // still working, show a soft countdown that degrades to "working…" rather
+      // than the misleading "finishing…" once the up-front estimate is overrun.
+      let state;
+      if (done || anchorPct >= 95) state = 'finishing…';
+      else { const remain = estTotal - e; state = remain > 0.5 ? '~' + Math.ceil(remain) + 's left' : 'working…'; }
+      const head = label ? label + ' ' : '';
+      txt.textContent = showPct ? head + Math.round(displayed) + '% · ' + state : head + state;
+    }
+    // Feed real clone-job progress in. Anchors the bar to the reported percent so
+    // the number shown reflects the actual stage; 100 marks the job done.
+    function update(pct, stageLabel) {
+      if (stageLabel) label = stageLabel;
+      pct = Math.max(0, Math.min(100, pct || 0));
+      if (pct >= 100) done = true;
+      else if (pct > anchorPct) { anchorPct = pct; anchorAt = secs(); }
+      paint();
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } node.remove(); }
+    paint(); timer = setInterval(paint, 250);
+    return { node, update, stop };
+  }
+
+  PAGES.voiceLab = async function (view) {
+    clear(view);
+    const conn = el('span.conn-status.checking', [el('span.dot.checking'), 'Checking…']);
+    let data = { presets: [], clones: [], sapiVoices: [], fish: {}, defaultId: null };
+    let fishPresets = [];
+    let fishStatus = {};
+    const sel = { sourceId: null };
+
+    // Connection pill — polls the Fish server; self-stops when the page changes.
+    async function pollConn() {
+      if (!document.body.contains(conn)) return false;
+      try { const r = await API.get('/fishspeech/check/server'); setConn(!!r.reachable); }
+      catch { setConn(false); }
+      return true;
+    }
+    function setConn(online) {
+      conn.className = 'conn-status ' + (online ? 'online' : 'offline');
+      clear(conn); conn.append(el('span.dot.' + (online ? 'online' : 'offline')), online ? 'Server online' : 'Server offline');
+    }
+    (function loopConn() { pollConn().then((alive) => { if (alive) setTimeout(loopConn, 4000); }); })();
+
+    // ---- Built-in style preset cards (screenshot 2) ----
+    const presetGrid = el('div.grid.cards');
+    const catBar = el('div.row.tight.mb');
+    let activeCat = 'all';
+    function renderPresetCards() {
+      clear(presetGrid);
+      const list = activeCat === 'all' ? fishPresets : fishPresets.filter((p) => p.category === activeCat);
+      list.forEach((p) => presetGrid.append(el('div.card', [
+        el('div.card-header', [
+          el('div.card-title', [el('span.ti', p.icon || '🎤'), p.name]),
+          pill(p.category, 'accent'),
+        ]),
+        el('div.tiny.muted', p.description),
+        el('div.small', { style: { fontStyle: 'italic', margin: '8px 0', color: 'var(--text2)' } }, '“' + (p.exampleLine || '') + '”'),
+        el('div.card-actions', [
+          btn('✎ Test', { cls: 'sm primary', onClick: async (e) => {
+            e.target.disabled = true;
+            const chip = busyChip({ prefix: 'Starting…', estSeconds: estSpeechSeconds(p.exampleLine) }); e.target.parentNode.append(chip.node);
+            try {
+              const { jobId } = await API.post('/voices/clone/jobs', { text: p.exampleLine, voiceName: p.name });
+              const job = await pollJob(jobId, (pct, stage) => chip.update(pct, stage));
+              if (job.audioUrl) playAudio(job.audioUrl); else toast('No audio — is the Fish server running?', 'warn');
+            } catch (er) { toast(er.message, 'err'); }
+            chip.stop(); e.target.disabled = false;
+          } }),
+        ]),
+      ])));
+    }
+    function renderCats() {
+      clear(catBar);
+      const cats = ['all', ...new Set(fishPresets.map((p) => p.category))];
+      cats.forEach((c) => catBar.append(el('span.chip' + (c === activeCat ? '.on' : ''), { onclick: () => { activeCat = c; renderCats(); renderPresetCards(); } }, c === 'all' ? 'All' : c)));
+    }
+
+    // ---- Voice cloning: 3 numbered step cards (screenshot 1) ----
+    const stepLabel = (n, label) => el('div', { style: { display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '14px' } }, [el('span.step-num', String(n)), el('span.step-label', label)]);
+    const transcriptTa = textarea({ rows: 3, placeholder: 'Type the exact words spoken in your uploaded clip. Required to clone — the engine matches your voice against these words.' });
+    const genText = textarea({ rows: 4, placeholder: 'Type the words you want spoken in the uploaded voice…  Aim for 20+ characters for best results.' });
+    const charCount = el('div.tiny.muted', { style: { textAlign: 'right' } }, '0 characters');
+    genText.addEventListener('input', () => { charCount.textContent = genText.value.length + ' characters'; });
+
+    let pendingFile = null;
+    const dropInput = el('input', { type: 'file', accept: '.wav,.mp3,.mp4,.flac,.m4a,.ogg,audio/*' });
+    const dropName = el('div.tiny.mt', { style: { color: 'var(--muted)' } }, 'No file selected');
+    const dropzone = el('div.upload-drop', [
+      el('div', { style: { fontSize: '1.6rem' } }, '🎙'),
+      el('div', [el('strong', 'Drop an audio file here, or click to browse')]),
+      el('div.tiny.muted', 'WAV · MP3 · MP4 · FLAC · 5–30 s of clear speech'),
+      dropName, dropInput,
+    ]);
+    function setPending(f) {
+      if (!f) return;
+      pendingFile = f;
+      clear(dropName); dropName.style.color = 'var(--purple2)';
+      dropName.append(el('strong', '📎 ' + f.name + ' (' + UI.fmtBytes(f.size) + ')'));
+    }
+    dropInput.addEventListener('change', () => setPending(dropInput.files[0]));
+    ['dragover', 'dragenter'].forEach((ev) => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); }));
+    ['dragleave', 'drop'].forEach((ev) => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('drag-over'); }));
+    dropzone.addEventListener('drop', (e) => setPending(e.dataTransfer.files[0]));
+
+    function selectSource(id) { sel.sourceId = id; }
+    // Upload + ffmpeg-convert the dropped clip to WAV if it isn't already. Returns
+    // the reference id (or null when nothing is pending). Both the Auto-transcribe
+    // and Generate Speech flows call this, so a dropped sample is always uploaded
+    // automatically — no separate upload step needed.
+    async function ensureSource() {
+      if (sel.sourceId) return sel.sourceId;
+      const file = pendingFile;
+      if (!file) return null;
+      clear(dropName); dropName.style.color = 'var(--muted)'; dropName.textContent = '⏳ Uploading & converting ' + file.name + '…';
+      const fd = new FormData(); fd.append('reference', file); fd.append('name', file.name.replace(/\.[^.]+$/, ''));
+      const r = await API.uploadProgress('/voices/clone/upload', fd, () => {});
+      dropName.textContent = '✓ Converted: ' + file.name;
+      selectSource(r.id);
+      return r.id;
+    }
+    async function autoTranscribe(voiceId) {
+      try {
+        const r = await API.post('/voices/clone/transcribe', { voiceId, maxWords: 80 });
+        if (r.ok && r.transcript) { transcriptTa.value = r.transcript; toast('Transcribed ~' + r.transcript.split(/\s+/).filter(Boolean).length + ' words', 'ok'); }
+        else { transcriptTa.value = ''; toast(r.note || 'Transcription unavailable — clone from audio alone, or paste the transcript.', 'warn', 9000); }
+      } catch (e) { transcriptTa.value = ''; toast('Transcription failed: ' + e.message, 'warn', 9000); }
+    }
+
+    // Dedicated one-click "give me the words" action, decoupled from cloning:
+    // upload+convert the chosen clip if needed (via ensureSource), then
+    // auto-transcribe ~80 words straight into the Transcript box (no speech
+    // generation).
+    const transcribeBusy = el('span');
+    const transcribeBtn = btn('✨ Auto-transcribe', { cls: 'sm primary', onClick: () => autoTranscribeFlow() });
+    async function autoTranscribeFlow() {
+      transcribeBtn.disabled = true;
+      clear(transcribeBusy);
+      const chip = busyChip({ prefix: 'Transcribing…', estSeconds: 10, showPct: false }); transcribeBusy.append(chip.node);
+      try {
+        // Need an uploaded/converted reference to transcribe — upload the pending file first.
+        chip.update(0, 'Uploading…');
+        if (!await ensureSource()) { toast('Choose an audio file first', 'warn'); return; }
+        transcriptTa.value = 'Transcribing… (first run downloads a small model)';
+        await autoTranscribe(sel.sourceId);
+      } catch (e) { toast(e.message, 'err', 8000); }
+      finally { chip.stop(); transcribeBtn.disabled = false; }
+    }
+
+    // Preview + the inline busy chip that sits beside the Generate button.
+    const genBusy = el('span');
+    const previewCard = el('div', el('div.tiny.muted', 'Generated audio will appear here.'));
+
+    // Poll a clone job to completion, reporting (percent, stageLabel) to onProgress.
+    async function pollJob(jobId, onProgress) {
+      for (;;) {
+        const job = await API.get('/voices/clone/jobs/' + jobId);
+        const pct = Math.max(0, Math.min(100, job.percent || 0));
+        if (onProgress) onProgress(pct, CLONE_STAGE_LABELS[job.stage] || job.stage || '');
+        if (job.status === 'complete') return job;
+        if (job.status === 'error') throw new Error(job.error || 'Generation failed');
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+    async function generate() {
+      if (!genText.value.trim()) return toast('Enter the text you want spoken', 'warn');
+      clear(genBusy);
+      const chip = busyChip({ prefix: 'Starting…', estSeconds: estSpeechSeconds(genText.value) }); genBusy.append(chip.node);
+      clear(previewCard); previewCard.append(el('div.tiny.muted', 'Generating…'));
+      try {
+        await ensureSource(); // upload the dropped sample first, if one is pending
+        const { jobId } = await API.post('/voices/clone/jobs', {
+          sourceId: sel.sourceId || undefined, text: genText.value,
+          promptText: transcriptTa.value, voiceName: 'Cloned voice',
+        });
+        const job = await pollJob(jobId, (pct, stage) => chip.update(pct, stage));
+        showOutput(job);
+      } catch (e) { toast(e.message, 'err', 8000); }
+      finally { chip.stop(); }
+    }
+    function showOutput(job) {
+      clear(previewCard);
+      previewCard.classList.remove('hidden');
+      const audio = el('audio', { controls: 'controls', src: job.audioUrl, style: { width: '100%' } });
+      previewCard.append(
+        audio,
+        el('div.row.tight.mt', [
+          pill('Time ' + (job.generation_time || 0).toFixed(1) + 's', 'info'),
+          pill('Size ' + fmtBytes(job.bytes || 0)),
+          pill('Endpoint /v1/tts', 'accent'),
+        ]),
+        el('div.card-actions.mt', [
+          el('a.btn.sm', { href: job.audioUrl, download: 'voice.wav' }, '⬇ Download WAV'),
+          btn('💾 Save as Preset', { cls: 'sm primary', onClick: () => savePresetModal(job) }),
+        ]),
+      );
+      audio.play().catch(() => {});
+    }
+    function savePresetModal(job) {
+      const d = { name: job.voiceName || 'Cloned voice' };
+      const m2 = modal('💾 Save as Preset', [
+        field('Preset name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+        el('div.tiny.muted', 'Saves this cloned voice as a reusable preset and keeps the clip you just heard, so ▶ Preview plays it back instantly.'),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Save', { cls: 'primary', onClick: async () => {
+          try {
+            await API.post('/voices/clone/jobs/' + job.jobId + '/save-preset', { name: d.name });
+            m2.close(); toast('Preset saved — preview ready', 'ok'); App.refreshMeta(); loadSaved();
+          } catch (e) { toast(e.message, 'err', 8000); }
+        } })]),
+      ], { width: '480px' });
+    }
+
+    // ---- Saved presets (user) ----
+    const savedGrid = el('div.grid.cards');
+    async function loadSaved() {
+      data = await API.get('/voices/presets');
+      clear(savedGrid);
+      if (!data.presets.length) { savedGrid.append(empty('🎚', 'No saved presets yet', 'Generate audio and click Save, or create a preset.')); }
+      data.presets.forEach((p) => savedGrid.append(savedCard(p)));
+      renderSetup(data.fish);
+    }
+    function savedCard(p) {
+      const enginePill = pill(p.engine === 'sapi' ? 'SAPI' : (p.engine === 'fish-clone' ? 'Cloned' : 'Fish'), p.engine === 'sapi' ? 'info' : 'accent');
+      return el('div.card', [
+        el('div.card-header', [el('div.card-title', [el('span.ti', p.icon || '🎙'), p.name]), p.is_default ? pill('Default ★', 'ok') : enginePill]),
+        el('div.tiny.muted', `${p.voice || p.engine} · speed ${p.speed}`),
+        el('div.card-actions.mt', [
+          btn('▶ Preview', { cls: 'sm primary', onClick: async (e) => { if (p.preview_url) return playAudio(p.preview_url); e.target.disabled = true; const chip = busyChip({ prefix: 'Preparing…', estSeconds: 6, showPct: false }); e.target.parentNode.append(chip.node); try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); playAudio(r.url); } catch (er) { toast(er.message, 'err'); } chip.stop(); e.target.disabled = false; } }),
+          btn(p.is_default ? '★' : 'Set Default', { cls: 'sm', disabled: p.is_default, onClick: async () => { await API.post('/voices/presets/' + p.id + '/default', {}); toast('Default voice set', 'ok'); loadSaved(); } }),
+          btn('🗑', { cls: 'sm danger', onClick: async () => { await API.del('/voices/presets/' + p.id); toast('Moved to trash'); App.refreshMeta(); loadSaved(); } }),
+        ]),
+      ]);
+    }
+    function newSapiModal() {
+      const d = { name: 'New voice', engine: 'sapi', voice: (data.sapiVoices[0] || {}).name, speed: 1.0, style: 'Calm storyteller' };
+      const m2 = modal('＋ New voice preset', [
+        field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+        field('SAPI voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })),
+        field('Speed', input({ type: 'number', step: '0.05', min: '0.6', max: '1.5', value: d.speed, onInput: (e) => d.speed = +e.target.value })),
+        field('Style', select(['Calm storyteller', 'Dramatic', 'Suspenseful', 'Funny', 'Energetic'], { value: d.style, onChange: (e) => d.style = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create', { cls: 'primary', onClick: async () => { await API.post('/voices/presets', d); m2.close(); toast('Voice created', 'ok'); App.refreshMeta(); loadSaved(); } })]),
+      ], { width: '520px' });
+    }
+
+    // ---- Fish Speech setup panel ----
+    const setupBox = el('div');
+    function renderSetup(s) {
+      s = s || {};
+      fishStatus = s;
+      clear(setupBox);
+      const checkRow = (k, ok, v) => el('div.spread', { style: { padding: '6px 0', borderBottom: '1px solid var(--border)' } }, [el('span', k), el('span', [pill(ok ? 'OK' : '—', ok ? 'ok' : 'warn'), v ? el('span.tiny.muted', { style: { marginLeft: '8px' } }, v) : null])]);
+      const prog = el('div.mt');
+      const quantSel = el('select', { style: { maxWidth: '150px' } }, (s.quants || ['q4_k_m']).map((q) => el('option', { value: q, selected: q === (s.quant || 'q4_k_m') }, q)));
+      setupBox.append(
+        el('div.card-header', [el('div.card-title', [el('span.ti', '🐟'), 'Fish Speech S2 Pro — Setup'])]),
+        el('div', [
+          checkRow('huggingface_hub installed', s.hubInstalled, ''),
+          checkRow('Model downloaded (GGUF)', s.modelPresent, s.gguf || 'not yet'),
+          checkRow('Tokenizer present', !!s.tokenizer, s.tokenizer || ''),
+          checkRow('Engine binary (s2.cpp)', s.binConfigured, s.binConfigured ? s.s2Bin : 'not built / not set'),
+          checkRow('Engine ready', s.engineReady, s.engineReady ? 'can synthesize' : ''),
+        ]),
+        el('div.tiny.muted.mt', 'Active config: ' + (s.repo || '') + ' (quant ' + (s.quant || '?') + ')  →  ' + (s.modelDir || '')),
+        el('div.row.tight.mt', { style: { alignItems: 'center' } }, [
+          el('span.tiny.muted', 'Quant:'), quantSel,
+          btn(s.modelPresent ? '↻ Re-download' : '⬇ Download model', { cls: 'sm primary', onClick: () => downloadModel(prog, quantSel.value) }),
+        ]),
+        el('div.tiny.muted', { style: { marginTop: '4px' } }, 'One quant only (q2_k ≈ 2.4 GB … f16 ≈ 9.3 GB). q4_k_m is a good CPU default.'),
+        el('div.btn-group.mt', [
+          btn('🔧 Build engine (s2.cpp)', { cls: 'warn', onClick: () => buildEngine(prog) }),
+          btn('🗂 Set engine binary', { onClick: setBinModal }),
+          btn('📁 Choose Existing Model Folder', { onClick: chooseFolder }),
+          btn('🛠 Repair', { onClick: async () => { try { const r = await API.post('/fishspeech/repair', {}); toast(r.ok ? 'Repair complete' : r.reason, r.ok ? 'ok' : 'warn', 8000); loadSaved(); } catch (e) { toast(e.message, 'err'); } } }),
+          s.engineReady ? btn('🔊 Test voice', { onClick: async () => { try { const r = await API.post('/fishspeech/test', { text: 'Fish Speech is ready.' }); playAudio(r.url); } catch (e) { toast(e.message, 'err', 8000); } } }) : null,
+          btn('📋 View Fish Logs', { onClick: viewLogs }),
+        ].filter(Boolean)),
+        el('div.tiny.muted.mt', s.engineReady ? '' : 'The s2.cpp engine has no prebuilt binary — build it (needs Git + CMake + a C++ compiler) or set the path to a prebuilt s2 binary. Narration uses SAPI until the engine is ready.'),
+        prog,
+      );
+    }
+    function setBinModal() {
+      let bin = fishStatus.s2Bin || '';
+      const m2 = modal('🗂 Set engine binary', [
+        el('div.tiny.muted.mb', 'Paste the full path to a built s2.cpp binary (e.g. s2.exe).'),
+        field('Binary path', input({ value: bin, placeholder: 'C:\\path\\to\\s2.exe', onInput: (e) => bin = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Save', { cls: 'primary', onClick: async () => { try { await API.post('/fishspeech/set-bin', { bin }); m2.close(); toast('Engine binary set', 'ok'); loadSaved(); } catch (e) { toast(e.message, 'err'); } } })]),
+      ], { width: '560px' });
+    }
+    function buildEngine(prog) {
+      clear(prog);
+      const label = el('div.tiny.muted.mb', 'Building s2.cpp (this can take several minutes)…');
+      const logBox = el('pre', { style: { maxHeight: '160px', overflow: 'auto', fontSize: '.62rem', whiteSpace: 'pre-wrap', background: 'var(--surface3)', padding: '8px', borderRadius: '6px' } }, '');
+      prog.append(label, logBox);
+      const off = App.on('progress', (p) => {
+        if (p.channel !== 'fish' || p.jobId) return;
+        if (p.stage === 'built') { App.off('progress', off); toast('Engine built', 'ok'); loadSaved(); return; }
+        if (p.stage === 'error') { App.off('progress', off); label.textContent = '✗ ' + p.error; toast('Build failed: ' + p.error, 'err', 12000); return; }
+        if (p.line) { logBox.textContent = (logBox.textContent + '\n' + p.line).split('\n').slice(-120).join('\n'); logBox.scrollTop = logBox.scrollHeight; }
+      });
+      API.post('/fishspeech/build', {}).catch((e) => { App.off('progress', off); toast(e.message, 'err', 12000); });
+    }
+    function chooseFolder() {
+      let dir = '';
+      const m2 = modal('📁 Choose Existing Model Folder', [
+        el('div.tiny.muted.mb', 'Paste the absolute path to a folder that already contains the s2-pro GGUF files.'),
+        field('Folder path', input({ placeholder: 'C:\\path\\to\\s2-pro-gguf', onInput: (e) => dir = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Use folder', { cls: 'primary', onClick: async () => { try { await API.post('/fishspeech/model-folder', { dir }); m2.close(); toast('Model folder set', 'ok'); loadSaved(); } catch (e) { toast(e.message, 'err'); } } })]),
+      ], { width: '560px' });
+    }
+    async function viewLogs() {
+      let logs = [];
+      try { const r = await API.get('/fishspeech/logs'); logs = r.logs || []; } catch { /* */ }
+      modal('📋 Fish Speech Logs', [
+        el('pre', { style: { maxHeight: '50vh', overflow: 'auto', fontSize: '.66rem', whiteSpace: 'pre-wrap', background: 'var(--surface3)', padding: '12px', borderRadius: '8px' } }, logs.length ? logs.join('\n') : 'No logs yet.'),
+      ], { width: '680px' });
+    }
+    function downloadModel(prog, quant) {
+      clear(prog);
+      const fill = el('div.fill', { style: { width: '0%' } });
+      const label = el('div.tiny.muted.mb', 'Starting download of quant ' + (quant || 'default') + '… (one GGUF file — this can take a while)');
+      prog.append(label, el('div.progress', fill));
+      const off = App.on('progress', (p) => {
+        if (p.channel !== 'fish' || p.jobId) return; // ignore clone-job progress
+        if (p.stage === 'done') { App.off('progress', off); fill.style.width = '100%'; toast('Model downloaded', 'ok'); loadSaved(); return; }
+        if (p.stage === 'error') { App.off('progress', off); toast('Download failed: ' + p.error, 'err', 9000); return; }
+        if (typeof p.percent === 'number') fill.style.width = Math.round(p.percent) + '%';
+        if (p.line) label.textContent = p.line;
+      });
+      API.post('/fishspeech/download', { quant }).catch((e) => { App.off('progress', off); toast(e.message, 'err'); });
+    }
+
+    // ---- Assemble the page ----
+    view.append(
+      pageHead('🎙 Voice Lab', 'Fish Speech S2 Pro — clone a voice, generate speech, and manage voice presets.', [conn]),
+      el('div.card', [el('div.card-header', [el('div.card-title', [el('span.ti', '🐟'), 'Fish S2 Pro Voice Presets'])]), catBar, presetGrid]),
+      el('div.grid.two.mt', [
+        // Left column: clone steps
+        el('div.col', [
+          el('div.card', [stepLabel(1, 'Upload Voice Sample'), dropzone, el('div.mt', [
+            el('div.spread.mb', { style: { alignItems: 'center' } }, [
+              el('div.step-label', 'Transcript — the words spoken in your sample (required to clone)'),
+              el('div.row.tight', { style: { alignItems: 'center' } }, [transcribeBtn, transcribeBusy]),
+            ]),
+            transcriptTa,
+          ])]),
+          el('div.card', [stepLabel(2, 'Enter Text'), genText, charCount,
+            el('div.row.tight.mt', { style: { alignItems: 'center' } }, [
+              btn('▶ Generate Speech', { cls: 'primary', onClick: generate }),
+              genBusy,
+            ]),
+          ]),
+          el('div.card', [stepLabel(3, 'Output'), previewCard]),
+        ]),
+        // Right column: saved presets + setup
+        el('div.col', [
+          el('div.card', [el('div.card-header', [el('div.card-title', [el('span.ti', '🎚'), 'Saved Presets']), btn('＋ SAPI voice', { cls: 'sm ghost', onClick: newSapiModal })]), savedGrid]),
+          el('div.card', setupBox),
+        ]),
+      ]),
+    );
+
+    // initial data loads
+    try { const r = await API.get('/voices/fish-presets'); fishPresets = r.presets || []; } catch { fishPresets = []; }
+    renderCats(); renderPresetCards();
+    await loadSaved();
+  };
+
+  // ===================== VOICE PRESETS (saved voices + trash bin) =====================
+  PAGES.voicePresets = async function (view) {
     clear(view);
     const state = { trash: false };
-    const grid = el('div.grid.cards.mt');
     const sel = new Set();
-    let data = { presets: [], clones: [], sapiVoices: [], fish: {} };
+    let data = { presets: [], clones: [], sapiVoices: [], fish: {}, defaultId: null };
+    const grid = el('div.grid.cards.mt');
+    const bar = el('div');
+    function play(url) { playAudio(url, () => toast('No preview yet — click Preview', 'warn')); }
 
     async function load() {
       clear(grid); grid.append(UI.spinner()); sel.clear();
       data = await API.get('/voices/presets' + (state.trash ? '?trash=1' : ''));
+      renderBar();
       clear(grid);
-      if (!data.presets.length) { grid.append(empty('🎙', state.trash ? 'Trash empty' : 'No voice presets', state.trash ? '' : 'Create one below, or clone a voice.')); }
-      data.presets.forEach((p) => grid.append(voiceCard(p)));
+      if (!data.presets.length) { grid.append(empty(state.trash ? '🗑' : '🎚', state.trash ? 'Trash bin is empty' : 'No saved voices yet', state.trash ? '' : 'Clone a voice or create a preset — saved voices appear in every voice picker.')); return; }
+      data.presets.forEach((p) => grid.append(card(p)));
     }
-    function play(url) { if (url) { const a = new Audio(url); a.play().catch(() => toast('No preview yet — click Preview', 'warn')); } }
-    function voiceCard(p) {
+    function card(p) {
       const enginePill = pill(p.engine === 'sapi' ? 'SAPI' : (p.engine === 'fish-clone' ? 'Cloned' : 'Fish'), p.engine === 'sapi' ? 'info' : 'accent');
+      const actions = state.trash ? [
+        btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'restore' }); await App.refreshMeta(); load(); } }),
+        btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Permanently delete "' + p.name + '"?', async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'purge' }); load(); }, 'Delete') }),
+      ] : [
+        btn('▶ Preview', { cls: 'sm primary', onClick: async (e) => { e.target.disabled = true; try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); play(r.url); } catch (er) { toast(er.message, 'err', 8000); } e.target.disabled = false; } }),
+        p.preview_url ? btn('🔊', { cls: 'sm ghost', title: 'Play last preview', onClick: () => play(p.preview_url) }) : null,
+        btn(p.is_default ? '★ Default' : 'Set Default', { cls: 'sm', disabled: !!p.is_default, onClick: async () => { await API.post('/voices/presets/' + p.id + '/default', {}); toast('Default voice set', 'ok'); load(); } }),
+        btn('✎ Rename', { cls: 'sm ghost', onClick: () => renameModal(p) }),
+        btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.del('/voices/presets/' + p.id); await App.refreshMeta(); toast('Moved to trash'); load(); } }),
+      ].filter(Boolean);
       return el('div.card', [
-        el('div.spread', [el('strong', (p.icon || '🎙') + ' ' + p.name), p.is_default ? pill('Default ★', 'ok') : enginePill]),
-        el('div.tiny.muted.mt', `${p.voice || p.engine} · speed ${p.speed}`),
-        el('div.card-actions.mt', state.trash ? [
-          btn('♻ Restore', { cls: 'sm ok', onClick: async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'restore' }); load(); } }),
-          btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Permanently delete this voice?', async () => { await API.post('/voices/presets/bulk', { ids: [p.id], action: 'purge' }); load(); }, 'Delete') }),
-        ] : [
-          btn('▶ Preview', { cls: 'sm primary', onClick: async (e) => { e.target.disabled = true; try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); play(r.url); } catch (er) { toast(er.message, 'err'); } e.target.disabled = false; } }),
-          p.preview_url ? btn('🔊', { cls: 'sm ghost', title: 'Play last preview', onClick: () => play(p.preview_url) }) : null,
-          btn(p.is_default ? '★' : 'Set Default', { cls: 'sm', disabled: p.is_default, onClick: async () => { await API.post('/voices/presets/' + p.id + '/default', {}); toast('Default voice set — used for the next run', 'ok'); load(); } }),
-          btn('✎ Edit', { cls: 'sm ghost', onClick: () => editVoice(p) }),
-          btn('🗑', { cls: 'sm danger', onClick: async () => { await API.del('/voices/presets/' + p.id); toast('Moved to trash'); load(); } }),
-        ].filter(Boolean)),
-        el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (e) => e.target.checked ? sel.add(p.id) : sel.delete(p.id) }), el('span', 'Select')]),
+        el('div.card-header', [el('div.card-title', [el('span.ti', p.icon || '🎙'), p.name]), p.is_default ? pill('Default ★', 'ok') : enginePill]),
+        el('div.tiny.muted', (p.voice || p.engine) + ' · speed ' + (p.speed != null ? p.speed : 1)),
+        el('div.card-actions.mt', actions),
+        el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (e) => e.target.checked ? sel.add(p.id) : sel.delete(p.id) }), el('span.tiny', 'Select')]),
       ]);
     }
-    function editVoice(p) {
-      const d = { name: p.name, voice: p.voice, speed: p.speed, style: p.style, temperature: p.temperature, engine: p.engine };
-      const m2 = modal('✎ ' + p.name, [
+    function renameModal(p) {
+      const d = { name: p.name, icon: p.icon };
+      const m2 = modal('✎ Rename voice', [
         field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
-        p.engine === 'sapi' ? field('SAPI voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })) : field('Temperature', input({ type: 'number', step: '0.05', value: d.temperature ?? 0.3, onInput: (e) => d.temperature = +e.target.value })),
+        field('Icon (emoji)', input({ value: d.icon, onInput: (e) => d.icon = e.target.value })),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Save', { cls: 'primary', onClick: async () => { await API.put('/voices/presets/' + p.id, d); m2.close(); await App.refreshMeta(); toast('Saved', 'ok'); load(); } })]),
+      ], { width: '440px' });
+    }
+    function newSapiModal() {
+      const d = { name: 'New voice', engine: 'sapi', voice: (data.sapiVoices[0] || {}).name, speed: 1.0, style: 'Calm storyteller', icon: '🎙' };
+      const m2 = modal('＋ New SAPI voice preset', [
+        field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
+        field('System voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })),
         field('Speed', input({ type: 'number', step: '0.05', min: '0.6', max: '1.5', value: d.speed, onInput: (e) => d.speed = +e.target.value })),
         field('Style', select(['Calm storyteller', 'Dramatic', 'Suspenseful', 'Funny', 'Energetic'], { value: d.style, onChange: (e) => d.style = e.target.value })),
-        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Save', { cls: 'primary', onClick: async () => { await API.put('/voices/presets/' + p.id, d); m2.close(); toast('Saved', 'ok'); load(); } })]),
+        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create', { cls: 'primary', onClick: async () => { await API.post('/voices/presets', d); m2.close(); await App.refreshMeta(); toast('Voice preset created', 'ok'); load(); } })]),
       ], { width: '520px' });
     }
-    function newVoiceModal() {
-      const d = { name: 'New voice', engine: 'sapi', voice: (data.sapiVoices[0] || {}).name, speed: 1.0, style: 'Calm storyteller', temperature: 0.3 };
-      const body = el('div.form-grid');
-      const m2 = modal('＋ New voice preset', [body, el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create & preview', { cls: 'primary', onClick: async () => { const p = await API.post('/voices/presets', d); try { const r = await API.post('/voices/presets/' + p.id + '/preview', {}); play(r.url); } catch (e) { /* */ } m2.close(); toast('Voice created', 'ok'); load(); } })])], { width: '520px' });
-      function rb() {
-        clear(body);
-        body.append(
-          field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
-          field('Engine', select([{ id: 'sapi', label: 'SAPI (local, always available)' }, { id: 'fish', label: 'Fish Speech (needs model)' }], { value: d.engine, onChange: (e) => { d.engine = e.target.value; rb(); } })),
-          d.engine === 'sapi' ? field('Voice', select((data.sapiVoices || []).map((v) => v.name), { value: d.voice, onChange: (e) => d.voice = e.target.value })) : field('Temperature', input({ type: 'number', step: '0.05', value: d.temperature, onInput: (e) => d.temperature = +e.target.value })),
-          field('Speed', input({ type: 'number', step: '0.05', min: '0.6', max: '1.5', value: d.speed, onInput: (e) => d.speed = +e.target.value })),
-          field('Style', select(['Calm storyteller', 'Dramatic', 'Suspenseful', 'Funny', 'Energetic'], { value: d.style, onChange: (e) => d.style = e.target.value })),
-        );
-      }
-      rb();
-    }
-    function cloneModal() {
-      const d = { name: 'My cloned voice', transcript: '' };
-      let file = null;
-      const m2 = modal('🧬 Clone a voice', [
-        el('div.small.muted.mb', 'Upload a short, clean voice sample (10–30s, WAV/MP3). Fish Speech uses it as the reference voice. By uploading you confirm you have the right to use this voice.'),
-        field('Name', input({ value: d.name, onInput: (e) => d.name = e.target.value })),
-        field('Reference audio', el('input', { type: 'file', accept: 'audio/*,.wav,.mp3', onchange: (e) => file = e.target.files[0] })),
-        field('Transcript (optional, improves quality)', textarea({ rows: 3, onInput: (e) => d.transcript = e.target.value })),
-        el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Create clone', { cls: 'primary', onClick: async (e) => {
-          if (!file) return toast('Choose a reference audio file', 'warn');
-          e.target.disabled = true;
-          const fd = new FormData(); fd.append('reference', file); fd.append('name', d.name); fd.append('transcript', d.transcript);
-          try { await API.uploadProgress('/voices/clone', fd, () => {}); m2.close(); toast('Voice cloned — preset created', 'ok'); load(); }
-          catch (er) { toast('Clone failed: ' + er.message, 'err'); e.target.disabled = false; }
-        } })]),
-      ], { width: '560px' });
-    }
-    async function bulk(action) { if (!sel.size) return toast('Select voices first', 'warn'); await API.post('/voices/presets/bulk', { ids: [...sel], action }); load(); }
-
-    view.append(
-      pageHead('🎙 Voices', 'Voice presets for narration — SAPI (built-in) and Fish Speech (incl. cloned voices). Set a default and it is used automatically on the next run.'),
-      el('div.panel', [
-        el('div.spread', [
-          el('div.btn-group', [
-            btn('＋ New voice preset', { cls: 'primary', onClick: newVoiceModal }),
-            btn('🧬 Clone a voice', { onClick: cloneModal }),
-            btn('🐟 Fish Speech setup', { cls: 'ghost', onClick: () => App.go('fishspeech') }),
-          ]),
-          btn(state.trash ? '← Back' : '🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
+    async function bulk(action) { if (!sel.size) return toast('Select voices first', 'warn'); await API.post('/voices/presets/bulk', { ids: [...sel], action }); await App.refreshMeta(); load(); }
+    function renderBar() {
+      clear(bar);
+      bar.append(el('div.spread', [
+        el('div.btn-group', state.trash ? [
+          btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }),
+          btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') }),
+        ] : [
+          btn('＋ New SAPI preset', { cls: 'primary', onClick: newSapiModal }),
+          btn('🧬 Clone a voice', { onClick: () => App.go('voiceLab') }),
+          btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') }),
         ]),
-        el('div.btn-group.mt', state.trash ? [btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }), btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') })] : [btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') })]),
-      ]),
+        btn(state.trash ? '← Back to voices' : '🗑 Trash bin', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
+      ]));
+    }
+    view.append(
+      pageHead('🎚 Voice Presets', 'Save, preview and manage voices (system + Fish/cloned). Saved voices appear in every voice picker; deleted ones go to the trash bin.'),
+      el('div.panel', bar),
       grid,
     );
     load();
   };
 
-  // ===================== FISH SPEECH =====================
-  PAGES.fishspeech = async function (view) {
-    clear(view);
-    const box = el('div.col.mt');
-    async function load() {
-      clear(box); box.append(UI.spinner());
-      const s = await API.get('/fishspeech/status');
-      clear(box);
-      const row = (k, ok, v) => el('div.spread', { style: { padding: '6px 0', borderBottom: '1px solid var(--border)' } }, [el('span', k), el('span', [pill(ok ? 'OK' : 'Missing', ok ? 'ok' : 'warn'), v ? el('span.tiny.muted', { style: { marginLeft: '8px' } }, v) : null])]);
-      box.append(el('div.panel', [
-        el('strong', 'Status'),
-        row('huggingface_hub installed', s.hubInstalled, ''),
-        row('Model downloaded', s.modelPresent, s.files && s.files.length ? s.files.length + ' files' : 'not yet'),
-        row('Server reachable', s.serverRunning, s.serverUrl),
-        row('Server binary configured', s.serverConfigured, s.serverConfigured ? '' : 'set FISH_S2_BIN'),
-        el('div.tiny.muted.mt', 'Model: ' + s.repo + '  →  ' + s.modelDir),
-      ]));
-      const prog = el('div.mt');
-      box.append(el('div.panel.mt', [
-        el('strong', 'Setup'),
-        el('div.btn-group.mt', [
-          btn(s.modelPresent ? '↻ Re-download model' : '⬇ Download model (GGUF)', { cls: 'primary', onClick: () => download(prog) }),
-          btn('▶ Start server', { onClick: async () => { try { const r = await API.post('/fishspeech/server/start', {}); toast(r.already ? 'Already running' : 'Server started', 'ok'); load(); } catch (e) { toast(e.message, 'err'); } } }),
-          btn('■ Stop server', { cls: 'ghost', onClick: async () => { await API.post('/fishspeech/server/stop', {}); load(); } }),
-          s.serverRunning ? btn('🔊 Test voice', { cls: 'ghost', onClick: async () => { try { const r = await API.post('/fishspeech/test', {}); new Audio(r.url).play(); } catch (e) { toast(e.message, 'err'); } } }) : null,
-        ].filter(Boolean)),
-        prog,
-        el('div.tiny.muted.mt', 'Fish Speech runs a local GGUF inference server. After downloading the model, set FISH_S2_BIN to the s2 server executable (or point FISH_TTS_URL at a running Fish server), then Start server. Cloned voices use a reference clip as the prompt voice. Narration falls back to SAPI when Fish Speech is unavailable.'),
-      ]));
-    }
-    function download(prog) {
-      clear(prog);
-      const fill = el('div.fill', { style: { width: '0%' } });
-      const label = el('div.small.muted.mb', 'Starting download… (the GGUF model is large — this can take a while)');
-      prog.append(label, el('div.progress', fill));
-      const off = App.on('progress', (p) => {
-        if (p.channel !== 'fish') return;
-        if (p.stage === 'done') { App.off('progress', off); toast('Model downloaded', 'ok'); load(); return; }
-        if (p.stage === 'error') { App.off('progress', off); toast('Download failed: ' + p.error, 'err', 9000); return; }
-        if (typeof p.percent === 'number') fill.style.width = Math.round(p.percent) + '%';
-        if (p.line) label.textContent = p.line;
-      });
-      API.post('/fishspeech/download', {}).catch((e) => { App.off('progress', off); toast(e.message, 'err'); });
-    }
-    view.append(pageHead('🐟 Fish Speech', 'Local neural TTS + voice cloning (S2-Pro GGUF). Download the model, start the server, then use Fish/cloned voices on the Voices page.'), box);
-    load();
-  };
+  // Old nav ids redirect here; keep aliases so any direct PAGES call still resolves.
+  PAGES.voices = PAGES.voiceLab;
+  PAGES.fishspeech = PAGES.voiceLab;
 
 })();

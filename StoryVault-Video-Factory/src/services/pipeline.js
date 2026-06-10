@@ -21,8 +21,9 @@ function resolveSettings(overrides = {}) {
   const presetId = overrides.voicePresetId || prefs.voicePresetId;
   if (presetId) { try { preset = require('./voices').getPreset(presetId); } catch { /* voices not ready */ } }
   let refPath = null;
+  let cloneText = null;
   if (preset && preset.engine === 'fish-clone' && preset.clone_id) {
-    try { const c = require('../db/database').get('SELECT reference_path FROM voice_clones WHERE id = ?', [preset.clone_id]); refPath = c && c.reference_path; } catch { /* */ }
+    try { const c = require('../db/database').get('SELECT reference_path, transcript FROM voice_clones WHERE id = ?', [preset.clone_id]); refPath = c && c.reference_path; cloneText = c && c.transcript; } catch { /* */ }
   }
   return {
     durationSeconds: overrides.durationSeconds || prefs.targetVideoLength || 60,
@@ -35,6 +36,7 @@ function resolveSettings(overrides = {}) {
     speed: overrides.speed != null ? overrides.speed : (preset && preset.speed != null ? preset.speed : 1.0),
     temperature: overrides.temperature != null ? overrides.temperature : (preset && preset.temperature),
     cloneRef: refPath,
+    cloneText,
     narrationStyle: overrides.narrationStyle || (preset && preset.style) || 'Calm storyteller',
     captionStyle: overrides.captionStyle || prefs.preferredCaptionStyle || 'bold',
     captionPosition: overrides.captionPosition || 'bottom',
@@ -72,7 +74,7 @@ async function createVideoForStory(storyOrId, overrides = {}, { stage = () => {}
   stage('Generating audio', 'Synthesizing narration');
   const narration = await ck.step({
     name: 'narration',
-    run: () => tts.generate(script, { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, refPath: s.cloneRef, temperature: s.temperature }),
+    run: () => tts.generate(script, { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, refPath: s.cloneRef, promptText: s.cloneText, temperature: s.temperature }),
     revive: (o) => tts.getNarration(o.id),
   });
 
@@ -105,7 +107,7 @@ async function createVideoForStory(storyOrId, overrides = {}, { stage = () => {}
         try {
           return await composer.applyTemplateIntro(video, {
             story, narration, template,
-            ttsOpts: { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, censor: s.censorCaptions, refPath: s.cloneRef, temperature: s.temperature },
+            ttsOpts: { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, censor: s.censorCaptions, refPath: s.cloneRef, promptText: s.cloneText, temperature: s.temperature },
             selectOpts: { avoidSegmentIds: s.avoidSegmentIds, backgroundCategory: s.backgroundCategory, backgroundIds: s.backgroundIds, variationSeed: s.variationSeed },
           });
         } catch (e) {

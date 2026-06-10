@@ -1,6 +1,6 @@
 'use strict';
 // Template store (spec "REFERENCE-BASED TEMPLATE SYSTEM"). Built-ins are seeded by the
-// migration; users can create/edit/delete their own. Built-ins cannot be deleted.
+// migration; users can create/edit/delete any template (built-ins included — see softRemove).
 const db = require('../db/database');
 const { id } = require('../util/ids');
 const { REFERENCE_TEMPLATE } = require('../templates-data');
@@ -48,18 +48,19 @@ function setDefault(tplId) {
   db.update('templates', tplId, { is_default: 1, updated_at: db.nowIso() });
   return get(tplId);
 }
-// Soft-delete a CUSTOM template (→ trash). Built-ins cannot be removed.
+// Soft-delete a template (→ trash). Works for built-ins too: the row is kept (deleted_at set)
+// so the migration's idempotent-by-id seed won't recreate it — the deletion persists.
 function softRemove(tplId) {
   const row = db.get('SELECT * FROM templates WHERE id = ?', [tplId]);
   if (!row) throw new Error('Template not found.');
-  if (row.builtin) throw new Error('Built-in templates cannot be deleted. Duplicate it and edit the copy instead.');
   db.update('templates', tplId, { deleted_at: db.nowIso(), is_default: 0, updated_at: db.nowIso() });
   return { ok: true };
 }
+// Hard-delete a template. NOTE: purging a built-in removes its row, so the migration will
+// re-seed it on the next server start. Use softRemove to make a built-in stay gone.
 function remove(tplId) {
   const row = db.get('SELECT * FROM templates WHERE id = ?', [tplId]);
   if (!row) throw new Error('Template not found.');
-  if (row.builtin) throw new Error('Built-in templates cannot be deleted. Duplicate it and edit the copy instead.');
   db.run('DELETE FROM templates WHERE id = ?', [tplId]);
   return { ok: true };
 }

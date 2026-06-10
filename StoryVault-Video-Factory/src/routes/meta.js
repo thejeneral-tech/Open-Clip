@@ -34,8 +34,16 @@ router.get('/meta', wrap(async (req, res) => {
     platforms: constants.PLATFORMS,
     gameplayCategories: constants.BACKGROUND_TYPES,
     voices: await tts.listVoices(),
+    voicePresets: require('../services/voices').listPresets().map((p) => ({ id: p.id, name: p.name, engine: p.engine, icon: p.icon, is_default: p.is_default })),
     templates: templates.list().map((t) => ({ id: t.id, name: t.name, builtin: t.builtin, isDefault: t.isDefault })),
   });
+}));
+
+// --- Version (settings About tab) ---
+router.get('/version', wrap(async (req, res) => {
+  let version = '1.0.0';
+  try { version = require('../../package.json').version || version; } catch { /* ignore */ }
+  res.json({ version, name: 'StoryVault Video Factory' });
 }));
 
 // --- Templates (REFERENCE-BASED TEMPLATE SYSTEM) ---
@@ -52,12 +60,12 @@ router.post('/templates/:id/duplicate', wrap(async (req, res) => res.json(templa
 router.post('/templates/bulk', wrap(async (req, res) => {
   const { ids = [], action } = req.body || {};
   const trash = require('../services/trash');
-  if (action === 'delete') { let n = 0; ids.forEach((id) => { try { templates.softRemove(id); n++; } catch { /* builtin */ } }); return res.json({ ok: true, count: n }); }
+  if (action === 'delete') { let n = 0; ids.forEach((id) => { try { templates.softRemove(id); n++; } catch { /* skip missing */ } }); return res.json({ ok: true, count: n }); }
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('templates', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('templates', ids) });
   throw new Error('Unknown action.');
 }));
-// Delete → trash (custom only); ?permanent=1 hard-removes.
+// Delete → trash (any template, built-ins included); ?permanent=1 hard-removes.
 router.delete('/templates/:id', wrap(async (req, res) => {
   if (req.query.permanent) return res.json(templates.remove(req.params.id));
   return res.json(templates.softRemove(req.params.id));

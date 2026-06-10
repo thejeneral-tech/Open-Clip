@@ -35,10 +35,11 @@ router.post('/discovery/import-urls', wrap(async (req, res) => {
 router.post('/discovery/save/:searchId', wrap(async (req, res) => res.json(discovery.saveSearch(req.params.searchId, req.body?.name))));
 router.get('/discovery/searches', wrap(async (req, res) => res.json(discovery.listSearches())));
 
-// Replenish the library with fresh long-form stories (workaround for no live API).
+// Replenish the library with fresh long-form stories — AI-invented when the local
+// LLM is reachable, otherwise generated offline.
 router.post('/stories/replenish', wrap(async (req, res) => {
   const count = Math.max(1, Math.min(50, Number(req.body?.count) || 12));
-  res.json(stories.replenish(count, {
+  res.json(await stories.replenish(count, {
     category: req.body?.category || null,
     targetMinutes: Number(req.body?.targetMinutes) || undefined,
     source: req.body?.source,
@@ -95,7 +96,7 @@ router.get('/stories/export/csv', wrap(async (req, res) => {
 router.post('/stories/:id/script', wrap(async (req, res) => {
   const s = stories.getStory(req.params.id);
   if (!s) throw new Error('Story not found.');
-  res.json(sg.generateAndSave(s, req.body || {}));
+  res.json(await sg.generateAndSaveAI(s, req.body || {}));
 }));
 router.get('/stories/:id/scripts', wrap(async (req, res) => res.json(sg.listForStory(req.params.id))));
 router.post('/scripts/:id/remix', wrap(async (req, res) => {

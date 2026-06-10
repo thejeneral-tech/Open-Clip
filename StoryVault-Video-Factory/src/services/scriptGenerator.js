@@ -14,6 +14,7 @@ const { analyze } = require('./analysis');
 const safety = require('./safety');
 const rng = require('../util/rng');
 const dedup = require('./dedup');
+const aiProvider = require('./aiProvider');
 
 const FILLER = [
   /\b(so basically|basically|to be honest|honestly|i guess|kind of|sort of|you know|like,|i mean|just to be clear|for context|a little background|long story short|tl;?dr:?)\b/gi,
@@ -229,6 +230,27 @@ function generateAndSave(story, opts = {}) {
   return save(scriptObj);
 }
 
+// AI-first generate + save: rewrite the story with the local LLM when enabled
+// and reachable, otherwise fall back to the offline heuristic. Never throws on
+// LLM problems — the heuristic always produces a usable script.
+async function generateAndSaveAI(story, opts = {}) {
+  let useAi = opts.useAi;
+  if (useAi === undefined) {
+    try { useAi = require('./preferences').get().useAi !== false; } catch { useAi = true; }
+  }
+  if (useAi && aiProvider.isEnabled({ useAi: true })) {
+    try {
+      if (await aiProvider.available()) {
+        const obj = await aiProvider.rewriteScript(story, opts);
+        return save(obj);
+      }
+    } catch (e) {
+      try { require('./logger').activity('SCRIPT', `AI rewrite failed, using heuristic: ${e.message}`, { level: 'warn' }); } catch { /* ignore */ }
+    }
+  }
+  return generateAndSave(story, opts);
+}
+
 // Modifier helpers used by the §8 buttons (shorter/longer/dramatic/etc).
 function remix(story, baseOpts, modifier) {
   const o = { ...baseOpts };
@@ -252,4 +274,4 @@ function nextHook(style) {
   return order[(i + 1) % order.length];
 }
 
-module.exports = { generate, save, getScript, listForStory, generateAndSave, remix, stripFiller };
+module.exports = { generate, save, getScript, listForStory, generateAndSave, generateAndSaveAI, remix, stripFiller };

@@ -82,6 +82,18 @@ const BUILTIN_TEMPLATES = [
     gameplay: { mode: 'split_bottom' }, // gameplay bottom half, card top (render support: future)
     captions: { marginV: 480 },
   }),
+  // Exact replica of the reference clip's captions: one short "popping" cue at a time,
+  // big white rounded fill + heavy black outline, dead-centre in the 9:16 frame (y=960).
+  variant('center_pop', 'Center Pop Captions', {
+    captions: {
+      style: 'pop', size: 116, outline: 8, maxWords: 2, maxChars: 12,
+      centerY: 960, font: 'Arial Rounded MT Bold', primary: C.white, highlight: C.white,
+    },
+  }),
+  // The original Full-Screen style, but with the captions raised to the dead centre (y=960).
+  variant('full_screen_centered', 'Full-Screen — Centered Captions', {
+    captions: { centerY: 960 },
+  }),
   variant('custom_template', 'Custom Template', {}),
 ];
 

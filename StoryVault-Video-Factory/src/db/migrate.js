@@ -14,6 +14,31 @@ function ensureColumn(db, table, col, ddl) {
 }
 
 function run(db, nowIso) {
+  // --- user auth (additive) -------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      username      TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin      INTEGER DEFAULT 0,
+      status        TEXT DEFAULT 'active',
+      created_at    TEXT NOT NULL,
+      last_login_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    CREATE TABLE IF NOT EXISTS sessions (
+      token      TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE TABLE IF NOT EXISTS auth_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+  `);
+
   // --- new tables (additive) ------------------------------------------------
   db.exec(`
     CREATE TABLE IF NOT EXISTS templates (

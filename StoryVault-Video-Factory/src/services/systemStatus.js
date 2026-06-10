@@ -25,9 +25,18 @@ async function checkTts() {
     return voices.length ? ok(`TTS ready (${voices.length} voice${voices.length > 1 ? 's' : ''})`) : { status: 'Missing', detail: 'No TTS voices found' };
   } catch (e) { return bad(`TTS error: ${e.message}`); }
 }
-function checkAiProvider() {
-  if (process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) return ok('External AI provider configured');
-  return { status: 'Ready', detail: 'Using built-in heuristic rewriter (no external AI required)' };
+async function checkAiProvider() {
+  try {
+    const llmAdmin = require('./llmAdmin');
+    const s = await llmAdmin.getStatus();
+    if (s.reachable) {
+      const n = s.models ? s.models.length : 0;
+      return ok(`Local AI online — ${s.backend}, ${n} model${n === 1 ? '' : 's'} (active: ${s.model || 'none'})`);
+    }
+    return { status: 'Limited', detail: 'Local AI offline — using the built-in heuristic rewriter (start Ollama or llama.cpp to enable AI)' };
+  } catch (e) {
+    return { status: 'Ready', detail: 'Using built-in heuristic rewriter (no external AI required)' };
+  }
 }
 async function checkReddit() {
   if (reddit.hasOAuth()) {
@@ -59,11 +68,11 @@ function ok(detail) { return { status: 'Ready', detail }; }
 function bad(detail) { return { status: 'Offline', detail }; }
 
 async function testAll() {
-  const [ffmpeg, ffprobe, tts, redditC] = await Promise.all([checkFfmpeg(), checkFfprobe(), checkTts(), checkReddit()]);
+  const [ffmpeg, ffprobe, tts, redditC, ai] = await Promise.all([checkFfmpeg(), checkFfprobe(), checkTts(), checkReddit(), checkAiProvider()]);
   return {
     database: checkDatabase(),
     ffmpeg, ffprobe, tts,
-    aiProvider: checkAiProvider(),
+    aiProvider: ai,
     reddit: redditC,
     storage: checkStorage(),
     renderWorker: checkRenderWorker(),

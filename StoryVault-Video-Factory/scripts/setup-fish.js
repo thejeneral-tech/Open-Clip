@@ -3,13 +3,14 @@
 // huggingface_hub. Run with: npm run setup:fish  (also available in-app on the Fish Speech page).
 const fish = require('../src/services/fishspeech');
 
+const quant = process.argv[2] || fish.DEFAULT_QUANT; // e.g. npm run setup:fish q2_k
 (async () => {
-  console.log(`\n  🐟 Fish Speech setup\n  Model: ${fish.REPO}\n  →      ${fish.MODEL_DIR}\n`);
-  if (fish.modelPresent()) { console.log('  Model already present. Re-downloading to refresh…\n'); }
+  console.log(`\n  🐟 Fish Speech setup\n  Model: ${fish.REPO}  (quant ${quant})\n  →      ${fish.getModelDir()}\n`);
+  if (fish.modelPresent()) { console.log('  A GGUF is already present — downloading the selected quant…\n'); }
   try {
-    const r = await fish.download({ onProgress: (l) => process.stdout.write(l) });
-    console.log(`\n\n  ✓ Downloaded ${r.files.length} file(s) to ${r.dir}`);
-    console.log('  Next: set FISH_S2_BIN to your s2 GGUF server binary (or point FISH_TTS_URL at a running Fish server), then start it from the Fish Speech page.\n');
+    const r = await fish.download({ quant, onProgress: (l) => process.stdout.write(l) });
+    console.log(`\n\n  ✓ Downloaded quant ${r.quant} to ${r.dir}`);
+    console.log('  Next: build the s2.cpp engine (Voice Lab → Setup → "Build engine", needs CMake + a C++ compiler)\n  or set the path to a prebuilt s2 binary there. Narration falls back to SAPI until the engine is ready.\n');
     process.exit(0);
   } catch (e) {
     console.error(`\n  ✗ ${e.message}\n  (Ensure Python + huggingface_hub are installed: pip install -U "huggingface_hub[hf_xet]")\n`);

@@ -102,6 +102,7 @@ async function run(batchId) {
           durationSeconds: pickDuration(params),
           hookStyle: plan.hookStyle,
           voice: params.voice || plan.voice,
+          voicePresetId: params.voicePresetId || null,
           speed: plan.speed,
           narrationStyle: plan.narrationStyle,
           captionStyle: params.captionStyle || plan.captionStyle,

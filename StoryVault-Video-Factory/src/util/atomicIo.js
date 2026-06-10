@@ -19,7 +19,13 @@ function atomicWriteJson(p, data, indent = 2) {
 }
 
 function readJson(p, fallback = null) {
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
+  // Strip a UTF-8 BOM — PowerShell's Set-Content -Encoding utf8 (PS 5.1) prepends
+  // one (char code 0xFEFF), and JSON.parse rejects a leading BOM.
+  try {
+    let raw = fs.readFileSync(p, 'utf8');
+    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+    return JSON.parse(raw);
+  } catch { return fallback; }
 }
 
 module.exports = { atomicWriteText, atomicWriteJson, readJson };

@@ -131,6 +131,7 @@ const DEFAULT_PREFERENCES = {
   desiredStoryLength: 'medium',
   targetVideoLength: 60,
   preferredVoice: 'Microsoft Zira Desktop',
+  voicePresetId: null,         // when set, a saved voice preset (Fish/cloned/SAPI) overrides preferredVoice
   preferredBackground: 'Minecraft parkour',
   preferredCaptionStyle: 'bold',
   preferredPlatforms: ['tiktok', 'shorts', 'reels'],
@@ -139,6 +140,8 @@ const DEFAULT_PREFERENCES = {
   adultTopicFilter: true,
   repetitionTolerance: 'low',  // low | medium | high
   endingPreference: 'Satisfying ending',
+  useAi: true,                 // use the local LLM for script rewriting (falls back to the heuristic when offline)
+  aiModel: '',                 // override the active LLM model for script generation ('' = use the selected model)
 };
 
 module.exports = {

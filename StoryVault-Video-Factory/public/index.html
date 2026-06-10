@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>StoryVault Video Factory</title>
+  <!-- Theme engine loads before paint (no defer) so the saved theme applies with no flash. -->
+  <script src="/js/tva-theme.js"></script>
   <link rel="stylesheet" href="/css/styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
 </head>
@@ -17,6 +19,17 @@
       <nav id="nav"></nav>
       <div class="sidebar-foot">
         <div id="statusMini" class="status-mini"></div>
+        <div id="sbAccount" class="sb-account hidden">
+          <span id="sbAvatar" class="sb-avatar">?</span>
+          <div class="sb-acct-text">
+            <div id="sbAcctName" class="sb-acct-name">—</div>
+            <div id="sbAcctRole" class="sb-acct-role">—</div>
+          </div>
+        </div>
+        <div class="sb-foot-btns">
+          <button id="settingsBtn" class="icon-btn" title="Settings">⚙</button>
+          <button id="logoutBtn" class="icon-btn hidden" title="Sign out">⎋</button>
+        </div>
       </div>
     </aside>
 
@@ -27,6 +40,7 @@
         <h1 id="pageTitle">Command Center</h1>
         <div class="topbar-right">
           <div id="activityTicker" class="ticker">Ready.</div>
+          <div id="themeMount"></div>
           <button id="logBtn" class="icon-btn" title="Activity log">📜</button>
         </div>
       </header>
@@ -46,5 +60,7 @@
   <script src="/js/ui.js"></script>
   <script src="/js/pages.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/js/settings-widget.js" defer></script>
+  <script src="/js/users-widget.js" defer></script>
 </body>
 </html>

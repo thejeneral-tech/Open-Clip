@@ -26,7 +26,10 @@ function ingest(candidates, opts = {}) {
     category: c.category || categorizer.infer(c.title, c.body),
     word_count: text.wordCount(c.body),
   }));
-  const scored = scoring.scoreBatch(ctxStories);
+  // Long-form "clip source" stories carry their intended length (_targetMinutes);
+  // score their duration-fit against that target so a 30-minute story isn't
+  // penalised for not being a 90-second clip.
+  const scored = scoring.scoreBatch(ctxStories, (s) => (s._targetMinutes ? { targetDuration: Math.round(s._targetMinutes * 60) } : {}));
 
   const sourceId = ensureSource({
     type: opts.sourceType || (candidates[0] && candidates[0].source_type) || 'pasted',
@@ -172,17 +175,39 @@ function availableCount(filter = {}) {
   return list({ ...filter, limit: 1000 }).filter((s) => s.status !== 'excluded' && s.status !== 'used' && !s.duplicate_of).length;
 }
 
-// Generate fresh long-form stories locally (workaround for no live Reddit/Quora API) and
-// ingest them. Used by the Story Library "Refresh" + auto-replenish.
-function replenish(count = 12, opts = {}) {
+// Generate fresh long-form stories and ingest them. Used by the Story Library
+// "🔄 Refresh / Replenish" button + auto-replenish.
+//
+// Primary path: the local AI (aiStoryForge) INVENTS brand-new premises on every
+// call, so the user gets genuinely different, well-rated, ~30-minute stories each
+// time. If the LLM is unreachable or returns too few, we transparently top up /
+// fall back to the offline storyForge so the button always works.
+async function replenish(count = 12, opts = {}) {
   const storyForge = require('./storyForge');
-  const candidates = storyForge.batch(count, {
-    category: opts.category || null,
-    targetMinutes: opts.targetMinutes || undefined,
-    source: opts.source || 'pasted',
-  });
-  const r = ingest(candidates, { sourceType: 'forge', applyPrefs: false });
-  return { added: r.stories.length, duplicates: r.duplicates, stories: r.stories };
+  const aiStoryForge = require('./aiStoryForge');
+  const targetMinutes = Number(opts.targetMinutes) || 30;
+  const forgeOpts = { category: opts.category || null, targetMinutes, source: opts.source || 'pasted' };
+
+  // Avoid repeating ANY story already in the library so every refresh is new.
+  // (Covers the whole library, not just the top 80, and — crucially — is now also
+  // honoured by the procedural generator, not only the AI path.)
+  const avoidTitles = list({ limit: 1000 }).map((s) => s.title).filter(Boolean);
+  const genOpts = { ...forgeOpts, avoidTitles };
+
+  let candidates = [];
+  try {
+    candidates = await aiStoryForge.batch(count, genOpts);
+  } catch (e) {
+    log.activity('STORIES', `Story generator error (${e.message}); using the legacy offline generator.`, { level: 'warn' });
+  }
+  // Last-ditch fallback if the generator threw or came up short.
+  if (candidates.length < count) {
+    candidates = candidates.concat(storyForge.batch(count - candidates.length, genOpts));
+  }
+  const usedAi = candidates.some((c) => c && c._ai);
+
+  const r = ingest(candidates, { sourceType: usedAi ? 'ai-forge' : 'forge', applyPrefs: false });
+  return { added: r.stories.length, duplicates: r.duplicates, stories: r.stories, usedAi };
 }
 
 function setStatus(storyId, status) {

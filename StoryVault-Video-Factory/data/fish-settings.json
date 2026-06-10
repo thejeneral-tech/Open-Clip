@@ -1,0 +1,5 @@
+{
+  "modelDir": "C:\\Users\\Anton\\OneDrive\\Documents\\GitHub\\TrendVault-Program\\StoryVault-Video-Factory\\data\\models\\s2-pro-gguf",
+  "quant": "q4_k_m",
+  "s2Bin": "C:\\Users\\Anton\\OneDrive\\Documents\\GitHub\\TrendVault-Program\\StoryVault-Video-Factory\\data\\models\\s2.cpp\\build\\s2.exe"
+}

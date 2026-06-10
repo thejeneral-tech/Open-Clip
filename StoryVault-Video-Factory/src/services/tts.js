@@ -130,7 +130,7 @@ async function generate(script, opts = {}) {
     var duration = meta.duration;
   } else if (provider === 'fish' || provider === 'fish-clone') {
     const fishspeech = require('./fishspeech');
-    await fishspeech.synth(scriptText, wavPath, { temperature: opts.temperature, refPath: opts.refPath, voice });
+    await fishspeech.synth(scriptText, wavPath, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
     const meta = await ff.probe(wavPath);
     duration = meta.duration;
     wordTimings = estimateTimings(scriptText, duration);
@@ -187,7 +187,7 @@ async function synth(textStr, opts = {}) {
   }
   if (provider === 'fish' || provider === 'fish-clone') {
     const fishspeech = require('./fishspeech');
-    await fishspeech.synth(String(textStr), outWav, { temperature: opts.temperature, refPath: opts.refPath, voice });
+    await fishspeech.synth(String(textStr), outWav, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
     const meta = await ff.probe(outWav);
     return { path: outWav, duration: round(meta.duration), wordTimings: estimateTimings(String(textStr), meta.duration) };
   }

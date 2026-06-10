@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · StoryVault</title>
+  <script src="/js/tva-theme.js"></script>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .login-wrap { width: 100%; max-width: 380px; }
+    .login-logo { text-align: center; margin-bottom: 20px; }
+    .login-logo .nm { font-size: 1.6rem; font-weight: 900; letter-spacing: 1px; background: linear-gradient(135deg, var(--purple2), var(--gold)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .login-logo .sub { font-size: .58rem; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+    .login-card { padding: 26px 24px; }
+    .login-card h1 { font-size: .8rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text2); text-align: center; margin-bottom: 18px; }
+    .login-field { margin-bottom: 13px; }
+    .login-field label { display: block; font-size: .62rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+    .pw-row { position: relative; }
+    .pw-row button { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; font-size: .9rem; }
+    .login-sub { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 16px; font-size: .68rem; }
+    .login-sub a { cursor: pointer; }
+    button.submit { width: 100%; padding: 12px; border: none; border-radius: 8px; background: linear-gradient(135deg, var(--purple2), var(--gold)); color: #fff; font-size: .85rem; font-weight: 800; letter-spacing: .3px; cursor: pointer; font-family: var(--font-mono); transition: filter .15s, transform .12s; }
+    button.submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .login-msg { margin-top: 12px; font-size: .7rem; text-align: center; min-height: 1em; }
+    .login-msg.err { color: var(--red); } .login-msg.ok { color: var(--green); }
+    .check { font-size: .7rem; }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-logo">
+      <div class="nm">🎬 StoryVault</div>
+      <div class="sub">Video Factory</div>
+    </div>
+    <div class="card login-card">
+      <h1 id="title">Sign In</h1>
+      <form id="form">
+        <div class="login-field">
+          <label for="username">Username</label>
+          <input id="username" autocomplete="username" spellcheck="false" autofocus />
+        </div>
+        <div class="login-field">
+          <label for="password">Password</label>
+          <div class="pw-row">
+            <input id="password" type="password" autocomplete="current-password" />
+            <button type="button" id="pwToggle" title="Show/hide" tabindex="-1">👁</button>
+          </div>
+        </div>
+        <div class="login-field" id="confirmWrap" style="display:none">
+          <label for="confirm">Confirm password</label>
+          <input id="confirm" type="password" autocomplete="new-password" />
+        </div>
+        <div class="login-sub">
+          <label class="check"><input type="checkbox" id="remember" checked style="width:auto" /> <span>Remember me</span></label>
+          <a id="toggleMode" class="muted" style="display:none"></a>
+        </div>
+        <button type="submit" class="submit" id="submit">Sign In</button>
+        <div class="login-msg" id="msg"></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var mode = 'login'; // login | signup | setup
+      var signupAllowed = false;
+
+      function setMsg(text, kind) { var m = $('msg'); m.textContent = text || ''; m.className = 'login-msg ' + (kind || ''); }
+      function render() {
+        var titles = { login: 'Sign In', signup: 'Create Account', setup: 'Create Admin Account' };
+        var btns = { login: 'Sign In', signup: 'Create Account', setup: 'Create Admin Account' };
+        $('title').textContent = titles[mode];
+        $('submit').textContent = btns[mode];
+        $('confirmWrap').style.display = mode === 'login' ? 'none' : 'block';
+        var tog = $('toggleMode');
+        if (mode === 'setup') { tog.style.display = 'none'; }
+        else if (signupAllowed) {
+          tog.style.display = 'inline';
+          tog.textContent = mode === 'login' ? 'Create an account' : 'Have an account? Sign in';
+        } else { tog.style.display = 'none'; }
+      }
+
+      $('pwToggle').addEventListener('click', function () {
+        var p = $('password'); p.type = p.type === 'password' ? 'text' : 'password';
+      });
+      $('toggleMode').addEventListener('click', function () { mode = mode === 'login' ? 'signup' : 'login'; setMsg(''); render(); });
+
+      try { var last = localStorage.getItem('storyvault-last-user'); if (last) $('username').value = last; } catch (e) {}
+
+      async function api(path, body) {
+        var res = await fetch('/api/auth/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+      }
+
+      async function doLogin(username, password, remember) {
+        await api('login', { username: username, password: password, remember: remember });
+        try { localStorage.setItem('storyvault-last-user', username); } catch (e) {}
+        window.location.href = '/';
+      }
+
+      $('form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var username = $('username').value.trim();
+        var password = $('password').value;
+        var remember = $('remember').checked;
+        setMsg('');
+        $('submit').disabled = true;
+        try {
+          if (mode === 'setup' || mode === 'signup') {
+            if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+            if (password !== $('confirm').value) throw new Error('Passwords do not match.');
+            await api(mode === 'setup' ? 'setup' : 'signup', { username: username, password: password });
+            setMsg('Account created — signing in…', 'ok');
+            await doLogin(username, password, remember);
+          } else {
+            await doLogin(username, password, remember);
+          }
+        } catch (err) {
+          setMsg(err.message, 'err');
+          $('submit').disabled = false;
+        }
+      });
+
+      // Decide initial mode from server state.
+      (async function init() {
+        try {
+          var s = await (await fetch('/api/auth/status', { credentials: 'same-origin' })).json();
+          if (s.authenticated) { window.location.href = '/'; return; }
+          signupAllowed = !!s.signup_enabled;
+          mode = s.configured ? 'login' : 'setup';
+        } catch (e) { mode = 'login'; }
+        render();
+      })();
+    })();
+  </script>
+</body>
+</html>

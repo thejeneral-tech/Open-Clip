@@ -82,23 +82,39 @@ function fitSize(text, targetPx, min, max) {
   return Math.max(min, Math.min(max, size));
 }
 
-// --- karaoke body captions (Stage 3) --------------------------------------
-// Reuses the proven word-grouping from captions.js; emits cumulative \k cues so already-
-// spoken words are yellow and upcoming words white (current-word highlight effect).
+// --- body captions (Stage 3) ----------------------------------------------
+// Two modes, both dead-centre horizontally via \an5 + \pos(W/2, centerY):
+//   default ('reference')  cumulative \k karaoke — already-spoken words yellow, upcoming white.
+//   'pop'                  one short cue (1-2 words) at a time, white rounded fill + heavy
+//                          outline, scaling in with a slight overshoot — the "popping words"
+//                          look from the reference clip. Each cue holds until the next begins.
 function captionEvents(bodyTimings, tpl, censor, W, centerY) {
   if (!bodyTimings || !bodyTimings.length) return [];
-  const groups = captions.groupWords(bodyTimings, { maxWords: tpl.maxWords, maxChars: Math.round((tpl.maxChars || 18) / 2) });
+  const pop = tpl.style === 'pop';
+  const groups = captions.groupWords(bodyTimings, {
+    maxWords: tpl.maxWords || (pop ? 2 : 4),
+    maxChars: Math.round((tpl.maxChars || (pop ? 12 : 18)) / 2),
+  });
   const cx = Math.round((W || 1080) / 2);
   const cy = Math.round(centerY || 1150);
+  const censorFn = censor ? require('./safety').censorText : null;
   const out = [];
-  for (const g of groups) {
-    const text = g.words.map((w) => {
-      const cs = Math.max(1, Math.round((w.end - w.start) * 100));
-      const word = censor ? require('./safety').censorText(w.word) : w.word;
-      return `{\\k${cs}}${esc(word)} `;
-    }).join('').trim();
-    // Dead-centre horizontally via \an5 + \pos(W/2, centerY) (overrides the style's align/margins).
-    out.push(`Dialogue: 0,${assTime(g.start)},${assTime(g.end)},Caption,,0,0,0,,{\\an5\\pos(${cx},${cy})}${text}`);
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    if (pop) {
+      // Hold each cue until the next one starts so the centre is never momentarily blank.
+      const end = (i + 1 < groups.length) ? groups[i + 1].start : g.end;
+      const word = esc(g.words.map((w) => (censorFn ? censorFn(w.word) : w.word)).join(' '));
+      const anim = '\\fad(50,40)\\fscx70\\fscy70\\t(0,110,\\fscx106\\fscy106)\\t(110,190,\\fscx100\\fscy100)';
+      out.push(`Dialogue: 0,${assTime(g.start)},${assTime(end)},Pop,,0,0,0,,{\\an5\\pos(${cx},${cy})${anim}}${word}`);
+    } else {
+      const text = g.words.map((w) => {
+        const cs = Math.max(1, Math.round((w.end - w.start) * 100));
+        const word = censorFn ? censorFn(w.word) : w.word;
+        return `{\\k${cs}}${esc(word)} `;
+      }).join('').trim();
+      out.push(`Dialogue: 0,${assTime(g.start)},${assTime(g.end)},Caption,,0,0,0,,{\\an5\\pos(${cx},${cy})}${text}`);
+    }
   }
   return out;
 }
@@ -238,6 +254,8 @@ function header(tpl) {
     `Style: Author,Arial Black,${ai.maxSize},${C.yellow},${C.yellow},${C.black},${C.black},-1,0,0,0,100,100,0,0,1,${ai.outline},0,5,40,40,0,1`,
     // Caption: bottom-centre, bold, thick outline; primary=yellow secondary=white for \k sweep
     `Style: Caption,Arial,${cap.size},${cap.highlight},${cap.primary},${C.black},${C.black},-1,0,0,0,100,100,0,0,1,${cap.outline},2,2,${tpl.safe.side},${tpl.safe.side},${cap.marginV},1`,
+    // Pop: dead-centre "popping word" captions — white rounded fill, heavy black outline (reference replica)
+    `Style: Pop,${cap.font || 'Arial Rounded MT Bold'},${cap.size},${C.white},${C.white},${C.black},${C.black},-1,0,0,0,100,100,0,0,1,${cap.outline},2,5,${tpl.safe.side},${tpl.safe.side},0,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',

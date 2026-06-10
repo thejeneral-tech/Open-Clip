@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["--no-warnings", "server.js"],
       "port": 4400
+    },
+    {
+      "name": "storyvault-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--no-warnings", "-e", "process.env.PORT='4488'; process.env.AUTH_ENABLED='false'; require('./server.js')"],
+      "port": 4488
     }
   ]
 }

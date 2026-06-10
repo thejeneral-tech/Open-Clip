@@ -75,7 +75,7 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
 
   const isQuora = /quora/i.test(story.source_type || '') || /quora/i.test(story.community || '');
   const platform = isQuora ? 'quora' : 'reddit';
-  const voiceOpts = { provider: ttsOpts.provider, voice: ttsOpts.voice, speed: ttsOpts.speed, style: ttsOpts.style, refPath: ttsOpts.refPath, temperature: ttsOpts.temperature };
+  const voiceOpts = { provider: ttsOpts.provider, voice: ttsOpts.voice, speed: ttsOpts.speed, style: ttsOpts.style, refPath: ttsOpts.refPath, promptText: ttsOpts.promptText, temperature: ttsOpts.temperature };
 
   // Stage 1 audio — the title.
   const title = (story.title || 'Untitled story').trim();

@@ -14,12 +14,18 @@ const app = express();
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// API routes
+// Public auth endpoints (login/setup/status) — no gate.
+app.use('/api/auth', require('./src/routes/auth'));
+// Login gate: everything else under /api requires a session (when AUTH_ENABLED).
+app.use('/api', require('./src/middleware/auth').gate);
+
+// Protected API routes
 app.use('/api', require('./src/routes/meta'));
 app.use('/api', require('./src/routes/discovery'));
 app.use('/api', require('./src/routes/library'));
 app.use('/api', require('./src/routes/production'));
 app.use('/api', require('./src/routes/voice'));
+app.use('/api', require('./src/routes/llm'));
 
 // Serve generated media (previews, renders, thumbnails) read-only.
 app.use('/media', express.static(PATHS.data, {
@@ -28,6 +34,7 @@ app.use('/media', express.static(PATHS.data, {
 
 // Static frontend
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // JSON 404 for unknown API routes
