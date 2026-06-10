@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_session
+from app.core.config import settings
+from app.core.logging import get_logger
 from app.models.bot import Bot
 from app.models.clip import Clip
 from app.models.enums import ConnectorStatus, PublishStatus
@@ -15,12 +19,19 @@ from app.models.publishing import PublishingConnector, PublishingJob
 from app.models.user import User
 from app.schemas.common import Message, TaskResponse
 from app.schemas.publishing import (
+    ConnectorAssignIn,
     ConnectorCreate,
     ConnectorOut,
     ConnectorUpdate,
     PublishingJobOut,
     PublishJobCreate,
+    YouTubeAuthUrlIn,
+    YouTubeAuthUrlOut,
+    YouTubeStatusOut,
 )
+from app.services.publishing import youtube_oauth
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +51,26 @@ async def _owned_connector(db: AsyncSession, cid: int, user: User) -> Publishing
     if not c or c.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Connector not found")
     return c
+
+
+async def _sync_bot_platforms(db: AsyncSession, bot_id: int | None) -> None:
+    """Mirror a bot's connected channels into ``publishing_config.platforms`` so
+    the runner's auto-publish step targets exactly the platforms it can post to.
+    """
+    if not bot_id:
+        return
+    bot = await db.get(Bot, bot_id)
+    if not bot:
+        return
+    rows = (
+        await db.execute(
+            select(PublishingConnector.platform).where(PublishingConnector.bot_id == bot_id)
+        )
+    ).scalars().all()
+    platforms = sorted({p for p in rows})
+    cfg = dict(bot.publishing_config or {})
+    cfg["platforms"] = platforms or ["manual"]
+    bot.publishing_config = cfg
 
 
 async def _owned_job(db: AsyncSession, jid: int, user: User) -> PublishingJob:
@@ -118,9 +149,36 @@ async def delete_connector(
     db: AsyncSession = Depends(get_session),
 ) -> Message:
     c = await _owned_connector(db, connector_id, current_user)
+    prev_bot = c.bot_id
     await db.delete(c)
+    await db.flush()
+    await _sync_bot_platforms(db, prev_bot)
     await db.commit()
     return Message(detail="Connector deleted")
+
+
+@router.post("/connectors/{connector_id}/assign", response_model=ConnectorOut)
+async def assign_connector(
+    connector_id: int,
+    payload: ConnectorAssignIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> ConnectorOut:
+    """Assign a channel to a bot (or unassign with ``bot_id: null``). Keeps the
+    bot's auto-publish platform list in sync."""
+    c = await _owned_connector(db, connector_id, current_user)
+    if payload.bot_id is not None:
+        bot = await db.get(Bot, payload.bot_id)
+        if not bot or bot.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Bot not found")
+    prev_bot = c.bot_id
+    c.bot_id = payload.bot_id
+    await db.flush()
+    await _sync_bot_platforms(db, prev_bot)
+    await _sync_bot_platforms(db, payload.bot_id)
+    await db.commit()
+    await db.refresh(c)
+    return _connector_out(c)
 
 
 # ------------------------------------------------------------------- queue
@@ -216,3 +274,123 @@ async def cancel_job(
     await db.commit()
     await db.refresh(job)
     return PublishingJobOut.model_validate(job)
+
+
+# --------------------------------------------------------------- youtube oauth
+@router.get("/youtube/status", response_model=YouTubeStatusOut)
+async def youtube_status(
+    current_user: User = Depends(get_current_user),
+) -> YouTubeStatusOut:
+    """Whether a Google OAuth client is wired up (so channels can be connected)."""
+    return YouTubeStatusOut(
+        configured=youtube_oauth.is_configured(),
+        redirect_uri=settings.GOOGLE_OAUTH_REDIRECT_URI,
+    )
+
+
+@router.post("/youtube/auth-url", response_model=YouTubeAuthUrlOut)
+async def youtube_auth_url(
+    payload: YouTubeAuthUrlIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> YouTubeAuthUrlOut:
+    """Start the OAuth flow: return a Google consent URL carrying a signed state."""
+    if not youtube_oauth.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="YouTube isn't configured on the server (GOOGLE_CLIENT_ID / SECRET).",
+        )
+    if payload.bot_id is not None:
+        bot = await db.get(Bot, payload.bot_id)
+        if not bot or bot.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Bot not found")
+    state = youtube_oauth.sign_state(
+        user_id=current_user.id, bot_id=payload.bot_id, name=payload.name
+    )
+    return YouTubeAuthUrlOut(auth_url=youtube_oauth.build_auth_url(state))
+
+
+def _frontend_redirect(**params: str) -> RedirectResponse:
+    base = settings.FRONTEND_BASE_URL.rstrip("/")
+    query = "&".join(f"{k}={quote(v)}" for k, v in params.items() if v)
+    return RedirectResponse(url=f"{base}/publishing?{query}", status_code=302)
+
+
+@router.get("/youtube/callback")
+async def youtube_callback(
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    """OAuth redirect target. Exchanges the code, stores the channel, and bounces
+    the browser back to the Publishing page. Unauthenticated by design — trust is
+    established by the signed ``state`` rather than a bearer token."""
+    if error:
+        return _frontend_redirect(error=f"YouTube authorization was cancelled ({error}).")
+    if not code or not state:
+        return _frontend_redirect(error="YouTube authorization is missing code/state.")
+    try:
+        st = youtube_oauth.verify_state(state)
+        tokens = await youtube_oauth.exchange_code(code)
+        channel = await youtube_oauth.fetch_channel(tokens.get("access_token", ""))
+    except youtube_oauth.OAuthError as exc:
+        logger.warning("YouTube callback failed: %s", exc)
+        return _frontend_redirect(error=str(exc))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("YouTube callback crashed")
+        return _frontend_redirect(error=f"YouTube connection failed: {exc}")
+
+    owner_id = int(st["uid"])
+    bot_id = st.get("bot_id")
+    channel_id = channel.get("id")
+    channel_title = channel.get("title") or "YouTube channel"
+    name = st.get("name") or channel_title
+
+    # Reuse an existing row for this channel (re-connect) instead of duplicating.
+    existing = (
+        await db.execute(
+            select(PublishingConnector).where(
+                PublishingConnector.owner_id == owner_id,
+                PublishingConnector.platform == "youtube",
+            )
+        )
+    ).scalars().all()
+    connector = next((c for c in existing if (c.config or {}).get("channel_id") == channel_id), None)
+
+    refresh_token = tokens.get("refresh_token")
+    if connector is None:
+        connector = PublishingConnector(
+            owner_id=owner_id,
+            platform="youtube",
+            name=name,
+            bot_id=bot_id,
+        )
+        db.add(connector)
+    else:
+        # Google omits refresh_token on silent re-consent — keep the stored one.
+        if not refresh_token:
+            refresh_token = (connector.credentials or {}).get("refresh_token")
+        if bot_id is not None:
+            connector.bot_id = bot_id
+
+    connector.status = ConnectorStatus.CONNECTED.value
+    connector.last_error = None
+    connector.name = name
+    connector.config = {
+        "channel_id": channel_id,
+        "channel_title": channel_title,
+        "channel_thumbnail": channel.get("thumbnail"),
+        "privacy": (connector.config or {}).get("privacy", settings.YOUTUBE_DEFAULT_PRIVACY),
+        "made_for_kids": (connector.config or {}).get("made_for_kids", False),
+    }
+    connector.credentials = {
+        "refresh_token": refresh_token,
+        "scope": tokens.get("scope"),
+        "token_type": tokens.get("token_type"),
+    }
+
+    await db.flush()
+    await _sync_bot_platforms(db, connector.bot_id)
+    await db.commit()
+    return _frontend_redirect(connected="youtube", channel=channel_title)

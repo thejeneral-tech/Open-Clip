@@ -109,6 +109,60 @@ def test_run_discovery_filters_and_dedupes(monkeypatch):
         assert rejected == 1
 
 
+def _duration_items() -> list[DiscoveredItem]:
+    now = datetime.now(timezone.utc)
+    return [
+        DiscoveredItem(platform="youtube", external_id="long", url="https://y/long",
+                       title="ai breakthrough", description="llm", duration_seconds=2400,  # 40 min
+                       published_at=now, metrics={"views": 1000}),
+        DiscoveredItem(platform="youtube", external_id="short", url="https://y/short",
+                       title="ai breakthrough", description="llm", duration_seconds=1200,  # 20 min
+                       published_at=now, metrics={"views": 1000}),
+    ]
+
+
+def test_run_discovery_caps_video_duration_at_global_ceiling(monkeypatch):
+    """The global ceiling rejects >30 min videos even if the bot allows longer."""
+    from app.core.database import session_scope
+
+    monkeypatch.setattr(bot_runner.settings, "BOT_MAX_VIDEO_DURATION_SECONDS", 1800)
+    monkeypatch.setattr(bot_runner, "discover_source", lambda *a, **k: _duration_items())
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id)
+        # A generous per-bot limit is still clamped down to the 1800s ceiling.
+        bot.filter_config = {**bot.filter_config, "max_duration": 10800}
+        db.add(TrendSource(owner_id=u.id, bot_id=bot.id, platform="youtube", name="src",
+                           identifier="@chan", list_mode=SourceListMode.ALLOW.value))
+        db.flush()
+        created = bot_runner.run_discovery(db, bot)
+        assert [c.external_id for c in created] == ["short"]
+        long_item = db.query(TrendItem).filter(
+            TrendItem.bot_id == bot.id, TrendItem.external_id == "long").one()
+        assert long_item.status == TrendItemStatus.REJECTED.value
+        assert "too long" in (long_item.reason or "")
+
+
+def test_run_discovery_ceiling_disabled_with_zero(monkeypatch):
+    """Setting the ceiling to 0 disables the global cap (bot limit applies as-is)."""
+    from app.core.database import session_scope
+
+    monkeypatch.setattr(bot_runner.settings, "BOT_MAX_VIDEO_DURATION_SECONDS", 0)
+    monkeypatch.setattr(bot_runner, "discover_source", lambda *a, **k: _duration_items())
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id)
+        bot.filter_config = {**bot.filter_config, "max_duration": 10800}
+        db.add(TrendSource(owner_id=u.id, bot_id=bot.id, platform="youtube", name="src2",
+                           identifier="@chan2", list_mode=SourceListMode.ALLOW.value))
+        db.flush()
+        created = bot_runner.run_discovery(db, bot)
+        # No global cap → both the 40-min and 20-min videos pass.
+        assert {c.external_id for c in created} == {"long", "short"}
+
+
 def test_run_scoring_approves_above_threshold():
     """Manual/semi-auto bots use the threshold strategy: approve every item >= min_score."""
     from app.core.database import session_scope
@@ -129,11 +183,11 @@ def test_run_scoring_approves_above_threshold():
         assert approved == [item]
 
 
-def test_run_scoring_autonomous_random_pool_approves_2_to_3(monkeypatch):
-    """Autonomous bots randomly approve 2-3 of the items scoring above 49."""
+def test_run_scoring_autonomous_approves_top_3(monkeypatch):
+    """Autonomous bots approve the 3 highest-scoring items from discovery."""
     from app.core.database import session_scope
 
-    # Deterministic scores: four above the pool threshold, two below it.
+    # v0..v5 get these scores in order.
     scores = iter([60.0, 58.0, 55.0, 52.0, 10.0, 5.0])
     monkeypatch.setattr(bot_runner.scoring, "score_item", lambda *a, **k: (next(scores), {}))
 
@@ -149,12 +203,35 @@ def test_run_scoring_autonomous_random_pool_approves_2_to_3(monkeypatch):
         db.flush()
         approved = bot_runner.run_scoring(db, bot, items)
 
-        # A random subset of the four-item >49 pool — never all four, never the sub-49 two.
-        assert 2 <= len(approved) <= 3
+        # Exactly the top 3 by score, highest first.
+        assert [a.trend_score for a in approved] == [60.0, 58.0, 55.0]
         assert all(a.status == TrendItemStatus.APPROVED.value for a in approved)
-        assert all(a.trend_score > 49 for a in approved)
         assert all(it.status != TrendItemStatus.APPROVED.value
-                   for it in items if it.trend_score <= 49)
+                   for it in items if it.trend_score < 55.0)
+
+
+def test_run_scoring_autonomous_random_pool_opt_in(monkeypatch):
+    """Random-pool approval is still available when explicitly enabled."""
+    from app.core.database import session_scope
+
+    scores = iter([60.0, 58.0, 55.0, 52.0, 10.0, 5.0])
+    monkeypatch.setattr(bot_runner.scoring, "score_item", lambda *a, **k: (next(scores), {}))
+
+    with session_scope() as db:
+        u = _mk_user(db)
+        bot = _mk_bot(db, u.id, approval=ApprovalMode.AUTONOMOUS)
+        bot.scoring_config = {**bot.scoring_config, "use_llm_relevance": False,
+                              "random_approval": {"enabled": True, "threshold": 49}}
+        items = [TrendItem(bot_id=bot.id, platform="youtube", external_id=f"v{i}",
+                           url=f"https://y/v{i}", title="ai",
+                           published_at=datetime.now(timezone.utc))
+                 for i in range(6)]
+        db.add_all(items)
+        db.flush()
+        approved = bot_runner.run_scoring(db, bot, items)
+
+        assert 2 <= len(approved) <= 3
+        assert all(a.trend_score > 49 for a in approved)
 
 
 def test_approve_random_pool_only_picks_from_pool():
@@ -172,6 +249,29 @@ def test_approve_random_pool_only_picks_from_pool():
     # 49 is NOT above 49, and nothing at/below the threshold is ever approved.
     assert all(it.status != TrendItemStatus.APPROVED.value
                for it in items if it.trend_score <= 49)
+
+
+def test_approve_top_n_picks_highest_scores():
+    """Unit-level: _approve_top_n approves the N best-scoring items, highest first."""
+    from app.services.bot_runner import _approve_top_n
+
+    items = [TrendItem(external_id=f"v{i}", trend_score=s)
+             for i, s in enumerate([80, 55, 70, 40, 90])]
+    approved = _approve_top_n(items, count=3, threshold=0)
+    assert [a.trend_score for a in approved] == [90, 80, 70]
+    assert all(a.status == TrendItemStatus.APPROVED.value for a in approved)
+    assert all(it.status != TrendItemStatus.APPROVED.value
+               for it in items if it.trend_score in (55, 40))
+
+
+def test_approve_top_n_respects_threshold():
+    """A threshold floor can shrink the picks below ``count``."""
+    from app.services.bot_runner import _approve_top_n
+
+    items = [TrendItem(external_id=f"v{i}", trend_score=s)
+             for i, s in enumerate([80, 30, 20])]
+    approved = _approve_top_n(items, count=3, threshold=49)
+    assert [a.trend_score for a in approved] == [80]  # only the 80 clears the floor
 
 
 def test_finalize_item_autonomous_creates_jobs():

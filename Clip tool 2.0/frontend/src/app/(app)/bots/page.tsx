@@ -28,7 +28,7 @@ const STATUS_COLOR: Record<BotStatus, string> = {
   active: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   running: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   paused: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  stopped: "bg-muted text-muted-foreground",
+  stopped: "bg-secondary text-muted-foreground",
   error: "bg-destructive/15 text-destructive",
 };
 

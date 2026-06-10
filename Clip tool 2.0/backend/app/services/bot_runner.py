@@ -97,6 +97,13 @@ def run_discovery(db: Session, bot: Bot) -> list[TrendItem]:
     """Poll sources, filter, dedupe, and persist new :class:`TrendItem` rows."""
     disc_cfg = bot.discovery_config or {}
     filters = bot.filter_config or {}
+    # Clamp the bot's max-duration filter to the global ceiling so no bot ever
+    # discovers videos longer than the deployment allows (default 30 min). A bot
+    # may set a stricter limit; it just can't exceed the ceiling.
+    cap = settings.BOT_MAX_VIDEO_DURATION_SECONDS
+    if cap and cap > 0:
+        cur = filters.get("max_duration")
+        filters = {**filters, "max_duration": min(cur, cap) if cur else cap}
     limit = int(disc_cfg.get("max_items_per_source", 25))
     lookback = int(disc_cfg.get("lookback_hours", 168))
 
@@ -140,17 +147,18 @@ def _to_discovered(item: TrendItem) -> DiscoveredItem:
 def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> list[TrendItem]:
     """Score each item locally, then approve a subset for ingestion.
 
-    Two approval strategies, chosen per bot via ``scoring_config``:
+    Three approval strategies, chosen per bot via ``scoring_config``:
 
+    * **top-N** (default for *autonomous* bots) — approve the ``top_approval.count``
+      (default 3) highest-scoring items above ``top_approval.threshold`` (default
+      0). Each cycle the bot grabs the best few videos discovery surfaced and
+      dispatches them.
+    * **random pool** (opt-in via ``random_approval.enabled``) — from the items
+      scoring above ``random_approval.threshold`` (default 49), approve a random
+      ``random_approval.min``–``max`` (default 2–3) of them, trading peak quality
+      for variety.
     * **threshold** (default for manual / semi-auto bots) — approve every item
       scoring at or above ``min_score``.
-    * **random pool** (default for *autonomous* bots) — from the items scoring
-      above ``random_approval.threshold`` (default 49), approve a random
-      ``random_approval.min``–``max`` (default 2–3) of them. This keeps a
-      fully-autonomous bot from always grabbing the same top-scoring videos and
-      adds variety to what gets clipped. Set
-      ``scoring_config['random_approval']['enabled']`` to force it on/off
-      regardless of approval mode.
 
     Returns the list of approved items.
     """
@@ -178,14 +186,21 @@ def run_scoring(db: Session, bot: Bot, items: list[TrendItem]) -> list[TrendItem
         item.score_breakdown = breakdown
         item.status = TrendItemStatus.SCORED.value
 
-    # 2) approve a subset per the bot's strategy.
+    # 2) approve a subset per the bot's strategy. Autonomous bots default to
+    #    top-N (the best few from this cycle's discovery); a bot can opt into the
+    #    random pool for variety; everyone else uses plain threshold approval.
     rcfg = scfg.get("random_approval") or {}
-    enabled = rcfg.get("enabled")
-    if enabled is None:
-        enabled = bot.approval_mode == ApprovalMode.AUTONOMOUS.value
+    tcfg = scfg.get("top_approval") or {}
+    autonomous = bot.approval_mode == ApprovalMode.AUTONOMOUS.value
 
-    if enabled:
+    if rcfg.get("enabled"):
         approved = _approve_random_pool(items, rcfg)
+    elif tcfg.get("enabled", autonomous):
+        approved = _approve_top_n(
+            items,
+            count=int(tcfg.get("count", 3)),
+            threshold=float(tcfg.get("threshold", 0)),
+        )
     else:
         approved = []
         for item in items:
@@ -233,6 +248,32 @@ def _approve_random_pool(
             approved.append(item)
         else:
             item.reason = f"in >{threshold:g} pool but not randomly selected this cycle"
+    return approved
+
+
+def _approve_top_n(
+    items: list[TrendItem],
+    *,
+    count: int = 3,
+    threshold: float = 0.0,
+) -> list[TrendItem]:
+    """Approve the ``count`` highest-scoring items (those above ``threshold``).
+
+    The default strategy for autonomous bots: each cycle grabs the best few
+    videos discovery surfaced and dispatches them. Items not picked are
+    annotated with why (below threshold, or outranked this cycle).
+    """
+    ranked = sorted(items, key=lambda it: it.trend_score or 0.0, reverse=True)
+    approved: list[TrendItem] = []
+    for rank, item in enumerate(ranked):
+        score = item.trend_score or 0.0
+        if score <= threshold:
+            item.reason = f"score {score:g} ≤ threshold {threshold:g}"
+        elif rank < count:
+            item.status = TrendItemStatus.APPROVED.value
+            approved.append(item)
+        else:
+            item.reason = f"not in top {count} this cycle (score {score:g})"
     return approved
 
 
@@ -348,10 +389,23 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
         return []
 
     pub_cfg = bot.publishing_config or {}
-    platforms = pub_cfg.get("platforms") or ["manual"]
+    requested = pub_cfg.get("platforms") or ["manual"]
+    # Only auto-publish to platforms this bot actually has a connected channel
+    # for (e.g. a connected YouTube channel). Anything else falls back to the
+    # manual download-&-post queue rather than queuing a job that can't post.
+    platforms = [p for p in requested if p == "manual" or _connectors_for(db, bot, p)]
+    if not platforms:
+        platforms = ["manual"]
     threshold = float(pub_cfg.get("auto_publish_threshold", 80))
-    spacing = int(pub_cfg.get("schedule_spacing_minutes", 120))
+    # Spacing between scheduled posts: 0 (default) publishes the whole batch at
+    # once; set >0 to drip the clips out over time via the release scheduler.
+    spacing = max(0, int(pub_cfg.get("schedule_spacing_minutes", 0)))
+    # Only publish the best clips from each video — the top N by ranking score.
+    top_n = max(1, int(pub_cfg.get("max_clips_per_video", 3)))
     mode = bot.approval_mode
+
+    # `clips` is already ordered by ranking_score DESC, so this keeps the best N.
+    clips = clips[:top_n]
 
     ready: list[PublishingJob] = []
     slot = 0
@@ -373,6 +427,12 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
             if status == PublishStatus.SCHEDULED.value:
                 scheduled_at = _now() + timedelta(minutes=spacing * slot)
                 slot += 1
+            # Privacy: an explicit bot setting wins, else the channel/connector's
+            # own configured privacy, else the global default. NOTE: an *unverified*
+            # Google API project force-locks every uploaded video to private
+            # regardless, until the project passes YouTube's API compliance audit.
+            conn_privacy = (connector.config or {}).get("privacy") if connector else None
+            privacy = pub_cfg.get("privacy") or conn_privacy or "private"
             job = PublishingJob(
                 bot_id=bot.id, clip_id=clip.id,
                 connector_id=connector.id if connector else None,
@@ -381,7 +441,7 @@ def finalize_item(db: Session, bot: Bot, item: TrendItem) -> list[PublishingJob]
                 payload={
                     "asset_key": clip.preview_path,
                     "hashtags": clip.hashtags or [],
-                    "privacy": pub_cfg.get("privacy", "private"),
+                    "privacy": privacy,
                     "score": score,
                 },
             )

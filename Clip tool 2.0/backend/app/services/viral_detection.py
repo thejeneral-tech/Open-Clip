@@ -14,7 +14,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.services import prompts
-from app.services.ollama_client import OllamaClient, ollama
+from app.services.ollama_client import OllamaClient, OllamaError, ollama
 from app.services.transcript_utils import (
     format_for_llm,
     segments_in_range,
@@ -27,6 +27,11 @@ logger = get_logger(__name__)
 # Analyze the video in windows of this many seconds (with a little overlap).
 _WINDOW_SECONDS = 600
 _WINDOW_OVERLAP = 30
+
+# Local models tend to nominate just the hook sentence (1-4s). Rather than pin
+# such clips to the bare minimum, bias clip length toward the upper end of the
+# allowed [min_s, max_s] range (0.0 = min, 1.0 = max).
+_TARGET_FRAC = 0.7
 
 
 @dataclass
@@ -69,6 +74,35 @@ def _windows(duration: float) -> list[tuple[float, float]]:
     return out
 
 
+def _target_len(min_s: float, max_s: float) -> float:
+    """Target clip length, biased toward the high end of the allowed range."""
+    return min_s + _TARGET_FRAC * (max_s - min_s)
+
+
+def _extend_end(
+    start: float,
+    end: float,
+    segments: list[dict[str, Any]],
+    *,
+    target_end: float,
+    max_end: float,
+) -> float:
+    """Push a clip's end forward toward ``target_end``, snapping to a sentence
+    boundary and never past ``max_end``. The hook (``start``) stays fixed.
+
+    Returns the first sentence boundary at/after ``target_end`` (so the clip is
+    self-contained), or the furthest boundary available when content runs out.
+    """
+    ends = [float(s["end"]) for s in segments]
+    boundaries = sorted(b for b in ends if end < b <= max_end + 1e-3)
+    if not boundaries:
+        return min(target_end, max_end)
+    for b in boundaries:
+        if b >= target_end:
+            return b
+    return boundaries[-1]
+
+
 def _normalize(
     raw_clips: list[dict[str, Any]],
     segments: list[dict[str, Any]],
@@ -89,7 +123,15 @@ def _normalize(
 
         start, end = snap_to_boundaries(start, end, segments)
 
-        # Enforce duration bounds (trim/extend within reason).
+        # Bias toward the high end of [min_s, max_s]: extend the end forward over
+        # whole sentences toward a target length, instead of pinning short clips
+        # to the bare minimum. The hook at ``start`` is preserved.
+        target_end = start + _target_len(min_s, max_s)
+        max_end = min(duration, start + max_s)
+        if end < target_end:
+            end = _extend_end(start, end, segments, target_end=target_end, max_end=max_end)
+
+        # Hard bounds.
         if end - start < min_s:
             end = min(duration, start + min_s)
         if end - start > max_s:
@@ -155,16 +197,20 @@ def detect_viral_clips(
 
     all_candidates: list[CandidateClip] = []
     analyses: list[dict[str, Any]] = []
+    window_errors: list[str] = []
+    windows_attempted = 0
 
     for win_start, win_end in windows:
         win_segments = segments_in_range(segments, win_start, win_end)
         if not win_segments:
             continue
+        windows_attempted += 1
         transcript_text = format_for_llm(win_segments)
         user_prompt = prompts.VIRAL_USER_TEMPLATE.format(
             count=per_window,
             min_seconds=min_s,
             max_seconds=max_s,
+            target_seconds=round(_target_len(min_s, max_s)),
             transcript=transcript_text,
         )
         try:
@@ -177,6 +223,7 @@ def detect_viral_clips(
             )
         except Exception as exc:
             logger.error("Viral detection failed for window %s-%s: %s", win_start, win_end, exc)
+            window_errors.append(str(exc))
             continue
 
         raw_clips = parsed.get("clips", []) if isinstance(parsed, dict) else []
@@ -191,6 +238,16 @@ def detect_viral_clips(
                 "tokens_eval": meta.get("eval_count"),
                 "duration_ms": meta.get("duration_ms"),
             }
+        )
+
+    # If every window we tried failed to reach the model, that's a technical
+    # failure (model missing, Ollama down, timeouts) — not "this video has no
+    # viral moments". Surface the real cause instead of an empty result that the
+    # caller would report as "No viral clips detected".
+    if not all_candidates and windows_attempted and len(window_errors) == windows_attempted:
+        raise OllamaError(
+            f"Clip detection failed for all {windows_attempted} window(s); "
+            f"last error: {window_errors[-1]}"
         )
 
     deduped = _dedupe_overlaps(all_candidates)

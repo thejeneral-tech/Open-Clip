@@ -39,6 +39,7 @@ from app.services import (
 )
 from app.services.export import render_clip
 from app.services.ffmpeg import ffmpeg
+from app.services.ollama_client import ollama
 from app.services.storage import (
     clip_preview_key,
     clip_thumb_key,
@@ -80,6 +81,36 @@ def _ai_analysis(video_id: int, clip_id: int | None = None, **fields: Any) -> AI
     return AIAnalysis(video_id=video_id, clip_id=clip_id, **known)
 
 
+def _ensure_llm_models_installed(models: dict[str, str]) -> None:
+    """Repoint LLM model names at something Ollama actually has installed.
+
+    A stale per-user setting (a model that was never pulled, or has since been
+    removed) would otherwise make every ``/api/generate`` call 404 and fail the
+    whole job with a misleading "No viral clips detected". Fall back to the
+    configured default when the requested model is missing. Only the LLM models
+    are checked here — ``whisper`` is a faster-whisper model, not an Ollama tag.
+    """
+    try:
+        installed = {m.get("name") for m in ollama.list_models()}
+    except Exception as exc:  # pragma: no cover - network hiccup
+        logger.warning("Could not list Ollama models to validate config: %s", exc)
+        return
+    if not installed:
+        return  # Ollama unreachable/empty — let the real call surface the error.
+
+    fallback = settings.OLLAMA_DEFAULT_MODEL
+    for key in ("default", "ranking"):
+        name = models[key]
+        if name in installed:
+            continue
+        if fallback in installed:
+            logger.warning(
+                "Model %r (%s) is not installed in Ollama; falling back to %r",
+                name, key, fallback,
+            )
+            models[key] = fallback
+
+
 def _owner_models(video: Video) -> dict[str, str]:
     """Resolve the model names to use, honoring the owner's settings."""
     out = {
@@ -100,6 +131,7 @@ def _owner_models(video: Video) -> dict[str, str]:
                 out["default"] = row.default_model
                 out["ranking"] = row.ranking_model
                 out["whisper"] = row.whisper_model
+    _ensure_llm_models_installed(out)
     return out
 
 

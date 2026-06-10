@@ -69,3 +69,28 @@ class PublishJobCreate(BaseModel):
     description: str | None = None
     scheduled_at: datetime | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+# ----------------------------------------------------------------- youtube
+class YouTubeStatusOut(BaseModel):
+    """Whether the server has a Google OAuth client wired up."""
+
+    configured: bool
+    redirect_uri: str
+
+
+class YouTubeAuthUrlIn(BaseModel):
+    # Optionally pre-assign the connected channel to a bot, and give it a name
+    # (defaults to the channel title once we learn it).
+    bot_id: int | None = None
+    name: str | None = Field(default=None, max_length=255)
+
+
+class YouTubeAuthUrlOut(BaseModel):
+    auth_url: str
+
+
+class ConnectorAssignIn(BaseModel):
+    """Assign (or unassign with ``null``) a channel to a bot."""
+
+    bot_id: int | None = None

@@ -36,7 +36,17 @@ def download(
         # to an uncapped pair, then any single best stream. We deliberately avoid
         # ext=mp4/m4a constraints: modern YouTube serves video/audio as separate
         # DASH streams, and the strict constraints make selection fail.
-        "format": "bv*[height<=1440]+ba/bv*+ba/b",
+        #
+        # Prefer H.264 (avc1): the smart-reframe subject tracker reads frames via
+        # OpenCV (cv2.VideoCapture), whose ffmpeg build can't decode YouTube's AV1
+        # streams ("Failed to get pixel format") — so an AV1 source yields zero
+        # detections and every clip silently falls back to a static centre crop.
+        # H.264 decodes everywhere; we keep AV1/VP9 only as a last-resort fallback.
+        "format": (
+            "bv*[vcodec^=avc1][height<=1440]+ba/"   # H.264 first (reframe-decodable)
+            "bv*[height<=1440]+ba/bv*+ba/b"          # then any codec, so we never fail
+        ),
+        "format_sort": ["vcodec:h264"],              # rank H.264 ahead of AV1/VP9
         "outtmpl": dest_path,
         "merge_output_format": "mp4",
         "quiet": True,

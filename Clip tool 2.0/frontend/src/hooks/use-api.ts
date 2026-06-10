@@ -197,6 +197,10 @@ export function useConnectors() {
   return useQuery({ queryKey: ["connectors"], queryFn: api.listConnectors });
 }
 
+export function useYouTubeStatus() {
+  return useQuery({ queryKey: ["youtube-status"], queryFn: api.youtubeStatus, staleTime: 60_000 });
+}
+
 export function usePublishingJobs(botId?: number, status?: string, poll = false) {
   return useQuery({
     queryKey: ["pub-jobs", botId, status],
