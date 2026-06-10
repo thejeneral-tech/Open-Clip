@@ -213,8 +213,11 @@ def _smooth_centers(raw: list[dict[str, Any]], sample_fps: float) -> list[dict[s
                 if breach >= need:
                     target = _anchor(seg, i)
                     breach = 0
-                    # Ignore retargets that barely move the crop.
-                    if math.hypot(target[0] - cur[0], target[1] - cur[1]) > deadband / 2:
+                    # Move only if it's worth it AND the glide can finish before
+                    # the shot ends — a pan that gets cut off mid-motion is
+                    # wasted movement (the cut re-frames anyway).
+                    if (math.hypot(target[0] - cur[0], target[1] - cur[1]) > deadband * 0.75
+                            and len(seg) - i > ease_n):
                         glide_from, glide_target, glide_step = cur, target, 0
             out.append({
                 "t": round(f["t"], 3),
@@ -374,7 +377,11 @@ def build_crop_keyframes(
     reframe_data: dict[str, Any], aspect_ratio: str
 ) -> tuple[int, int, list[tuple[float, int, int]]]:
     """Translate a centre trajectory into ``(crop_w, crop_h, [(t, x, y)])``
-    for a given aspect ratio, clamped to frame bounds."""
+    for a given aspect ratio, clamped to frame bounds.
+
+    Horizontally the subject is centred; vertically it sits at
+    ``REFRAME_SUBJECT_Y`` of the crop height (slightly above centre for
+    natural headroom) whenever the crop has vertical freedom."""
     sw = int(reframe_data.get("source_w") or 0)
     sh = int(reframe_data.get("source_h") or 0)
     centers = reframe_data.get("centers") or [{"t": 0.0, "cx": 0.5, "cy": 0.5}]
@@ -388,7 +395,7 @@ def build_crop_keyframes(
     keyframes: list[tuple[float, int, int]] = []
     for c in centers:
         x = int(round(c["cx"] * sw - crop_w / 2))
-        y = int(round(c["cy"] * sh - crop_h / 2))
+        y = int(round(c["cy"] * sh - crop_h * settings.REFRAME_SUBJECT_Y))
         x = max(0, min(max_x, x))
         y = max(0, min(max_y, y))
         keyframes.append((float(c["t"]), x, y))

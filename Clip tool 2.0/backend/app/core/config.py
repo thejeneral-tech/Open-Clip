@@ -182,10 +182,15 @@ class Settings(BaseSettings):
     # or (b) the subject sustainably leaving the deadband — one smoothstep
     # glide, then locked again. Jitter and dropouts never move the crop.
     REFRAME_SCENE_CORREL: float = 0.5       # HSV-hist correlation between samples below this = scene cut
-    REFRAME_DEADBAND: float = 0.08          # norm distance the subject may roam without the crop moving
-    REFRAME_RETARGET_SECONDS: float = 0.6   # deadband breach must persist this long before re-centring
-    REFRAME_EASE_SECONDS: float = 0.8       # duration of the smoothstep re-centre glide
+    REFRAME_DEADBAND: float = 0.12          # norm distance the subject may roam without the crop moving
+    REFRAME_RETARGET_SECONDS: float = 1.0   # deadband breach must persist this long before re-centring
+    REFRAME_EASE_SECONDS: float = 1.2       # duration of the smoothstep re-centre glide
     REFRAME_LOOKAHEAD_SECONDS: float = 1.0  # anchor = median of this upcoming detection window
+    # Composition: vertical position of the subject centre within the crop
+    # (0.5 = dead centre). 0.42 gives rule-of-thirds-ish headroom whenever the
+    # crop can move vertically (no-op for 16:9 → 9:16, where the crop is full
+    # height).
+    REFRAME_SUBJECT_Y: float = 0.42
     # Subject lock / anti-flicker.
     REFRAME_SWITCH_DIST: float = 0.25     # norm distance beyond which a detection is a NEW subject
     REFRAME_SWITCH_HOLD: int = 3          # consecutive samples a far subject must persist before the lock moves

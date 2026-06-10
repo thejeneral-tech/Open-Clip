@@ -155,9 +155,27 @@ def test_smooth_centers_scene_cut_snaps_with_pinned_keyframe():
     assert all(c["cx"] == 0.8 for c in out[6:])
 
 
+def test_smooth_centers_skips_glide_that_cannot_finish_before_cut():
+    # Subject relocates only in the last second of the shot — a pan would be
+    # cut off mid-motion, so the crop must stay parked.
+    raw = [_raw(i * 0.2, 0.3 if i < 25 else 0.8, 0.5) for i in range(30)]
+    out = _smooth_centers(raw, sample_fps=5)
+    assert all(c["cx"] == 0.3 for c in out)
+
+
 def test_smooth_centers_singleton_is_identity():
     out = _smooth_centers([_raw(0.0, 0.3, 0.7)], sample_fps=5)
     assert out == [{"t": 0.0, "cx": 0.3, "cy": 0.7, "conf": 1.0}]
+
+
+def test_build_crop_keyframes_subject_headroom():
+    # Vertical source cropped to 1:1: the crop CAN move vertically, so the
+    # subject sits at REFRAME_SUBJECT_Y (0.42) of the crop, not dead centre.
+    data = {"source_w": 1080, "source_h": 1920,
+            "centers": [{"t": 0.0, "cx": 0.5, "cy": 0.5}]}
+    crop_w, crop_h, kf = build_crop_keyframes(data, "1:1")
+    assert (crop_w, crop_h) == (1080, 1080)
+    assert kf[0][2] == round(0.5 * 1920 - 1080 * 0.42)  # 506, not 420
 
 
 def test_select_subject_acquires_face_over_larger_person():
