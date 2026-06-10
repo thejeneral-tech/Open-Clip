@@ -161,7 +161,7 @@ print("DONE", flush=True)`;
     let err = '';
     const onLine = (s) => { plog(s); if (onProgress) onProgress(s); };
     downloadProc.stdout.on('data', (d) => onLine(d.toString()));
-    downloadProc.stderr.on('data', (d) => { const s = d.toString(); err += s; onLine(s); });
+    downloadProc.stderr.on('data', (d) => { const s = d.toString(); if (err.length < 262144) err += s; onLine(s); });
     downloadProc.on('error', (e) => { downloadProc = null; reject(new Error(`Could not launch the downloader (${e.message}).`)); });
     downloadProc.on('close', (codeN) => {
       downloadProc = null;
@@ -258,7 +258,7 @@ function synth(text, outWav, opts = {}) {
     try { ps = spawn(bin, args, { windowsHide: true }); }
     catch (e) { return reject(new Error(`Could not run the engine (${e.message}).`)); }
     ps.stdout && ps.stdout.on('data', (d) => plog(d.toString()));
-    ps.stderr && ps.stderr.on('data', (d) => { const s = d.toString(); err += s; plog(s); });
+    ps.stderr && ps.stderr.on('data', (d) => { const s = d.toString(); if (err.length < 262144) err += s; plog(s); });
     ps.on('error', (e) => reject(new Error(`Could not run the engine (${e.message}).`)));
     ps.on('close', (code) => {
       if (code === 0 && fs.existsSync(outWav) && fs.statSync(outWav).size > 256) resolve({ path: outWav });

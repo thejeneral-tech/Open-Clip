@@ -25,6 +25,8 @@ $OutLog  = Join-Path $LogDir 'launcher-server.out.log'
 $ErrLog  = Join-Path $LogDir 'launcher-server.err.log'
 $FishOut = Join-Path $LogDir 'fish-server.out.log'
 $FishErr = Join-Path $LogDir 'fish-server.err.log'
+$SetupOut = Join-Path $LogDir 'fish-setup.out.log'
+$SetupErr = Join-Path $LogDir 'fish-setup.err.log'
 $CfgFile = Join-Path $Root 'data\launcher-config.json'
 
 $script:ServerProc = $null
@@ -36,6 +38,9 @@ $script:OutPos     = 0
 $script:ErrPos     = 0
 $script:FishOutPos = 0
 $script:FishErrPos = 0
+$script:SetupProc    = $null
+$script:SetupOutPos  = 0
+$script:SetupErrPos  = 0
 $script:procQueue  = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
 
 # ============================== theme (TrendVault dark) ======================
@@ -566,6 +571,21 @@ $script:fishLogTimer.Add_Tick({
   }
 })
 
+# tail the background model-download/repair (npm run setup:fish) logs + detect exit.
+# Keeps the GUI responsive while a multi-GB download runs in a detached process.
+$script:setupLogTimer = New-Object System.Windows.Forms.Timer
+$script:setupLogTimer.Interval = 700
+$script:setupLogTimer.Add_Tick({
+  Read-Tail $SetupOut ([ref]$script:SetupOutPos)
+  Read-Tail $SetupErr ([ref]$script:SetupErrPos)
+  if ($script:SetupProc -and $script:SetupProc.HasExited) {
+    Read-Tail $SetupOut ([ref]$script:SetupOutPos)
+    Read-Tail $SetupErr ([ref]$script:SetupErrPos)
+    Append-Log "Fish Speech setup finished (exit $($script:SetupProc.ExitCode))."
+    $script:SetupProc = $null; $script:setupLogTimer.Stop()
+  }
+})
+
 # =============================== status poll =================================
 function Test-Port([int]$port) {
   try {
@@ -589,23 +609,34 @@ $pollTimer.Add_Tick({
 $pollTimer.Start()
 
 # =============================== Fish actions ================================
-function Fish-Download {
-  Append-Log '=== Fish Speech: downloading model (one GGUF quant via npm run setup:fish) ==='
-  $d = Test-Deps
-  if (-not $d.Node) { Append-Log 'Node.js missing - install dependencies first.'; return }
-  $npmDir = Split-Path $script:NodeExe -Parent; $env:Path = "$npmDir;$env:Path"
-  $env:FISH_MODEL_DIR = $script:cfg.fishModelDir
-  Invoke-Logged 'cmd.exe' '/c npm run setup:fish' $Root | Out-Null
-  Append-Log 'Fish Speech model download finished. Build the s2.cpp engine in the Voice Lab to synthesize.'
-}
-function Fish-Repair {
-  Append-Log '=== Fish Speech: repairing (re-downloading model via npm run setup:fish) ==='
+# Run `npm run setup:fish` in a DETACHED process so the multi-GB model download
+# never blocks/freezes the GUI thread. Progress tails into the log via setupLogTimer.
+# setup-fish.js skips instantly when a model is already present (use --force to refetch).
+function Start-FishSetup([string]$label, [string]$extraArgs) {
   $d = Test-Deps
   if (-not $d.Node) { Append-Log 'Node.js missing — install dependencies first.'; return }
+  if ($script:SetupProc -and -not $script:SetupProc.HasExited) { Append-Log 'A Fish Speech download/repair is already running — watch the log below.'; return }
   $npmDir = Split-Path $script:NodeExe -Parent; $env:Path = "$npmDir;$env:Path"
   $env:FISH_MODEL_DIR = $script:cfg.fishModelDir
-  Invoke-Logged 'cmd.exe' '/c npm run setup:fish' $Root | Out-Null
-  Append-Log 'Fish Speech repair finished.'
+  '' | Set-Content $SetupOut; '' | Set-Content $SetupErr
+  $script:SetupOutPos = 0; $script:SetupErrPos = 0
+  $cmdArgs = '/c npm run setup:fish'
+  if ($extraArgs) { $cmdArgs += " -- $extraArgs" }
+  try {
+    $script:SetupProc = Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdArgs `
+      -WorkingDirectory $Root -RedirectStandardOutput $SetupOut -RedirectStandardError $SetupErr `
+      -WindowStyle Hidden -PassThru
+  } catch { Append-Log "Failed to start Fish setup: $($_.Exception.Message)"; $script:SetupProc = $null; return }
+  Append-Log "$label — running in the background; the window stays responsive. Progress appears below."
+  $script:setupLogTimer.Start()
+}
+function Fish-Download {
+  Append-Log '=== Fish Speech: download model (one GGUF quant, background) ==='
+  Start-FishSetup 'Fish Speech model download started' ''
+}
+function Fish-Repair {
+  Append-Log '=== Fish Speech: repair (validate model; downloads only if missing, background) ==='
+  Start-FishSetup 'Fish Speech repair started' ''
 }
 # Locate the built s2 engine: an explicit server binary from Settings, else the
 # path the build script records in data\fish-settings.json, else the standard
