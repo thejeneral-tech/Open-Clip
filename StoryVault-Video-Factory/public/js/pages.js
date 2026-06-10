@@ -970,9 +970,34 @@ window.PAGES = window.PAGES || {};
         grid.append(el('div.card', [el('div.spread', [el('strong', name), el('span.dot.' + cls)]), el('div.small.mt', pill(st.status, cls === 'loading' ? 'info' : cls)), el('div.tiny.muted.mt', st.detail || '')]));
       });
     }
+    // One-click repair: recreates data folders, reinstalls missing deps, re-applies
+    // migrations, requeues interrupted renders, and reports on external tools.
+    async function runRepair() {
+      const body = el('div', [el('div.tiny.muted.mb', 'Repairing subsystems — recreating folders, checking dependencies, re-applying migrations…'), UI.spinner()]);
+      const m = modal('🛠 System Repair', [body], { width: '600px' });
+      try {
+        const r = await API.post('/system/repair', {});
+        clear(body);
+        body.append(
+          el('div.tiny.muted.mb', r.ok ? `✓ Repair complete — ${r.fixed} item(s) checked/fixed.` : `Finished — ${(r.failures || []).length} item(s) need attention.`),
+          ...(r.steps || []).map((s) => el('div.spread', { style: { padding: '7px 0', borderBottom: '1px solid var(--border)', gap: '12px', alignItems: 'flex-start' } }, [
+            el('span', { style: { whiteSpace: 'nowrap' } }, s.name),
+            el('span', { style: { textAlign: 'right' } }, [pill(s.ok ? (s.fixed ? 'Fixed' : 'OK') : 'Action needed', s.ok ? 'ok' : 'warn'), el('div.tiny.muted.mt', s.detail || '')]),
+          ])),
+          el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Close', { cls: 'ghost', onClick: () => m.close() })]),
+        );
+        toast(r.ok ? 'Repair complete' : 'Repair finished — some items need attention', r.ok ? 'ok' : 'warn', 6000);
+        load();
+      } catch (e) {
+        clear(body);
+        body.append(el('div.err', 'Repair failed: ' + e.message), el('div.row.mt', { style: { justifyContent: 'flex-end' } }, [btn('Close', { cls: 'ghost', onClick: () => m.close() })]));
+        toast(e.message, 'err');
+      }
+    }
     view.append(
       pageHead('System Health', 'Health of every subsystem.', [
         btn('🔄 Test All', { cls: 'primary', onClick: load }),
+        btn('🛠 Repair', { cls: 'warn', onClick: runRepair }),
         btn('🔌 Reconnect', { onClick: () => API.post('/system/test', {}).then(load) }),
         btn('📜 Open Logs', { onClick: () => document.getElementById('logPanel').classList.remove('hidden') }),
         btn('♻ Resume Failed Jobs', { onClick: async () => { const r = await API.post('/system/resume-failed', {}); toast('Resumed ' + r.resumed + ' job(s)', 'ok'); } }),

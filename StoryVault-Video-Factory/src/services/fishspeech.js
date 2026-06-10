@@ -87,12 +87,22 @@ function binPath() {
 function binConfigured() { return !!binPath(); }
 function engineReady() { return !!binPath() && modelPresent() && !!tokenizerPath(); }
 
+// These run synchronously (spawnSync) in the request path, so they MUST be
+// bounded: a hung python.exe/git (cold start under OneDrive/AV) would otherwise
+// block the whole Node event loop and freeze the server. `timeout` kills a stuck
+// probe; the result is cached briefly so status polls don't re-spawn every time.
+let _hfCache = null; // { val, at }
 function huggingfaceAvailable() {
-  try { return spawnSync(PYTHON, ['-c', 'import huggingface_hub'], { windowsHide: true }).status === 0; }
-  catch { return false; }
+  const now = Date.now();
+  if (_hfCache && (now - _hfCache.at) < 30000) return _hfCache.val;
+  let val = false;
+  try { val = spawnSync(PYTHON, ['-c', 'import huggingface_hub'], { windowsHide: true, timeout: 8000 }).status === 0; }
+  catch { val = false; }
+  _hfCache = { val, at: now };
+  return val;
 }
 function hasCmd(cmd) {
-  try { const r = spawnSync(cmd, ['--version'], { windowsHide: true }); return r.status === 0 || (r.status != null && !r.error); }
+  try { const r = spawnSync(cmd, ['--version'], { windowsHide: true, timeout: 8000 }); return r.status === 0 || (r.status != null && !r.error); }
   catch { return false; }
 }
 
@@ -200,17 +210,25 @@ function buildEngine({ onProgress } = {}) {
   });
 }
 
-// Repair = re-validate; re-download model if missing. Non-destructive.
+// Repair = re-validate, non-destructive. Returns FAST and NEVER blocks the HTTP
+// request on a multi-GB model download (doing so froze the UI/app). When the model
+// is missing it returns { needsDownload: true } and the route kicks the download
+// off in the background, streaming progress over the `fish` SSE channel.
 async function repair() {
   plog('Repair: validating Fish Speech engine…');
+  // Drop a stale engine-binary path that no longer exists so status reflects reality.
+  if (state.s2Bin && !fs.existsSync(state.s2Bin)) { plog(`Repair: clearing stale engine path ${state.s2Bin}`); state.s2Bin = ''; persist(); }
   if (!modelPresent()) {
-    plog('Repair: model missing — downloading…');
-    try { await download({}); } catch (e) { return { ok: false, reason: e.message }; }
+    if (downloadProc) return { ok: false, busy: true, reason: 'A model download is already running — watch progress in the Fish logs.' };
+    if (!huggingfaceAvailable()) {
+      return { ok: false, reason: 'Model missing and huggingface_hub isn\'t installed for this Python. Run: pip install -U "huggingface_hub[hf_xet]", then click Repair again.' };
+    }
+    return { ok: false, needsDownload: true, reason: 'Model missing — download started in the background. Watch the Fish logs; click Repair again once it finishes.' };
   }
   if (!binConfigured()) {
-    return { ok: false, reason: 'Engine binary not found. Click "Build engine" (needs CMake + a C++ compiler) or set its path under "Set engine binary".' };
+    return { ok: false, reason: 'Model present, but the s2.cpp engine binary isn\'t built. Click "Build engine" (needs CMake + a C++ compiler) or set its path under "Set engine binary". Narration uses SAPI until then.' };
   }
-  return { ok: engineReady(), reason: engineReady() ? 'Engine ready.' : 'Engine still not ready — check the logs.' };
+  return { ok: engineReady(), reason: engineReady() ? 'Engine ready.' : 'Engine still not ready — check the Fish logs.' };
 }
 
 // ── synthesis via the s2 CLI ──────────────────────────────────────────────────

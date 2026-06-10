@@ -94,6 +94,7 @@ router.put('/preferences', (req, res) => res.json(prefsSvc.update(req.body || {}
 router.get('/system/status', wrap(async (req, res) => res.json(await sys.testAll())));
 router.post('/system/test', wrap(async (req, res) => res.json(await sys.testAll())));
 router.post('/system/resume-failed', wrap(async (req, res) => res.json(sys.resumeFailedJobs())));
+router.post('/system/repair', wrap(async (req, res) => res.json(await sys.repair())));
 router.get('/system/logs', (req, res) => res.json(log.recent(Number(req.query.limit) || 300)));
 
 // --- Dashboard (spec §24) ---
