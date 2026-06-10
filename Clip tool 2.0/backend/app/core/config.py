@@ -171,6 +171,10 @@ class Settings(BaseSettings):
     # CPU is plenty fast at the ~5fps tracking sample rate. Set "cuda"/"0" only on
     # a GPU whose CC is supported by the installed torch.
     YOLO_DEVICE: str = "cpu"
+    # Larger YOLO used when a user enables "high-accuracy subject detection" in
+    # Settings (better in dark/wide shots; ~2-3x slower on CPU). Auto-downloads
+    # from ultralytics on first use.
+    YOLO_MODEL_HQ: str = "yolov8s.pt"
 
     # ---- Reframe smoothing / render ----
     # Dense sendcmd grid ceiling (Hz). When the crop DOES move (a re-centre

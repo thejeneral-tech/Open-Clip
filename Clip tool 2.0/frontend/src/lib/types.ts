@@ -175,6 +175,8 @@ export interface UserSettings {
   default_caption_style: CaptionStyle;
   default_export_format: ExportFormat;
   default_export_resolution: ExportResolution;
+  reframe_hq_detection: boolean;
+  reframe_face_zoom: boolean;
   preferences: Record<string, unknown>;
 }
 

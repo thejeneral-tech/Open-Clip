@@ -1,9 +1,11 @@
 import re
 
+from app.services import reframing
 from app.services.export import _build_sendcmd, _densify, _escape_path, output_dimensions
 from app.services.reframing import (
     _select_subject,
     _smooth_centers,
+    _zoom_faces,
     build_crop_keyframes,
     crop_dimensions,
 )
@@ -166,6 +168,31 @@ def test_smooth_centers_skips_glide_that_cannot_finish_before_cut():
 def test_smooth_centers_singleton_is_identity():
     out = _smooth_centers([_raw(0.0, 0.3, 0.7)], sample_fps=5)
     assert out == [{"t": 0.0, "cx": 0.3, "cy": 0.7, "conf": 1.0}]
+
+
+def test_zoom_faces_maps_crop_coords_back_to_full_frame(monkeypatch):
+    # A face found at the centre of a person's (upscaled) head crop must map
+    # back to that head region's centre in full-frame normalized coords.
+    import numpy as np
+
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    person = (860.0, 400.0, 1060.0, 1000.0)  # 200x600 px box
+    monkeypatch.setattr(reframing, "_detect_faces", lambda det, crop: [(0.5, 0.5, 0.25)])
+    out = _zoom_faces(object(), frame, [person], 1920, 1080)
+    assert len(out) == 1
+    cx, cy, area = out[0]
+    # Head region: x 830..1090 (15% pad), y 400..670 (45% of box height).
+    assert abs(cx - (830 + 1090) / 2 / 1920) < 0.01
+    assert abs(cy - (400 + 670) / 2 / 1080) < 0.01
+    assert 0 < area < 1
+
+
+def test_zoom_faces_skips_degenerate_boxes(monkeypatch):
+    import numpy as np
+
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    monkeypatch.setattr(reframing, "_detect_faces", lambda det, crop: [(0.5, 0.5, 0.25)])
+    assert _zoom_faces(object(), frame, [(10.0, 10.0, 15.0, 15.0)], 1920, 1080) == []
 
 
 def test_build_crop_keyframes_subject_headroom():

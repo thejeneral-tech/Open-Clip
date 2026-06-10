@@ -55,3 +55,19 @@ async def test_settings_roundtrip(client):
     res = await client.patch("/api/v1/settings", json={"target_clip_count": 25}, headers=headers)
     assert res.status_code == 200
     assert res.json()["target_clip_count"] == 25
+
+
+async def test_settings_reframe_detection_toggles(client):
+    token = await _register(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    res = await client.get("/api/v1/settings", headers=headers)
+    assert res.json()["reframe_hq_detection"] is False  # off by default
+    assert res.json()["reframe_face_zoom"] is False
+    res = await client.patch(
+        "/api/v1/settings",
+        json={"reframe_hq_detection": True, "reframe_face_zoom": True},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["reframe_hq_detection"] is True
+    assert res.json()["reframe_face_zoom"] is True

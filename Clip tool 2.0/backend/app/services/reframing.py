@@ -63,17 +63,20 @@ def _detect_faces(detector, frame) -> list[tuple[float, float, float]]:
     return out
 
 
-def _detect_persons_yolo(model, frame, w: int, h: int) -> list[tuple[float, float, float]]:
-    """Return list of (cx, head_cy, area) normalized person estimates for a frame.
+def _detect_persons_yolo(
+    model, frame, w: int, h: int
+) -> list[tuple[float, float, float, tuple[float, float, float, float]]]:
+    """Return list of (cx, head_cy, area, box_px) normalized person estimates.
 
     The vertical anchor is a *head* estimate (box_top + a fraction of box
     height), not the box centre (torso) — so a face↔person fallback flip barely
-    moves cy instead of lurching between head and torso.
+    moves cy instead of lurching between head and torso. ``box_px`` is the raw
+    pixel xyxy box (used by the zoomed face pass).
     """
     # device pinned (default cpu): the P100 (sm_60) isn't supported by the
     # installed torch, so GPU inference raises "no kernel image is available".
     results = model(frame, classes=[0], verbose=False, device=settings.YOLO_DEVICE)  # class 0 = person
-    out: list[tuple[float, float, float]] = []
+    out: list[tuple[float, float, float, tuple[float, float, float, float]]] = []
     frac = settings.REFRAME_PERSON_HEAD_FRAC
     for r in results:
         for box in getattr(r, "boxes", []):
@@ -81,7 +84,46 @@ def _detect_persons_yolo(model, frame, w: int, h: int) -> list[tuple[float, floa
             area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
             cx = ((x1 + x2) / 2) / w if w else 0.5
             head_cy = (y1 + frac * (y2 - y1)) / h if h else 0.5
-            out.append((min(1.0, max(0.0, cx)), min(1.0, max(0.0, head_cy)), area / (w * h) if w and h else 0.0))
+            out.append((min(1.0, max(0.0, cx)), min(1.0, max(0.0, head_cy)),
+                        area / (w * h) if w and h else 0.0, (x1, y1, x2, y2)))
+    return out
+
+
+def _zoom_faces(detector, frame, person_boxes, w: int, h: int) -> list[tuple[float, float, float]]:
+    """Second-pass face detection inside each person's head region.
+
+    Faces at stage distance are often too small for a full-frame pass; cropping
+    the head+shoulders region of each person box and upscaling it before
+    re-running the detector recovers them. ``detector`` must be the SHORT-range
+    MediaPipe model (``model_selection=0``): after the zoom the face is large in
+    the crop, and the full-range model is unreliable on large faces. Returns
+    (cx, cy, area) in FULL-frame normalized coordinates, like
+    :func:`_detect_faces`.
+    """
+    import cv2
+
+    out: list[tuple[float, float, float]] = []
+    # Largest people first; cap the passes — this runs per sampled frame.
+    boxes = sorted(person_boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True)[:3]
+    for x1, y1, x2, y2 in boxes:
+        bw, bh = x2 - x1, y2 - y1
+        if bw < 10 or bh < 10:
+            continue
+        pad = 0.15 * bw
+        hx1, hx2 = max(0, int(x1 - pad)), min(w, int(x2 + pad))
+        hy1, hy2 = max(0, int(y1)), min(h, int(y1 + 0.45 * bh))  # head + shoulders
+        crop = frame[hy1:hy2, hx1:hx2]
+        if crop.size == 0:
+            continue
+        ch, cw = crop.shape[:2]
+        scale = 256.0 / max(1, min(cw, ch))
+        if scale > 1.0:
+            crop = cv2.resize(crop, (int(cw * scale), int(ch * scale)), interpolation=cv2.INTER_CUBIC)
+        for fcx, fcy, farea in _detect_faces(detector, crop):
+            gx = (hx1 + fcx * (hx2 - hx1)) / w if w else 0.5
+            gy = (hy1 + fcy * (hy2 - hy1)) / h if h else 0.5
+            ga = farea * ((hx2 - hx1) * (hy2 - hy1)) / (w * h) if w and h else 0.0
+            out.append((min(1.0, max(0.0, gx)), min(1.0, max(0.0, gy)), ga))
     return out
 
 
@@ -234,8 +276,16 @@ def compute_trajectory(
     start: float = 0.0,
     end: float | None = None,
     on_progress: ProgressCb | None = None,
+    hq_detection: bool = False,
+    face_zoom: bool = False,
 ) -> dict[str, Any]:
-    """Analyze [start, end] of a video and return a centre trajectory."""
+    """Analyze [start, end] of a video and return a centre trajectory.
+
+    ``hq_detection`` swaps the person detector for the larger
+    ``YOLO_MODEL_HQ``; ``face_zoom`` enables the per-person zoomed face pass
+    (see :func:`_zoom_faces`). Both are per-user Settings toggles — accuracy
+    in wide/dark shots at the cost of slower analysis.
+    """
     import cv2
 
     cap = cv2.VideoCapture(video_path)
@@ -254,12 +304,17 @@ def compute_trajectory(
 
     # Lazy-init detectors.
     face_detector = None
+    face_detector_near = None  # short-range model for the zoomed head pass
     try:
         import mediapipe as mp
 
         face_detector = mp.solutions.face_detection.FaceDetection(
             model_selection=1, min_detection_confidence=0.5
         )
+        if face_zoom:
+            face_detector_near = mp.solutions.face_detection.FaceDetection(
+                model_selection=0, min_detection_confidence=0.5
+            )
     except Exception as exc:  # pragma: no cover
         logger.warning("MediaPipe unavailable: %s", exc)
 
@@ -268,7 +323,7 @@ def compute_trajectory(
         try:
             from ultralytics import YOLO
 
-            yolo = YOLO(settings.YOLO_MODEL)
+            yolo = YOLO(settings.YOLO_MODEL_HQ if hq_detection else settings.YOLO_MODEL)
         except Exception as exc:  # pragma: no cover
             logger.warning("YOLO unavailable: %s", exc)
 
@@ -306,12 +361,18 @@ def compute_trajectory(
                 lock = None
                 switch_state = {"cand": None, "count": 0}
 
+            faces = _detect_faces(face_detector, frame) if face_detector else []
+            persons = _detect_persons_yolo(yolo, frame, width, height) if yolo is not None else []
+            if face_detector_near is not None and not faces and persons:
+                # No face at full-frame resolution — zoom into each person's
+                # head region and look again (catches stage-distance faces).
+                faces = _zoom_faces(face_detector_near, frame, [p[3] for p in persons], width, height)
+
             candidates: list[tuple[float, float, float, str]] = []
-            for fcx, fcy, area in (_detect_faces(face_detector, frame) if face_detector else []):
+            for fcx, fcy, area in faces:
                 candidates.append((fcx, fcy, area, "face"))
-            if yolo is not None:
-                for pcx, pcy, area in _detect_persons_yolo(yolo, frame, width, height):
-                    candidates.append((pcx, pcy, area, "person"))
+            for pcx, pcy, area, _box in persons:
+                candidates.append((pcx, pcy, area, "person"))
 
             chosen, lock, conf, method, hard_switch = _select_subject(candidates, lock, switch_state)
 
@@ -340,6 +401,8 @@ def compute_trajectory(
     cap.release()
     if face_detector:
         face_detector.close()
+    if face_detector_near:
+        face_detector_near.close()
     if on_progress:
         on_progress(1.0)
 
