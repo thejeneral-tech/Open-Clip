@@ -11,15 +11,16 @@ import {
   Cpu,
   Film,
   FolderKanban,
-  Gauge,
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Mic,
   Minus,
   Palette,
   Plus,
   Send,
   Settings,
+  Sparkles,
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,22 +48,27 @@ const SECTIONS: NavSection[] = [
       { href: "/bots", label: "Bots", icon: Bot },
       { href: "/discovery", label: "Discovery", icon: Compass },
       { href: "/publishing", label: "Publishing", icon: Send },
-      { href: "/models", label: "Models & GPU", icon: Cpu },
-      { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
   {
     id: "storyvault",
     label: "Story Vault",
     items: [
-      { href: "/storyvault/command", label: "Command Center", icon: Gauge },
+      { href: "/storyvault/command", label: "Dashboard", icon: LayoutDashboard },
       { href: "/storyvault/library", label: "Story Library", icon: BookOpen },
       { href: "/storyvault/footage", label: "Footage Library", icon: Film },
       { href: "/storyvault/studio", label: "Video Studio", icon: Clapperboard },
+      { href: "/storyvault/voicelab", label: "Voice Lab", icon: Mic },
+      { href: "/storyvault/presets", label: "Presets", icon: Sparkles },
       { href: "/storyvault/review", label: "Review Queue", icon: ListChecks },
       { href: "/storyvault/exports", label: "Exports", icon: Upload },
     ],
   },
+];
+
+const BOTTOM_ITEMS: NavItem[] = [
+  { href: "/models", label: "Models & GPU", icon: Cpu },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 const COLLAPSE_KEY = "openclip_nav_sections";
@@ -187,6 +193,27 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="space-y-1 border-t border-border p-2.5">
+        {BOTTOM_ITEMS.map((item) => {
+          const active = pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                active
+                  ? "font-medium text-[var(--accent-contrast)]"
+                  : "text-fg hover:bg-[var(--hover-bg)]",
+              )}
+              style={active ? { background: "var(--red)" } : undefined}
+            >
+              <Icon size={17} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
         <button
           type="button"
           onClick={onOpenTheme}

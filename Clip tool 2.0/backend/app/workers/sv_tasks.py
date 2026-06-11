@@ -21,6 +21,7 @@ from app.services.ffmpeg import ffmpeg
 from app.services.storage import (
     storage,
     sv_background_thumb_key,
+    sv_caption_preview_key,
     sv_captions_key,
     sv_export_key,
     sv_narration_key,
@@ -271,6 +272,53 @@ def sv_generate_video_task(sv_video_id: int) -> None:
     except Exception as exc:
         logger.exception("Story video %s pipeline failed", sv_video_id)
         tracker.fail("pipeline", str(exc)[:1000])
+
+
+# =====================================================================
+# Caption-style preset previews
+# =====================================================================
+# One sample sentence narrated once, then rendered with each caption style so
+# the Presets page shows the real thing (same ASS renderer the pipeline uses).
+PREVIEW_SAMPLE_TEXT = (
+    "This is exactly how your captions will look. Bold words pop, numbers like "
+    "47 stand out, and every single word stays in sync."
+)
+
+
+@celery_app.task(name="app.workers.sv_tasks.sv_caption_previews_task")
+def sv_caption_previews_task(styles: list[str], force: bool = False) -> None:
+    import tempfile
+
+    missing = [s for s in styles if force or not storage.exists(sv_caption_preview_key(s))]
+    if not missing:
+        return
+
+    with tempfile.TemporaryDirectory(prefix="sv_prev_") as tmp:
+        wav = os.path.join(tmp, "sample.wav")
+        result = tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
+        tokens = captions_svc.build_tokens(result.words)
+        tokens = captions_svc.heuristic_emphasis(tokens)
+
+        for style in missing:
+            try:
+                ass = os.path.join(tmp, f"{style}.ass")
+                captions_svc.write_ass(ass, tokens, style, composer.PREVIEW_W, composer.PREVIEW_H)
+                key = sv_caption_preview_key(style)
+                composer.render_video(
+                    composer.RenderSpec(
+                        narration_path=wav,
+                        total_duration=result.duration,
+                        ass_path=ass,
+                        plan=[],
+                        output_path=storage.abspath(key),
+                        width=composer.PREVIEW_W,
+                        height=composer.PREVIEW_H,
+                    )
+                )
+                storage.commit(key)
+                logger.info("Caption preview rendered: %s", style)
+            except Exception:
+                logger.exception("Caption preview failed for style %s", style)
 
 
 # =====================================================================

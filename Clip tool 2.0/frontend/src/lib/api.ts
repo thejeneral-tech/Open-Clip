@@ -15,6 +15,7 @@ import type {
   Project,
   PublishingJob,
   SvBackground,
+  SvCaptionPreview,
   SvDashboard,
   SvDiscoveryResult,
   SvExport,
@@ -24,6 +25,8 @@ import type {
   SvVideo,
   SvVideoCreate,
   SvVoice,
+  SvVoicePreset,
+  SvVoiceSample,
   Token,
   Transcript,
   TrendItem,
@@ -383,6 +386,20 @@ export const api = {
     request<SvVideo>(`/storyvault/videos/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
   svRetryVideo: (id: number) => request<SvVideo>(`/storyvault/videos/${id}/retry`, { method: "POST" }),
   svDeleteVideo: (id: number) => request<void>(`/storyvault/videos/${id}`, { method: "DELETE" }),
+  svVoiceSample: (data: { text?: string; voice?: string | null; speed?: number }) =>
+    request<SvVoiceSample>("/storyvault/voices/sample", { method: "POST", body: JSON.stringify(data) }),
+  svListVoicePresets: () => request<SvVoicePreset[]>("/storyvault/voices/presets"),
+  svCreateVoicePreset: (data: { name: string; voice: string; speed: number }) =>
+    request<SvVoicePreset>("/storyvault/voices/presets", { method: "POST", body: JSON.stringify(data) }),
+  svUpdateVoicePreset: (id: number, data: { name?: string; voice?: string; speed?: number }) =>
+    request<SvVoicePreset>(`/storyvault/voices/presets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  svSetDefaultVoicePreset: (id: number) =>
+    request<SvVoicePreset>(`/storyvault/voices/presets/${id}/default`, { method: "POST" }),
+  svDeleteVoicePreset: (id: number) =>
+    request<void>(`/storyvault/voices/presets/${id}`, { method: "DELETE" }),
+  svCaptionPreviews: () => request<SvCaptionPreview[]>("/storyvault/presets/caption-previews"),
+  svGenerateCaptionPreviews: (force = false) =>
+    request<{ detail: string }>(`/storyvault/presets/caption-previews/generate?force=${force}`, { method: "POST" }),
   svListExports: () => request<SvExport[]>("/storyvault/exports"),
   svDeleteExport: (id: number) => request<void>(`/storyvault/exports/${id}`, { method: "DELETE" }),
   svExportDownloadUrl: (id: number) =>

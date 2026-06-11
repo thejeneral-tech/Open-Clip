@@ -512,6 +512,25 @@ export interface SvVoice {
   gender: string | null;
 }
 
+export interface SvVoicePreset {
+  id: number;
+  name: string;
+  voice: string;
+  speed: number;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface SvVoiceSample {
+  media_url: string;
+  duration: number;
+}
+
+export interface SvCaptionPreview {
+  style: string;
+  media_url: string | null;
+}
+
 export interface SvDashboard {
   stories_total: number;
   stories_new: number;

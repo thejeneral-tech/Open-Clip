@@ -84,6 +84,14 @@ def sv_export_key(sv_video_id: int, export_id: int) -> str:
     return f"{sv_video_dir(sv_video_id)}/export_{export_id}.mp4"
 
 
+def sv_voice_sample_key(digest: str) -> str:
+    return f"storyvault/voices/sample_{digest}.wav"
+
+
+def sv_caption_preview_key(style: str) -> str:
+    return f"storyvault/presets/caption_{style}.mp4"
+
+
 class Storage:
     def __init__(self) -> None:
         self.backend = settings.STORAGE_BACKEND

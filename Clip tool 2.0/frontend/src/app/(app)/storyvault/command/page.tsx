@@ -42,7 +42,7 @@ export default function StoryVaultCommandPage() {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Story Vault — turn stories into narrated vertical videos.
           </p>
@@ -92,7 +92,7 @@ export default function StoryVaultCommandPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Command Center</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
           Story Vault — turn stories into narrated vertical videos.
         </p>

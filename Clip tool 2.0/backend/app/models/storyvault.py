@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -162,6 +162,19 @@ class SvVideo(TimestampMixin, Base):
 
     story: Mapped["SvStory"] = relationship("SvStory")
     script: Mapped["SvScript | None"] = relationship("SvScript")
+
+
+class SvVoicePreset(CreatedAtMixin, Base):
+    __tablename__ = "sv_voice_presets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    voice: Mapped[str] = mapped_column(String(128), nullable=False)  # SAPI voice name
+    speed: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)  # 0.7-1.4
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class SvExport(CreatedAtMixin, Base):

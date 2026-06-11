@@ -363,6 +363,57 @@ export function useSvDeleteVideo() {
   return useSvVideoMutation((id: number) => api.svDeleteVideo(id));
 }
 
+export function useSvVoicePresets() {
+  return useQuery({ queryKey: ["sv-voice-presets"], queryFn: api.svListVoicePresets });
+}
+
+export function useSvCreateVoicePreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; voice: string; speed: number }) => api.svCreateVoicePreset(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-voice-presets"] }),
+  });
+}
+
+export function useSvSetDefaultVoicePreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svSetDefaultVoicePreset(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-voice-presets"] }),
+  });
+}
+
+export function useSvDeleteVoicePreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteVoicePreset(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-voice-presets"] }),
+  });
+}
+
+export function useSvVoiceSample() {
+  return useMutation({
+    mutationFn: (data: { text?: string; voice?: string | null; speed?: number }) =>
+      api.svVoiceSample(data),
+  });
+}
+
+export function useSvCaptionPreviews(poll = false) {
+  return useQuery({
+    queryKey: ["sv-caption-previews"],
+    queryFn: api.svCaptionPreviews,
+    refetchInterval: poll ? 3000 : false,
+  });
+}
+
+export function useSvGenerateCaptionPreviews() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (force: boolean) => api.svGenerateCaptionPreviews(force),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-caption-previews"] }),
+  });
+}
+
 export function useSvExports(poll = false) {
   return useQuery({
     queryKey: ["sv-exports"],

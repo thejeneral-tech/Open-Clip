@@ -171,6 +171,48 @@ class SvVoiceOut(BaseModel):
     gender: str | None = None
 
 
+class SvVoiceSampleRequest(BaseModel):
+    text: str = Field(
+        default="Hi! This is a Story Vault voice test. Stories sound better out loud.",
+        max_length=400,
+    )
+    voice: str | None = None
+    speed: float = Field(default=1.0, ge=0.7, le=1.4)
+
+
+class SvVoiceSampleOut(BaseModel):
+    media_url: str
+    duration: float
+
+
+class SvVoicePresetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    voice: str = Field(min_length=1, max_length=128)
+    speed: float = Field(default=1.0, ge=0.7, le=1.4)
+
+
+class SvVoicePresetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    voice: str | None = None
+    speed: float | None = Field(default=None, ge=0.7, le=1.4)
+
+
+class SvVoicePresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    voice: str
+    speed: float
+    is_default: bool
+    created_at: datetime
+
+
+class SvCaptionPreviewOut(BaseModel):
+    style: str
+    media_url: str | None = None
+
+
 class SvDashboardOut(BaseModel):
     stories_total: int
     stories_new: int

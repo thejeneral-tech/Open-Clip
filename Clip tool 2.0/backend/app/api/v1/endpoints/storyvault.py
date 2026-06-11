@@ -25,12 +25,21 @@ from app.models.enums import (
     SvStoryStatus,
     SvVideoStatus,
 )
-from app.models.storyvault import SvBackground, SvExport, SvScript, SvSegment, SvStory, SvVideo
+from app.models.storyvault import (
+    SvBackground,
+    SvExport,
+    SvScript,
+    SvSegment,
+    SvStory,
+    SvVideo,
+    SvVoicePreset,
+)
 from app.models.user import User
 from app.schemas.common import Message
 from app.schemas.storyvault import (
     SvBackgroundOut,
     SvBackgroundUpdate,
+    SvCaptionPreviewOut,
     SvDashboardOut,
     SvDiscoveryResult,
     SvDiscoverySearch,
@@ -45,11 +54,22 @@ from app.schemas.storyvault import (
     SvVideoOut,
     SvVideoReject,
     SvVoiceOut,
+    SvVoicePresetCreate,
+    SvVoicePresetOut,
+    SvVoicePresetUpdate,
+    SvVoiceSampleOut,
+    SvVoiceSampleRequest,
 )
-from app.services.storage import storage, sv_background_key
+from app.services.storage import (
+    storage,
+    sv_background_key,
+    sv_caption_preview_key,
+    sv_voice_sample_key,
+)
 from app.services.storyvault import reddit, scoring
 from app.services.storyvault import tts as tts_svc
 from app.workers.sv_tasks import (
+    sv_caption_previews_task,
     sv_generate_video_task,
     sv_ingest_background_task,
     sv_render_video_task,
@@ -113,6 +133,166 @@ async def list_voices(current_user: User = Depends(get_current_user)) -> list[Sv
     if _voices_cache is None:
         _voices_cache = await run_in_threadpool(tts_svc.list_voices)
     return [SvVoiceOut(**v) for v in _voices_cache]
+
+
+@router.post("/voices/sample", response_model=SvVoiceSampleOut)
+async def voice_sample(
+    payload: SvVoiceSampleRequest,
+    current_user: User = Depends(get_current_user),
+) -> SvVoiceSampleOut:
+    """Synthesize a short test line so a voice can be auditioned in the browser.
+
+    Samples are cached by (voice, speed, text) hash — repeat auditions are free.
+    """
+    import hashlib
+
+    text = payload.text.strip() or SvVoiceSampleRequest.model_fields["text"].default
+    digest = hashlib.sha256(f"{payload.voice}|{payload.speed:.2f}|{text}".encode()).hexdigest()[:16]
+    key = sv_voice_sample_key(digest)
+
+    if not storage.exists(key):
+        try:
+            result = await run_in_threadpool(
+                tts_svc.synthesize,
+                text,
+                storage.abspath(key),
+                voice=payload.voice,
+                speed=payload.speed,
+            )
+            storage.commit(key)
+            duration = result.duration
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Synthesis failed: {exc}") from exc
+    else:
+        try:
+            from app.services.ffmpeg import ffmpeg as _ff
+
+            duration = await run_in_threadpool(
+                lambda: _ff.probe(storage.abspath(key, ensure_parent=False)).duration
+            )
+        except Exception:
+            duration = 0.0
+    return SvVoiceSampleOut(media_url=storage.url(key) or "", duration=duration)
+
+
+# ------------------------------------------------------------- voice presets
+@router.get("/voices/presets", response_model=list[SvVoicePresetOut])
+async def list_voice_presets(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvVoicePresetOut]:
+    rows = (
+        await db.execute(
+            select(SvVoicePreset)
+            .where(SvVoicePreset.owner_id == current_user.id)
+            .order_by(SvVoicePreset.is_default.desc(), SvVoicePreset.created_at.desc())
+        )
+    ).scalars().all()
+    return [SvVoicePresetOut.model_validate(p) for p in rows]
+
+
+@router.post("/voices/presets", response_model=SvVoicePresetOut, status_code=201)
+async def create_voice_preset(
+    payload: SvVoicePresetCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvVoicePresetOut:
+    count = int(
+        (
+            await db.execute(
+                select(func.count(SvVoicePreset.id)).where(SvVoicePreset.owner_id == current_user.id)
+            )
+        ).scalar() or 0
+    )
+    preset = SvVoicePreset(
+        owner_id=current_user.id,
+        name=payload.name.strip(),
+        voice=payload.voice,
+        speed=payload.speed,
+        is_default=count == 0,  # first preset becomes the default
+    )
+    db.add(preset)
+    await db.commit()
+    await db.refresh(preset)
+    return SvVoicePresetOut.model_validate(preset)
+
+
+async def _owned_preset(db: AsyncSession, preset_id: int, user: User) -> SvVoicePreset:
+    preset = await db.get(SvVoicePreset, preset_id)
+    if not preset or preset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Voice preset not found")
+    return preset
+
+
+@router.patch("/voices/presets/{preset_id}", response_model=SvVoicePresetOut)
+async def update_voice_preset(
+    preset_id: int,
+    payload: SvVoicePresetUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvVoicePresetOut:
+    preset = await _owned_preset(db, preset_id, current_user)
+    if payload.name is not None:
+        preset.name = payload.name.strip()
+    if payload.voice is not None:
+        preset.voice = payload.voice
+    if payload.speed is not None:
+        preset.speed = payload.speed
+    await db.commit()
+    await db.refresh(preset)
+    return SvVoicePresetOut.model_validate(preset)
+
+
+@router.post("/voices/presets/{preset_id}/default", response_model=SvVoicePresetOut)
+async def set_default_voice_preset(
+    preset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvVoicePresetOut:
+    preset = await _owned_preset(db, preset_id, current_user)
+    others = (
+        await db.execute(select(SvVoicePreset).where(SvVoicePreset.owner_id == current_user.id))
+    ).scalars().all()
+    for p in others:
+        p.is_default = p.id == preset.id
+    await db.commit()
+    await db.refresh(preset)
+    return SvVoicePresetOut.model_validate(preset)
+
+
+@router.delete("/voices/presets/{preset_id}", response_model=Message)
+async def delete_voice_preset(
+    preset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    preset = await _owned_preset(db, preset_id, current_user)
+    await db.delete(preset)
+    await db.commit()
+    return Message(detail="Voice preset deleted")
+
+
+# --------------------------------------------------------- caption previews
+@router.get("/presets/caption-previews", response_model=list[SvCaptionPreviewOut])
+async def caption_previews(
+    current_user: User = Depends(get_current_user),
+) -> list[SvCaptionPreviewOut]:
+    out: list[SvCaptionPreviewOut] = []
+    for style in [s.value for s in CaptionStyle]:
+        key = sv_caption_preview_key(style)
+        exists = await run_in_threadpool(storage.exists, key)
+        out.append(SvCaptionPreviewOut(style=style, media_url=storage.url(key) if exists else None))
+    return out
+
+
+@router.post("/presets/caption-previews/generate", response_model=Message)
+async def generate_caption_previews(
+    force: bool = Query(default=False),
+    current_user: User = Depends(get_current_user),
+) -> Message:
+    styles = [s.value for s in CaptionStyle]
+    sv_caption_previews_task.delay(styles, force)
+    return Message(detail="Caption previews are rendering")
 
 
 @router.get("/dashboard", response_model=SvDashboardOut)
@@ -452,6 +632,19 @@ async def create_video(
     db: AsyncSession = Depends(get_session),
 ) -> SvVideoOut:
     story = await _owned_story(db, payload.story_id, current_user)
+    # Voice "Auto" → the user's default Voice Lab preset, if one exists.
+    voice = payload.voice
+    if voice is None:
+        default_preset = (
+            await db.execute(
+                select(SvVoicePreset).where(
+                    SvVoicePreset.owner_id == current_user.id,
+                    SvVoicePreset.is_default.is_(True),
+                )
+            )
+        ).scalars().first()
+        if default_preset:
+            voice = default_preset.voice
     video = SvVideo(
         owner_id=current_user.id,
         story_id=story.id,
@@ -460,7 +653,7 @@ async def create_video(
         hook_style=payload.hook_style,
         narration_style=payload.narration_style,
         drama_level=payload.drama_level,
-        voice=payload.voice,
+        voice=voice,
         speed=payload.speed,
         caption_style=payload.caption_style,
         background_category=payload.background_category,

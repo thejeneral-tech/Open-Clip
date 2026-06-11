@@ -23,6 +23,7 @@ from app.models.storyvault import (
     SvSegment,
     SvStory,
     SvVideo,
+    SvVoicePreset,
 )
 from app.models.transcript import Transcript
 from app.models.trend import TrendItem, TrendSource
@@ -46,6 +47,7 @@ __all__ = [
     "SvSegment",
     "SvStory",
     "SvVideo",
+    "SvVoicePreset",
     "Transcript",
     "TrendItem",
     "TrendSource",

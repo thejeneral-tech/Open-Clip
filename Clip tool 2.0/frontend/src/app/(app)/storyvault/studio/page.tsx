@@ -77,6 +77,7 @@ function PipelineRow({ video }: { video: SvVideo }) {
 function StudioInner() {
   const searchParams = useSearchParams();
   const storyParam = searchParams.get("story");
+  const captionParam = searchParams.get("caption");
 
   const { data: stories = [], isLoading: storiesLoading } = useSvStories({ status: undefined, sort: "score" });
   const { data: meta } = useSvMeta();
@@ -94,7 +95,7 @@ function StudioInner() {
   const [dramaLevel, setDramaLevel] = useState(3);
   const [voice, setVoice] = useState("auto");
   const [speed, setSpeed] = useState(1.0);
-  const [captionStyle, setCaptionStyle] = useState("hormozi");
+  const [captionStyle, setCaptionStyle] = useState(captionParam || "hormozi");
   const [backgroundCategory, setBackgroundCategory] = useState("any");
   const [scriptEngine, setScriptEngine] = useState("auto");
 
