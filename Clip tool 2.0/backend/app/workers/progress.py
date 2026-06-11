@@ -12,9 +12,10 @@ from app.core.database import session_scope
 from app.core.events import publish_progress
 from app.models.clip import Clip
 from app.models.export import Export
+from app.models.storyvault import SvVideo
 from app.models.video import Video
 
-_MODELS = {"video": Video, "clip": Clip, "export": Export}
+_MODELS = {"video": Video, "clip": Clip, "export": Export, "sv_video": SvVideo}
 
 
 class ProgressTracker:

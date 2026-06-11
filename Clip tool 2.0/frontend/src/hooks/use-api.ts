@@ -217,3 +217,164 @@ export function useOllamaStatus(poll = false) {
     refetchInterval: poll ? 5000 : false,
   });
 }
+
+// -------------------------------------------------------------- story vault
+export function useSvMeta() {
+  return useQuery({ queryKey: ["sv-meta"], queryFn: api.svMeta, staleTime: 5 * 60_000 });
+}
+
+export function useSvVoices() {
+  return useQuery({ queryKey: ["sv-voices"], queryFn: api.svVoices, staleTime: 5 * 60_000 });
+}
+
+export function useSvDashboard(poll = false) {
+  return useQuery({
+    queryKey: ["sv-dashboard"],
+    queryFn: api.svDashboard,
+    refetchInterval: poll ? 6000 : false,
+  });
+}
+
+export function useSvStories(params: { status?: string; category?: string; q?: string; sort?: string } = {}) {
+  return useQuery({
+    queryKey: ["sv-stories", params],
+    queryFn: () => api.svListStories(params),
+  });
+}
+
+export function useSvDiscoverySearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.svDiscoverySearch>[0]) => api.svDiscoverySearch(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-stories"] }),
+  });
+}
+
+export function useSvImportStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.svImportStory>[0]) => api.svImportStory(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-stories"] }),
+  });
+}
+
+export function useSvUpdateStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; data: { status?: string; category?: string } }) =>
+      api.svUpdateStory(vars.id, vars.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-stories"] }),
+  });
+}
+
+export function useSvDeleteStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteStory(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-stories"] }),
+  });
+}
+
+export function useSvBackgrounds(poll = false) {
+  return useQuery({
+    queryKey: ["sv-backgrounds"],
+    queryFn: api.svListBackgrounds,
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+export function useSvUploadBackground() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { file: File; category?: string }) =>
+      api.svUploadBackground(vars.file, vars.category),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-backgrounds"] }),
+  });
+}
+
+export function useSvUpdateBackground() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; data: { category?: string } }) =>
+      api.svUpdateBackground(vars.id, vars.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-backgrounds"] }),
+  });
+}
+
+export function useSvDeleteBackground() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteBackground(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-backgrounds"] }),
+  });
+}
+
+export function useSvVideos(status?: string, poll = false) {
+  return useQuery({
+    queryKey: ["sv-videos", status ?? "all"],
+    queryFn: () => api.svListVideos(status),
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+export function useSvVideo(id: number, poll = false) {
+  return useQuery({
+    queryKey: ["sv-video", id],
+    queryFn: () => api.svGetVideo(id),
+    enabled: !!id,
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+function useSvVideoMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sv-videos"] });
+      qc.invalidateQueries({ queryKey: ["sv-video"] });
+      qc.invalidateQueries({ queryKey: ["sv-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["sv-exports"] });
+    },
+  });
+}
+
+export function useSvCreateVideo() {
+  return useSvVideoMutation((data: Parameters<typeof api.svCreateVideo>[0]) => api.svCreateVideo(data));
+}
+
+export function useSvApproveVideo() {
+  return useSvVideoMutation((vars: { id: number; platform: string }) =>
+    api.svApproveVideo(vars.id, vars.platform),
+  );
+}
+
+export function useSvRejectVideo() {
+  return useSvVideoMutation((vars: { id: number; reason?: string }) =>
+    api.svRejectVideo(vars.id, vars.reason),
+  );
+}
+
+export function useSvRetryVideo() {
+  return useSvVideoMutation((id: number) => api.svRetryVideo(id));
+}
+
+export function useSvDeleteVideo() {
+  return useSvVideoMutation((id: number) => api.svDeleteVideo(id));
+}
+
+export function useSvExports(poll = false) {
+  return useQuery({
+    queryKey: ["sv-exports"],
+    queryFn: api.svListExports,
+    refetchInterval: poll ? 6000 : false,
+  });
+}
+
+export function useSvDeleteExport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteExport(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-exports"] }),
+  });
+}

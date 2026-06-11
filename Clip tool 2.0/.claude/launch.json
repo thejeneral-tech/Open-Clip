@@ -8,6 +8,20 @@
       "port": 3000,
       "autoPort": true,
       "cwd": "frontend"
+    },
+    {
+      "name": "openclip-api",
+      "runtimeExecutable": "C:\\Users\\kevin\\Documents\\GitHub\\TrendVault Program\\Clip tool 2.0\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "port": 8000,
+      "cwd": "backend"
+    },
+    {
+      "name": "openclip-worker",
+      "runtimeExecutable": "C:\\Users\\kevin\\Documents\\GitHub\\TrendVault Program\\Clip tool 2.0\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-Q", "default,media,ai,bots", "--pool=solo"],
+      "port": 8765,
+      "cwd": "backend"
     }
   ]
 }

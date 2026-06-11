@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     projects,
     publishing,
     settings,
+    storyvault,
     users,
     videos,
     ws,
@@ -33,4 +34,6 @@ api_router.include_router(presets.router, prefix="/presets", tags=["presets"])
 api_router.include_router(discovery.router, prefix="/discovery", tags=["discovery"])
 api_router.include_router(publishing.router, prefix="/publishing", tags=["publishing"])
 api_router.include_router(automation.router, prefix="/automation", tags=["automation"])
+# --- Story Vault (story-to-vertical-video factory) ---
+api_router.include_router(storyvault.router, prefix="/storyvault", tags=["storyvault"])
 api_router.include_router(ws.router, tags=["ws"])

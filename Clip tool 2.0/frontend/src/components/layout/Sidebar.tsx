@@ -1,18 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BookOpen,
   Bot,
   Clapperboard,
   Compass,
   Cpu,
+  Film,
   FolderKanban,
+  Gauge,
   LayoutDashboard,
+  ListChecks,
   LogOut,
+  Minus,
   Palette,
+  Plus,
   Send,
   Settings,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,15 +31,49 @@ interface NavItem {
   soon?: boolean;
 }
 
-const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/bots", label: "Bots", icon: Bot },
-  { href: "/discovery", label: "Discovery", icon: Compass },
-  { href: "/publishing", label: "Publishing", icon: Send },
-  { href: "/models", label: "Models & GPU", icon: Cpu },
-  { href: "/settings", label: "Settings", icon: Settings },
+interface NavSection {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const SECTIONS: NavSection[] = [
+  {
+    id: "openclip",
+    label: "OpenClip",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/projects", label: "Projects", icon: FolderKanban },
+      { href: "/bots", label: "Bots", icon: Bot },
+      { href: "/discovery", label: "Discovery", icon: Compass },
+      { href: "/publishing", label: "Publishing", icon: Send },
+      { href: "/models", label: "Models & GPU", icon: Cpu },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+  {
+    id: "storyvault",
+    label: "Story Vault",
+    items: [
+      { href: "/storyvault/command", label: "Command Center", icon: Gauge },
+      { href: "/storyvault/library", label: "Story Library", icon: BookOpen },
+      { href: "/storyvault/footage", label: "Footage Library", icon: Film },
+      { href: "/storyvault/studio", label: "Video Studio", icon: Clapperboard },
+      { href: "/storyvault/review", label: "Review Queue", icon: ListChecks },
+      { href: "/storyvault/exports", label: "Exports", icon: Upload },
+    ],
+  },
 ];
+
+const COLLAPSE_KEY = "openclip_nav_sections";
+
+function loadCollapsed(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
 
 export function Sidebar({
   onOpenTheme,
@@ -45,6 +87,23 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  // Collapse state hydrates from localStorage after mount (SSR has no storage).
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setCollapsed(loadCollapsed());
+  }, []);
+
+  const toggleSection = (id: string) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  };
 
   return (
     <aside className="oc-surface flex h-full w-60 shrink-0 flex-col" style={{ background: "var(--sidebar-bg)" }}>
@@ -60,41 +119,68 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2">
-        {NAV.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          if (item.soon) {
-            return (
-              <div
-                key={item.href}
-                className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted opacity-60"
-                title="Coming soon"
-              >
-                <Icon size={17} />
-                <span>{item.label}</span>
-                <span className="ml-auto rounded bg-[var(--hover-bg)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide">
-                  soon
-                </span>
-              </div>
-            );
-          }
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2.5 py-2">
+        {SECTIONS.map((section) => {
+          const isCollapsed = !!collapsed[section.id];
+          const sectionActive = section.items.some((item) =>
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href),
+          );
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
-                active
-                  ? "font-medium text-[var(--accent-contrast)]"
-                  : "text-fg hover:bg-[var(--hover-bg)]",
+            <div key={section.id}>
+              <button
+                type="button"
+                onClick={() => toggleSection(section.id)}
+                aria-expanded={!isCollapsed}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest transition hover:bg-[var(--hover-bg)]",
+                  sectionActive && isCollapsed ? "text-fg" : "text-muted",
+                )}
+                title={isCollapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
+              >
+                <span>{section.label}</span>
+                {isCollapsed ? <Plus size={13} /> : <Minus size={13} />}
+              </button>
+              {!isCollapsed && (
+                <div className="space-y-0.5 pb-1.5">
+                  {section.items.map((item) => {
+                    const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                    const Icon = item.icon;
+                    if (item.soon) {
+                      return (
+                        <div
+                          key={item.href}
+                          className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted opacity-60"
+                          title="Coming soon"
+                        >
+                          <Icon size={17} />
+                          <span>{item.label}</span>
+                          <span className="ml-auto rounded bg-[var(--hover-bg)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide">
+                            soon
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onNavigate}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
+                          active
+                            ? "font-medium text-[var(--accent-contrast)]"
+                            : "text-fg hover:bg-[var(--hover-bg)]",
+                        )}
+                        style={active ? { background: "var(--red)" } : undefined}
+                      >
+                        <Icon size={17} />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-              style={active ? { background: "var(--red)" } : undefined}
-            >
-              <Icon size={17} />
-              <span>{item.label}</span>
-            </Link>
+            </div>
           );
         })}
       </nav>

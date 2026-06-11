@@ -22,7 +22,7 @@ celery_app = Celery(
     "openclip",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.celery_result_backend,
-    include=["app.workers.tasks", "app.workers.bot_tasks"],
+    include=["app.workers.tasks", "app.workers.bot_tasks", "app.workers.sv_tasks"],
 )
 
 celery_app.conf.update(
@@ -50,6 +50,11 @@ celery_app.conf.update(
         "app.workers.tasks.regenerate_clip_task": {"queue": "ai"},
         "app.workers.tasks.render_preview_task": {"queue": "media"},
         "app.workers.tasks.export_clip_task": {"queue": "media"},
+        # Story Vault: footage ingest is I/O-bound media work; the generation
+        # pipeline (LLM + TTS + render) rides the ai queue.
+        "app.workers.sv_tasks.sv_ingest_background_task": {"queue": "media"},
+        "app.workers.sv_tasks.sv_generate_video_task": {"queue": "ai"},
+        "app.workers.sv_tasks.sv_render_video_task": {"queue": "media"},
         # Autonomous bot orchestration runs on its own queue so a long cycle
         # never starves interactive clip jobs.
         "app.workers.bot_tasks.run_bot_cycle": {"queue": "bots"},

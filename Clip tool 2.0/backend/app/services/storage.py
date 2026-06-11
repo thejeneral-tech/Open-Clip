@@ -55,6 +55,35 @@ def export_key(project_id: int, video_id: int, clip_id: int, export_id: int, fmt
     return f"{clip_dir(project_id, video_id, clip_id)}/export_{export_id}.{fmt}"
 
 
+# ------------------------------------------------------------ story vault keys
+def sv_background_key(background_id: int, ext: str = "mp4") -> str:
+    return f"storyvault/backgrounds/{background_id}/source.{ext.lstrip('.')}"
+
+
+def sv_background_thumb_key(background_id: int) -> str:
+    return f"storyvault/backgrounds/{background_id}/thumbnail.jpg"
+
+
+def sv_video_dir(sv_video_id: int) -> str:
+    return f"storyvault/videos/{sv_video_id}"
+
+
+def sv_narration_key(sv_video_id: int) -> str:
+    return f"{sv_video_dir(sv_video_id)}/narration.wav"
+
+
+def sv_captions_key(sv_video_id: int, ext: str = "ass") -> str:
+    return f"{sv_video_dir(sv_video_id)}/captions.{ext}"
+
+
+def sv_preview_key(sv_video_id: int) -> str:
+    return f"{sv_video_dir(sv_video_id)}/preview.mp4"
+
+
+def sv_export_key(sv_video_id: int, export_id: int) -> str:
+    return f"{sv_video_dir(sv_video_id)}/export_{export_id}.mp4"
+
+
 class Storage:
     def __init__(self) -> None:
         self.backend = settings.STORAGE_BACKEND
