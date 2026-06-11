@@ -72,11 +72,14 @@ function hydrate(row) {
 function get(bgId) { return hydrate(db.get('SELECT * FROM backgrounds WHERE id = ?', [bgId])); }
 
 function list({ category, archived = 0, favorite, trash } = {}) {
-  let sql = 'SELECT * FROM backgrounds WHERE archived = ?'; const p = [archived ? 1 : 0];
-  sql += trash ? ' AND deleted_at IS NOT NULL' : ' AND deleted_at IS NULL';
-  if (category) { sql += ' AND category = ?'; p.push(category); }
-  if (favorite != null) { sql += ' AND favorite = ?'; p.push(favorite ? 1 : 0); }
-  sql += ' ORDER BY created_at DESC';
+  // Include a per-background segment count so the library can show "Segments (N)"
+  // without an extra round-trip per card.
+  let sql = 'SELECT b.*, (SELECT COUNT(*) FROM segments s WHERE s.background_id = b.id) AS segment_count'
+    + ' FROM backgrounds b WHERE b.archived = ?'; const p = [archived ? 1 : 0];
+  sql += trash ? ' AND b.deleted_at IS NOT NULL' : ' AND b.deleted_at IS NULL';
+  if (category) { sql += ' AND b.category = ?'; p.push(category); }
+  if (favorite != null) { sql += ' AND b.favorite = ?'; p.push(favorite ? 1 : 0); }
+  sql += ' ORDER BY b.created_at DESC';
   return db.all(sql, p).map(hydrate);
 }
 

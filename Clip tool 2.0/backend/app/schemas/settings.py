@@ -26,6 +26,8 @@ class SettingsOut(BaseModel):
     default_caption_style: CaptionStyle
     default_export_format: ExportFormat
     default_export_resolution: ExportResolution
+    reframe_hq_detection: bool = False
+    reframe_face_zoom: bool = False
     preferences: dict[str, Any] = {}
 
 
@@ -41,6 +43,8 @@ class SettingsUpdate(BaseModel):
     default_caption_style: CaptionStyle | None = None
     default_export_format: ExportFormat | None = None
     default_export_resolution: ExportResolution | None = None
+    reframe_hq_detection: bool | None = None
+    reframe_face_zoom: bool | None = None
     preferences: dict[str, Any] | None = None
 
 

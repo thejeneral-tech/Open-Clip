@@ -69,6 +69,14 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return {}; } }
 
 function setItem(itemId, patch) { db.update('batch_items', itemId, { ...patch, updated_at: db.nowIso() }); }
 function setBatch(batchId, patch) { db.update('batches', batchId, { ...patch, updated_at: db.nowIso() }); }
+// Reflect the item currently being processed at the batch level so the UI pill shows
+// live progress instead of sitting on "Finding story" for the whole run. Never clobbers
+// a paused/cancelled batch (pause/stop own the status field).
+function reflectStage(batchId, st) {
+  const b = db.get('SELECT paused, status FROM batches WHERE id = ?', [batchId]);
+  if (!b || b.paused || b.status === 'Cancelled') return;
+  setBatch(batchId, { status: st });
+}
 
 // Start (or resume) processing. Fire-and-forget; progress via the activity stream.
 async function run(batchId) {
@@ -97,12 +105,18 @@ async function run(batchId) {
         // Diversify each item from the previous one (spec §16 + test #23).
         const plan = variation.plan({ ...prevSettings, storyId: story.id, segmentIds: usedSegmentIds }, variationOrder[vi % variationOrder.length], prefs, vi);
         vi++;
+        // Voice resolution: explicit batch params win; otherwise the starred default preset
+        // (Fish/cloned) applies; only when neither exists do we rotate plain SAPI voices.
+        let defaultPresetId = null;
+        if (!params.voice && !params.voicePresetId) {
+          try { const d = require('./voices').getDefault(); defaultPresetId = d && d.id; } catch { /* */ }
+        }
         const overrides = {
           batchId,
           durationSeconds: pickDuration(params),
           hookStyle: plan.hookStyle,
-          voice: params.voice || plan.voice,
-          voicePresetId: params.voicePresetId || null,
+          voice: params.voice || ((params.voicePresetId || defaultPresetId) ? undefined : plan.voice),
+          voicePresetId: params.voicePresetId || defaultPresetId || null,
           speed: plan.speed,
           narrationStyle: plan.narrationStyle,
           captionStyle: params.captionStyle || plan.captionStyle,
@@ -132,10 +146,11 @@ async function run(batchId) {
 
         try {
           setItem(item.id, { status: 'Writing script', stage_detail: 'Rewriting story' });
+          reflectStage(batchId, 'Writing script');
           log.progress('batch', { batchId, itemId: item.id, status: 'Writing script' });
           const video = await pipeline.createVideoForStory(story, overrides, {
             jobId,
-            stage: (st, detail) => { setItem(item.id, { status: st, stage_detail: detail }); log.progress('batch', { batchId, itemId: item.id, status: st, detail }); },
+            stage: (st, detail) => { setItem(item.id, { status: st, stage_detail: detail }); reflectStage(batchId, st); log.progress('batch', { batchId, itemId: item.id, status: st, detail }); },
           });
           jobs.markDone(jobId, video.id);
           // Record this item's footage so later items avoid it.
@@ -173,7 +188,7 @@ function composerPlan(video) { return Array.isArray(video.segment_plan) ? video.
 function pickDuration(params) {
   if (params.duration) return params.duration;
   if (params.durationMin && params.durationMax) {
-    const opts = [30, 45, 60, 90, 120, 180].filter((d) => d >= params.durationMin && d <= params.durationMax);
+    const opts = require('../constants').SCRIPT_DURATIONS.filter((d) => d >= params.durationMin && d <= params.durationMax);
     return opts.length ? opts[Math.floor(opts.length / 2)] : params.durationMin;
   }
   return 60;

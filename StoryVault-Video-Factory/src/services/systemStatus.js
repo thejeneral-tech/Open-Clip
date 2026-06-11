@@ -1,8 +1,10 @@
 'use strict';
 // System Status checks (spec §26).
 const fs = require('node:fs');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 const db = require('../db/database');
-const { PATHS, FFMPEG, FFPROBE } = require('../config');
+const { PATHS, FFMPEG, FFPROBE, ROOT, ensureDirs } = require('../config');
 const ff = require('./ffmpeg');
 const reddit = require('./sources/reddit');
 
@@ -115,4 +117,87 @@ function resumeFailedJobs() {
   return { resumed };
 }
 
-module.exports = { testAll, resumeFailedJobs, checkFfmpeg, checkFfprobe, checkDatabase };
+// ── One-click Repair (spec §26) ───────────────────────────────────────────────
+// Idempotent, non-destructive recovery for the whole app. Each step is safe to
+// run repeatedly: it recreates the data folder layout, reinstalls only missing
+// npm packages, re-applies DB migrations + verifies integrity, requeues
+// interrupted renders, and reports on external tools (FFmpeg/FFprobe/Fish Speech)
+// that can't be auto-installed. Returns a per-step report the UI renders.
+const REQUIRED_DEPS = (() => {
+  try { return Object.keys(require('../../package.json').dependencies || {}); }
+  catch { return []; }
+})();
+
+function depInstalled(name) {
+  return fs.existsSync(path.join(ROOT, 'node_modules', name, 'package.json'));
+}
+
+// Reinstall declared dependencies. `shell: true` lets Windows resolve npm.cmd;
+// the command is fixed (no user input), so there is nothing to inject.
+function npmInstall() {
+  return new Promise((resolve) => {
+    let out = '';
+    let ps;
+    try { ps = spawn('npm install --no-audit --no-fund', { cwd: ROOT, shell: true, windowsHide: true }); }
+    catch (e) { return resolve({ code: -1, out: e.message }); }
+    ps.stdout && ps.stdout.on('data', (d) => { out += d.toString(); });
+    ps.stderr && ps.stderr.on('data', (d) => { out += d.toString(); });
+    ps.on('error', (e) => resolve({ code: -1, out: out + e.message }));
+    ps.on('close', (code) => resolve({ code, out }));
+  });
+}
+
+async function repair() {
+  const steps = [];
+  const add = (name, fixed, ok, detail) => steps.push({ name, fixed, ok, detail });
+
+  // 1) Data folder layout (Storage) — always safe to (re)create.
+  try { ensureDirs(); add('Directories', true, true, `Data folder layout verified at ${PATHS.data}`); }
+  catch (e) { add('Directories', false, false, `Could not create data folders: ${e.message}`); }
+
+  // 2) npm dependencies — reinstall only when something is actually missing.
+  const missing = REQUIRED_DEPS.filter((d) => !depInstalled(d));
+  if (!REQUIRED_DEPS.length) {
+    add('Dependencies', false, true, 'No npm dependencies declared.');
+  } else if (!missing.length) {
+    add('Dependencies', false, true, `All packages present (${REQUIRED_DEPS.join(', ')}).`);
+  } else {
+    const r = await npmInstall();
+    const still = REQUIRED_DEPS.filter((d) => !depInstalled(d));
+    if (!still.length) add('Dependencies', true, true, `Installed missing package(s): ${missing.join(', ')}.`);
+    else add('Dependencies', true, false, `npm install exited ${r.code}; still missing: ${still.join(', ')}. ${(r.out || '').trim().split('\n').slice(-2).join(' ')}`);
+  }
+
+  // 3) Database — any query forces schema + migrations + default seed; then verify.
+  try {
+    const n = db.get('SELECT count(*) c FROM stories').c;
+    const chk = db.get('PRAGMA integrity_check');
+    const integrity = chk && (chk.integrity_check || Object.values(chk)[0]);
+    const okDb = integrity === 'ok';
+    add('Database', true, okDb, okDb ? `Schema + migrations applied (${n} stories).` : `Integrity check returned: ${integrity}`);
+  } catch (e) { add('Database', false, false, `Database error: ${e.message}`); }
+
+  // 4) Interrupted renders — requeue so they finish instead of hanging at 'running'.
+  try { const r = resumeFailedJobs(); add('Render jobs', true, true, r.resumed ? `Requeued ${r.resumed} interrupted render(s).` : 'No interrupted renders.'); }
+  catch (e) { add('Render jobs', false, false, `Could not requeue renders: ${e.message}`); }
+
+  // 5) FFmpeg / FFprobe — can't be auto-installed; report resolution + how to fix.
+  const [ffm, ffp] = await Promise.all([checkFfmpeg(), checkFfprobe()]);
+  const binHint = `set FFMPEG_PATH/FFPROBE_PATH or place the binaries in ${path.join(ROOT, 'bin')}`;
+  add('FFmpeg', false, ffm.status === 'Ready', ffm.status === 'Ready' ? `${ffm.detail} (${FFMPEG})` : `${ffm.detail} — ${binHint}.`);
+  add('FFprobe', false, ffp.status === 'Ready', ffp.status === 'Ready' ? `${ffp.detail} (${FFPROBE})` : `${ffp.detail} — ${binHint}.`);
+
+  // 6) Fish Speech — optional (SAPI fallback). Report only; the multi-GB model
+  //    download stays an explicit action on Voice Lab → Setup → Repair.
+  try {
+    const fishspeech = require('./fishspeech');
+    const s = await fishspeech.status();
+    add('Fish Speech (optional)', false, true, s.engineReady ? 'Engine ready.' : 'Not configured — using SAPI fallback. Install via Voice Lab → Setup → Repair.');
+  } catch (e) { add('Fish Speech (optional)', false, true, `Optional — not configured (${e.message}).`); }
+
+  const fixed = steps.filter((s) => s.fixed).length;
+  const failures = steps.filter((s) => !s.ok).map((s) => s.name);
+  return { ok: failures.length === 0, fixed, failures, steps, at: db.nowIso() };
+}
+
+module.exports = { testAll, repair, resumeFailedJobs, checkFfmpeg, checkFfprobe, checkDatabase };

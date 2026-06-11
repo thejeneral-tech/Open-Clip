@@ -31,6 +31,7 @@ function createVideo({ story, script, narration, caption, opts = {} }) {
     backgroundIds: opts.backgroundIds || null,
     category: opts.backgroundCategory || null,
     seedRng,
+    transition: TRANSITION,
   });
 
   const vid = id('vid');
@@ -42,6 +43,7 @@ function createVideo({ story, script, narration, caption, opts = {} }) {
     duration: targetDur,
     segment_plan: JSON.stringify(sel.plan),
     voice: narration.voice,
+    voice_preset_id: opts.voicePresetId || null,
     caption_style: caption.style,
     template_id: opts.templateId || null,
     status: 'draft',
@@ -115,6 +117,7 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
   const sel = segSvc.selectForDuration(withTransitionBuffer(total), {
     avoidSegmentIds: selectOpts.avoidSegmentIds || [], backgroundIds: selectOpts.backgroundIds || null,
     category: selectOpts.backgroundCategory || null, seedRng,
+    transition: TRANSITION,
   });
 
   db.update('videos', video.id, {
@@ -193,7 +196,10 @@ function buildArgs(plan, narrationPath, assBasename, { width, height, fps, crf, 
   const parts = [];
   const labels = [];
   for (let i = 0; i < plan.length; i++) {
-    parts.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,fps=${fps},format=yuv420p[v${i}]`);
+    // Horizontal 16:9 footage is zoomed ~1.78x to cover the 9:16 frame, so the upscale must be
+    // high quality: lanczos resampling + a mild unsharp keeps the gameplay crisp (was a soft
+    // bicubic upscale). fps normalisation matches the output rate (60) so motion stays smooth.
+    parts.push(`[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},setsar=1,unsharp=3:3:0.5,fps=${fps},format=yuv420p[v${i}]`);
     labels.push(`[v${i}]`);
   }
   let chain = parts.join(';');
@@ -211,8 +217,12 @@ function buildArgs(plan, narrationPath, assBasename, { width, height, fps, crf, 
       prev = out;
     }
   }
+  // Safety pad: if the assembled footage still ends a hair before the audio (rounding,
+  // unexpected short clips), clone the last frame instead of dropping the video track —
+  // '-t' below trims any excess, so the pad is invisible when footage fully covers.
+  chain += `;[bg]tpad=stop_mode=clone:stop_duration=10[bgp]`;
   // burn captions (ass referenced by basename; ffmpeg cwd set to captions dir)
-  chain += `;[bg]subtitles=${assBasename}[vout]`;
+  chain += `;[bgp]subtitles=${assBasename}[vout]`;
 
   args.push('-filter_complex', chain);
   args.push('-map', '[vout]', '-map', `${audioIndex}:a`);
@@ -228,7 +238,9 @@ function buildArgs(plan, narrationPath, assBasename, { width, height, fps, crf, 
 function runFfmpegWithProgress(args, totalDur, onProgress) {
   return ff.ffmpeg(args, {
     cwd: PATHS.captions,
-    timeoutMs: 30 * 60000,
+    // Scale the kill-switch with output length: a 5-minute 1080x1920 encode with a
+    // 60-input crossfade graph can legitimately exceed the old flat 30-minute cap on CPU.
+    timeoutMs: Math.max(30 * 60000, Math.ceil(totalDur || 60) * 30 * 1000),
     onStderr: (s) => {
       const m = /time=(\d+):(\d+):(\d+\.\d+)/.exec(s);
       if (m && onProgress) {
@@ -251,8 +263,10 @@ async function buildPreview(videoId, { onProgress } = {}) {
   validatePlan(v.segment_plan);
 
   const out = path.join(PATHS.previews, `${videoId}.mp4`);
+  // Preview is a fast proxy, but at 720p/60fps so the reviewer sees the real sharpness and
+  // smoothness (the old 540p/30fps preview looked blurry + framey vs the final render).
   const args = buildArgs(v.segment_plan, src.audioPath, src.assBasename,
-    { width: 540, height: 960, fps: 30, crf: 28, preset: 'veryfast', durationCap: src.durationCap });
+    { width: 720, height: 1280, fps: 60, crf: 24, preset: 'veryfast', durationCap: src.durationCap });
   args.push(out);
   log.activity('PREVIEW', `Building preview for "${v.title}"…`, { refId: videoId });
   await runFfmpegWithProgress(args, src.durationCap, onProgress);
@@ -338,25 +352,26 @@ async function render(videoId, { preset = 'tiktok', onProgress } = {}) {
     out = path.join(PATHS.renders, `${base}.mp4`);
   }
   const args = buildArgs(v.segment_plan, src.audioPath, src.assBasename,
-    { width: presetConf.width, height: presetConf.height, fps: presetConf.fps, crf: RENDER.crf, preset: 'medium', durationCap: src.durationCap });
+    { width: presetConf.width, height: presetConf.height, fps: presetConf.fps, crf: RENDER.crf, preset: 'fast', durationCap: src.durationCap });
   args.push(out);
 
   log.activity('RENDER', `Rendering "${v.title}" (${preset} ${presetConf.width}x${presetConf.height})…`, { refId: videoId });
+  // Any failure from here through output verification must mark the job + video failed —
+  // an escaped throw used to leave them stuck at 'rendering'/'running' forever.
+  let meta;
   try {
     await runFfmpegWithProgress(args, src.durationCap, (p) => {
       db.update('render_jobs', jobId, { progress: Math.round(p * 100) });
       if (onProgress) onProgress(p);
     });
+    if (!ff.fileExists(out)) throw new Error('Render produced no output file.');
+    // Verify the output is playable and has audio (spec §19 guarantees).
+    try { meta = await ff.probe(out); } catch (e) { throw new Error(`Rendered file failed verification: ${e.message}`); }
   } catch (e) {
     db.update('render_jobs', jobId, { status: 'failed', error: e.message, finished_at: db.nowIso() });
     db.update('videos', videoId, { status: 'failed', error: `Render failed: ${e.message}`, updated_at: db.nowIso() });
     throw e;
   }
-  if (!ff.fileExists(out)) throw new Error('Render produced no output file.');
-
-  // Verify the output is playable and has audio (spec §19 guarantees).
-  let meta;
-  try { meta = await ff.probe(out); } catch (e) { throw new Error(`Rendered file failed verification: ${e.message}`); }
   if (!meta.hasAudio) log.error('RENDER', 'Rendered video has no audio track.', null, videoId);
 
   db.update('render_jobs', jobId, { status: 'done', progress: 100, output_path: out, finished_at: db.nowIso() });
@@ -393,4 +408,4 @@ function validatePlan(plan) {
   }
 }
 
-module.exports = { createVideo, applyTemplateIntro, buildPreview, render, getVideo, buildArgs, hydrate, validatePlan };
+module.exports = { createVideo, applyTemplateIntro, buildPreview, render, getVideo, buildArgs, hydrate, validatePlan, TRANSITION, withTransitionBuffer };

@@ -63,6 +63,7 @@ router.post('/templates/bulk', wrap(async (req, res) => {
   if (action === 'delete') { let n = 0; ids.forEach((id) => { try { templates.softRemove(id); n++; } catch { /* skip missing */ } }); return res.json({ ok: true, count: n }); }
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('templates', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('templates', ids) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('templates') });
   throw new Error('Unknown action.');
 }));
 // Delete → trash (any template, built-ins included); ?permanent=1 hard-removes.
@@ -94,6 +95,7 @@ router.put('/preferences', (req, res) => res.json(prefsSvc.update(req.body || {}
 router.get('/system/status', wrap(async (req, res) => res.json(await sys.testAll())));
 router.post('/system/test', wrap(async (req, res) => res.json(await sys.testAll())));
 router.post('/system/resume-failed', wrap(async (req, res) => res.json(sys.resumeFailedJobs())));
+router.post('/system/repair', wrap(async (req, res) => res.json(await sys.repair())));
 router.get('/system/logs', (req, res) => res.json(log.recent(Number(req.query.limit) || 300)));
 
 // --- Dashboard (spec §24) ---

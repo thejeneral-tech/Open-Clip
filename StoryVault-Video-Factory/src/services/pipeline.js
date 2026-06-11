@@ -14,25 +14,48 @@ const jobs = require('./jobs');
 const prefsSvc = require('./preferences');
 const log = require('./logger');
 
+// A Windows SAPI voice name (so we don't pass a Fish/clone voice id to the SAPI engine).
+function isSapiVoice(v) { return /microsoft|desktop|zira|david|hazel|mark|eva|catherine|hortense|huihui/i.test(String(v || '')); }
+
 function resolveSettings(overrides = {}) {
   const prefs = prefsSvc.get();
   // A chosen voice preset (SAPI or Fish Speech / cloned voice) overrides the raw voice fields.
   let preset = null;
   const presetId = overrides.voicePresetId || prefs.voicePresetId;
   if (presetId) { try { preset = require('./voices').getPreset(presetId); } catch { /* voices not ready */ } }
+  // No explicit choice → honor the Voices page "Set Default" star, so picking a default
+  // Fish/cloned voice once makes every subsequent video use it automatically.
+  if (!preset && !overrides.voice) { try { preset = require('./voices').getDefault(); } catch { /* */ } }
   let refPath = null;
   let cloneText = null;
   if (preset && preset.engine === 'fish-clone' && preset.clone_id) {
     try { const c = require('../db/database').get('SELECT reference_path, transcript FROM voice_clones WHERE id = ?', [preset.clone_id]); refPath = c && c.reference_path; cloneText = c && c.transcript; } catch { /* */ }
   }
+  let provider = overrides.provider || (preset && preset.engine) || 'sapi';
+  let voice = overrides.voice || (preset && preset.voice) || prefs.preferredVoice || 'Microsoft Zira Desktop';
+  // Preflight: if a Fish/cloned voice is selected but the engine can't synthesize right
+  // now (no server, model missing, etc.), downgrade to SAPI so a batch of 1000 degrades
+  // gracefully instead of failing every item. A mid-render crash is caught again in tts.js.
+  if (provider === 'fish' || provider === 'fish-clone') {
+    let ready = false;
+    try { ready = require('./fishspeech').engineReady(); } catch { ready = false; }
+    if (!ready) {
+      log.activity('AUDIO', 'Fish Speech engine not ready — using the local SAPI voice for this video.', { level: 'warning' });
+      provider = 'sapi';
+      if (!isSapiVoice(voice)) voice = prefs.preferredVoice || 'Microsoft Zira Desktop';
+      refPath = null; cloneText = null;
+      preset = null; // record no preset on the video — this run is plain SAPI
+    }
+  }
   return {
+    voicePresetId: preset ? preset.id : null,
     durationSeconds: overrides.durationSeconds || prefs.targetVideoLength || 60,
     hookStyle: overrides.hookStyle || 'conflict',
     dramaLevel: overrides.dramaLevel || 3,
     safeMode: overrides.safeMode != null ? overrides.safeMode : (prefs.profanity === 'censor'),
     variationSeed: overrides.variationSeed || 0,
-    provider: overrides.provider || (preset && preset.engine) || 'sapi',
-    voice: overrides.voice || (preset && preset.voice) || prefs.preferredVoice || 'Microsoft Zira Desktop',
+    provider,
+    voice,
     speed: overrides.speed != null ? overrides.speed : (preset && preset.speed != null ? preset.speed : 1.0),
     temperature: overrides.temperature != null ? overrides.temperature : (preset && preset.temperature),
     cloneRef: refPath,
@@ -91,7 +114,7 @@ async function createVideoForStory(storyOrId, overrides = {}, { stage = () => {}
     name: 'footage',
     run: () => composer.createVideo({
       story, script, narration, caption,
-      opts: { batchId: s.batchId, avoidSegmentIds: s.avoidSegmentIds, backgroundCategory: s.backgroundCategory, backgroundIds: s.backgroundIds, variationSeed: s.variationSeed, templateId: template.id },
+      opts: { batchId: s.batchId, avoidSegmentIds: s.avoidSegmentIds, backgroundCategory: s.backgroundCategory, backgroundIds: s.backgroundIds, variationSeed: s.variationSeed, templateId: template.id, voicePresetId: s.voicePresetId },
     }),
     revive: (o) => composer.getVideo(o.id),
   });

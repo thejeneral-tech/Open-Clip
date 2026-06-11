@@ -16,6 +16,16 @@ from app.models.metrics import BotMetric
 from app.models.project import Project
 from app.models.publishing import PublishingConnector, PublishingJob
 from app.models.settings import UserSettings
+from app.models.storyvault import (
+    SvBackground,
+    SvExport,
+    SvPublishJob,
+    SvScript,
+    SvSegment,
+    SvStory,
+    SvVideo,
+    SvVoicePreset,
+)
 from app.models.transcript import Transcript
 from app.models.trend import TrendItem, TrendSource
 from app.models.user import User
@@ -32,6 +42,14 @@ __all__ = [
     "Project",
     "PublishingConnector",
     "PublishingJob",
+    "SvBackground",
+    "SvExport",
+    "SvPublishJob",
+    "SvScript",
+    "SvSegment",
+    "SvStory",
+    "SvVideo",
+    "SvVoicePreset",
     "Transcript",
     "TrendItem",
     "TrendSource",

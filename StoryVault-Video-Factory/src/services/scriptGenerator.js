@@ -60,7 +60,13 @@ function buildHook(style, analysis, story, rand, seedOffset) {
 function firstSentence(s) { return text.sentences(String(s || ''))[0] || String(s || ''); }
 function stripPunct(s) { return String(s || '').replace(/[.!?]+$/, ''); }
 function ensureStop(s) { s = String(s || '').trim(); return /[.!?]$/.test(s) ? s : s + '.'; }
-function trimHook(s) { return text.truncate(stripFiller(firstSentence(s)).replace(/\s+/g, ' ').trim(), 120); }
+function trimHook(s) {
+  // Drop a leading conjunction so the hook never opens mid-thought ("But my wife is upset…"),
+  // then re-capitalise so it reads as a clean standalone opening line.
+  const h = stripFiller(firstSentence(s)).replace(/\s+/g, ' ')
+    .replace(/^(but|and|so|because|then|also|however|yet|still|anyway|plus)[,]?\s+/i, '').trim();
+  return text.truncate(cap(h), 120);
+}
 function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(); }
 // True when two normalised sentences share a long common prefix (same sentence).
 function overlaps(a, b) {
@@ -181,7 +187,7 @@ function generate(story, opts = {}) {
   // 7) narration-ready full text
   const parts = [hook, setup.join(' '), conflict.join(' '), escalation.join(' '), ending, audienceQuestion]
     .map((p) => p && p.trim()).filter(Boolean);
-  const fullText = parts.join(' ').replace(/\s+/g, ' ').trim();
+  const fullText = sanitizeForNarration(parts.join(' '));
 
   const wordCount = text.wordCount(fullText);
   const estSeconds = text.narrationSeconds(fullText);
@@ -208,10 +214,29 @@ function generate(story, opts = {}) {
   };
 }
 
+// Anonymisation leaves spoken-unfriendly placeholders ("named [name]", "[redacted]"); strip
+// them so narration never reads a bracketed token aloud, then tidy spacing/punctuation.
+// Idempotent — safe to apply both at generate() time and again in save() (covers AI rewrites).
+function sanitizeForNarration(s) {
+  return String(s || '')
+    .replace(/\b(?:my name is|i am|i'm|named)\s+\[name\]\s*[,]?/gi, '')
+    .replace(/\[name\]/gi, 'them')
+    .replace(/\s*\[redacted\]/gi, '')
+    .replace(/\s+([.,!?])/g, '$1')
+    .replace(/\s+/g, ' ').trim();
+}
+
 // Persist a generated script and register hook/ending fingerprints (§9).
 function save(scriptObj) {
   const sid = id('script');
   const row = { id: sid, ...scriptObj, created_at: db.nowIso() };
+  // Single chokepoint for narration-text hygiene: heuristic AND AI-rewritten scripts both pass
+  // through save(), so placeholders can never reach TTS regardless of which generator ran.
+  if (row.full_text) {
+    row.full_text = sanitizeForNarration(row.full_text);
+    row.word_count = text.wordCount(row.full_text);
+    row.est_seconds = text.narrationSeconds(row.full_text);
+  }
   db.insert('scripts', row);
   return getScript(sid);
 }
@@ -256,7 +281,7 @@ function remix(story, baseOpts, modifier) {
   const o = { ...baseOpts };
   switch (modifier) {
     case 'shorter': o.durationSeconds = Math.max(30, (o.durationSeconds || 60) - 15); break;
-    case 'longer': o.durationSeconds = Math.min(180, (o.durationSeconds || 60) + 30); break;
+    case 'longer': o.durationSeconds = Math.min(300, (o.durationSeconds || 60) + 30); break;
     case 'more_dramatic': o.dramaLevel = Math.min(5, (o.dramaLevel || 3) + 1); break;
     case 'less_dramatic': o.dramaLevel = Math.max(1, (o.dramaLevel || 3) - 1); break;
     case 'safer': o.safeMode = true; break;

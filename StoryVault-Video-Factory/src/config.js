@@ -109,18 +109,19 @@ const UPLOAD = {
   acceptedImport: ['.txt', '.csv', '.json'],
 };
 
-// Default video output (spec §19).
+// Default video output (spec §19). 60 fps + CRF 18 for sharper, smoother (less "framey")
+// renders — the source gameplay is 60 fps, so 30 fps was throwing away half the frames.
 const RENDER = {
   width: 1080,
   height: 1920,
-  fps: 30,
+  fps: 60,
   vcodec: 'libx264',
   acodec: 'aac',
-  crf: 20,
+  crf: 18,
   presets: {
-    tiktok: { width: 1080, height: 1920, fps: 30 },
-    shorts: { width: 1080, height: 1920, fps: 30 },
-    reels: { width: 1080, height: 1920, fps: 30 },
+    tiktok: { width: 1080, height: 1920, fps: 60 },
+    shorts: { width: 1080, height: 1920, fps: 60 },
+    reels: { width: 1080, height: 1920, fps: 60 },
   },
 };
 

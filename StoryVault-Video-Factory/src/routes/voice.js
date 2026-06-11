@@ -42,6 +42,7 @@ router.post('/voices/presets/bulk', wrap(async (req, res) => {
   if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('voice_presets', ids) });
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('voice_presets', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('voice_presets', ids, ['preview_path']) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('voice_presets', ['preview_path']) });
   throw new Error('Unknown action.');
 }));
 
@@ -83,7 +84,19 @@ router.get('/fishspeech/status', wrap(async (req, res) => res.json(await fishspe
 // The "connection pill" = whether the engine can synthesize right now.
 router.get('/fishspeech/check/server', wrap(async (req, res) => res.json({ reachable: fishspeech.engineReady() })));
 router.get('/fishspeech/logs', wrap(async (req, res) => res.json({ logs: fishspeech.getLogs() })));
-router.post('/fishspeech/repair', wrap(async (req, res) => res.json(await fishspeech.repair())));
+router.post('/fishspeech/repair', wrap(async (req, res) => {
+  const r = await fishspeech.repair();
+  // Long work (model download) runs in the BACKGROUND and streams over the `fish`
+  // SSE channel — never block the HTTP request (that previously froze the UI/app).
+  if (r.needsDownload) {
+    log.activity('AUDIO', `Repair: downloading Fish Speech model (${fishspeech.REPO})…`, { level: 'info' });
+    log.progress('fish', { stage: 'downloading', percent: 0 });
+    fishspeech.download({ onProgress: (line) => { const m = String(line).match(/(\d+)%/); log.progress('fish', { stage: 'downloading', line: String(line).trim().slice(0, 160), percent: m ? Number(m[1]) : undefined }); } })
+      .then((d) => { log.progress('fish', { stage: 'done', files: d.files.length }); log.activity('AUDIO', `Repair: Fish Speech model downloaded (quant ${d.quant}).`, { level: 'success' }); })
+      .catch((e) => { log.progress('fish', { stage: 'error', error: e.message }); log.error('AUDIO', `Repair: model download failed: ${e.message}`); });
+  }
+  res.json(r);
+}));
 router.post('/fishspeech/model-folder', wrap(async (req, res) => {
   const dir = (req.body && req.body.dir || '').trim();
   if (!dir) throw new Error('Provide the path to an existing model folder.');

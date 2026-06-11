@@ -143,6 +143,12 @@ router.post('/segments', wrap(async (req, res) => {
 router.patch('/segments/:id', wrap(async (req, res) => res.json(withMedia(segSvc.updateSegment(req.params.id, req.body || {})))));
 router.post('/segments/:id/split', wrap(async (req, res) => res.json(withMedia(segSvc.splitSegment(req.params.id, Number(req.body.at))))));
 router.delete('/segments/:id', wrap(async (req, res) => res.json({ ok: segSvc.deleteSegment(req.params.id) })));
+// Multi-select bulk action from the Footage Library. Only 'delete' for now (permanent — segments have no trash).
+router.post('/segments/bulk', wrap(async (req, res) => {
+  const { ids = [], action = 'delete' } = req.body || {};
+  if (action !== 'delete') throw new Error('Unknown action.');
+  res.json({ ok: true, count: segSvc.deleteSegments(ids) });
+}));
 router.post('/segments/select', wrap(async (req, res) => res.json(segSvc.selectForDuration(Number(req.body.duration) || 60, req.body || {}))));
 
 // --- Text/CSV/JSON story file import (spec §2) — lives here as a library import ---

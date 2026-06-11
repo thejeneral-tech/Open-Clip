@@ -60,6 +60,45 @@ class ExportResolution(str, Enum):
     P2160 = "2160p"
 
 
+# --------------------------------------------------------------- story vault
+class SvStoryStatus(str, Enum):
+    """Editorial lifecycle of a discovered story."""
+
+    NEW = "new"
+    SAVED = "saved"
+    APPROVED = "approved"
+    USED = "used"
+    EXCLUDED = "excluded"
+
+
+class SvVideoStatus(str, Enum):
+    """Story-video pipeline lifecycle (preview → human review → final render)."""
+
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    READY_FOR_REVIEW = "ready_for_review"
+    APPROVED = "approved"
+    RENDERING = "rendering"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+# Story Vault option vocabularies (mirrored in the frontend forms).
+SV_HOOK_STYLES = ["conflict", "craziest", "question", "quote", "reveal", "calm", "suspense", "funny"]
+SV_NARRATION_STYLES = ["calm", "dramatic", "suspenseful", "funny", "serious", "confessional", "documentary"]
+SV_DURATIONS = [30, 45, 60, 90, 120, 180, 240, 300]
+SV_CATEGORIES = [
+    "AITA", "Relationships", "Revenge", "Scary", "Confessions", "Workplace",
+    "Family", "Money", "School", "Wholesome", "Mystery", "Other",
+]
+SV_BACKGROUND_CATEGORIES = [
+    "minecraft", "gta", "fortnite", "rocket-league", "subway-surfers",
+    "nature", "cooking", "satisfying", "driving", "other",
+]
+SV_PLATFORMS = ["tiktok", "shorts", "reels"]
+
+
 # --------------------------------------------------------------- automation
 class BotStatus(str, Enum):
     STOPPED = "stopped"

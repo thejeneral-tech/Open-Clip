@@ -10,6 +10,7 @@
     "init-db": "node --no-warnings scripts/init-db.js",
     "test": "node --no-warnings tests/run-tests.js",
     "seed": "node --no-warnings scripts/seed.js",
+    "export-voices": "node --no-warnings scripts/export-voices.js",
     "setup:fish": "node --no-warnings scripts/setup-fish.js"
   },
   "engines": {

@@ -81,6 +81,7 @@ router.post('/stories/bulk', wrap(async (req, res) => {
   if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('stories', ids) });
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('stories', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('stories', ids) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('stories') });
   const map = { approve: 'approved', save: 'saved', exclude: 'excluded', prepare: 'saved' };
   if (!map[action]) throw new Error('Unknown bulk action.');
   ids.forEach((id) => stories.setStatus(id, map[action]));

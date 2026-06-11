@@ -171,23 +171,34 @@ class Settings(BaseSettings):
     # CPU is plenty fast at the ~5fps tracking sample rate. Set "cuda"/"0" only on
     # a GPU whose CC is supported by the installed torch.
     YOLO_DEVICE: str = "cpu"
+    # Larger YOLO used when a user enables "high-accuracy subject detection" in
+    # Settings (better in dark/wide shots; ~2-3x slower on CPU). Auto-downloads
+    # from ultralytics on first use.
+    YOLO_MODEL_HQ: str = "yolov8s.pt"
 
     # ---- Reframe smoothing / render ----
-    # Dense sendcmd grid ceiling (Hz). The crop is animated at min(this, source
-    # fps) so it pans continuously instead of stepping at the analysis rate.
+    # Dense sendcmd grid ceiling (Hz). When the crop DOES move (a re-centre
+    # glide), it is animated at min(this, source fps) so the glide is per-frame
+    # smooth instead of stepping at the analysis rate.
     REFRAME_RENDER_FPS: int = 30
-    # One-Euro filter: low cutoff = steadier when the subject is still; the
-    # cutoff opens with (filtered) speed so fast pans stay responsive.
-    REFRAME_MIN_CUTOFF: float = 1.0   # Hz; lower = smoother/steadier when still
-    REFRAME_BETA: float = 0.02        # speed coupling (tuned for normalized 0..1 coords)
-    REFRAME_D_CUTOFF: float = 1.0     # derivative low-pass cutoff (Hz)
+    # Lock-and-hold: the crop is piecewise-STATIC. It locks onto the subject
+    # and moves only on (a) a scene cut — instant snap, invisible across a cut —
+    # or (b) the subject sustainably leaving the deadband — one smoothstep
+    # glide, then locked again. Jitter and dropouts never move the crop.
+    REFRAME_SCENE_CORREL: float = 0.5       # HSV-hist correlation between samples below this = scene cut
+    REFRAME_DEADBAND: float = 0.12          # norm distance the subject may roam without the crop moving
+    REFRAME_RETARGET_SECONDS: float = 1.0   # deadband breach must persist this long before re-centring
+    REFRAME_EASE_SECONDS: float = 1.2       # duration of the smoothstep re-centre glide
+    REFRAME_LOOKAHEAD_SECONDS: float = 1.0  # anchor = median of this upcoming detection window
+    # Composition: vertical position of the subject centre within the crop
+    # (0.5 = dead centre). 0.42 gives rule-of-thirds-ish headroom whenever the
+    # crop can move vertically (no-op for 16:9 → 9:16, where the crop is full
+    # height).
+    REFRAME_SUBJECT_Y: float = 0.42
     # Subject lock / anti-flicker.
     REFRAME_SWITCH_DIST: float = 0.25     # norm distance beyond which a detection is a NEW subject
     REFRAME_SWITCH_HOLD: int = 3          # consecutive samples a far subject must persist before the lock moves
     REFRAME_PERSON_HEAD_FRAC: float = 0.15  # head estimate = person box_top + this*box_height
-    # Detection dropout handling.
-    REFRAME_MAX_HOLD_SECONDS: float = 1.5      # after this much continuous miss, ease held center toward frame center
-    REFRAME_REACQUIRE_GAP_SECONDS: float = 0.4  # gaps longer than this reset the filter (clean re-acquire, no pre-echo)
 
     # ---- Limits ----
     MAX_UPLOAD_SIZE_MB: int = 4096

@@ -4,6 +4,7 @@
 // `ALTER TABLE ADD COLUMN`. Each migration is idempotent. (Phase 1 data-safety rule.)
 
 const templatesData = require('../templates-data');
+const seedVoices = require('./seed-voices');
 
 function tableColumns(db, table) {
   try { return db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name); }
@@ -182,6 +183,9 @@ function run(db, nowIso) {
   ensureColumn(db, 'exports', 'deleted_at', 'deleted_at TEXT');
   // Voice presets (custom + cloned) — Fish Speech / SAPI.
   ensureColumn(db, 'voice_presets', 'deleted_at', 'deleted_at TEXT');
+  // Remember WHICH preset narrated a video, so variations / voice-regeneration keep the
+  // same Fish/cloned voice instead of silently falling back to SAPI.
+  ensureColumn(db, 'videos', 'voice_preset_id', 'voice_preset_id TEXT');
 
   // --- seed built-in templates (idempotent by id) ---------------------------
   const exists = db.prepare('SELECT id FROM templates WHERE id = ?');
@@ -191,6 +195,9 @@ function run(db, nowIso) {
       insert.run(t.id, t.name, 1, t.isDefault ? 1 : 0, JSON.stringify(t), nowIso(), nowIso());
     }
   }
+
+  // --- seed voice presets shipped with the repo (idempotent by id) ----------
+  seedVoices.run(db, nowIso);
 }
 
 module.exports = { run, ensureColumn, tableColumns };

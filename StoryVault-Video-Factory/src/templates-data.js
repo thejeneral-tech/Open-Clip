@@ -11,7 +11,7 @@
 const C = {
   white: '&H00FFFFFF', black: '&H00000000', yellow: '&H0000F0FF',
   cardFill: '&H00FFFFFF', cardTitle: '&H00141414', cardMeta: '&H00777777',
-  cardRed: '&H002430E0', shadow: '&HA0000000',
+  cardRed: '&H002430E0', shadow: '&H78000000',
 };
 
 // The reference default — "Full-Screen Story Gameplay".

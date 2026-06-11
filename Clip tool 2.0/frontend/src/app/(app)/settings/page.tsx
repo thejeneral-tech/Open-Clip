@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useModels, useSettings } from "@/hooks/use-api";
 import { api } from "@/lib/api";
 import type { UserSettings } from "@/lib/types";
@@ -315,6 +316,46 @@ export default function SettingsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Smart reframe</CardTitle>
+          <CardDescription>
+            Detection quality for subject tracking. Both options improve accuracy in wide or dark
+            shots at the cost of slower clip analysis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="reframe-hq">High-accuracy subject detection</Label>
+              <p className="text-xs text-muted-foreground">
+                Uses a larger person-detection model (YOLOv8s instead of nano). Fewer missed or
+                confused subjects; roughly 2–3× slower analysis per clip.
+              </p>
+            </div>
+            <Switch
+              id="reframe-hq"
+              checked={form.reframe_hq_detection ?? false}
+              onCheckedChange={(v) => set("reframe_hq_detection", v)}
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="reframe-face-zoom">Small-face zoom detection</Label>
+              <p className="text-xs text-muted-foreground">
+                When no face is found at full resolution, zooms into each detected person and looks
+                again. Helps lock onto faces in wide stage shots (podcasts, live events).
+              </p>
+            </div>
+            <Switch
+              id="reframe-face-zoom"
+              checked={form.reframe_face_zoom ?? false}
+              onCheckedChange={(v) => set("reframe_face_zoom", v)}
+            />
           </div>
         </CardContent>
       </Card>

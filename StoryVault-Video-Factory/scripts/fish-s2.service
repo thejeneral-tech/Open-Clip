@@ -1,0 +1,26 @@
+[Unit]
+# systemd unit for the StoryVault Fish Speech (s2.cpp) GPU server.
+# Install:  sudo cp scripts/fish-s2.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now fish-s2
+# Edit User=, WorkingDirectory=, and the env values for your box first.
+Description=StoryVault Fish Speech (s2.cpp) GPU server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=storyvault
+WorkingDirectory=/opt/StoryVault-Video-Factory
+Environment=FISH_QUANT=q8_0
+Environment=FISH_HOST=0.0.0.0
+Environment=FISH_PORT=8080
+Environment=FISH_GPU_DEVICE=0
+Environment=FISH_GPU_LAYERS=-1
+ExecStart=/opt/StoryVault-Video-Factory/scripts/fish-server.sh serve
+Restart=always
+RestartSec=3
+# Give weight loading time before systemd considers the start failed.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
