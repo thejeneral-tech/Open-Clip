@@ -382,14 +382,23 @@ function Test-Deps {
   $hasNode = [bool]$script:NodeExe
   $hasFf   = [bool]$script:FfmpegExe -and [bool]$script:FfprobeExe
   $hasPkgs = Test-Path (Join-Path $Root 'node_modules\express')
+  # Fish Speech S2 (data\models): the built engine (s2.cpp → s2.exe), the GGUF voice
+  # model (s2-pro-*.gguf), and its tokenizer.json. Optional for the Web UI, but all
+  # three are required before the Fish narration server can start.
+  $hasFishBin  = [bool](Fish-ResolveBin)
+  $hasFishGguf = [bool](Fish-FindGguf)
+  $hasFishTok  = [bool]$script:cfg.fishModelDir -and (Test-Path (Join-Path $script:cfg.fishModelDir 'tokenizer.json'))
   $mk = { param($ok) if ($ok) { '✓' } else { '✗' } }
-  $depLbl.Text = "Node.js $(& $mk $hasNode)    FFmpeg $(& $mk $hasFf)    npm packages $(& $mk $hasPkgs)"
-  $depLbl.ForeColor = if ($hasNode -and $hasFf -and $hasPkgs) { $c_ok } else { $c_warn }
+  $depLbl.Text = "Node.js $(& $mk $hasNode)    FFmpeg $(& $mk $hasFf)    npm packages $(& $mk $hasPkgs)    Fish engine $(& $mk $hasFishBin)    Fish model $(& $mk $hasFishGguf)    Fish tokenizer $(& $mk $hasFishTok)"
+  $coreOk = $hasNode -and $hasFf -and $hasPkgs
+  $fishOk = $hasFishBin -and $hasFishGguf -and $hasFishTok
+  # green = everything ready; gold = Web UI ready but Fish incomplete; red = core dep missing.
+  $depLbl.ForeColor = if ($coreOk -and $fishOk) { $c_ok } elseif ($coreOk) { $c_gold } else { $c_warn }
   $btnStart.Enabled = ($hasNode -and $hasPkgs -and -not $script:ServerProc)
   # "Start All" only needs the core deps; it stays enabled while a service runs so
   # it can still bring up whichever one isn't up yet (each callee no-ops if running).
   $btnStartAll.Enabled = ($hasNode -and $hasPkgs)
-  return [pscustomobject]@{ Node = $hasNode; Ffmpeg = $hasFf; Pkgs = $hasPkgs }
+  return [pscustomobject]@{ Node = $hasNode; Ffmpeg = $hasFf; Pkgs = $hasPkgs; FishBin = $hasFishBin; FishGguf = $hasFishGguf; FishTok = $hasFishTok }
 }
 
 function Invoke-Logged([string]$file, [string]$arguments, [string]$workdir) {

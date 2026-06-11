@@ -3,7 +3,7 @@ bin/
 data/database/
 data/stories/
 data/imports/
-data/backgrounds/
+data/backgrounds/*
 data/segments/
 data/narration/
 data/captions/
@@ -12,8 +12,16 @@ data/renders/
 data/thumbnails/
 data/logs/
 data/tmp/
-data/models/
+data/models/*
 data/voice-previews/
+!data/backgrounds/
+!data/backgrounds/*/
+!data/models/.gitignore
+!data/models/
+!data/models/s2-pro-gguf/
+!data/models/s2-pro-gguf/.gitignore
+!data/backgrounds/.gitignore
+!data/backgrounds/*/.gitignore
 
 # --- Voice presets shipped with the repo: keep these TRACKED (do NOT ignore) ---
 # Saved voices live in the (gitignored) DB, so they're committed as a seed instead.
