@@ -223,4 +223,4 @@ async function synth(textStr, opts = {}) {
   return { path: outWav, duration: round(duration), wordTimings: estimateTimings(String(textStr), duration) };
 }
 
-module.exports = { generate, synth, listVoices, getNarration, estimateTimings, sapiRate, hydrate };
+module.exports = { generate, synth, listVoices, getNarration, estimateTimings, sapiRate, hydrate, sapiSafeVoice };

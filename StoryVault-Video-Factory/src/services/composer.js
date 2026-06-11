@@ -77,11 +77,18 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
 
   const isQuora = /quora/i.test(story.source_type || '') || /quora/i.test(story.community || '');
   const platform = isQuora ? 'quora' : 'reddit';
-  const voiceOpts = { provider: ttsOpts.provider, voice: ttsOpts.voice, speed: ttsOpts.speed, style: ttsOpts.style, refPath: ttsOpts.refPath, promptText: ttsOpts.promptText, temperature: ttsOpts.temperature };
+  // The white Reddit card is timed to the spoken title / "Posted by …" lines. Those are
+  // short throwaway utterances, so synthesize them with the FAST, always-available SAPI
+  // voice instead of a slow/fragile Fish clone. This guarantees the card renders quickly
+  // and reliably (a clone that is slow or errors used to drag out or soft-fail the whole
+  // intro, dropping the card). The BODY narration still uses the user's chosen voice.
+  // To read the title in the cloned voice instead, set `introVoiceOpts` back to the full
+  // ttsOpts (provider/refPath/promptText/temperature).
+  const introVoiceOpts = { provider: 'sapi', voice: tts.sapiSafeVoice(ttsOpts.voice), speed: ttsOpts.speed, style: ttsOpts.style };
 
   // Stage 1 audio — the title.
   const title = (story.title || 'Untitled story').trim();
-  const titleSynth = await tts.synth(cleanForSpeech(title), { ...voiceOpts, out: path.join(PATHS.tmp, `${video.id}_title.wav`) });
+  const titleSynth = await tts.synth(cleanForSpeech(title), { ...introVoiceOpts, out: path.join(PATHS.tmp, `${video.id}_title.wav`) });
   const dT = titleSynth.duration;
 
   // Stage 2 audio — "Posted by <author>". Every post gets a username: the real author when
@@ -92,7 +99,7 @@ async function applyTemplateIntro(video, { story, narration, template, ttsOpts =
     : generateHandle(story, isQuora);
   if (ai.enabled !== false && author) {
     const prefix = isQuora ? (ai.prefixQuora || 'Written by') : (ai.prefixReddit || 'Posted by');
-    const aSynth = await tts.synth(`${prefix}, ${humanizeHandle(author)}.`, { ...voiceOpts, out: path.join(PATHS.tmp, `${video.id}_author.wav`) });
+    const aSynth = await tts.synth(`${prefix}, ${humanizeHandle(author)}.`, { ...introVoiceOpts, out: path.join(PATHS.tmp, `${video.id}_author.wav`) });
     dA = aSynth.duration; authorWav = aSynth.path;
   }
   const topicEnd = dT, introEnd = dT + dA, total = introEnd + narration.duration;
