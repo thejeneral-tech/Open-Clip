@@ -117,3 +117,78 @@ def test_group_tokens_respects_max_words():
     groups = cap.group_tokens(tokens, style)
     assert all(len(g) <= style.max_words for g in groups)
     assert sum(len(g) for g in groups) == 14
+
+
+# --------------------------------------------------------------- overlap bug
+def _dialogue_spans(ass: str) -> list[tuple[float, float]]:
+    """(start, end) seconds for every Dialogue event, in file order."""
+    def secs(t: str) -> float:
+        h, m, rest = t.split(":")
+        return int(h) * 3600 + int(m) * 60 + float(rest)
+
+    spans = []
+    for line in ass.splitlines():
+        if line.startswith("Dialogue:"):
+            parts = line.split(",", 3)
+            spans.append((secs(parts[1]), secs(parts[2])))
+    return spans
+
+
+def test_sanitize_timing_is_monotonic_and_non_overlapping():
+    # Out-of-order / overlapping ASR output (word 2 starts before word 1 ends,
+    # word 3 runs backwards) is the real-world cause of the stacked captions.
+    messy = [
+        {"word": "a", "start": 0.0, "end": 0.5},
+        {"word": "b", "start": 0.3, "end": 0.4},   # overlaps a, ends early
+        {"word": "c", "start": 0.2, "end": 0.2},   # backwards + zero length
+        {"word": "d", "start": 1.0, "end": 1.4},
+    ]
+    clean = cap.sanitize_timing(messy)
+    for i in range(len(clean) - 1):
+        assert clean[i]["end"] <= clean[i + 1]["start"] + 1e-9
+        assert clean[i]["end"] > clean[i]["start"]  # every word has real duration
+    # Well-behaved input must pass through untouched (no drift).
+    good = _tokens()
+    assert cap.sanitize_timing(good) == good
+
+
+def test_render_ass_never_overlaps_even_with_bad_timings():
+    messy = build_tokens([
+        {"word": "brave", "start": 0.0, "end": 0.6},
+        {"word": "bro", "start": 0.4, "end": 0.9},     # overlaps "brave"
+        {"word": "the", "start": 0.3, "end": 0.5},     # runs backwards
+        {"word": "thing", "start": 0.9, "end": 1.2},
+        {"word": "I", "start": 1.1, "end": 1.15},      # overlaps "thing"
+        {"word": "was", "start": 1.5, "end": 2.0},
+    ])
+    for name in ["hormozi", "modern_tiktok", "minimal", "gaming", "podcast"]:
+        spans = _dialogue_spans(cap.render_ass(messy, name, 1080, 1920))
+        assert spans, f"{name} produced no events"
+        for i in range(len(spans) - 1):
+            assert spans[i][1] <= spans[i + 1][0] + 1e-6, (
+                f"{name}: event {i} ends at {spans[i][1]} after event "
+                f"{i + 1} starts at {spans[i + 1][0]}"
+            )
+        assert all(end > start for start, end in spans)
+
+
+def test_build_segments_holds_until_next_group_no_gaps():
+    # Within a group the cue tiles continuously; the group is then held right up
+    # to the next group's first word so the centre is never blank.
+    style = get_style("hormozi")  # max_words 4
+    tokens = build_tokens([{"word": f"w{i}", "start": i * 0.5, "end": i * 0.5 + 0.3}
+                           for i in range(9)])
+    segs = cap.build_segments(tokens, style)
+    for i in range(len(segs) - 1):
+        assert abs(segs[i]["end"] - segs[i + 1]["start"]) < 1e-6  # contiguous
+
+
+def test_audit_timeline_reports_no_overlaps():
+    messy = build_tokens([
+        {"word": "x", "start": 0.0, "end": 0.9},
+        {"word": "y", "start": 0.2, "end": 0.3},
+        {"word": "z", "start": 0.1, "end": 0.1},
+    ])
+    audit = cap.audit_timeline(messy, "hormozi")
+    assert audit["overlaps"] == 0
+    assert audit["groups"] >= 1

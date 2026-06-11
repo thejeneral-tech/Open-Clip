@@ -91,19 +91,27 @@ function fitSize(text, targetPx, min, max) {
 function captionEvents(bodyTimings, tpl, censor, W, centerY) {
   if (!bodyTimings || !bodyTimings.length) return [];
   const pop = tpl.style === 'pop';
+  // Self-tuning words-per-cue per reference caption mode (best-effort).
+  const styleKey = pop ? 'ref_pop' : 'ref_karaoke';
+  let learning = null, learnedMax;
+  try { learning = require('./caption-learning'); learnedMax = learning.suggestMaxWords(styleKey); }
+  catch { learning = null; }
+  const maxWords = learnedMax || tpl.maxWords || (pop ? 2 : 4);
   const groups = captions.groupWords(bodyTimings, {
-    maxWords: tpl.maxWords || (pop ? 2 : 4),
+    maxWords,
     maxChars: Math.round((tpl.maxChars || (pop ? 12 : 18)) / 2),
   });
   const cx = Math.round((W || 1080) / 2);
   const cy = Math.round(centerY || 1150);
   const censorFn = censor ? require('./safety').censorText : null;
+  const MAX_HOLD = 1.2; // cap how long a cue lingers past its last word (s)
   const out = [];
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i];
+    // Hold each cue until the next begins (centre never blank, two cues never
+    // coexist), capped so a cue can't linger through a long pause.
+    const end = (i + 1 < groups.length) ? Math.min(groups[i + 1].start, g.end + MAX_HOLD) : g.end;
     if (pop) {
-      // Hold each cue until the next one starts so the centre is never momentarily blank.
-      const end = (i + 1 < groups.length) ? groups[i + 1].start : g.end;
       const word = esc(g.words.map((w) => (censorFn ? censorFn(w.word) : w.word)).join(' '));
       const anim = '\\fad(50,40)\\fscx70\\fscy70\\t(0,110,\\fscx106\\fscy106)\\t(110,190,\\fscx100\\fscy100)';
       out.push(`Dialogue: 0,${assTime(g.start)},${assTime(end)},Pop,,0,0,0,,{\\an5\\pos(${cx},${cy})${anim}}${word}`);
@@ -113,8 +121,12 @@ function captionEvents(bodyTimings, tpl, censor, W, centerY) {
         const word = censorFn ? censorFn(w.word) : w.word;
         return `{\\k${cs}}${esc(word)} `;
       }).join('').trim();
-      out.push(`Dialogue: 0,${assTime(g.start)},${assTime(g.end)},Caption,,0,0,0,,{\\an5\\pos(${cx},${cy})}${text}`);
+      out.push(`Dialogue: 0,${assTime(g.start)},${assTime(end)},Caption,,0,0,0,,{\\an5\\pos(${cx},${cy})}${text}`);
     }
+  }
+  if (learning) {
+    try { learning.recordRender(styleKey, captions.auditTimeline(bodyTimings, { maxWords })); }
+    catch { /* learning is optional */ }
   }
   return out;
 }

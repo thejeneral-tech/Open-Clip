@@ -9,7 +9,7 @@ Turns clip words into styled, animated captions:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.core.logging import get_logger
@@ -54,6 +54,18 @@ BLACK = _ass_color(0, 0, 0)
 CAPTION_SIZE_SCALE = 0.65
 CAPTION_ALIGNMENT = 2              # ASS numpad: 2 = bottom-center
 CAPTION_MARGIN_V_FRAC = 0.15      # text baseline sits ~15% up from the bottom
+
+# Smallest time a single caption segment may occupy on screen. Word-level ASR
+# timestamps are occasionally zero-length or slightly out of order (especially
+# over music / crosstalk); without a floor a caption can flash for a single
+# frame or, worse, overlap its neighbour — which libass then stacks vertically
+# (the "double caption" artifact). See :func:`sanitize_timing`.
+MIN_SEG_DUR = 0.10
+
+# A cue is held on screen until the next cue begins (so the centre never flickers
+# blank between words), but never longer than this past the last spoken word — so
+# a caption doesn't linger through a long pause / music break.
+MAX_HOLD = 1.2
 
 STYLES: dict[str, StylePreset] = {
     CaptionStyle.HORMOZI.value: StylePreset(
@@ -160,6 +172,35 @@ def heuristic_emphasis(tokens: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return tokens
 
 
+def sanitize_timing(tokens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return tokens on a strictly monotonic, non-overlapping timeline.
+
+    Word-level ASR timestamps can run backwards or overlap (word *i* ends after
+    word *i+1* starts). Burned straight into ASS, those overlapping events are
+    both rendered and libass's collision avoidance stacks them — the classic
+    doubled-caption artifact. Here we force a clean timeline: every word starts
+    no earlier than the previous word ended, and lasts at least
+    :data:`MIN_SEG_DUR`. For well-behaved input nothing moves (each word already
+    starts after the last ended), so there is no drift; only genuinely
+    out-of-order words get nudged forward by the minimum needed. Emphasis / emoji
+    and every other field are preserved; the input list is left untouched.
+    """
+    clean: list[dict[str, Any]] = []
+    prev_end = 0.0
+    for tok in tokens:
+        start = float(tok.get("start", prev_end))
+        end = float(tok.get("end", start))
+        start = max(start, prev_end)           # never travel backwards in time
+        if end <= start:
+            end = start + MIN_SEG_DUR          # give zero-length words a frame
+        new = dict(tok)
+        new["start"] = round(start, 3)
+        new["end"] = round(end, 3)
+        clean.append(new)
+        prev_end = new["end"]
+    return clean
+
+
 def group_tokens(tokens: list[dict[str, Any]], style: StylePreset) -> list[list[int]]:
     """Chunk tokens into on-screen groups by word count and silence gaps."""
     groups: list[list[int]] = []
@@ -204,14 +245,114 @@ def _word_text(tok: dict[str, Any], style: StylePreset, active: bool) -> str:
     return word
 
 
+def build_segments(
+    tokens: list[dict[str, Any]], style: StylePreset
+) -> list[dict[str, Any]]:
+    """Non-overlapping ``{start, end, text}`` caption segments for the clip.
+
+    The single source of truth for *when* each caption is on screen:
+
+    * timings are sanitized to a clean, monotonic timeline,
+    * tokens are chunked into on-screen groups,
+    * each group is shown as a run of word-highlight segments that tile the
+      group's window, and the group is **held until the next group begins** so
+      the centre is never momentarily blank,
+    * a final clamp guarantees ``end[i] <= start[i+1]`` for every pair — no two
+      captions can ever be on screen at once, which is what used to stack them.
+    """
+    tokens = sanitize_timing(tokens)
+    groups = group_tokens(tokens, style)
+    segments: list[dict[str, Any]] = []
+    for gi, group in enumerate(groups):
+        group_start = tokens[group[0]]["start"]
+        last_end = tokens[group[-1]]["end"]
+        # Hold this group until the next group's first word (never past it), but
+        # not more than MAX_HOLD past the last spoken word so it doesn't linger
+        # through a long pause. The final group simply ends with its last word.
+        if gi + 1 < len(groups):
+            group_end = min(tokens[groups[gi + 1][0]]["start"], last_end + MAX_HOLD)
+        else:
+            group_end = last_end
+        for pos, idx in enumerate(group):
+            seg_start = tokens[idx]["start"]
+            seg_end = (
+                tokens[group[pos + 1]]["start"]
+                if pos + 1 < len(group)
+                else group_end
+            )
+            seg_start = min(max(seg_start, group_start), group_end)
+            seg_end = min(max(seg_end, seg_start), group_end)
+            pieces = [_word_text(tokens[j], style, active=(j == idx)) for j in group]
+            segments.append(
+                {"start": seg_start, "end": seg_end, "text": " ".join(pieces)}
+            )
+    return _clamp_no_overlap(segments)
+
+
+def _clamp_no_overlap(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Force strictly sequential segments and drop any zero-length ones."""
+    out = [s for s in segments if s["end"] > s["start"]]
+    for i in range(len(out) - 1):
+        if out[i]["end"] > out[i + 1]["start"]:
+            out[i]["end"] = out[i + 1]["start"]
+    return [s for s in out if s["end"] > s["start"]]
+
+
+# Reading-comfort thresholds for the learning audit. A cue counts as "too fast"
+# only if it is both brief AND densely packed, so calm short cues aren't flagged.
+FAST_CPS = 30.0                # characters per second a viewer can comfortably read
+MIN_COMFORTABLE_GROUP = 0.7    # a cue shorter than this is a candidate for "fast"
+
+
+def audit_timeline(
+    tokens: list[dict[str, Any]], style_name: str, max_words: int | None = None
+) -> dict[str, Any]:
+    """Read-only quality metrics for a render (used by the learning profile).
+
+    Reports the number of on-screen groups, how many were uncomfortably fast,
+    and any residual overlaps (should always be 0 — the clamp guarantees it).
+    """
+    style = get_style(style_name)
+    if max_words:
+        style = replace(style, max_words=max_words)
+    clean = sanitize_timing(tokens)
+    groups = group_tokens(clean, style)
+    segments = build_segments(tokens, style)
+    overlaps = sum(
+        1 for i in range(len(segments) - 1)
+        if segments[i]["end"] > segments[i + 1]["start"] + 1e-6
+    )
+    fast = 0
+    for gi, group in enumerate(groups):
+        gstart = clean[group[0]]["start"]
+        last_end = clean[group[-1]]["end"]
+        gend = (
+            min(clean[groups[gi + 1][0]]["start"], last_end + MAX_HOLD)
+            if gi + 1 < len(groups)
+            else last_end
+        )
+        window = max(1e-3, gend - gstart)
+        chars = sum(len(clean[j]["word"]) for j in group) + max(0, len(group) - 1)
+        if window < MIN_COMFORTABLE_GROUP and chars / window > FAST_CPS:
+            fast += 1
+    return {"groups": len(groups), "fast_groups": fast, "overlaps": overlaps}
+
+
 def render_ass(
     tokens: list[dict[str, Any]],
     style_name: str,
     width: int,
     height: int,
+    max_words: int | None = None,
 ) -> str:
-    """Render an ASS subtitle document with word-level highlighting."""
+    """Render an ASS subtitle document with word-level highlighting.
+
+    ``max_words`` overrides the preset's words-per-cue (set by the learning
+    profile to slow down content that reads too fast); ``None`` uses the preset.
+    """
     style = get_style(style_name)
+    if max_words:
+        style = replace(style, max_words=max_words)
     fontsize = max(12, int(round(style.font_scale * height * CAPTION_SIZE_SCALE)))
     bold = -1 if style.bold else 0
     # Override each preset's own placement so captions always land in the lower
@@ -234,31 +375,37 @@ Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{st
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    events: list[str] = []
-    groups = group_tokens(tokens, style)
-    for group in groups:
-        for pos, idx in enumerate(group):
-            tok = tokens[idx]
-            seg_start = tok["start"]
-            seg_end = tokens[group[pos + 1]]["start"] if pos + 1 < len(group) else tok["end"]
-            if seg_end <= seg_start:
-                seg_end = seg_start + 0.12
-            pieces = [_word_text(tokens[j], style, active=(j == idx)) for j in group]
-            text = " ".join(pieces)
-            events.append(
-                f"Dialogue: 0,{_fmt_time(seg_start)},{_fmt_time(seg_end)},Default,,0,0,0,,{text}"
-            )
+    events = [
+        f"Dialogue: 0,{_fmt_time(seg['start'])},{_fmt_time(seg['end'])},Default,,0,0,0,,{seg['text']}"
+        for seg in build_segments(tokens, style)
+    ]
     return header + "\n".join(events) + "\n"
 
 
 def write_ass(path: str, tokens: list[dict[str, Any]], style_name: str, width: int, height: int) -> str:
+    # Consult the self-tuning profile for a learned words-per-cue, then feed this
+    # render's quality back into it. Both steps are best-effort and never block a
+    # render — the deterministic no-overlap guarantee does not depend on them.
+    learning = None
+    max_words: int | None = None
+    try:
+        from app.services import caption_learning as learning
+        max_words = learning.suggest_max_words(style_name)
+    except Exception:  # pragma: no cover - learning is optional
+        learning = None
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(render_ass(tokens, style_name, width, height))
+        fh.write(render_ass(tokens, style_name, width, height, max_words=max_words))
+    if learning is not None:
+        try:
+            learning.record_render(style_name, audit_timeline(tokens, style_name, max_words))
+        except Exception:  # pragma: no cover - learning is optional
+            pass
     return path
 
 
 # ----------------------------------------------------------------- SRT / VTT
 def _grouped_lines(tokens: list[dict[str, Any]], max_words: int = 7) -> list[dict[str, Any]]:
+    tokens = sanitize_timing(tokens)  # sidecar files share the clean timeline
     lines: list[dict[str, Any]] = []
     cur: list[dict[str, Any]] = []
     for tok in tokens:

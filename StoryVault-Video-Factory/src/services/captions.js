@@ -16,6 +16,17 @@ const BLACK = '&H00000000';
 const YELLOW = '&H0000F0FF';
 const BOXBG = '&H64000000'; // semi-transparent black
 
+// Smallest on-screen time for a caption word. SAPI / Whisper word boundaries are
+// occasionally zero-length or slightly out of order; without a floor, cues overlap
+// and ffmpeg/libass stacks them vertically (the doubled-caption artifact).
+const MIN_SEG_DUR = 0.10;
+// A cue is held until the next begins (no blank flicker) but never longer than
+// this past its last word, so it doesn't linger through a long pause / music.
+const MAX_HOLD = 1.2;
+// Reading-comfort thresholds used by the self-tuning audit (caption-learning.js).
+const FAST_CPS = 30;            // characters/second a viewer can comfortably read
+const MIN_COMFORTABLE_GROUP = 0.7; // a cue briefer than this can count as "too fast"
+
 // Style presets → ASS V4+ style fields + behaviour flags.
 function styleDef(styleId, opts = {}) {
   const size = opts.size || null;
@@ -36,8 +47,29 @@ function styleDef(styleId, opts = {}) {
   return p;
 }
 
+// Force word timings onto a strictly monotonic, non-overlapping timeline.
+// Each word starts no earlier than the previous one ended and lasts ≥ MIN_SEG_DUR.
+// Well-behaved input passes through unchanged (no drift); only genuinely
+// out-of-order words get nudged forward. This is the root-cause fix for the
+// stacked/overlapping captions — once words don't overlap, neither do the cues.
+function sanitizeTimings(timings) {
+  const round = (n) => Math.round(n * 1000) / 1000;
+  const out = [];
+  let prevEnd = 0;
+  for (const w of timings || []) {
+    let start = Number(w.start); if (!isFinite(start)) start = prevEnd;
+    let end = Number(w.end); if (!isFinite(end)) end = start;
+    start = Math.max(start, prevEnd);          // never travel backwards
+    if (end <= start) end = start + MIN_SEG_DUR; // give zero-length words a frame
+    out.push({ ...w, start: round(start), end: round(end) });
+    prevEnd = round(end);
+  }
+  return out;
+}
+
 // Group words into caption cues: 3-7 words, ≤ ~22 chars/line, max 2 lines.
 function groupWords(timings, { maxWords = 5, maxChars = 24 } = {}) {
+  timings = sanitizeTimings(timings); // clean timeline first → cues can't overlap
   const groups = [];
   let cur = [];
   const flush = () => { if (cur.length) { groups.push(cur); cur = []; } };
@@ -80,7 +112,8 @@ function maybeCensor(word, censor) { return censor ? safety.censorText(word) : w
 
 function buildAss(timings, opts = {}) {
   const def = styleDef(opts.style || 'bold', opts);
-  const groups = groupWords(timings, { maxWords: opts.style === 'large_centered' ? 4 : 5 });
+  const maxWords = opts.maxWords || (opts.style === 'large_centered' ? 4 : 5);
+  const groups = groupWords(timings, { maxWords });
   const header = [
     '[Script Info]',
     'ScriptType: v4.00+',
@@ -97,7 +130,11 @@ function buildAss(timings, opts = {}) {
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
   ];
   const lines = [];
-  for (const g of groups) {
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    // Hold each cue until the next begins (so the screen is never momentarily
+    // blank and two cues can't coexist), capped so it can't linger through a pause.
+    const end = (i + 1 < groups.length) ? Math.min(groups[i + 1].start, g.end + MAX_HOLD) : g.end;
     let textField;
     if (def.karaoke) {
       // cumulative karaoke highlight per word (\k in centiseconds)
@@ -108,7 +145,7 @@ function buildAss(timings, opts = {}) {
     } else {
       textField = wrapTwoLines(g.words.map((w) => esc(maybeCensor(w.word, opts.censor))), 22);
     }
-    lines.push(`Dialogue: 0,${ts(g.start)},${ts(g.end)},Default,,0,0,0,,${textField}`);
+    lines.push(`Dialogue: 0,${ts(g.start)},${ts(end)},Default,,0,0,0,,${textField}`);
   }
   return header.concat(lines).join('\n') + '\n';
 }
@@ -126,6 +163,24 @@ function srtTs(sec) {
 }
 function esc(s) { return String(s).replace(/[{}]/g, '').replace(/\n/g, ' '); }
 
+// Read-only quality metrics for a set of word timings (used by caption-learning).
+// Reports cue count, how many cues read uncomfortably fast, and any residual
+// overlaps (always 0 after sanitize — kept as a guard/telemetry signal).
+function auditTimeline(timings, opts = {}) {
+  const maxWords = opts.maxWords || (opts.style === 'large_centered' ? 4 : 5);
+  const groups = groupWords(timings, { maxWords });
+  let fast = 0, overlaps = 0;
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const end = (i + 1 < groups.length) ? Math.min(groups[i + 1].start, g.end + MAX_HOLD) : g.end;
+    const window = Math.max(0.001, end - g.start);
+    const chars = g.words.reduce((a, w) => a + String(w.word).length, 0) + Math.max(0, g.words.length - 1);
+    if (window < MIN_COMFORTABLE_GROUP && chars / window > FAST_CPS) fast++;
+    if (i + 1 < groups.length && g.end > groups[i + 1].start + 1e-6) overlaps++;
+  }
+  return { groups: groups.length, fast_groups: fast, overlaps };
+}
+
 // Generate + persist caption files for a narration.
 function generate(narration, opts = {}) {
   if (!narration || !narration.word_timings || !narration.word_timings.length) {
@@ -135,8 +190,21 @@ function generate(narration, opts = {}) {
   const assPath = path.join(PATHS.captions, `${capId}.ass`);
   const srtPath = path.join(PATHS.captions, `${capId}.srt`);
   const censor = !!opts.censor;
-  fs.writeFileSync(assPath, buildAss(narration.word_timings, { ...opts, censor }), 'utf8');
+  const style = opts.style || 'bold';
+  // Best-effort self-tuning: a learned words-per-cue (slower for content that has
+  // historically read too fast), then feed this render's quality back in. Never
+  // blocks caption generation — the no-overlap guarantee is independent of it.
+  let learning = null, maxWords;
+  try { learning = require('./caption-learning'); maxWords = learning.suggestMaxWords(style); }
+  catch { learning = null; }
+  const buildOpts = { ...opts, censor };
+  if (maxWords) buildOpts.maxWords = maxWords;
+  fs.writeFileSync(assPath, buildAss(narration.word_timings, buildOpts), 'utf8');
   fs.writeFileSync(srtPath, buildSrt(narration.word_timings, { censor }), 'utf8');
+  if (learning) {
+    try { learning.recordRender(style, auditTimeline(narration.word_timings, buildOpts)); }
+    catch { /* learning is optional */ }
+  }
   const row = {
     id: capId, narration_id: narration.id, style: opts.style || 'bold', position: opts.position || 'bottom',
     size: opts.size || null, ass_path: assPath, srt_path: srtPath, censored: censor ? 1 : 0, created_at: db.nowIso(),
@@ -148,4 +216,4 @@ function generate(narration, opts = {}) {
 
 function getCaption(capId) { return db.get('SELECT * FROM captions WHERE id = ?', [capId]); }
 
-module.exports = { generate, buildAss, buildSrt, groupWords, styleDef, getCaption };
+module.exports = { generate, buildAss, buildSrt, groupWords, sanitizeTimings, auditTimeline, styleDef, getCaption };

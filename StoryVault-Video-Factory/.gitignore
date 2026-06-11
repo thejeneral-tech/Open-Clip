@@ -12,6 +12,7 @@ data/renders/
 data/thumbnails/
 data/logs/
 data/tmp/
+data/caption-profile.json
 data/models/*
 data/voice-previews/
 !data/backgrounds/
