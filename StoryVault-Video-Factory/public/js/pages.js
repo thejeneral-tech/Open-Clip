@@ -29,7 +29,21 @@ window.PAGES = window.PAGES || {};
   function currentVoiceValue(st) {
     if (st.voicePresetId) return 'preset:' + st.voicePresetId;
     if (st.voice) return 'sapi:' + st.voice;
+    const init = initialVoiceState();
+    if (init.voicePresetId) return 'preset:' + init.voicePresetId;
+    if (init.voice) return 'sapi:' + init.voice;
     return voiceOptions()[0].value;
+  }
+  // Initial voice for a new creation form, matching backend precedence: Settings preset →
+  // starred default preset (Voices page) → Settings SAPI voice → first system voice. Forms
+  // used to prefill a SAPI name, which overrode the starred Fish/cloned default every time.
+  function initialVoiceState() {
+    const m = meta();
+    const prefPreset = App.prefs && App.prefs.voicePresetId;
+    if (prefPreset && (m.voicePresets || []).some((p) => p.id === prefPreset)) return { voicePresetId: prefPreset };
+    const def = (m.voicePresets || []).find((p) => p.is_default);
+    if (def) return { voicePresetId: def.id };
+    return { voice: (App.prefs && App.prefs.preferredVoice) || (m.voices && m.voices[0] && m.voices[0].name) };
   }
   function applyVoiceValue(st, val) {
     if (val && val.indexOf('preset:') === 0) { st.voicePresetId = val.slice(7); st.voice = undefined; }
@@ -169,7 +183,7 @@ window.PAGES = window.PAGES || {};
     const defTpl = (m.templates || []).find((t) => t.isDefault) || (m.templates || [])[0] || {};
     const st = {
       durationSeconds: (App.prefs && App.prefs.targetVideoLength) || 60,
-      hookStyle: 'conflict', voice: (App.prefs && App.prefs.preferredVoice) || (m.voices && m.voices[0] && m.voices[0].name),
+      hookStyle: 'conflict', ...initialVoiceState(),
       speed: 1.0, captionStyle: (App.prefs && App.prefs.preferredCaptionStyle) || 'bold',
       narrationStyle: 'Calm storyteller', backgroundCategory: (App.prefs && App.prefs.preferredBackground) || 'Minecraft parkour',
       templateId: defTpl.id, dramaLevel: 3, safeMode: false,
@@ -377,6 +391,7 @@ window.PAGES = window.PAGES || {};
       }
       clear(grid);
       countLine.textContent = list.length + (state.trash ? ' in trash' : ' stories');
+      state.trashN = state.trash ? list.length : 0;
       renderBulk();
       if (!list.length) { grid.append(empty('📚', state.trash ? 'Trash is empty' : 'No stories yet', state.trash ? 'Deleted stories appear here.' : 'Click “Refresh / Replenish”.')); return; }
       list.forEach((s) => grid.append(storyCard(s, { selectable: true, trash: state.trash, onSelect: (id, on) => on ? selected.add(id) : selected.delete(id), onChange: load })));
@@ -386,6 +401,7 @@ window.PAGES = window.PAGES || {};
       bulkBar.append(el('strong', 'Bulk actions'), el('div.btn-group', state.trash ? [
         btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }),
         btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => selected.size ? UI.confirmModal('Delete forever', `Permanently delete ${selected.size} story(ies)?`, () => bulk('purge'), 'Delete') : toast('Select stories first', 'warn') }),
+        btn('🧹 Empty trash', { cls: 'sm danger', onClick: () => state.trashN ? UI.confirmModal('Empty trash', `Permanently delete all ${state.trashN} stor${state.trashN === 1 ? 'y' : 'ies'} in the trash? This cannot be undone.`, async () => { const r = await API.post('/stories/bulk', { action: 'empty' }); toast(`Deleted ${r.count} from trash`, 'ok'); load(); }, 'Delete all') : toast('Trash is already empty', 'warn') }),
       ] : [
         btn('💾 Save', { cls: 'sm', onClick: () => bulk('save') }),
         btn('✦ Create videos', { cls: 'sm primary', onClick: createBatchFromSelected }),
@@ -546,6 +562,24 @@ window.PAGES = window.PAGES || {};
 
   function backgroundCard(bg, reload) {
     const used = bg.times_used ? pill('used ' + bg.times_used + '×', 'info') : null;
+    const segCount = bg.segment_count || 0;
+
+    // Inline, lazy-loaded segment browser with multi-select + bulk delete (§12).
+    const segPanel = el('div.seg-panel', { style: { display: 'none' } });
+    let loaded = false;
+    const segLabel = () => 'Segments' + (segCount ? ' (' + segCount + ')' : '');
+    const segToggle = btn('▸ ' + segLabel(), { cls: 'sm ghost', onClick: () => {
+      const open = segPanel.style.display === 'none';
+      segPanel.style.display = open ? '' : 'none';
+      segToggle.textContent = (open ? '▾ ' : '▸ ') + segLabel();
+      if (open && !loaded) { loaded = true; loadSegments(); }
+    } });
+    async function loadSegments() {
+      clear(segPanel); segPanel.append(UI.spinner());
+      try { renderSegmentPicker(segPanel, await API.get('/backgrounds/' + bg.id + '/segments/list'), reload); }
+      catch (e) { clear(segPanel); segPanel.append(el('div.tiny.muted', { style: { padding: '8px 2px' } }, 'Could not load segments: ' + e.message)); }
+    }
+
     return el('div.card.hover', [
       bg.thumbnail_url ? el('img.thumb', { src: bg.thumbnail_url }) : el('div.thumb'),
       el('div.spread.mt', [el('strong', bg.original_name), bg.favorite ? pill('★', 'warn') : null]),
@@ -556,12 +590,73 @@ window.PAGES = window.PAGES || {};
       el('div.row.tight.mt', [tag(bg.category), bg.analyzed ? pill('segmented', 'ok') : pill('not segmented', 'warn'), used].filter(Boolean)),
       el('div.card-actions.mt', [
         btn('✂ Create Segments', { cls: 'sm primary', onClick: () => createSegments(bg, reload) }),
+        segToggle,
         btn('🎞 Edit', { cls: 'sm', onClick: () => App.go('segments/b/' + bg.id) }),
         btn(bg.favorite ? '★ Unfav' : '☆ Favorite', { cls: 'sm ghost', onClick: async () => { await API.patch('/backgrounds/' + bg.id, { favorite: !bg.favorite }); reload(); } }),
         btn('🏷 Tags', { cls: 'sm ghost', onClick: () => tagModal(bg, reload) }),
         btn('🗑', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete background', 'Delete "' + bg.original_name + '" and its segments? The original file will be removed.', async () => { await API.del('/backgrounds/' + bg.id); toast('Deleted'); reload(); }, 'Delete') }),
       ]),
+      segPanel,
     ]);
+  }
+
+  // Inline multi-select segment list for a Footage Library card. Pick several clips and
+  // delete them in one action. `reload` refreshes the whole library so the card's
+  // "Segments (N)" count and segmented/not-segmented pill stay accurate after a delete.
+  function renderSegmentPicker(panel, segs, reload) {
+    clear(panel);
+    if (!segs.length) { panel.append(el('div.tiny.muted', { style: { padding: '8px 2px' } }, 'No segments yet — click "✂ Create Segments".')); return; }
+
+    const selected = new Set();
+    const rows = [];
+    const delBtn = btn('🗑 Delete selected', { cls: 'sm danger', disabled: true, onClick: doDelete });
+    const countLbl = el('span.tiny.muted');
+    const allCb = el('input', { type: 'checkbox', onchange: (e) => setAll(e.target.checked) });
+
+    function refresh() {
+      const n = selected.size;
+      delBtn.disabled = !n;
+      delBtn.textContent = n ? '🗑 Delete selected (' + n + ')' : '🗑 Delete selected';
+      countLbl.textContent = n ? n + ' of ' + segs.length + ' selected' : segs.length + ' segment' + (segs.length === 1 ? '' : 's');
+      allCb.checked = n === segs.length;
+      allCb.indeterminate = n > 0 && n < segs.length;
+    }
+    function onToggle(id, on) { if (on) selected.add(id); else selected.delete(id); refresh(); }
+    function setAll(on) { selected.clear(); rows.forEach((r) => { r.set(on); if (on) selected.add(r.id); }); refresh(); }
+    async function doDelete() {
+      const n = selected.size; if (!n) return;
+      UI.confirmModal('Delete segments', 'Permanently delete ' + n + ' segment' + (n === 1 ? '' : 's') + '? This cannot be undone.', async () => {
+        try {
+          const r = await API.post('/segments/bulk', { ids: [...selected], action: 'delete' });
+          toast('Deleted ' + r.count + ' segment' + (r.count === 1 ? '' : 's'), 'ok');
+          reload();
+        } catch (e) { toast('Delete failed: ' + e.message, 'err'); }
+      }, 'Delete');
+    }
+
+    const list = el('div.seg-list');
+    segs.forEach((s) => { const r = segPickRow(s, onToggle); rows.push(r); list.append(r.el); });
+    panel.append(
+      el('div.spread.seg-toolbar', [
+        el('label.check', [allCb, el('span', 'Select all')]),
+        el('div.row.tight', { style: { gap: '8px', alignItems: 'center' } }, [countLbl, delBtn]),
+      ]),
+      list,
+    );
+    refresh();
+  }
+
+  function segPickRow(s, onToggle) {
+    const cb = el('input', { type: 'checkbox', onchange: (e) => { row.classList.toggle('sel', e.target.checked); onToggle(s.id, e.target.checked); } });
+    const row = el('label.seg-pick', [
+      cb,
+      el('div.grow', { style: { minWidth: 0 } }, [
+        el('div.seg-name', s.name),
+        el('div.tiny.muted', fmtDuration(s.duration) + ' · ' + s.start_sec + 's→' + s.end_sec + 's · Q' + Math.round(s.quality_score)),
+      ]),
+      s.usable ? pill('usable', 'ok') : pill('unusable', 'err'),
+    ]);
+    return { el: row, id: s.id, set: (on) => { cb.checked = on; row.classList.toggle('sel', on); } };
   }
   function tagModal(bg, reload) {
     let tags = (bg.tags || []).join(', ');
@@ -654,8 +749,33 @@ window.PAGES = window.PAGES || {};
     const rightInfo = el('div.panel', el('div.muted', 'Segment plan & export appear here after generating.'));
 
     const m = meta();
-    const st = { durationSeconds: 60, hookStyle: 'conflict', voice: m.voices && m.voices[0] && m.voices[0].name, captionStyle: 'bold', narrationStyle: 'Calm storyteller', backgroundCategory: 'Minecraft parkour', speed: 1, dramaLevel: 3, safeMode: false };
+    const st = { durationSeconds: 60, hookStyle: 'conflict', ...initialVoiceState(), captionStyle: 'bold', narrationStyle: 'Calm storyteller', backgroundCategory: 'Minecraft parkour', speed: 1, dramaLevel: 3, safeMode: false };
     let currentVideoId = null;
+
+    // Current preset box: surfaces which video template drives this video. Honours a
+    // preset carried in from the Presets page ("✦ Create video with this"), otherwise
+    // the default template. Setting st.templateId makes generation use exactly what's
+    // shown here (the pipeline resolves a null id to the default, so this is in sync).
+    const templates = m.templates || [];
+    const carriedId = sessionStorage.getItem('studioTemplateId');
+    sessionStorage.removeItem('studioTemplateId');
+    const activePreset = (carriedId && templates.find((t) => t.id === carriedId))
+      || templates.find((t) => t.isDefault) || templates[0] || null;
+    st.templateId = activePreset ? activePreset.id : null;
+
+    const presetBox = el('div.preset-box', [
+      el('span.pb-ico', '✦'),
+      el('div.pb-body', [
+        el('div.pb-label', 'Current preset'),
+        el('div.pb-name-row', [
+          el('span.pb-name', activePreset ? activePreset.name : 'Default template'),
+          activePreset ? (activePreset.isDefault ? pill('Default ★', 'ok') : (activePreset.builtin ? pill('Built-in', 'info') : pill('Custom', 'accent'))) : null,
+        ]),
+        el('div.pb-sub', 'Drives captions, layout & footage for this video.'),
+      ]),
+      btn('Change', { cls: 'sm ghost', title: 'Pick a different preset', onClick: () => App.go('presets') }),
+    ]);
+    if (carriedId && activePreset && activePreset.id === carriedId) toast('Using preset: ' + activePreset.name, 'ok');
 
     const settings = el('div.panel', [
       el('div.section-title', '⚙ Settings'),
@@ -702,7 +822,7 @@ window.PAGES = window.PAGES || {};
       catch (e) { clear(stage); stage.append(empty('⚠️', 'Variation failed', e.message)); }
     }
 
-    view.append(el('div.composer', [el('div.col', [leftPick, settings]), el('div.col', [stage]), el('div.col', [rightInfo])]));
+    view.append(el('div.composer', [el('div.col', [presetBox, leftPick, settings]), el('div.col', [stage]), el('div.col', [rightInfo])]));
   };
 
   // ===================== BATCH STUDIO (§17) =====================
@@ -714,11 +834,27 @@ window.PAGES = window.PAGES || {};
     const cfg = { count: 10, category: '', duration: 60, background: 'Minecraft parkour', captionStyle: 'bold', source: 'reddit', communities: ['AmItheAsshole'], discover: false };
 
     const listBox = el('div.col.mt');
+    const TERMINAL = ['Ready for review', 'Cancelled', 'Failed', 'Complete', 'Approved'];
+    const watched = new Set();   // batch ids already wired to a live watcher (dedup across refreshes)
+    let pollTimer = null;
+    function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
     async function loadBatches() {
       const batches = await API.get('/batch');
       clear(listBox);
-      if (!batches.length) { listBox.append(empty('⚙️', 'No batches yet', 'Configure one above and run it.')); return; }
+      if (!batches.length) { listBox.append(empty('⚙️', 'No batches yet', 'Configure one above and run it.')); stopPoll(); return; }
       batches.forEach((b) => listBox.append(batchRow(b)));
+      // Auto-watch every running batch — including ones started from the Command Center,
+      // which navigates here via App.go('batch') without calling watchBatch itself.
+      const active = batches.filter((b) => !TERMINAL.includes(b.status));
+      active.forEach((b) => watchBatch(b.id));
+      // Polling fallback so the page still advances if an SSE progress event is missed;
+      // it self-terminates once nothing is active or we leave this page.
+      if (active.length && !pollTimer) {
+        pollTimer = setInterval(() => {
+          if (!location.hash.startsWith('#/batch')) { stopPoll(); return; }
+          loadBatches();
+        }, 3000);
+      } else if (!active.length) { stopPoll(); }
     }
 
     view.append(
@@ -769,7 +905,12 @@ window.PAGES = window.PAGES || {};
         ].filter(Boolean)),
       ]);
     }
-    function watchBatch(id) { const h = App.on('progress', (p) => { if (p.channel === 'batch' && p.batchId === id) loadBatches(); }); setTimeout(() => App.off('progress', h), 600000); }
+    function watchBatch(id) {
+      if (watched.has(id)) return;   // don't stack listeners across refreshes/polls
+      watched.add(id);
+      const h = App.on('progress', (p) => { if (p.channel === 'batch' && p.batchId === id) loadBatches(); });
+      setTimeout(() => { App.off('progress', h); watched.delete(id); }, 600000);
+    }
 
     async function batchDetail(id) {
       const b = await API.get('/batch/' + id);
@@ -886,13 +1027,17 @@ window.PAGES = window.PAGES || {};
     const state = { trash: false };
     const sel = new Set();
     const grid = el('div.grid.cards.mt');
+    const bar = el('div.spread');
+    let trashN = 0;
     async function load() {
       clear(grid); grid.append(UI.spinner()); sel.clear();
       const list = await API.get('/exports' + (state.trash ? '?trash=1' : ''));
       clear(grid);
+      trashN = state.trash ? list.length : 0;
+      renderBar();
       if (!list.length) { grid.append(empty('📤', state.trash ? 'Trash empty' : 'No exports yet', state.trash ? '' : 'Approve videos in the Review Queue.')); return; }
       list.forEach((e) => grid.append(el('div.card', [
-        e.render_url ? el('video.thumb.v', { src: e.render_url, controls: true, style: { width: '100%', maxHeight: '340px', aspectRatio: '9/16' } }) : el('div.thumb.v'),
+        (e.file_url || e.render_url) ? el('video.thumb.v', { src: (e.file_url || e.render_url) + '#t=0.1', controls: true, preload: 'metadata', style: { width: '100%', maxHeight: '340px', aspectRatio: '9/16' } }) : el('div.thumb.v', empty('🎬', 'No preview')),
         el('div.spread.mt', [el('strong', e.title || 'Video'), pill(e.platform, 'accent')]),
         el('div.tiny.muted.mt', e.width + '×' + e.height + ' · ' + fmtDuration(e.duration) + ' · ' + fmtBytes(e.size_bytes) + ' · ' + ago(e.created_at)),
         el('div.card-actions.mt', state.trash ? [
@@ -900,19 +1045,29 @@ window.PAGES = window.PAGES || {};
           btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => UI.confirmModal('Delete forever', 'Delete this export + its file permanently?', async () => { await API.post('/exports/bulk', { ids: [e.id], action: 'purge' }); load(); }, 'Delete') }),
         ] : [
           el('a.btn.sm.primary', { href: '/api/exports/' + e.id + '/download' }, '⬇ Download'),
-          el('a.btn.sm.ghost', { href: e.render_url, target: '_blank' }, '▶ Open'),
+          el('a.btn.sm.ghost', { href: e.file_url || e.render_url, target: '_blank' }, '▶ Open'),
           btn('🗑', { cls: 'sm danger', title: 'Move to trash', onClick: async () => { await API.del('/exports/' + e.id); toast('Moved to trash'); load(); } }),
         ]),
         el('label.check', { style: { marginTop: '4px' } }, [el('input', { type: 'checkbox', onchange: (ev) => ev.target.checked ? sel.add(e.id) : sel.delete(e.id) }), el('span', 'Select')]),
       ])));
     }
     async function bulk(action) { if (!sel.size) return toast('Select exports first', 'warn'); await API.post('/exports/bulk', { ids: [...sel], action }); load(); }
+    function emptyTrash() {
+      if (!trashN) return toast('Trash is already empty', 'warn');
+      UI.confirmModal('Empty trash', `Permanently delete all ${trashN} export(s) in the trash and their files? This cannot be undone.`, async () => { const r = await API.post('/exports/bulk', { action: 'empty' }); toast(`Deleted ${r.count} from trash`, 'ok'); load(); }, 'Delete all');
+    }
+    function renderBar() {
+      clear(bar);
+      bar.append(
+        el('div.btn-group', state.trash
+          ? [btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }), btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') }), btn('🧹 Empty trash', { cls: 'sm danger', onClick: emptyTrash })]
+          : [btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') })]),
+        btn(state.trash ? '← Back' : '🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
+      );
+    }
     view.append(
       pageHead('📤 Exports', 'Finished, approved videos ready to download and publish manually.'),
-      el('div.panel', el('div.spread', [
-        el('div.btn-group', state.trash ? [btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }), btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') })] : [btn('🗑 Delete selected', { cls: 'sm danger', onClick: () => bulk('delete') })]),
-        btn(state.trash ? '← Back' : '🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; load(); } }),
-      ])),
+      el('div.panel', bar),
       grid,
     );
     load();
@@ -1135,13 +1290,17 @@ window.PAGES = window.PAGES || {};
       clear(grid); grid.append(UI.spinner());
       const list = await API.get('/templates' + (state.trash ? '?trash=1' : ''));
       clear(grid);
+      emptyBtn.style.display = (state.trash && list.length) ? '' : 'none';
       if (!list.length) { grid.append(empty('🗂', state.trash ? 'Trash is empty' : 'No templates yet', state.trash ? 'Deleted templates appear here — restore them or delete them for good.' : 'Create one with “＋ New Template”.')); return; }
       list.forEach((t) => grid.append(templateCard(t, activeId, load, state.trash)));
     }
+    const emptyBtn = btn('🧹 Empty trash', { cls: 'ghost', onClick: () => UI.confirmModal('Empty trash', 'Permanently delete every template in the trash? This cannot be undone.', async () => { const r = await API.post('/templates/bulk', { action: 'empty' }); toast(`Deleted ${r.count} from trash`, 'ok'); load(); }, 'Delete all') });
+    emptyBtn.style.display = 'none';
     const trashBtn = btn('🗑 Trash', { cls: 'ghost', onClick: () => { state.trash = !state.trash; trashBtn.textContent = state.trash ? '← Back to templates' : '🗑 Trash'; load(); } });
     view.append(
       pageHead('Templates', 'Reusable video layouts. The default drives every new video. ★ = active default.', [
         btn('＋ New Template', { cls: 'primary', onClick: async () => { const name = prompt('Template name', 'My Template'); if (!name) return; const base = (await API.get('/templates')).find((x) => x.isDefault); const t = await API.post('/templates', { name, data: base }); toast('Created', 'ok'); editTemplate(t, load); } }),
+        emptyBtn,
         trashBtn,
       ]),
       grid,
@@ -1948,6 +2107,7 @@ window.PAGES = window.PAGES || {};
         el('div.btn-group', state.trash ? [
           btn('♻ Restore selected', { cls: 'sm ok', onClick: () => bulk('restore') }),
           btn('🗑 Delete forever', { cls: 'sm danger', onClick: () => bulk('purge') }),
+          btn('🧹 Empty trash', { cls: 'sm danger', onClick: () => data.presets.length ? UI.confirmModal('Empty trash', `Permanently delete all ${data.presets.length} voice preset(s) in the trash? This cannot be undone.`, async () => { const r = await API.post('/voices/presets/bulk', { action: 'empty' }); await App.refreshMeta(); toast(`Deleted ${r.count} from trash`, 'ok'); load(); }, 'Delete all') : toast('Trash is already empty', 'warn') }),
         ] : [
           btn('＋ New SAPI preset', { cls: 'primary', onClick: newSapiModal }),
           btn('🧬 Clone a voice', { onClick: () => App.go('voiceLab') }),

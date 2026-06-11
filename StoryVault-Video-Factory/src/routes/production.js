@@ -58,7 +58,10 @@ router.post('/videos/:id/variation', wrap(async (req, res) => {
     if (pool[0]) storyId = pool[0].id;
   }
   const video = await pipeline.createVideoForStory(storyId, {
-    hookStyle: plan.hookStyle, voice: plan.voice, speed: plan.speed, narrationStyle: plan.narrationStyle,
+    // Keep the original's Fish/cloned preset when it had one (the plan's voice rotation only
+    // knows SAPI names); otherwise use the planned SAPI voice as before.
+    voicePresetId: v.voice_preset_id || undefined,
+    hookStyle: plan.hookStyle, voice: v.voice_preset_id ? undefined : plan.voice, speed: plan.speed, narrationStyle: plan.narrationStyle,
     captionStyle: plan.captionStyle, variationSeed: plan.variationSeed, avoidSegmentIds: prev.segmentIds,
   });
   res.json(withMedia(review.bundle(video.id)));
@@ -109,6 +112,7 @@ router.post('/exports/bulk', wrap(async (req, res) => {
   if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('exports', ids) });
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('exports', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('exports', ids, ['path', 'sidecar_path']) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('exports', ['path', 'sidecar_path']) });
   throw new Error('Unknown action.');
 }));
 

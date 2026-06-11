@@ -1,5 +1,5 @@
 {
+  "s2Bin": "C:\\Users\\Anton\\s2v\\s2.exe",
   "modelDir": "C:\\Users\\Anton\\OneDrive\\Documents\\GitHub\\TrendVault-Program\\StoryVault-Video-Factory\\data\\models\\s2-pro-gguf",
-  "quant": "q4_k_m",
-  "s2Bin": "C:\\Users\\Anton\\OneDrive\\Documents\\GitHub\\TrendVault-Program\\StoryVault-Video-Factory\\data\\models\\s2.cpp\\build\\s2.exe"
+  "quant": "q4_k_m"
 }

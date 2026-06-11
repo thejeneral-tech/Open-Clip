@@ -27,7 +27,10 @@ function sapiRate(speed = 1.0, style = '') {
 }
 
 function settingsHash(scriptText, opts) {
-  return fp.sha256([scriptText, opts.provider, opts.voice, opts.speed, opts.style].join('|'));
+  // refPath + temperature identify WHICH cloned voice (and how it was sampled): for Fish
+  // presets the `voice` field carries a SAPI name, so without these two different clones
+  // hash identically and switching presets would silently reuse the wrong voice's audio.
+  return fp.sha256([scriptText, opts.provider, opts.voice, opts.speed, opts.style, opts.refPath || '', opts.temperature != null ? opts.temperature : ''].join('|'));
 }
 
 async function listVoices() {
@@ -45,6 +48,9 @@ async function listVoices() {
   });
 }
 function fallbackVoices() { return [{ name: 'Microsoft Zira Desktop', provider: 'sapi' }, { name: 'Microsoft David Desktop', provider: 'sapi' }]; }
+// When falling back from Fish to SAPI, make sure we hand SAPI a real SAPI voice name
+// (a Fish/clone voice id would error). Default to a voice that ships on every Windows.
+function sapiSafeVoice(v) { return /microsoft|desktop|zira|david|hazel|mark|eva|catherine|hortense|huihui/i.test(String(v || '')) ? v : 'Microsoft Zira Desktop'; }
 
 // Run the SAPI helper → WAV + raw timing events.
 function runSapi(scriptText, wavPath, timingsPath, { voice, speed, style }) {
@@ -106,7 +112,7 @@ async function generate(script, opts = {}) {
   const speed = opts.speed != null ? opts.speed : 1.0;
   const style = opts.style || 'Calm storyteller';
   const scriptText = script.full_text;
-  const hash = settingsHash(scriptText, { provider, voice, speed, style });
+  const hash = settingsHash(scriptText, { provider, voice, speed, style, refPath: opts.refPath, temperature: opts.temperature });
 
   // Reuse if identical settings already produced a still-present file (§14).
   const existing = db.get('SELECT * FROM narration WHERE script_id = ? AND settings_hash = ? ORDER BY created_at DESC LIMIT 1', [script.id, hash]);
@@ -129,11 +135,21 @@ async function generate(script, opts = {}) {
     cleanup(timingsPath);
     var duration = meta.duration;
   } else if (provider === 'fish' || provider === 'fish-clone') {
-    const fishspeech = require('./fishspeech');
-    await fishspeech.synth(scriptText, wavPath, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
-    const meta = await ff.probe(wavPath);
-    duration = meta.duration;
-    wordTimings = estimateTimings(scriptText, duration);
+    try {
+      const fishspeech = require('./fishspeech');
+      await fishspeech.synth(scriptText, wavPath, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
+      const meta = await ff.probe(wavPath);
+      duration = meta.duration;
+      wordTimings = estimateTimings(scriptText, duration);
+    } catch (e) {
+      // Never fail a render on a TTS engine hiccup — degrade to the always-available SAPI voice.
+      log.activity('AUDIO', `Fish Speech synthesis failed (${e.message}). Falling back to SAPI for this narration.`, { level: 'warning', refId: script.id });
+      await runSapi(scriptText, wavPath, timingsPath, { voice: sapiSafeVoice(voice), speed, style });
+      const meta = await ff.probe(wavPath);
+      wordTimings = buildTimingsFromSapi(timingsPath, meta.duration, scriptText);
+      cleanup(timingsPath);
+      duration = meta.duration;
+    }
   } else if (provider === 'kokoro' || provider === 'http') {
     duration = await generateViaHttp(provider, scriptText, wavPath, { voice, speed, style });
     const meta = await ff.probe(wavPath);
@@ -186,10 +202,20 @@ async function synth(textStr, opts = {}) {
     return { path: outWav, duration: round(meta.duration), wordTimings };
   }
   if (provider === 'fish' || provider === 'fish-clone') {
-    const fishspeech = require('./fishspeech');
-    await fishspeech.synth(String(textStr), outWav, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
-    const meta = await ff.probe(outWav);
-    return { path: outWav, duration: round(meta.duration), wordTimings: estimateTimings(String(textStr), meta.duration) };
+    try {
+      const fishspeech = require('./fishspeech');
+      await fishspeech.synth(String(textStr), outWav, { temperature: opts.temperature, refPath: opts.refPath, promptText: opts.promptText, voice });
+      const meta = await ff.probe(outWav);
+      return { path: outWav, duration: round(meta.duration), wordTimings: estimateTimings(String(textStr), meta.duration) };
+    } catch (e) {
+      log.activity('AUDIO', `Fish Speech synthesis failed (${e.message}). Falling back to SAPI.`, { level: 'warning' });
+      const timingsPath = outWav + '.timings.json';
+      await runSapi(String(textStr), outWav, timingsPath, { voice: sapiSafeVoice(voice), speed, style });
+      const meta = await ff.probe(outWav);
+      const wordTimings = buildTimingsFromSapi(timingsPath, meta.duration, String(textStr));
+      cleanup(timingsPath);
+      return { path: outWav, duration: round(meta.duration), wordTimings };
+    }
   }
   const fallbackDur = await generateViaHttp(provider, String(textStr), outWav, { voice, speed, style });
   const meta = await ff.probe(outWav);

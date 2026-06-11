@@ -13,6 +13,15 @@ data/thumbnails/
 data/logs/
 data/tmp/
 data/models/
+data/voice-previews/
+
+# --- Voice presets shipped with the repo: keep these TRACKED (do NOT ignore) ---
+# Saved voices live in the (gitignored) DB, so they're committed as a seed instead.
+# data/seeds/voice-presets.json  -> seed re-imported on startup (src/db/seed-voices.js)
+# data/voice-refs/               -> reference clips voice clones need at render time
+# Regenerate the seed after saving voices with: npm run export-voices
+# (voice previews above are regenerated on demand and are intentionally not committed)
+
 *.log
 *.key
 secret.key

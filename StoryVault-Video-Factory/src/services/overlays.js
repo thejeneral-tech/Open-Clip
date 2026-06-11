@@ -169,8 +169,10 @@ function buildAss(opts = {}) {
       + gapAfterTitle + metricsH + padBottom;
     const cy = Math.round(tpl.topicCard.centerY - ch / 2);
 
-    // Card background + soft shadow.
-    events.push(`Dialogue: 0,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${C.cardFill}\\bord0\\shad14\\4c${C.shadow}}${roundedRect(cx, cy, cw, ch, tpl.topicCard.radius)}{\\p0}`);
+    // Card background + a SUBTLE drop shadow. NOTE: libass shadows are NOT blurred — \shad
+    // draws a solid offset copy of the shape. A large offset (was 14) reads as a second box
+    // behind the card ("double box"), so keep it small for a single, clean card.
+    events.push(`Dialogue: 0,${t0},${t1},Card,,0,0,0,,{${fa}\\p1\\pos(0,0)\\1c${C.cardFill}\\bord0\\shad5\\4c${C.shadow}}${roundedRect(cx, cy, cw, ch, tpl.topicCard.radius)}{\\p0}`);
 
     // Avatar circle + initial.
     const y = cy + padTop;

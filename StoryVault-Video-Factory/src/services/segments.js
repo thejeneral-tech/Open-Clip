@@ -162,12 +162,24 @@ function deleteSegment(segId) {
   return true;
 }
 
+// Permanently delete many segments at once (multi-select in the Footage Library).
+// Returns the number of rows that actually existed and were removed.
+function deleteSegments(ids) {
+  let n = 0;
+  for (const sid of [].concat(ids || [])) {
+    if (!getSegment(sid)) continue;
+    deleteSegment(sid);
+    n++;
+  }
+  return n;
+}
+
 // -------- Selection (spec §11 steps 6-10) -----------------------------------
 // Choose an ordered list of segments whose total length covers targetSeconds,
 // preferring least-used + unused, mixing different backgrounds, and avoiding the
 // caller's previous sequence. The final segment is trimmed by the composer.
 function selectForDuration(targetSeconds, opts = {}) {
-  const { avoidSegmentIds = [], backgroundIds = null, category = null, seedRng = Math.random, minClip = 4 } = opts;
+  const { avoidSegmentIds = [], backgroundIds = null, category = null, seedRng = Math.random, minClip = 4, transition = 0 } = opts;
   let pool = db.all('SELECT * FROM segments WHERE usable = 1').map(hydrate)
     .filter((s) => s.duration >= minClip);
   if (backgroundIds && backgroundIds.length) pool = pool.filter((s) => backgroundIds.includes(s.background_id));
@@ -206,7 +218,10 @@ function selectForDuration(targetSeconds, opts = {}) {
       segmentId: next.id, backgroundId: next.background_id, start: next.start_sec,
       end: round(next.start_sec + take), duration: round(take), name: next.name,
     });
-    total += take;
+    // Each crossfade overlaps the previous clip by `transition` seconds, so every clip after
+    // the first contributes (take - transition) of effective timeline — count it that way, or
+    // a long video built from short clips ends before the narration does.
+    total += (plan.length === 1) ? take : take - transition;
   }
   return { plan, totalSeconds: round(total) };
 }
@@ -229,5 +244,5 @@ function reuseStats() {
 
 module.exports = {
   analyze, listForBackground, getSegment, createSegment, updateSegment, splitSegment,
-  deleteSegment, selectForDuration, markSequenceUsed, usableIntervals, reuseStats, hydrate,
+  deleteSegment, deleteSegments, selectForDuration, markSequenceUsed, usableIntervals, reuseStats, hydrate,
 };

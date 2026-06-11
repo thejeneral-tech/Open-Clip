@@ -63,6 +63,7 @@ router.post('/templates/bulk', wrap(async (req, res) => {
   if (action === 'delete') { let n = 0; ids.forEach((id) => { try { templates.softRemove(id); n++; } catch { /* skip missing */ } }); return res.json({ ok: true, count: n }); }
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('templates', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('templates', ids) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('templates') });
   throw new Error('Unknown action.');
 }));
 // Delete → trash (any template, built-ins included); ?permanent=1 hard-removes.

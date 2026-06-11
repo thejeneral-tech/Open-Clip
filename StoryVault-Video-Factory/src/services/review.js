@@ -73,15 +73,24 @@ async function regenerate(videoId, component, overrides = {}) {
     } else {
       script = sg.remix(story, { durationSeconds: script.duration_target, hookStyle: script.hook_style, dramaLevel: script.drama_level }, overrides.modifier || 'another_angle');
     }
-    narration = await tts.generate(script, { voice: narration.voice, speed: narration.speed, style: narration.style });
+    // Keep the SAME voice the video was made with — incl. Fish/cloned presets, which need
+    // provider + reference clip resolved, not just the SAPI-looking voice name string.
+    narration = await tts.generate(script, narrationOpts(v.voice_preset_id, narration));
     caption = captions.generate(narration, { style: caption.style, position: caption.position });
     plan = reselect(narration.duration, plan).plan;
     Object.assign(patch, { script_id: script.id, narration_id: narration.id, caption_id: caption.id, segment_plan: JSON.stringify(plan), duration: narration.duration });
   } else if (component === 'voice') {
-    narration = await tts.generate(script, { voice: overrides.voice || nextVoice(narration.voice), speed: overrides.speed || narration.speed, style: overrides.style || narration.style });
+    // "Different voice": rotate to the next saved preset when the video used one (keeps
+    // Fish/cloned voices in the rotation); otherwise rotate the classic SAPI pair.
+    const targetPresetId = overrides.voicePresetId
+      || (overrides.voice ? null : (v.voice_preset_id ? nextPresetId(v.voice_preset_id) : null));
+    const vo = targetPresetId
+      ? narrationOpts(targetPresetId, narration, overrides)
+      : { voice: overrides.voice || nextVoice(narration.voice), speed: overrides.speed || narration.speed, style: overrides.style || narration.style, presetId: null };
+    narration = await tts.generate(script, vo);
     caption = captions.generate(narration, { style: caption.style, position: caption.position });
     plan = reselect(narration.duration, plan).plan;
-    Object.assign(patch, { narration_id: narration.id, caption_id: caption.id, voice: narration.voice, segment_plan: JSON.stringify(plan), duration: narration.duration });
+    Object.assign(patch, { narration_id: narration.id, caption_id: caption.id, voice: narration.voice, voice_preset_id: vo.presetId || null, segment_plan: JSON.stringify(plan), duration: narration.duration });
   } else if (component === 'captions') {
     caption = captions.generate(narration, { style: overrides.style || nextCaption(caption.style), position: overrides.position || caption.position, size: overrides.size, censor: overrides.censor });
     Object.assign(patch, { caption_id: caption.id, caption_style: caption.style });
@@ -99,11 +108,37 @@ async function regenerate(videoId, component, overrides = {}) {
 }
 
 function reselect(duration, prevPlan, overrides = {}) {
-  return segSvc.selectForDuration(duration, {
+  // Same buffer + xfade-overlap accounting as the composer, or regenerated plans
+  // come up short and the video ends before the narration.
+  return segSvc.selectForDuration(composer.withTransitionBuffer(duration), {
     avoidSegmentIds: (prevPlan || []).map((p) => p.segmentId),
     category: overrides.backgroundCategory || null,
     backgroundIds: overrides.backgroundIds || null,
+    transition: composer.TRANSITION,
   });
+}
+
+// Narration options for a regeneration, honoring a saved voice preset: Fish/cloned voices
+// need provider + reference clip + temperature resolved — the bare `voice` name on the
+// narration row is a SAPI fallback label and would silently downgrade them to SAPI.
+function narrationOpts(presetId, narration, overrides = {}) {
+  if (presetId) {
+    try {
+      const s = require('./pipeline').resolveSettings({
+        voicePresetId: presetId,
+        speed: overrides.speed, narrationStyle: overrides.style,
+      });
+      return { provider: s.provider, voice: s.voice, speed: s.speed, style: s.narrationStyle, refPath: s.cloneRef, promptText: s.cloneText, temperature: s.temperature, presetId: s.voicePresetId };
+    } catch { /* preset gone — fall back to the raw narration fields below */ }
+  }
+  return { voice: overrides.voice || narration.voice, speed: overrides.speed || narration.speed, style: overrides.style || narration.style, presetId: null };
+}
+// Next non-deleted preset in creation order (wraps around) — powers "Different voice".
+function nextPresetId(currentId) {
+  const all = db.all('SELECT id FROM voice_presets WHERE deleted_at IS NULL ORDER BY created_at');
+  if (!all.length) return null;
+  const i = all.findIndex((p) => p.id === currentId);
+  return all[(i + 1) % all.length].id;
 }
 function scriptToObj(s) {
   const o = {}; for (const k of ['story_id', 'duration_target', 'hook_style', 'hook', 'setup', 'conflict', 'escalation', 'ending', 'audience_question', 'full_text', 'word_count', 'est_seconds', 'drama_level', 'safe_mode', 'source_attribution']) o[k] = s[k];

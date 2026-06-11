@@ -144,6 +144,26 @@ const PASTED_REVENGE = 'My petty revenge on a parking spot thief\n\nMy neighbor 
     assert(overlap < second.plan.length, 'selection did not avoid used segments at all');
   });
 
+  await test('12b. Bulk-delete selected segments + list exposes segment_count', async () => {
+    // Isolated background so other selection tests keep their pool intact.
+    const clip = makeClip('bulkdel.mp4', { dur: 16, withBlack: false });
+    const bg = await bgSvc.register(clip, 'bulkdel.mp4', { category: 'Nature' });
+    const segs = await segSvc.analyze(bg.id, { segmentLength: 5 });
+    assert(segs.length >= 2, 'expected multiple segments to bulk-delete, got ' + segs.length);
+
+    // list() powers the Footage Library cards' "Segments (N)" label.
+    const listed = bgSvc.list().find((b) => b.id === bg.id);
+    assert(listed && listed.segment_count === segs.length, 'segment_count missing/wrong on list()');
+
+    // Multi-select delete in one call; unknown ids are ignored, count reflects real removals.
+    const ids = segs.slice(0, 2).map((s) => s.id);
+    const n = segSvc.deleteSegments([...ids, 'seg_missing']);
+    assert(n === 2, 'expected 2 deletions, got ' + n);
+    const after = segSvc.listForBackground(bg.id);
+    assert(after.length === segs.length - 2, 'segments not removed');
+    assert(!after.some((s) => ids.includes(s.id)), 'deleted segments still present');
+  });
+
   // Scripts
   let story = importedStory;
   let script60, script180;

@@ -93,7 +93,7 @@ const CAPTION_STYLES = [
   { id: 'two_line', label: 'Two-line story captions' },
 ];
 
-const SCRIPT_DURATIONS = [30, 45, 60, 90, 120, 180];
+const SCRIPT_DURATIONS = [30, 45, 60, 90, 120, 180, 240, 300];
 
 const BACKGROUND_TYPES = [
   'Minecraft parkour', 'Fortnite parkour', 'Rocket League', 'GTA', 'Nature', 'Driving',

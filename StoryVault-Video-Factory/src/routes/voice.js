@@ -42,6 +42,7 @@ router.post('/voices/presets/bulk', wrap(async (req, res) => {
   if (action === 'delete') return res.json({ ok: true, count: trash.softDelete('voice_presets', ids) });
   if (action === 'restore') return res.json({ ok: true, count: trash.restore('voice_presets', ids) });
   if (action === 'purge') return res.json({ ok: true, count: trash.purge('voice_presets', ids, ['preview_path']) });
+  if (action === 'empty') return res.json({ ok: true, count: trash.emptyTrash('voice_presets', ['preview_path']) });
   throw new Error('Unknown action.');
 }));
 
