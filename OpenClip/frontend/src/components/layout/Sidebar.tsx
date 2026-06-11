@@ -19,6 +19,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ const SECTIONS: NavSection[] = [
       { href: "/projects", label: "Projects", icon: FolderKanban },
       { href: "/bots", label: "Bots", icon: Bot },
       { href: "/discovery", label: "Discovery", icon: Compass },
+      { href: "/presets", label: "Presets", icon: Type },
       { href: "/publishing", label: "Publishing", icon: Send },
     ],
   },
