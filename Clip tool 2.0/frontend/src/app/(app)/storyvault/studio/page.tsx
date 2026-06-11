@@ -115,7 +115,7 @@ function StudioInner() {
         background_category: backgroundCategory === "any" ? undefined : backgroundCategory,
         script_engine: scriptEngine,
       });
-      toast.success("Video queued — it will land in the Review Queue");
+      toast.success("Video queued — it will appear in Publishing when ready");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to queue video");
     }
@@ -325,10 +325,10 @@ function StudioInner() {
               pipeline.map((v) => <PipelineRow key={v.id} video={v} />)
             )}
             <Link
-              href="/storyvault/review"
+              href="/storyvault/publishing"
               className="block text-sm text-muted-foreground hover:text-primary"
             >
-              Go to review queue →
+              Go to publishing →
             </Link>
           </CardContent>
         </Card>

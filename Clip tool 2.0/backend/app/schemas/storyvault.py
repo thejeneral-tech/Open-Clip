@@ -213,6 +213,32 @@ class SvCaptionPreviewOut(BaseModel):
     media_url: str | None = None
 
 
+# ---------------------------------------------------------------- publishing
+class SvPublishRequest(BaseModel):
+    connector_ids: list[int] = Field(min_length=1, max_length=10)
+    title: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=5000)
+    privacy: str = "public"  # public|unlisted|private
+
+
+class SvPublishJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    sv_video_id: int
+    connector_id: int | None = None
+    platform: str
+    status: str
+    title: str | None = None
+    published_at: datetime | None = None
+    external_url: str | None = None
+    error: str | None = None
+    created_at: datetime
+    # Enriched by the endpoint:
+    video_title: str | None = None
+    channel_name: str | None = None
+
+
 class SvDashboardOut(BaseModel):
     stories_total: int
     stories_new: int

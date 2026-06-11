@@ -20,6 +20,7 @@ import type {
   SvDiscoveryResult,
   SvExport,
   SvMeta,
+  SvPublishJob,
   SvScript,
   SvStory,
   SvVideo,
@@ -400,6 +401,19 @@ export const api = {
   svCaptionPreviews: () => request<SvCaptionPreview[]>("/storyvault/presets/caption-previews"),
   svGenerateCaptionPreviews: (force = false) =>
     request<{ detail: string }>(`/storyvault/presets/caption-previews/generate?force=${force}`, { method: "POST" }),
+  svPublishVideo: (
+    videoId: number,
+    data: { connector_ids: number[]; title?: string; description?: string; privacy?: string },
+  ) =>
+    request<SvPublishJob[]>(`/storyvault/videos/${videoId}/publish`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  svListPublishJobs: () => request<SvPublishJob[]>("/storyvault/publishing/jobs"),
+  svRetryPublishJob: (id: number) =>
+    request<SvPublishJob>(`/storyvault/publishing/jobs/${id}/retry`, { method: "POST" }),
+  svDeletePublishJob: (id: number) =>
+    request<void>(`/storyvault/publishing/jobs/${id}`, { method: "DELETE" }),
   svListExports: () => request<SvExport[]>("/storyvault/exports"),
   svDeleteExport: (id: number) => request<void>(`/storyvault/exports/${id}`, { method: "DELETE" }),
   svExportDownloadUrl: (id: number) =>

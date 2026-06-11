@@ -9,6 +9,7 @@ import {
   Film,
   Loader2,
   Search,
+  Send,
   Workflow,
 } from "lucide-react";
 import Link from "next/link";
@@ -78,12 +79,12 @@ export default function StoryVaultCommandPage() {
       icon: <Workflow className="h-4 w-4 text-muted-foreground" />,
     },
     {
-      label: "In review",
+      label: "Ready to publish",
       value: dashboard.videos_in_review,
       icon: <Eye className="h-4 w-4 text-muted-foreground" />,
     },
     {
-      label: "Exports",
+      label: "Renders",
       value: dashboard.exports_total,
       icon: <Download className="h-4 w-4 text-muted-foreground" />,
     },
@@ -125,13 +126,8 @@ export default function StoryVaultCommandPage() {
           </Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href="/storyvault/review">
-            <Eye className="h-4 w-4" /> Review queue
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/storyvault/exports">
-            <Download className="h-4 w-4" /> Exports
+          <Link href="/storyvault/publishing">
+            <Send className="h-4 w-4" /> Publishing
           </Link>
         </Button>
       </div>

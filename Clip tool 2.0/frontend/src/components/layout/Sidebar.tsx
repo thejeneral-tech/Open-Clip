@@ -12,7 +12,6 @@ import {
   Film,
   FolderKanban,
   LayoutDashboard,
-  ListChecks,
   LogOut,
   Mic,
   Minus,
@@ -21,7 +20,6 @@ import {
   Send,
   Settings,
   Sparkles,
-  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,8 +58,7 @@ const SECTIONS: NavSection[] = [
       { href: "/storyvault/studio", label: "Video Studio", icon: Clapperboard },
       { href: "/storyvault/voicelab", label: "Voice Lab", icon: Mic },
       { href: "/storyvault/presets", label: "Presets", icon: Sparkles },
-      { href: "/storyvault/review", label: "Review Queue", icon: ListChecks },
-      { href: "/storyvault/exports", label: "Exports", icon: Upload },
+      { href: "/storyvault/publishing", label: "Publishing", icon: Send },
     ],
   },
 ];

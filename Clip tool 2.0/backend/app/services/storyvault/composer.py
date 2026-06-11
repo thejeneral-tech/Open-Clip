@@ -110,6 +110,16 @@ def render_video(spec: RenderSpec, *, on_progress: ProgressCb | None = None) -> 
     vlabels: list[str] = []
     filters: list[str] = []
 
+    # Footage can be deleted between planning and (re-)rendering — skip missing
+    # sources instead of failing, falling back to the gradient when none remain.
+    plan = []
+    for item in spec.plan:
+        if os.path.exists(storage.abspath(item["storage_path"], ensure_parent=False)):
+            plan.append(item)
+        else:
+            logger.warning("Skipping missing footage source %s", item["storage_path"])
+    spec = RenderSpec(**{**spec.__dict__, "plan": plan})
+
     if spec.plan:
         for idx, item in enumerate(spec.plan):
             src = storage.abspath(item["storage_path"], ensure_parent=False)

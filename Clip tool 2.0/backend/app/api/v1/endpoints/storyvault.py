@@ -25,9 +25,11 @@ from app.models.enums import (
     SvStoryStatus,
     SvVideoStatus,
 )
+from app.models.publishing import PublishingConnector
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvPublishJob,
     SvScript,
     SvSegment,
     SvStory,
@@ -45,6 +47,8 @@ from app.schemas.storyvault import (
     SvDiscoverySearch,
     SvExportOut,
     SvMetaOut,
+    SvPublishJobOut,
+    SvPublishRequest,
     SvScriptOut,
     SvStoryImport,
     SvStoryOut,
@@ -72,6 +76,7 @@ from app.workers.sv_tasks import (
     sv_caption_previews_task,
     sv_generate_video_task,
     sv_ingest_background_task,
+    sv_publish_job_task,
     sv_render_video_task,
 )
 
@@ -779,6 +784,133 @@ async def delete_video(
     await db.commit()
     storage.delete(f"storyvault/videos/{video_id}")
     return Message(detail="Video deleted")
+
+
+# ---------------------------------------------------------------- publishing
+@router.post("/videos/{video_id}/publish", response_model=list[SvPublishJobOut], status_code=201)
+async def publish_video(
+    video_id: int,
+    payload: SvPublishRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvPublishJobOut]:
+    """Queue an upload of this video to each selected channel.
+
+    The final 1080×1920 render happens automatically if it hasn't yet.
+    """
+    video = await _owned_video(db, video_id, current_user)
+    publishable = {
+        SvVideoStatus.READY_FOR_REVIEW.value,
+        SvVideoStatus.APPROVED.value,
+        SvVideoStatus.COMPLETED.value,
+    }
+    if video.status not in publishable:
+        raise HTTPException(status_code=409, detail=f"Video is {video.status} — wait for the preview to finish")
+    if payload.privacy not in ("public", "unlisted", "private"):
+        raise HTTPException(status_code=422, detail=f"Unknown privacy {payload.privacy!r}")
+
+    connectors = (
+        await db.execute(
+            select(PublishingConnector).where(
+                PublishingConnector.id.in_(payload.connector_ids),
+                PublishingConnector.owner_id == current_user.id,
+            )
+        )
+    ).scalars().all()
+    if len(connectors) != len(set(payload.connector_ids)):
+        raise HTTPException(status_code=404, detail="One or more selected channels were not found")
+
+    # Publishing implies approval — the review step is the publish click itself.
+    if video.status == SvVideoStatus.READY_FOR_REVIEW.value:
+        video.status = SvVideoStatus.APPROVED.value
+
+    title = (payload.title or video.title or "Story video").strip()[:100]
+    jobs: list[SvPublishJob] = []
+    for connector in connectors:
+        job = SvPublishJob(
+            owner_id=current_user.id,
+            sv_video_id=video.id,
+            connector_id=connector.id,
+            platform=connector.platform,
+            title=title,
+            description=payload.description,
+            payload={"privacy": payload.privacy},
+        )
+        db.add(job)
+        jobs.append(job)
+    await db.commit()
+
+    out: list[SvPublishJobOut] = []
+    for job, connector in zip(jobs, connectors):
+        await db.refresh(job)
+        sv_publish_job_task.delay(job.id)
+        item = SvPublishJobOut.model_validate(job)
+        item.video_title = video.title
+        item.channel_name = connector.name
+        out.append(item)
+    return out
+
+
+@router.get("/publishing/jobs", response_model=list[SvPublishJobOut])
+async def list_publish_jobs(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvPublishJobOut]:
+    rows = (
+        await db.execute(
+            select(SvPublishJob, SvVideo.title, PublishingConnector.name)
+            .join(SvVideo, SvPublishJob.sv_video_id == SvVideo.id)
+            .outerjoin(PublishingConnector, SvPublishJob.connector_id == PublishingConnector.id)
+            .where(SvPublishJob.owner_id == current_user.id)
+            .order_by(SvPublishJob.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    out: list[SvPublishJobOut] = []
+    for job, video_title, channel_name in rows:
+        item = SvPublishJobOut.model_validate(job)
+        item.video_title = video_title
+        item.channel_name = channel_name
+        out.append(item)
+    return out
+
+
+@router.post("/publishing/jobs/{job_id}/retry", response_model=SvPublishJobOut)
+async def retry_publish_job(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvPublishJobOut:
+    job = await db.get(SvPublishJob, job_id)
+    if not job or job.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Publish job not found")
+    if job.status == "publishing":
+        raise HTTPException(status_code=409, detail="Job is already uploading")
+    if job.status == "published":
+        raise HTTPException(status_code=409, detail="Job already published")
+    job.status = "pending"
+    job.error = None
+    await db.commit()
+    sv_publish_job_task.delay(job.id)
+    await db.refresh(job)
+    return SvPublishJobOut.model_validate(job)
+
+
+@router.delete("/publishing/jobs/{job_id}", response_model=Message)
+async def delete_publish_job(
+    job_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    job = await db.get(SvPublishJob, job_id)
+    if not job or job.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Publish job not found")
+    if job.status == "publishing":
+        raise HTTPException(status_code=409, detail="Job is uploading — wait for it to finish")
+    await db.delete(job)
+    await db.commit()
+    return Message(detail="Publish job removed")
 
 
 # ------------------------------------------------------------------- exports

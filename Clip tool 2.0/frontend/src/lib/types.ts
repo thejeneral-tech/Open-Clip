@@ -531,6 +531,21 @@ export interface SvCaptionPreview {
   media_url: string | null;
 }
 
+export interface SvPublishJob {
+  id: number;
+  sv_video_id: number;
+  connector_id: number | null;
+  platform: string;
+  status: string;
+  title: string | null;
+  published_at: string | null;
+  external_url: string | null;
+  error: string | null;
+  created_at: string;
+  video_title: string | null;
+  channel_name: string | null;
+}
+
 export interface SvDashboard {
   stories_total: number;
   stories_new: number;

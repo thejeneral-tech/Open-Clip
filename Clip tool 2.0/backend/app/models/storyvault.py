@@ -177,6 +177,40 @@ class SvVoicePreset(CreatedAtMixin, Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
+class SvPublishJob(CreatedAtMixin, Base):
+    """One upload of a story video to one connected channel.
+
+    Field names (title/description/payload) mirror ``PublishingJob`` so the
+    platform connectors' ``publish(job, …)`` accept either model unchanged.
+    """
+
+    __tablename__ = "sv_publish_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    sv_video_id: Mapped[int] = mapped_column(
+        ForeignKey("sv_videos.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("publishing_connectors.id", ondelete="SET NULL"), index=True, default=None
+    )
+
+    platform: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    external_post_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    external_url: Mapped[str | None] = mapped_column(Text, default=None)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+
+    video: Mapped["SvVideo"] = relationship("SvVideo")
+
+
 class SvExport(CreatedAtMixin, Base):
     __tablename__ = "sv_exports"
 

@@ -414,6 +414,44 @@ export function useSvGenerateCaptionPreviews() {
   });
 }
 
+export function useSvPublishJobs(poll = false) {
+  return useQuery({
+    queryKey: ["sv-publish-jobs"],
+    queryFn: api.svListPublishJobs,
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+export function useSvPublishVideo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      videoId: number;
+      data: { connector_ids: number[]; title?: string; description?: string; privacy?: string };
+    }) => api.svPublishVideo(vars.videoId, vars.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sv-publish-jobs"] });
+      qc.invalidateQueries({ queryKey: ["sv-videos"] });
+    },
+  });
+}
+
+export function useSvRetryPublishJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svRetryPublishJob(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-publish-jobs"] }),
+  });
+}
+
+export function useSvDeletePublishJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeletePublishJob(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-publish-jobs"] }),
+  });
+}
+
 export function useSvExports(poll = false) {
   return useQuery({
     queryKey: ["sv-exports"],

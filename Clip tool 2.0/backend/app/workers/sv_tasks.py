@@ -14,8 +14,17 @@ import os
 
 from app.core.database import session_scope
 from app.core.logging import get_logger
-from app.models.enums import JobStatus, SvStoryStatus, SvVideoStatus
-from app.models.storyvault import SvBackground, SvExport, SvScript, SvSegment, SvStory, SvVideo
+from app.models.enums import JobStatus, PublishStatus, SvStoryStatus, SvVideoStatus
+from app.models.publishing import PublishingConnector
+from app.models.storyvault import (
+    SvBackground,
+    SvExport,
+    SvPublishJob,
+    SvScript,
+    SvSegment,
+    SvStory,
+    SvVideo,
+)
 from app.services import captions as captions_svc
 from app.services.ffmpeg import ffmpeg
 from app.services.storage import (
@@ -393,3 +402,78 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             if export and not export.storage_path:
                 db.delete(export)
         tracker.fail("render", str(exc)[:1000])
+        raise
+
+
+# =====================================================================
+# Publishing (upload to connected channels)
+# =====================================================================
+@celery_app.task(name="app.workers.sv_tasks.sv_publish_job_task")
+def sv_publish_job_task(job_id: int) -> None:
+    from datetime import datetime, timezone
+
+    from app.services.publishing.registry import get_connector
+
+    with session_scope() as db:
+        job = db.get(SvPublishJob, job_id)
+        if not job:
+            return
+        job.status = PublishStatus.PUBLISHING.value
+        job.error = None
+        sv_video_id = job.sv_video_id
+        connector_id = job.connector_id
+        platform = job.platform
+        video = db.get(SvVideo, sv_video_id)
+        render_key = video.render_path if video else None
+
+    def _fail(message: str) -> None:
+        with session_scope() as db:
+            j = db.get(SvPublishJob, job_id)
+            if j:
+                j.status = PublishStatus.FAILED.value
+                j.error = message[:1000]
+
+    try:
+        # The upload needs the final 1080×1920 file — render it on demand.
+        if not render_key:
+            sv_render_video_task(sv_video_id, platform)
+            with session_scope() as db:
+                video = db.get(SvVideo, sv_video_id)
+                render_key = video.render_path if video else None
+        if not render_key:
+            _fail("Final render failed — see the video's error for details")
+            return
+        asset_path = storage.abspath(render_key, ensure_parent=False)
+
+        with session_scope() as db:
+            connector = db.get(PublishingConnector, connector_id) if connector_id else None
+            if not connector:
+                _fail("The selected channel no longer exists")
+                return
+            plugin = get_connector(connector.platform)
+            if not plugin:
+                _fail(f"No publisher for platform {connector.platform!r}")
+                return
+            ok, reason = plugin.validate(connector)
+            if not ok:
+                _fail(reason)
+                return
+            job = db.get(SvPublishJob, job_id)
+            result = plugin.publish(job, asset_path, connector)
+            if result.success:
+                job.status = PublishStatus.PUBLISHED.value
+                job.external_post_id = result.external_post_id
+                job.external_url = result.external_url
+                job.published_at = datetime.now(timezone.utc)
+                story_video = db.get(SvVideo, job.sv_video_id)
+                if story_video:
+                    story = db.get(SvStory, story_video.story_id)
+                    if story and story.status != SvStoryStatus.EXCLUDED.value:
+                        story.status = SvStoryStatus.USED.value
+                logger.info("Story video %s published to %s: %s", sv_video_id, connector.name, result.external_url)
+            else:
+                job.status = PublishStatus.FAILED.value
+                job.error = (result.detail or "Upload failed")[:1000]
+    except Exception as exc:
+        logger.exception("Story publish job %s failed", job_id)
+        _fail(str(exc))
