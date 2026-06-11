@@ -111,12 +111,14 @@ def _ensure_llm_models_installed(models: dict[str, str]) -> None:
             models[key] = fallback
 
 
-def _owner_models(video: Video) -> dict[str, str]:
-    """Resolve the model names to use, honoring the owner's settings."""
-    out = {
+def _owner_models(video: Video) -> dict[str, Any]:
+    """Resolve the model names + pipeline toggles, honoring the owner's settings."""
+    out: dict[str, Any] = {
         "default": settings.OLLAMA_DEFAULT_MODEL,
         "ranking": settings.OLLAMA_RANKING_MODEL,
         "whisper": settings.WHISPER_MODEL,
+        "reframe_hq": False,
+        "reframe_face_zoom": False,
     }
     with session_scope() as db:
         v = db.get(Video, video.id)
@@ -131,6 +133,8 @@ def _owner_models(video: Video) -> dict[str, str]:
                 out["default"] = row.default_model
                 out["ranking"] = row.ranking_model
                 out["whisper"] = row.whisper_model
+                out["reframe_hq"] = bool(row.reframe_hq_detection)
+                out["reframe_face_zoom"] = bool(row.reframe_face_zoom)
     _ensure_llm_models_installed(out)
     return out
 
@@ -313,7 +317,7 @@ def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
 
 
 def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
-                 opts: ProcessOptions, models: dict[str, str]) -> None:
+                 opts: ProcessOptions, models: dict[str, Any]) -> None:
     """Run all AI + media steps for a single clip."""
     clip_tracker = ProgressTracker("clip", clip_id)
     with session_scope() as db:
@@ -387,6 +391,8 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
             clip_tracker.set(stage="reframe", progress=0.72, message="Tracking subject")
             reframe_data = reframing.compute_trajectory(
                 source_path, start=start, end=end,
+                hq_detection=bool(models.get("reframe_hq")),
+                face_zoom=bool(models.get("reframe_face_zoom")),
                 on_progress=lambda f: clip_tracker.set(
                     stage="reframe", progress=0.72 + f * 0.1, persist=False),
             )

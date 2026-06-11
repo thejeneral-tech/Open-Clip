@@ -77,13 +77,16 @@ def step_hold_render(keyframes):
 
 
 def dense_render(keyframes, max_x, max_y):
-    return [x for _, x, _ in _densify(keyframes, FPS, max_x, max_y)]
+    # sendcmd applies the densified keyframes step-and-hold per output frame,
+    # so sample them exactly like the old render samples its sparse ones.
+    return step_hold_render(_densify(keyframes, FPS, max_x, max_y))
 
 
 def metrics(xs):
     jumps = [abs(xs[i + 1] - xs[i]) for i in range(len(xs) - 1)]
     jerks = [abs(xs[i + 1] - 2 * xs[i] + xs[i - 1]) for i in range(1, len(xs) - 1)]
-    return max(jumps) if jumps else 0, (sum(jerks) / len(jerks)) if jerks else 0
+    moving = sum(1 for j in jumps if j > 0) / len(jumps) if jumps else 0
+    return max(jumps) if jumps else 0, (sum(jerks) / len(jerks)) if jerks else 0, moving
 
 
 oc = old_centers()
@@ -100,11 +103,11 @@ scenarios = [
 ]
 
 print(f"crop = {cw}x{ch}, max_x = {max_x}px, 30fps over {raw[-1]['t']:.1f}s\n")
-print(f"{'scenario':<46}  {'worst jump':>11}  {'mean jerk':>10}")
-print("-" * 72)
+print(f"{'scenario':<46}  {'worst jump':>11}  {'mean jerk':>10}  {'moving':>7}")
+print("-" * 80)
 for name, xs in scenarios:
-    mj, jk = metrics(xs)
-    print(f"{name:<46}  {mj:>9.1f}px  {jk:>8.2f}px")
+    mj, jk, mv = metrics(xs)
+    print(f"{name:<46}  {mj:>9.1f}px  {jk:>8.2f}px  {mv:>6.0%}")
 
 # Dropout check: did the NEW trajectory avoid the center-snap at the miss?
 miss_t = 14 / SAMPLE_FPS

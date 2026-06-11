@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -54,5 +54,9 @@ class UserSettings(Base):
     default_export_resolution: Mapped[str] = mapped_column(
         String(16), default=ExportResolution.P1080.value, nullable=False
     )
+
+    # Smart-reframe detection quality (both trade analysis speed for accuracy).
+    reframe_hq_detection: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reframe_face_zoom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)

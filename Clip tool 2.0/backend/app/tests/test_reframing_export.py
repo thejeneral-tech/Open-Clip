@@ -1,9 +1,11 @@
 import re
 
+from app.services import reframing
 from app.services.export import _build_sendcmd, _densify, _escape_path, output_dimensions
 from app.services.reframing import (
-    _OneEuro2D,
+    _select_subject,
     _smooth_centers,
+    _zoom_faces,
     build_crop_keyframes,
     crop_dimensions,
 )
@@ -97,17 +99,17 @@ def test_build_sendcmd_real_pan_emits_valid_lines(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-#  Reframe stability: offline smoothing (dropout hold, impulse suppression)
+#  Reframe stability: lock-and-hold smoothing
 # --------------------------------------------------------------------------- #
-def _raw(t, cx, cy, conf=1.0, switch=False):
-    return {"t": t, "cx": cx, "cy": cy, "conf": conf, "switch": switch}
+def _raw(t, cx, cy, conf=1.0, switch=False, scene=False):
+    return {"t": t, "cx": cx, "cy": cy, "conf": conf, "switch": switch, "scene": scene}
 
 
 def test_smooth_centers_holds_dropout_not_center_snap():
     raw = [_raw(0.0, 0.8, 0.8), _raw(0.2, None, None, 0.0), _raw(0.4, 0.8, 0.8)]
     out = _smooth_centers(raw, sample_fps=5)
     assert len(out) == 3
-    assert out[1]["cx"] > 0.6 and out[1]["cy"] > 0.6  # held near 0.8, NOT 0.5
+    assert all(c["cx"] == 0.8 and c["cy"] == 0.8 for c in out)  # locked, NOT 0.5
 
 
 def test_smooth_centers_all_miss_falls_back_to_center():
@@ -116,11 +118,51 @@ def test_smooth_centers_all_miss_falls_back_to_center():
     assert all(c["cx"] == 0.5 and c["cy"] == 0.5 and c["conf"] == 0.0 for c in out)
 
 
-def test_smooth_centers_suppresses_single_impulse():
+def test_smooth_centers_ignores_single_impulse():
     raw = [_raw(i * 0.2, 0.5, 0.5) for i in range(8)]
     raw[4] = _raw(0.8, 0.9, 0.5)  # one off-center spike
     out = _smooth_centers(raw, sample_fps=5)
-    assert 0.5 < out[4]["cx"] < 0.8  # attenuated, not snapped to 0.9
+    assert all(c["cx"] == 0.5 for c in out)  # the lock never moves
+
+
+def test_smooth_centers_jitter_inside_deadband_is_static():
+    # Detection noise around 0.5 — well inside the deadband.
+    wiggle = [0.02, -0.03, 0.01, -0.02, 0.03, 0.0]
+    raw = [_raw(i * 0.2, 0.5 + wiggle[i % 6], 0.5 - wiggle[i % 6] / 2) for i in range(20)]
+    out = _smooth_centers(raw, sample_fps=5)
+    assert len({c["cx"] for c in out}) == 1  # one position the whole way
+    assert len({c["cy"] for c in out}) == 1
+
+
+def test_smooth_centers_sustained_move_glides_once_then_locks():
+    # Subject sits at 0.3 for 2s, then sits at 0.8 for the rest.
+    raw = [_raw(i * 0.2, 0.3 if i < 10 else 0.8, 0.5) for i in range(30)]
+    out = _smooth_centers(raw, sample_fps=5)
+    xs = [c["cx"] for c in out]
+    assert xs[0] == xs[9] == 0.3            # locked before the move
+    assert xs[-1] == 0.8                    # locked on the new position
+    assert xs == sorted(xs)                 # monotonic glide, no overshoot/wobble
+    assert len({x for x in xs}) <= 8        # static-glide-static, not continuous drift
+
+
+def test_smooth_centers_scene_cut_snaps_with_pinned_keyframe():
+    raw = [_raw(i * 0.2, 0.2, 0.5) for i in range(5)]
+    raw += [_raw(1.0 + i * 0.2, 0.8, 0.5, scene=(i == 0)) for i in range(5)]
+    out = _smooth_centers(raw, sample_fps=5)
+    assert len(out) == 11  # 10 samples + 1 epsilon pin before the cut
+    pin = out[5]
+    assert pin["t"] == 0.999 and pin["cx"] == 0.2  # old centre pinned 1ms pre-cut
+    assert out[6]["t"] == 1.0 and out[6]["cx"] == 0.8  # instant snap at the cut
+    assert all(c["cx"] == 0.2 for c in out[:6])
+    assert all(c["cx"] == 0.8 for c in out[6:])
+
+
+def test_smooth_centers_skips_glide_that_cannot_finish_before_cut():
+    # Subject relocates only in the last second of the shot — a pan would be
+    # cut off mid-motion, so the crop must stay parked.
+    raw = [_raw(i * 0.2, 0.3 if i < 25 else 0.8, 0.5) for i in range(30)]
+    out = _smooth_centers(raw, sample_fps=5)
+    assert all(c["cx"] == 0.3 for c in out)
 
 
 def test_smooth_centers_singleton_is_identity():
@@ -128,20 +170,45 @@ def test_smooth_centers_singleton_is_identity():
     assert out == [{"t": 0.0, "cx": 0.3, "cy": 0.7, "conf": 1.0}]
 
 
-# --------------------------------------------------------------------------- #
-#  Reframe stability: One-Euro filter behavior
-# --------------------------------------------------------------------------- #
-def test_one_euro_step_no_overshoot_and_converges():
-    euro = _OneEuro2D(min_cutoff=1.0, beta=0.02, d_cutoff=1.0)
-    euro.filter(0.0, 0.5, 0.0)
-    vals = [euro.filter(1.0, 0.5, 0.1 * i)[0] for i in range(1, 25)]
-    assert all(v <= 1.0 + 1e-9 for v in vals)  # never overshoots the step target
-    assert vals[-1] > 0.9                       # converges toward it
+def test_zoom_faces_maps_crop_coords_back_to_full_frame(monkeypatch):
+    # A face found at the centre of a person's (upscaled) head crop must map
+    # back to that head region's centre in full-frame normalized coords.
+    import numpy as np
+
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    person = (860.0, 400.0, 1060.0, 1000.0)  # 200x600 px box
+    monkeypatch.setattr(reframing, "_detect_faces", lambda det, crop: [(0.5, 0.5, 0.25)])
+    out = _zoom_faces(object(), frame, [person], 1920, 1080)
+    assert len(out) == 1
+    cx, cy, area = out[0]
+    # Head region: x 830..1090 (15% pad), y 400..670 (45% of box height).
+    assert abs(cx - (830 + 1090) / 2 / 1920) < 0.01
+    assert abs(cy - (400 + 670) / 2 / 1080) < 0.01
+    assert 0 < area < 1
 
 
-def test_one_euro_ramp_tracks_with_bounded_lag():
-    euro = _OneEuro2D(min_cutoff=1.0, beta=0.02, d_cutoff=1.0)
-    out = (0.0, 0.5)
-    for i in range(40):
-        out = euro.filter(0.02 * i, 0.5, 0.1 * i)  # slow constant-velocity ramp
-    assert abs(out[0] - 0.02 * 39) < 0.1           # follows with small lag
+def test_zoom_faces_skips_degenerate_boxes(monkeypatch):
+    import numpy as np
+
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    monkeypatch.setattr(reframing, "_detect_faces", lambda det, crop: [(0.5, 0.5, 0.25)])
+    assert _zoom_faces(object(), frame, [(10.0, 10.0, 15.0, 15.0)], 1920, 1080) == []
+
+
+def test_build_crop_keyframes_subject_headroom():
+    # Vertical source cropped to 1:1: the crop CAN move vertically, so the
+    # subject sits at REFRAME_SUBJECT_Y (0.42) of the crop, not dead centre.
+    data = {"source_w": 1080, "source_h": 1920,
+            "centers": [{"t": 0.0, "cx": 0.5, "cy": 0.5}]}
+    crop_w, crop_h, kf = build_crop_keyframes(data, "1:1")
+    assert (crop_w, crop_h) == (1080, 1080)
+    assert kf[0][2] == round(0.5 * 1920 - 1080 * 0.42)  # 506, not 420
+
+
+def test_select_subject_acquires_face_over_larger_person():
+    # A person box always out-areas a face box; acquisition must still prefer
+    # the face so the crop locks onto it.
+    candidates = [(0.3, 0.5, 0.40, "person"), (0.62, 0.38, 0.02, "face")]
+    chosen, lock, conf, method, _ = _select_subject(candidates, None, {"cand": None, "count": 0})
+    assert chosen == (0.62, 0.38) and lock == (0.62, 0.38)
+    assert method == "face" and conf == 1.0
