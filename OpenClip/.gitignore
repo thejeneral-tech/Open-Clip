@@ -1,0 +1,73 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
+
+# ---- Node / Next ----
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# ---- Env & secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Local stack data (SQLite DB, media, queue, logs, pids) ----
+data/*
+control/
+backend/control/
+
+# ---- Media & generated artifacts ----
+storage/
+media/
+uploads/
+# Downloaded ML model *weights* only. Anchored to the repo root + weight file
+# extensions so this never swallows the backend ORM package (backend/app/models/),
+# which is source code and MUST be committed.
+/models/
+*.pt
+*.onnx
+*.gguf
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.srt
+*.vtt
+*.ass
+!data/
+!data/storage/
+!data/storage/storyvault/
+!data/storage/storyvault/voices/
+!data/storage/storyvault/voices/presets/
+!data/storage/storyvault/voices/presets/*.wav
+!data/storage/storyvault/backgrounds/
+!data/storage/storyvault/backgrounds/.gitignore
+!data/storage/storyvault/backgrounds/*/
+!data/storage/storyvault/backgrounds/*/.gitignore
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.swp
