@@ -386,3 +386,184 @@ export interface BotAnalytics {
   summary: Record<string, unknown>;
   insights: Record<string, unknown>;
 }
+
+// ------------------------------------------------------------- story vault
+export type SvStoryStatus = "new" | "saved" | "approved" | "used" | "excluded";
+export type SvVideoStatus =
+  | "queued"
+  | "processing"
+  | "ready_for_review"
+  | "approved"
+  | "rendering"
+  | "completed"
+  | "rejected"
+  | "failed";
+
+export interface SvStory {
+  id: number;
+  source: string;
+  source_url: string | null;
+  community: string | null;
+  author: string | null;
+  title: string;
+  body: string;
+  category: string | null;
+  upvotes: number;
+  num_comments: number;
+  score: number;
+  score_breakdown: Record<string, number> | null;
+  status: SvStoryStatus;
+  created_at: string;
+}
+
+export interface SvDiscoveryResult {
+  fetched: number;
+  added: number;
+  duplicates: number;
+  stories: SvStory[];
+}
+
+export interface SvScript {
+  id: number;
+  story_id: number;
+  full_text: string;
+  hook: string | null;
+  duration_target: number;
+  hook_style: string;
+  narration_style: string;
+  drama_level: number;
+  word_count: number;
+  generator: string | null;
+  created_at: string;
+}
+
+export interface SvBackground {
+  id: number;
+  original_filename: string | null;
+  category: string | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  size_bytes: number | null;
+  status: string;
+  error: string | null;
+  created_at: string;
+  thumbnail_url: string | null;
+  segment_count: number;
+}
+
+export interface SvVideoCreate {
+  story_id: number;
+  duration_target: number;
+  hook_style: string;
+  narration_style: string;
+  drama_level: number;
+  voice?: string | null;
+  speed: number;
+  caption_style: string;
+  background_category?: string | null;
+  script_engine: string;
+}
+
+export interface SvVideo {
+  id: number;
+  story_id: number;
+  script_id: number | null;
+  title: string | null;
+  duration_target: number;
+  hook_style: string;
+  narration_style: string;
+  drama_level: number;
+  voice: string | null;
+  speed: number;
+  caption_style: string;
+  background_category: string | null;
+  script_engine: string;
+  narration_duration: number | null;
+  status: SvVideoStatus;
+  stage: string | null;
+  progress: number;
+  error: string | null;
+  reject_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  preview_url: string | null;
+  render_url: string | null;
+  script_text: string | null;
+  story_title: string | null;
+}
+
+export interface SvExport {
+  id: number;
+  sv_video_id: number;
+  platform: string;
+  title: string | null;
+  size_bytes: number | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+  media_url: string | null;
+}
+
+export interface SvVoice {
+  name: string;
+  culture: string | null;
+  gender: string | null;
+}
+
+export interface SvVoicePreset {
+  id: number;
+  name: string;
+  voice: string;
+  speed: number;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface SvVoiceSample {
+  media_url: string;
+  duration: number;
+}
+
+export interface SvCaptionPreview {
+  style: string;
+  media_url: string | null;
+}
+
+export interface SvPublishJob {
+  id: number;
+  sv_video_id: number;
+  connector_id: number | null;
+  platform: string;
+  status: string;
+  title: string | null;
+  published_at: string | null;
+  external_url: string | null;
+  error: string | null;
+  created_at: string;
+  video_title: string | null;
+  channel_name: string | null;
+}
+
+export interface SvDashboard {
+  stories_total: number;
+  stories_new: number;
+  stories_approved: number;
+  backgrounds_ready: number;
+  segments_total: number;
+  videos_in_pipeline: number;
+  videos_in_review: number;
+  exports_total: number;
+  recent_videos: SvVideo[];
+}
+
+export interface SvMeta {
+  hook_styles: string[];
+  narration_styles: string[];
+  durations: number[];
+  categories: string[];
+  background_categories: string[];
+  caption_styles: string[];
+  platforms: string[];
+}
