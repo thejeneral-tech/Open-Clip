@@ -46,6 +46,7 @@ const SECTIONS: NavSection[] = [
       { href: "/bots", label: "Bots", icon: Bot },
       { href: "/discovery", label: "Discovery", icon: Compass },
       { href: "/presets", label: "Presets", icon: Type },
+      { href: "/studio", label: "Video Studio", icon: Clapperboard },
       { href: "/publishing", label: "Publishing", icon: Send },
     ],
   },
