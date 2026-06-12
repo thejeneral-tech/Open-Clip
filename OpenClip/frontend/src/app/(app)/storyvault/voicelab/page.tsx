@@ -22,9 +22,9 @@ import type { SvVoicePreset } from "@/lib/types";
 // blue island. The whole surface is built to fit one screen — no page scroll —
 // as a two-column "voice command center".
 const LABEL = "font-mono text-[10.5px] font-bold uppercase tracking-[0.16em] text-primary";
-const CARD = "rounded-2xl border bg-card/70 text-card-foreground shadow-sm backdrop-blur-sm";
+const CARD = "rounded-2xl border bg-card text-card-foreground shadow-sm";
 const TEXTAREA =
-  "w-full resize-none rounded-lg border bg-background/60 px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/40";
+  "w-full resize-none rounded-lg border bg-background px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/40";
 
 const ACCEPT = ".wav,.mp3,.mp4,.flac,.m4a,.ogg,audio/*";
 
@@ -51,7 +51,7 @@ function StepBadge({ n }: { n: number }) {
 
 // --------------------------------------------------------------- saved presets
 const PRESET_BTN =
-  "inline-flex items-center gap-1.5 rounded-md border bg-background/60 px-3 py-1.5 font-mono text-[11px] font-bold text-primary transition hover:bg-accent disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 font-mono text-[11px] font-bold text-primary transition hover:bg-accent disabled:opacity-50";
 
 function isClonedVoice(preset: SvVoicePreset): boolean {
   // Prefer the explicit engine; fall back to sniffing the voice string for
@@ -98,7 +98,7 @@ function PresetRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="group flex items-center gap-3 rounded-xl border bg-card/60 px-3 py-2.5 shadow-sm transition hover:border-primary/40 hover:bg-accent/40">
+    <div className="group flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 shadow-sm transition hover:border-primary/40 hover:bg-accent/40">
       <button
         type="button"
         onClick={onPreview}
@@ -127,7 +127,7 @@ function PresetRow({
         className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border transition disabled:opacity-60 ${
           preset.is_default
             ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-            : "border-border bg-background/60 text-muted-foreground hover:text-primary"
+            : "border-border bg-background text-muted-foreground hover:text-primary"
         }`}
       >
         <Star className={`h-3.5 w-3.5 ${preset.is_default ? "fill-current" : ""}`} />
@@ -137,7 +137,7 @@ function PresetRow({
         onClick={onDelete}
         disabled={busy}
         title="Delete preset"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[#5a2a2a] bg-background/60 text-[#e06c75] opacity-0 transition hover:bg-[#241010] disabled:opacity-50 group-hover:opacity-100"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[#5a2a2a] bg-background text-[#e06c75] opacity-0 transition hover:bg-[#241010] disabled:opacity-50 group-hover:opacity-100"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -500,7 +500,7 @@ export default function VoiceLabPage() {
                     ? "border-primary bg-accent"
                     : referenceId
                       ? "border-primary/50 bg-primary/5"
-                      : "border-border bg-background/40 hover:border-primary hover:bg-accent"
+                      : "border-border bg-background hover:border-primary hover:bg-accent"
                 }`}
               >
                 {uploadMut.isPending ? (
@@ -538,7 +538,7 @@ export default function VoiceLabPage() {
                   type="button"
                   onClick={() => void autoTranscribe()}
                   disabled={transcribeMut.isPending}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-background/60 px-2.5 py-1 font-mono text-[10.5px] font-bold text-primary transition hover:bg-accent disabled:opacity-50"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 font-mono text-[10.5px] font-bold text-primary transition hover:bg-accent disabled:opacity-50"
                 >
                   {transcribeMut.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>✨</span>}
                   Auto-transcribe
@@ -612,7 +612,7 @@ export default function VoiceLabPage() {
                     <a
                       href={output.media_url}
                       download="voice.wav"
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-md border bg-background/60 px-2.5 py-1 font-bold text-primary transition hover:bg-accent"
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 font-bold text-primary transition hover:bg-accent"
                     >
                       <Download className="h-3.5 w-3.5" />
                       Download WAV
