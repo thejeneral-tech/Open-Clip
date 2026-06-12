@@ -62,6 +62,14 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(seed_system_presets)
     except Exception as exc:  # pragma: no cover
         logger.warning("Preset seeding skipped: %s", exc)
+    try:
+        # Give every user the bundled built-in voice presets (TikTok clone voices)
+        # on startup, so they're always present without opening Voice Lab first.
+        from app.services.storyvault.voice_presets import seed_all_voice_presets
+
+        await asyncio.to_thread(seed_all_voice_presets)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Voice-preset seeding skipped: %s", exc)
 
     from app.core.scheduler import start_scheduler, stop_scheduler
 
