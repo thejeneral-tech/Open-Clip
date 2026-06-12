@@ -167,6 +167,12 @@ class SvVideo(TimestampMixin, Base):
     narration_path: Mapped[str | None] = mapped_column(String(1024), default=None)
     narration_duration: Mapped[float | None] = mapped_column(Float, default=None)
     word_timings: Mapped[list | None] = mapped_column(JSON, default=None)
+    # Intro narration plan: the on-screen windows for the title (topic card) and
+    # author intro, plus when the body narration starts — so the final render
+    # rebuilds the overlays with the exact timing the captions were synced to.
+    # {"card": [start, end] | None, "author": [start, end] | None, "body_start": float}.
+    # None → no intro sequence (body-only narration, captions from the top).
+    intro_plan: Mapped[dict | None] = mapped_column(JSON, default=None)
     captions_ass_path: Mapped[str | None] = mapped_column(String(1024), default=None)
     captions_srt_path: Mapped[str | None] = mapped_column(String(1024), default=None)
     segment_plan: Mapped[list | None] = mapped_column(JSON, default=None)

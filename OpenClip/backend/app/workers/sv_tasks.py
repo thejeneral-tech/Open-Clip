@@ -344,47 +344,60 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         tracker.set(stage="script", progress=_SCRIPT[1], message="Script ready")
 
         # ------------------------------------------------------- 2. narration
+        # Read the title (shown on the topic card) and the author intro, then the
+        # story body — all in one synthesis pass so they share a single audio
+        # timeline. Each intro card is shown for exactly as long as its line is
+        # spoken, and the body captions begin the instant the body narration does.
+        # With no intro template the narration is body-only, exactly as before.
         tracker.set(stage="narration", progress=_NARRATE[0], message="Synthesizing narration")
         narration_key = sv_narration_key(sv_video_id)
-        result = tts.synthesize(
-            script_text,
-            storage.abspath(narration_key),
-            voice=opts["voice"],
-            speed=opts["speed"],
-        )
+        beats = overlays_svc.intro_beats(opts["story_meta"], opts.get("template_config"))
+        card_window = author_window = None
+        if beats:
+            narr = tts.synthesize_story(
+                [*beats, {"kind": "body", "text": script_text}],
+                storage.abspath(narration_key),
+                voice=opts["voice"], speed=opts["speed"],
+            )
+            body_words, body_start = narr.body_words, narr.body_start
+            card_window, author_window = narr.card_window, narr.author_window
+            duration = narr.duration
+        else:
+            result = tts.synthesize(
+                script_text, storage.abspath(narration_key),
+                voice=opts["voice"], speed=opts["speed"],
+            )
+            body_words, body_start, duration = result.words, 0.0, result.duration
         storage.commit(narration_key)
-        if result.duration <= 0.5:
+        if duration <= 0.5:
             raise RuntimeError("Narration came back empty — is a SAPI voice installed?")
+        intro_plan = {
+            "card": list(card_window) if card_window else None,
+            "author": list(author_window) if author_window else None,
+            "body_start": body_start,
+        }
         with session_scope() as db:
             video = db.get(SvVideo, sv_video_id)
             video.narration_path = narration_key
-            video.narration_duration = result.duration
-            video.word_timings = result.words
-        tracker.set(stage="narration", progress=_NARRATE[1], message=f"Narration: {result.duration:.1f}s")
+            video.narration_duration = duration
+            video.word_timings = body_words
+            video.intro_plan = intro_plan
+        tracker.set(stage="narration", progress=_NARRATE[1], message=f"Narration: {duration:.1f}s")
 
         # -------------------------------------------------------- 3. captions
+        # Captions cover the body only (the title/author are shown by the intro
+        # cards). The body word timings already sit at their true place on the
+        # combined timeline, so no offset is needed — caption N lights up exactly
+        # as word N is spoken. Timing is resolution-independent, so this single
+        # (RENDER-res) ASS drives the preview and final renders alike.
         tracker.set(stage="captions", progress=_CAPTIONS[0], message="Building captions")
-        tokens = captions_svc.build_tokens(result.words)
+        tokens = captions_svc.build_tokens(body_words)
         tokens = captions_svc.heuristic_emphasis(tokens)
-        # Intro Reddit card + author intro own the opening seconds; hold the
-        # caption track back so it never collides with them. Timing is
-        # resolution-independent, so the offset baked into the (RENDER-res) ASS
-        # here also applies to the preview and final renders.
-        intro = overlays_svc.prepare_intro_overlays(
-            sv_video_id=sv_video_id,
-            story_meta=opts["story_meta"],
-            template_config=opts.get("template_config"),
-            total_duration=result.duration,
-            width=composer.RENDER_W,
-            height=composer.RENDER_H,
-        )
-        intro_end = intro["intro_end"]
         ass_key = sv_captions_key(sv_video_id, "ass")
         srt_key = sv_captions_key(sv_video_id, "srt")
         captions_svc.write_ass(
             storage.abspath(ass_key), tokens, opts["caption_style"],
             composer.RENDER_W, composer.RENDER_H, overrides=opts.get("caption_config"),
-            start_offset=intro_end,
         )
         storage.commit(ass_key)
         with open(storage.abspath(srt_key), "w", encoding="utf-8") as fh:
@@ -401,7 +414,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             candidates = _segment_candidates(
                 db, opts["owner_id"], opts["background_category"], opts["background_id"]
             )
-        plan = composer.plan_segments(candidates, result.duration, seed=sv_video_id)
+        plan = composer.plan_segments(candidates, duration, seed=sv_video_id)
         with session_scope() as db:
             video = db.get(SvVideo, sv_video_id)
             video.segment_plan = plan
@@ -418,13 +431,14 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             sv_video_id=sv_video_id,
             story_meta=opts["story_meta"],
             template_config=opts.get("template_config"),
-            total_duration=result.duration,
             width=composer.PREVIEW_W,
             height=composer.PREVIEW_H,
+            card_window=card_window,
+            author_window=author_window,
         )
         spec = composer.RenderSpec(
             narration_path=storage.abspath(narration_key, ensure_parent=False),
-            total_duration=result.duration,
+            total_duration=duration,
             ass_path=storage.abspath(ass_key, ensure_parent=False),
             plan=plan,
             output_path=storage.abspath(preview_key),
@@ -529,23 +543,27 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
         plan = video.segment_plan or []
         duration = video.narration_duration or 0.0
         template_config = video.template_config
+        intro_plan = video.intro_plan or {}
         story_meta = _story_meta(story) if story else None
         video.status = SvVideoStatus.RENDERING.value
         video.stage = "render"
         video.progress = 0.0
 
     try:
-        # Rebuild the intro overlays at full render resolution. Timing matches
-        # the offset already baked into the ASS during the preview pass (both
-        # derive deterministically from the same story + template + duration).
+        # Rebuild the intro overlays at full render resolution, reusing the exact
+        # on-screen windows the narration produced (and the captions were synced
+        # to) during the preview pass — stored in intro_plan.
+        card = intro_plan.get("card")
+        author = intro_plan.get("author")
         intro = (
             overlays_svc.prepare_intro_overlays(
                 sv_video_id=sv_video_id,
                 story_meta=story_meta,
                 template_config=template_config,
-                total_duration=duration,
                 width=composer.RENDER_W,
                 height=composer.RENDER_H,
+                card_window=tuple(card) if card else None,
+                author_window=tuple(author) if author else None,
             )
             if story_meta is not None
             else {"overlays": []}

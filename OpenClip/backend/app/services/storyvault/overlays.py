@@ -7,9 +7,11 @@ by u/…" author intro**, after which the word-by-word captions take over.
 
 This module rasterizes those two beats as transparent PNGs with Pillow and
 exposes :func:`prepare_intro_overlays`, which turns a story + a template's render
-config into the overlay specs the composer composites over the footage, plus the
-``intro_end`` time the caption track is held back to (so captions never collide
-with the cards).
+config into the overlay specs the composer composites over the footage. The two
+cards are shown across the windows during which their lines are *narrated*
+(:func:`intro_beats` supplies that narration text), so each card is on screen for
+exactly as long as the voice reads it and the body captions take over the moment
+the body narration begins.
 
 Everything is drawn in the reference 1080-wide canvas and then resized to the
 actual render width, so the preview (540px) and final (1080px) renders stay
@@ -316,8 +318,28 @@ def _render_author_intro(meta: dict[str, Any], ai: dict[str, Any]) -> Image.Imag
 
 
 # --------------------------------------------------------------------- public
-def _clamp(v: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, v))
+def intro_beats(
+    story_meta: dict[str, Any], template_config: dict[str, Any] | None
+) -> list[dict[str, str]]:
+    """Ordered narration beats that open the video, for whichever intro cards the
+    template enables.
+
+    The topic card narrates the post title; the author intro narrates the
+    "Posted by <handle>" line (spoken without the ``u/`` so it doesn't come out
+    as "u slash …"). The caller appends the story body after these.
+    """
+    cfg = template_config or {}
+    tc = cfg.get("topicCard") or {}
+    ai = cfg.get("authorIntro") or {}
+    beats: list[dict[str, str]] = []
+    if tc.get("enabled", False) is True:
+        title = (story_meta.get("title") or "").strip()
+        if title:
+            beats.append({"kind": "card", "text": title.rstrip(".!?") + "."})
+    if ai.get("enabled", False) is True:
+        prefix = (ai.get("prefixReddit") or "Posted by").strip()
+        beats.append({"kind": "author", "text": f"{prefix} {_handle_from(story_meta)}."})
+    return beats
 
 
 def prepare_intro_overlays(
@@ -325,74 +347,53 @@ def prepare_intro_overlays(
     sv_video_id: int,
     story_meta: dict[str, Any],
     template_config: dict[str, Any] | None,
-    total_duration: float,
     width: int,
     height: int,
+    card_window: tuple[float, float] | None = None,
+    author_window: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
-    """Build the intro overlay PNGs for one render and their on-screen timing.
+    """Build the intro overlay PNGs for one render at the target resolution.
 
-    Returns ``{"overlays": [...], "intro_end": float}`` where each overlay is
-    ``{path, x, y, start, end, fade}`` in the *target* render's pixel space, and
-    ``intro_end`` is when the captions should resume. With no template / disabled
-    cards (or a render too short to fit them) it returns no overlays and a zero
-    ``intro_end`` — the pipeline then behaves exactly as before.
+    The Reddit topic card is shown across ``card_window`` (while the title is
+    narrated) and the "Posted by u/…" author intro across ``author_window``
+    (while the author line is narrated), so each is on screen for exactly as long
+    as its line is spoken. A beat with no window — its narration is disabled, or
+    the window is too short to be worth a card — is skipped. Returns
+    ``{"overlays": [...]}`` where each overlay is ``{path, x, y, start, end,
+    fade}`` in the *target* render's pixel space.
     """
     cfg = template_config or {}
     tc = cfg.get("topicCard") or {}
     ai = cfg.get("authorIntro") or {}
-    card_on = tc.get("enabled", False) is True
-    author_on = ai.get("enabled", False) is True
-    if not (card_on or author_on) or total_duration <= 2.0:
-        return {"overlays": [], "intro_end": 0.0}
-
     scale = width / CANVAS_W
     overlays: list[dict[str, Any]] = []
-    cursor = 0.0
-    # Keep the whole intro inside the first ~55% of the video so there's always
-    # room for the body captions.
-    intro_budget = max(2.0, total_duration * 0.55)
 
-    if card_on:
-        words = len((story_meta.get("title") or "").split())
-        dur = _clamp(1.7 + words * 0.22, float(tc.get("minSeconds", 2.2)), float(tc.get("maxSeconds", 5.0)))
-        dur = min(dur, intro_budget - cursor)
-        if dur >= 0.6:
-            img = _render_topic_card(story_meta, tc)
-            if scale != 1.0:
-                img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS)
-            key = sv_overlay_key(sv_video_id, "card", width)
-            img.save(storage.abspath(key))
-            storage.commit(key)
-            cy = float(tc.get("centerY", 760)) * scale
-            overlays.append({
-                "path": storage.abspath(key, ensure_parent=False),
-                "x": round((width - img.width) / 2),
-                "y": round(cy - img.height / 2),
-                "start": round(cursor, 3),
-                "end": round(cursor + dur, 3),
-                "fade": max(0.05, float(tc.get("fade", 180)) / 1000.0),
-            })
-            cursor += dur
+    def _add(img: Image.Image, kind: str, center_y: float,
+             window: tuple[float, float], fade_ms: float) -> None:
+        start, end = float(window[0]), float(window[1])
+        if end - start < 0.3:  # too brief to register as a card
+            return
+        if scale != 1.0:
+            img = img.resize(
+                (max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS
+            )
+        key = sv_overlay_key(sv_video_id, kind, width)
+        img.save(storage.abspath(key))
+        storage.commit(key)
+        overlays.append({
+            "path": storage.abspath(key, ensure_parent=False),
+            "x": round((width - img.width) / 2),
+            "y": round(center_y - img.height / 2),
+            "start": round(start, 3),
+            "end": round(end, 3),
+            "fade": max(0.05, float(fade_ms) / 1000.0),
+        })
 
-    if author_on:
-        dur = _clamp(1.9, float(ai.get("minSeconds", 1.5)), float(ai.get("maxSeconds", 3.0)))
-        dur = min(dur, intro_budget - cursor)
-        if dur >= 0.6:
-            img = _render_author_intro(story_meta, ai)
-            if scale != 1.0:
-                img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS)
-            key = sv_overlay_key(sv_video_id, "author", width)
-            img.save(storage.abspath(key))
-            storage.commit(key)
-            cy = height * 0.46
-            overlays.append({
-                "path": storage.abspath(key, ensure_parent=False),
-                "x": round((width - img.width) / 2),
-                "y": round(cy - img.height / 2),
-                "start": round(cursor, 3),
-                "end": round(cursor + dur, 3),
-                "fade": max(0.05, float(ai.get("fade", 160)) / 1000.0),
-            })
-            cursor += dur
+    if tc.get("enabled", False) is True and card_window:
+        _add(_render_topic_card(story_meta, tc), "card",
+             float(tc.get("centerY", 760)) * scale, card_window, tc.get("fade", 180))
+    if ai.get("enabled", False) is True and author_window:
+        _add(_render_author_intro(story_meta, ai), "author",
+             height * 0.46, author_window, ai.get("fade", 160))
 
-    return {"overlays": overlays, "intro_end": round(cursor, 3)}
+    return {"overlays": overlays}
