@@ -1,7 +1,8 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Star } from "lucide-react";
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,13 +19,20 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useConnectors,
+  useSvBackgrounds,
   useSvMeta,
   useSvTemplates,
   useSvVoicePresets,
   useSvVoices,
 } from "@/hooks/use-api";
 import { categoryLabel } from "@/lib/utils";
-import type { SvProject, SvProjectSettings, SvVoicePreset } from "@/lib/types";
+import type {
+  SvProject,
+  SvProjectSettings,
+  SvTemplate,
+  SvTemplateData,
+  SvVoicePreset,
+} from "@/lib/types";
 
 // Mirrors backend SvProjectSettings defaults so a fresh form is already valid.
 export const DEFAULT_SETTINGS: SvProjectSettings = {
@@ -56,6 +64,34 @@ function isClonedVoice(preset: SvVoicePreset): boolean {
   return /clone|fish/i.test(preset.voice);
 }
 
+function truncate(text: string, max = 32): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+// One-line descriptor for a preset, mirroring the Video Studio + Presets page.
+function templateTagline(t: SvTemplateData): string {
+  const cap = t.captions || {};
+  const style = cap.style === "pop" ? "Pop" : "Karaoke";
+  const split = t.gameplay?.mode === "split_bottom" ? " · split" : "";
+  return `${style} · ${cap.size || 80}px${split}`;
+}
+
+function TemplateBadge({ t }: { t: SvTemplate }) {
+  if (t.is_default) {
+    return (
+      <Badge variant="success" className="gap-1">
+        <Star className="h-3 w-3 fill-current" /> Default
+      </Badge>
+    );
+  }
+  if (t.builtin) return <Badge variant="secondary">Built-in</Badge>;
+  return (
+    <Badge variant="outline" className="border-primary/40 text-primary">
+      Custom
+    </Badge>
+  );
+}
+
 // settings.voice <-> the Select value ("auto" | "preset:<id>" | "<sapi name>").
 function voiceToValue(voice: string | null): string {
   return voice == null ? "auto" : voice;
@@ -85,9 +121,12 @@ export function ProjectForm({
   const { data: voices = [] } = useSvVoices();
   const { data: voicePresets = [] } = useSvVoicePresets();
   const { data: templates = [] } = useSvTemplates();
+  const { data: backgrounds = [] } = useSvBackgrounds();
   const { data: connectors = [] } = useConnectors();
 
   const clonedPresets = voicePresets.filter(isClonedVoice);
+  // Footage the user can pin to the gameplay layer — only ready clips with segments.
+  const readyFootage = backgrounds.filter((b) => b.status === "completed" && b.segment_count > 0);
   const base = initial?.settings ?? DEFAULT_SETTINGS;
 
   const [name, setName] = useState(initial?.name ?? "");
@@ -97,6 +136,11 @@ export function ProjectForm({
 
   const set = <K extends keyof SvProjectSettings>(key: K, value: SvProjectSettings[K]) =>
     setS((prev) => ({ ...prev, [key]: value }));
+
+  const selectedTemplate = templates.find((t) => t.id === s.template_id) ?? null;
+  // Footage selection only applies to split-screen presets (gameplay fills the
+  // bottom half); full-screen presets use the whole frame.
+  const isSplitScreen = selectedTemplate?.data?.gameplay?.mode === "split_bottom";
 
   const toggleConnector = (id: number) =>
     setS((prev) => ({
@@ -233,26 +277,41 @@ export function ProjectForm({
       {/* 2. Look & sound */}
       <fieldset className="space-y-3 rounded-lg border p-4">
         <legend className="px-1 text-sm font-semibold">2 · How every video looks &amp; sounds</legend>
+        <div className="space-y-2">
+          <Label>Preset</Label>
+          <Select
+            value={s.template_id != null ? String(s.template_id) : "none"}
+            onValueChange={(v) => set("template_id", v === "none" ? null : Number(v))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Default preset" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Use my default preset</SelectItem>
+              {templates.map((t) => (
+                <SelectItem key={t.id} value={String(t.id)}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedTemplate ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/60 bg-primary/5 px-4 py-3 ring-1 ring-primary/30">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-primary">{selectedTemplate.name}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {templateTagline(selectedTemplate.data)}
+                </div>
+              </div>
+              <TemplateBadge t={selectedTemplate} />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Using your default preset. Pick one above to lock its look for every video.
+            </p>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Preset</Label>
-            <Select
-              value={s.template_id != null ? String(s.template_id) : "none"}
-              onValueChange={(v) => set("template_id", v === "none" ? null : Number(v))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Default preset" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Use my default preset</SelectItem>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="space-y-2">
             <Label>Voice</Label>
             <Select value={voiceToValue(s.voice)} onValueChange={(v) => set("voice", valueToVoice(v))}>
@@ -303,6 +362,7 @@ export function ProjectForm({
             <Select
               value={s.background_category ?? "any"}
               onValueChange={(v) => set("background_category", v === "any" ? null : v)}
+              disabled={isSplitScreen && s.background_id != null}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -317,6 +377,32 @@ export function ProjectForm({
               </SelectContent>
             </Select>
           </div>
+          {isSplitScreen && (
+            <div className="space-y-2">
+              <Label>Footage</Label>
+              <Select
+                value={s.background_id != null ? String(s.background_id) : "auto"}
+                onValueChange={(v) => set("background_id", v === "auto" ? null : Number(v))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto (from category)</SelectItem>
+                  {readyFootage.map((b) => (
+                    <SelectItem key={b.id} value={String(b.id)}>
+                      {truncate(b.original_filename || `Footage #${b.id}`)} · {b.segment_count} seg
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {s.background_id != null && (
+                <p className="text-xs text-muted-foreground">
+                  Gameplay segments come from this clip only.
+                </p>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Duration</Label>
             <Select value={String(s.duration_target)} onValueChange={(v) => set("duration_target", Number(v))}>
