@@ -6,6 +6,7 @@
 import type { Palette } from "./colorUtils";
 
 export const THEMES: Record<string, Palette> = {
+  "open-code-default": { bg: "#1f231f", fg: "#d5dcd6", panel: "#141514", border: "#404f41", red: "#65c26c" },
   dark: { bg: "#282c34", fg: "#9cdef2", panel: "#111111", border: "#355a66", red: "#e06c75" },
   light: { bg: "#f0ebe3", fg: "#5a5248", panel: "#faf6f0", border: "#d4cdc2", red: "#c47d5a" },
   midnight: { bg: "#0d1117", fg: "#c9d1d9", panel: "#161b22", border: "#30363d", red: "#f85149" },
@@ -30,12 +31,13 @@ export const THEMES: Record<string, Palette> = {
 export const THEME_ORDER = Object.keys(THEMES);
 
 export function themeLabel(name: string): string {
+  if (name === "open-code-default") return "open code";
   if (name === "dark") return "original";
   if (name === "gpt") return "GPT";
   return name;
 }
 
-export const DEFAULT_THEME = "dark";
+export const DEFAULT_THEME = "open-code-default";
 export const LS_KEY = "openclip-theme";
 export const CUSTOM_THEMES_KEY = "openclip-custom-themes";
 export const MAX_CUSTOM_THEMES = 8;
@@ -73,6 +75,7 @@ export const BG_PATTERNS: { value: BgPattern; label: string }[] = [
 
 /** Default background pattern per built-in theme. */
 export const THEME_DEFAULT_PATTERN: Record<string, BgPattern> = {
+  "open-code-default": "perlin-flow",
   dark: "none",
   light: "dots",
   midnight: "rain",

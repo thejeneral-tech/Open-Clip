@@ -74,11 +74,11 @@ function defaultState(): ThemeState {
     colors: THEMES[DEFAULT_THEME],
     font: DEFAULT_FONT,
     density: DEFAULT_DENSITY,
-    bgPattern: "none",
-    bgEffectColor: "",
-    bgEffectIntensity: 1,
+    bgPattern: THEME_DEFAULT_PATTERN[DEFAULT_THEME] || "none",
+    bgEffectColor: THEME_DEFAULT_EFFECT_COLOR[DEFAULT_THEME] || "",
+    bgEffectIntensity: THEME_DEFAULT_INTENSITY[DEFAULT_THEME] ?? 1,
     bgEffectSize: 1,
-    frosted: false,
+    frosted: THEME_DEFAULT_FROSTED[DEFAULT_THEME] ?? false,
   };
 }
 

@@ -8,19 +8,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#282c34",
+  themeColor: "#1f231f",
 };
 
 /**
- * No-flash theme bootstrap — applies the saved palette (or the default dark
- * theme) to <html> before first paint, so there's no flash of the wrong theme.
- * The full ThemeProvider then takes over on hydration.
+ * No-flash theme bootstrap — applies the saved palette (or the open-code
+ * default theme) to <html> before first paint, so there's no flash of the
+ * wrong theme. The full ThemeProvider then takes over on hydration.
  */
 const BOOTSTRAP = `(function(){try{
   var raw = localStorage.getItem('openclip-theme');
-  var DARK = {bg:'#282c34',fg:'#9cdef2',panel:'#111111',border:'#355a66',red:'#e06c75'};
+  var DEFAULT = {bg:'#1f231f',fg:'#d5dcd6',panel:'#141514',border:'#404f41',red:'#65c26c'};
   var saved = raw ? JSON.parse(raw) : null;
-  var c = (saved && saved.colors) ? saved.colors : DARK;
+  var c = (saved && saved.colors) ? saved.colors : DEFAULT;
   var s = document.documentElement.style;
   s.setProperty('--bg', c.bg); s.setProperty('--fg', c.fg);
   s.setProperty('--panel', c.panel); s.setProperty('--border', c.border);
@@ -29,13 +29,13 @@ const BOOTSTRAP = `(function(){try{
   s.setProperty('--hover-bg', 'color-mix(in srgb, '+c.fg+' 8%, '+c.bg+')');
   var FONTS = {mono:"'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace", sans:"system-ui, -apple-system, 'Segoe UI', sans-serif", serif:"Georgia, 'Times New Roman', serif"};
   if (saved && saved.font && FONTS[saved.font]) s.setProperty('--font-family', FONTS[saved.font]);
-  var DEFP = {dark:'none',light:'dots',midnight:'rain',paper:'dots',cyberpunk:'synapse',retrowave:'embers',forest:'petals',ocean:'constellations',terminal:'perlin-flow',organs:'rain',ume:'petals',cute:'sparkles'};
+  var DEFP = {'open-code-default':'perlin-flow',dark:'none',light:'dots',midnight:'rain',paper:'dots',cyberpunk:'synapse',retrowave:'embers',forest:'petals',ocean:'constellations',terminal:'perlin-flow',organs:'rain',ume:'petals',cute:'sparkles'};
   var de = document.documentElement;
   if (saved && saved.density && saved.density !== 'comfortable') de.classList.add('density-' + saved.density);
   if (saved && saved.bgEffectColor) s.setProperty('--bg-effect-color', saved.bgEffectColor);
   if (saved && saved.bgEffectIntensity != null) s.setProperty('--bg-effect-intensity', String(saved.bgEffectIntensity));
   document.addEventListener('DOMContentLoaded', function(){
-    var pat = (saved && saved.bgPattern) ? saved.bgPattern : (saved ? (DEFP[saved.name]||'none') : 'none');
+    var pat = (saved && saved.bgPattern) ? saved.bgPattern : (saved ? (DEFP[saved.name]||'none') : 'perlin-flow');
     if (pat && pat !== 'none') document.body.classList.add('bg-pattern-' + pat);
     if (saved && saved.frosted) document.body.classList.add('theme-frosted');
   });
