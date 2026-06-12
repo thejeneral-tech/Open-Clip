@@ -638,6 +638,28 @@ async def _owned_template(db: AsyncSession, template_id: int, user: User) -> SvT
     return tpl
 
 
+async def _template_snapshot(
+    db: AsyncSession, user: User, template_id: int | None
+) -> tuple[dict | None, dict | None]:
+    """Freeze a template's render config for a queued video.
+
+    Returns ``(template_config, caption_config)`` snapshotted at queue time so a
+    later edit/deletion of the template can't change an in-flight video. The full
+    config drives the intro Reddit topic card + author intro overlays; the
+    ``captions`` sub-blob keeps matching the burned-in caption preview as before.
+    With no ``template_id`` both are ``None`` (the named ``caption_style`` is used
+    alone and no intro overlays render) — the studio always sends the default
+    template's id, so the default video still gets the full reference look.
+    """
+    if template_id is None:
+        return None, None
+    tpl = await _owned_template(db, template_id, user)
+    if not isinstance(tpl.data, dict):
+        return None, None
+    caps = tpl.data.get("captions")
+    return tpl.data, (caps if isinstance(caps, dict) else None)
+
+
 async def _list_templates(db: AsyncSession, user: User) -> list[SvTemplate]:
     return list(
         (
@@ -1004,6 +1026,7 @@ async def run_project(
     ).scalars().all()
 
     voice, speed = await _resolve_voice(db, current_user, s.voice, s.speed)
+    template_config, caption_config = await _template_snapshot(db, current_user, s.template_id)
     queued: list[SvVideo] = []
     for story in stories:
         video = SvVideo(
@@ -1018,6 +1041,8 @@ async def run_project(
             voice=voice,
             speed=speed,
             caption_style=s.caption_style,
+            caption_config=caption_config,
+            template_config=template_config,
             background_category=s.background_category,
             background_id=s.background_id,
             script_engine=s.script_engine,
@@ -1427,14 +1452,11 @@ async def create_video(
     #   "preset:<id>"        → that saved preset, picked explicitly in the studio
     #   any other string     → a SAPI system voice name, used verbatim
     voice, speed = await _resolve_voice(db, current_user, payload.voice, payload.speed)
-    # Snapshot the selected preset's caption config so the burned-in captions
-    # match its preview, frozen at queue time against later template edits.
-    caption_config = None
-    if payload.template_id is not None:
-        tpl = await _owned_template(db, payload.template_id, current_user)
-        caps = tpl.data.get("captions") if isinstance(tpl.data, dict) else None
-        if isinstance(caps, dict):
-            caption_config = caps
+    # Snapshot the selected template's full render config (frozen at queue time
+    # against later edits): the caption sub-blob keeps the burned-in captions
+    # matching the preview, and the topicCard/authorIntro drive the intro
+    # overlays. With no template selected we fall back to the user's default.
+    template_config, caption_config = await _template_snapshot(db, current_user, payload.template_id)
     video = SvVideo(
         owner_id=current_user.id,
         story_id=story.id,
@@ -1448,6 +1470,7 @@ async def create_video(
         speed=speed,
         caption_style=payload.caption_style,
         caption_config=caption_config,
+        template_config=template_config,
         background_category=payload.background_category,
         background_id=payload.background_id,
         script_engine=payload.script_engine,

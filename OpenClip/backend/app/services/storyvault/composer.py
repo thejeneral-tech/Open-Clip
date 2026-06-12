@@ -38,6 +38,10 @@ class RenderSpec:
     output_path: str               # absolute output mp4
     width: int = RENDER_W
     height: int = RENDER_H
+    # Intro overlays composited on top of the captioned footage, each:
+    # {"path", "x", "y", "start", "end", "fade"} (absolute PNG path, target-px
+    # position, on-screen window in seconds, alpha fade duration). Empty = none.
+    overlays: list[dict[str, Any]] | None = None
 
 
 def _escape_filter_path(path: str) -> str:
@@ -143,10 +147,37 @@ def render_video(spec: RenderSpec, *, on_progress: ProgressCb | None = None) -> 
     args.extend(["-i", spec.narration_path])
     audio_idx = n_video_inputs
 
+    # Footage + captions → [base].
     chain = [f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS"]
     if spec.ass_path and os.path.exists(spec.ass_path):
         chain.append(f"ass='{_escape_filter_path(spec.ass_path)}'")
-    filters.append(",".join(chain) + "[vout]")
+    last = "[vout]"
+
+    # Intro overlays (Reddit topic card, author intro): each PNG is looped over
+    # the full timeline so its alpha-fade has frames to act on, then composited
+    # only within its on-screen window.
+    overlays = [o for o in (spec.overlays or []) if os.path.exists(o.get("path", ""))]
+    if overlays:
+        filters.append(",".join(chain) + "[base]")
+        prev = "[base]"
+        for k, ov in enumerate(overlays):
+            ov_idx = audio_idx + 1 + k
+            args.extend(["-loop", "1", "-framerate", str(FPS), "-t", f"{total:.3f}", "-i", ov["path"]])
+            start, end = float(ov["start"]), float(ov["end"])
+            fade = max(0.05, min(float(ov.get("fade", 0.18)), (end - start) / 2))
+            filters.append(
+                f"[{ov_idx}:v]format=rgba,"
+                f"fade=t=in:st={start:.3f}:d={fade:.3f}:alpha=1,"
+                f"fade=t=out:st={end - fade:.3f}:d={fade:.3f}:alpha=1[ov{k}]"
+            )
+            out = "[vout]" if k == len(overlays) - 1 else f"[base{k}]"
+            filters.append(
+                f"{prev}[ov{k}]overlay=x={int(ov['x'])}:y={int(ov['y'])}:"
+                f"enable='between(t,{start:.3f},{end:.3f})'{out}"
+            )
+            prev = out
+    else:
+        filters.append(",".join(chain) + last)
 
     os.makedirs(os.path.dirname(spec.output_path), exist_ok=True)
     cmd = [
