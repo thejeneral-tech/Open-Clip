@@ -234,12 +234,18 @@ def _fmt_time(seconds: float) -> str:
 def _word_text(tok: dict[str, Any], style: StylePreset, active: bool) -> str:
     word = tok["word"].upper() if style.uppercase else tok["word"]
     word = word.replace("{", "(").replace("}", ")")  # ASS-safe
-    emphasized = tok.get("emphasis") or active
-    if emphasized:
-        scale = int(style.active_scale * 100)
+    scale = int(style.active_scale * 100)
+    if active:
+        # Only the word being spoken right now lights up (highlight colour + grow).
+        # This is the karaoke effect — exactly one word per segment is active, so
+        # the colour always tracks the voice.
         override = f"{{\\c{style.highlight}\\fscx{scale}\\fscy{scale}}}"
-        reset = "{\\r}"
-        word = f"{override}{word}{reset}"
+        word = f"{override}{word}{{\\r}}"
+    elif tok.get("emphasis"):
+        # Emphasised words (numbers, long/important words) stay slightly larger so
+        # they still stand out, but keep the base colour — never the highlight
+        # colour — so they're never mistaken for the word currently being spoken.
+        word = f"{{\\fscx{scale}\\fscy{scale}}}{word}{{\\r}}"
     if tok.get("emoji"):
         word = f"{word} {tok['emoji']}"
     return word
