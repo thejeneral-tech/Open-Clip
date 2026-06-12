@@ -194,17 +194,17 @@ export default function ModelsPage() {
             <CardContent>
               {!status?.gpu_processes?.length ? (
                 <p className="text-sm text-muted-foreground">
-                  Open-Clip isn&apos;t using any GPU VRAM right now — the app and the Ollama model server
-                  are idle (or there&apos;s no GPU / counters are unavailable).
+                  None of Open-Clip&apos;s services are running right now.
                 </p>
               ) : (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Open-Clip&apos;s GPU processes — the app&apos;s own workers and the Ollama model server
-                    it drives — currently using GPU memory. Toggle one{" "}
-                    <span className="font-medium">off to pause it</span> (freezes the process so it stops
-                    working) and back <span className="font-medium">on to resume</span> — or use the trash
-                    button to terminate it. Critical system processes are locked.
+                    Open-Clip&apos;s own services — the API server, background worker, web frontend and
+                    the Ollama model server — with the GPU memory each is using (a dash means it&apos;s on
+                    CPU only right now). Toggle one{" "}
+                    <span className="font-medium">off to pause it</span> (freezes the whole service so it
+                    stops working) and back <span className="font-medium">on to resume</span> — or use the
+                    trash button to terminate it. The API server runs this page, so it stays locked.
                   </p>
                   {status.gpu_processes.map((p) => {
                     const toggling = suspend.isPending && suspend.variables?.pid === p.pid;
