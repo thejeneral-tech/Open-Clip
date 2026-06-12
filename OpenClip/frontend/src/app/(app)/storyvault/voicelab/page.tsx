@@ -452,7 +452,7 @@ export default function VoiceLabPage() {
       {/* Header */}
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-lg shadow-primary/20">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground">
             <Mic className="h-5 w-5" />
           </div>
           <div>
