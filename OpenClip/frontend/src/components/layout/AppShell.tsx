@@ -8,11 +8,32 @@ import { Sidebar } from "./Sidebar";
 import { ThemeModal } from "@/components/theme/ThemeModal";
 import { cn } from "@/lib/utils";
 
+const SIDEBAR_COLLAPSED_KEY = "openclip_sidebar_collapsed";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout: authLogout } = useAuth();
   const [themeOpen, setThemeOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Desktop sidebar icon-rail mode; hydrates from localStorage after mount.
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setNavCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+  const toggleNavCollapsed = () => {
+    setNavCollapsed((prev) => {
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, prev ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !prev;
+    });
+  };
 
   // Auth gate — bounce to /login once we know there's no authenticated user.
   useEffect(() => {
@@ -38,7 +59,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen overflow-hidden">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <Sidebar onOpenTheme={() => setThemeOpen(true)} onLogout={logout} userEmail={displayEmail} />
+        <Sidebar
+          onOpenTheme={() => setThemeOpen(true)}
+          onLogout={logout}
+          userEmail={displayEmail}
+          collapsed={navCollapsed}
+          onToggleCollapse={toggleNavCollapsed}
+        />
       </div>
 
       {/* Mobile sidebar drawer */}
