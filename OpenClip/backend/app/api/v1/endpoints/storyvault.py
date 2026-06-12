@@ -31,6 +31,7 @@ from app.models.publishing import PublishingConnector
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvProject,
     SvPublishJob,
     SvScript,
     SvSegment,
@@ -59,6 +60,11 @@ from app.schemas.storyvault import (
     SvDiscoverySearch,
     SvExportOut,
     SvMetaOut,
+    SvProjectCreate,
+    SvProjectOut,
+    SvProjectRunResult,
+    SvProjectSettings,
+    SvProjectUpdate,
     SvPublishJobOut,
     SvPublishRequest,
     SvScriptOut,
@@ -137,6 +143,87 @@ async def _owned_video(db: AsyncSession, video_id: int, user: User) -> SvVideo:
     if not video or video.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Video not found")
     return video
+
+
+async def _owned_project(db: AsyncSession, project_id: int, user: User) -> SvProject:
+    project = await db.get(SvProject, project_id)
+    if not project or project.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+# Story statuses that are still "ready to turn into a video" (not yet used).
+_READY_STORY_STATUSES = (
+    SvStoryStatus.NEW.value,
+    SvStoryStatus.SAVED.value,
+    SvStoryStatus.APPROVED.value,
+)
+_PIPELINE_VIDEO_STATUSES = (
+    SvVideoStatus.QUEUED.value,
+    SvVideoStatus.PROCESSING.value,
+    SvVideoStatus.RENDERING.value,
+)
+
+
+async def _project_out(db: AsyncSession, project: SvProject) -> SvProjectOut:
+    """Enrich a project with its pipeline counts (one place to see the flow)."""
+
+    async def _count(stmt) -> int:
+        return int((await db.execute(stmt)).scalar() or 0)
+
+    pid = project.id
+    stories_q = select(func.count(SvStory.id)).where(
+        SvStory.project_id == pid, SvStory.deleted_at.is_(None)
+    )
+    videos_q = select(func.count(SvVideo.id)).where(SvVideo.project_id == pid)
+
+    out = SvProjectOut.model_validate(project)
+    out.settings = SvProjectSettings(**(project.settings or {}))
+    out.stories_total = await _count(stories_q)
+    out.stories_ready = await _count(stories_q.where(SvStory.status.in_(_READY_STORY_STATUSES)))
+    out.videos_total = await _count(videos_q)
+    out.videos_in_pipeline = await _count(videos_q.where(SvVideo.status.in_(_PIPELINE_VIDEO_STATUSES)))
+    out.videos_in_review = await _count(
+        videos_q.where(SvVideo.status == SvVideoStatus.READY_FOR_REVIEW.value)
+    )
+    out.videos_completed = await _count(videos_q.where(SvVideo.status == SvVideoStatus.COMPLETED.value))
+    out.videos_published = await _count(
+        select(func.count(func.distinct(SvPublishJob.sv_video_id)))
+        .join(SvVideo, SvPublishJob.sv_video_id == SvVideo.id)
+        .where(SvVideo.project_id == pid, SvPublishJob.status == "published")
+    )
+    return out
+
+
+async def _resolve_voice(
+    db: AsyncSession, user: User, voice: str | None, speed: float
+) -> tuple[str | None, float]:
+    """Turn a stored voice choice into a concrete (voice, speed) pair.
+
+    ``None`` → the user's default Voice Lab preset (if any); ``"preset:<id>"`` →
+    that saved preset; anything else → a SAPI voice name used verbatim.
+    """
+    if voice is None:
+        default_preset = (
+            await db.execute(
+                select(SvVoicePreset).where(
+                    SvVoicePreset.owner_id == user.id,
+                    SvVoicePreset.deleted_at.is_(None),
+                    SvVoicePreset.is_default.is_(True),
+                )
+            )
+        ).scalars().first()
+        return (default_preset.voice if default_preset else None), speed
+    if voice.startswith("preset:"):
+        try:
+            preset_id = int(voice.split(":", 1)[1])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid voice preset")
+        preset = await db.get(SvVoicePreset, preset_id)
+        if not preset or preset.owner_id != user.id or preset.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Voice preset not found")
+        return preset.voice, preset.speed
+    return voice, speed
 
 
 # ---------------------------------------------------------------------- meta
@@ -700,6 +787,270 @@ async def delete_template(
     return Message(detail="Template deleted")
 
 
+# ------------------------------------------------------------------ projects
+async def _validate_project_settings(
+    db: AsyncSession, user: User, s: SvProjectSettings
+) -> None:
+    """Reject settings that point at footage or channels the user doesn't own."""
+    if s.background_id is not None:
+        bg = await db.get(SvBackground, s.background_id)
+        if not bg or bg.owner_id != user.id:
+            raise HTTPException(status_code=404, detail="Footage not found")
+    if s.template_id is not None:
+        tpl = await db.get(SvTemplate, s.template_id)
+        if not tpl or tpl.owner_id != user.id or tpl.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Preset not found")
+    if s.publish_connector_ids:
+        owned = set(
+            (
+                await db.execute(
+                    select(PublishingConnector.id).where(
+                        PublishingConnector.id.in_(s.publish_connector_ids),
+                        PublishingConnector.owner_id == user.id,
+                    )
+                )
+            ).scalars()
+        )
+        missing = [c for c in s.publish_connector_ids if c not in owned]
+        if missing:
+            raise HTTPException(status_code=404, detail="One or more publish channels were not found")
+
+
+async def _collect_reddit_into_project(
+    db: AsyncSession, user: User, project: SvProject, s: SvProjectSettings
+) -> int:
+    """Fetch fresh stories from the project's communities and file them under it.
+
+    Mirrors ``/discovery/search`` but tags every new story with ``project_id`` so
+    a one-click run pulls straight into the right folder. Failures are swallowed
+    (best-effort) so a flaky source never blocks the rest of the run.
+    """
+    fetched: list[dict] = []
+    for community in s.communities:
+        try:
+            fetched.extend(
+                await reddit.fetch_community(
+                    community,
+                    sort=s.discovery_sort,
+                    time_window=s.discovery_time_window,
+                    limit=25,
+                    min_upvotes=s.min_upvotes,
+                    min_length=s.min_length,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — one bad source shouldn't abort the run
+            logger.warning("Project %s discovery failed for %s: %s", project.id, community, exc)
+
+    existing_ids = set(
+        (
+            await db.execute(
+                select(SvStory.external_id).where(
+                    SvStory.owner_id == user.id, SvStory.external_id.isnot(None)
+                )
+            )
+        ).scalars()
+    )
+
+    added = 0
+    for item in fetched:
+        if item["external_id"] in existing_ids:
+            continue
+        existing_ids.add(item["external_id"])
+        scored = scoring.score_story(
+            item["title"], item["body"], item["upvotes"], item["num_comments"]
+        )
+        db.add(
+            SvStory(
+                owner_id=user.id,
+                project_id=project.id,
+                source=item["source"],
+                source_url=item["source_url"],
+                external_id=item["external_id"],
+                community=item["community"],
+                author=item.get("author"),
+                title=item["title"],
+                body=item["body"],
+                category=scoring.guess_category(item["title"], item["body"], item["community"]),
+                upvotes=item["upvotes"],
+                num_comments=item["num_comments"],
+                score=scored["overall"],
+                score_breakdown=scored["breakdown"],
+            )
+        )
+        added += 1
+    if added:
+        await db.commit()
+    return added
+
+
+@router.get("/projects", response_model=list[SvProjectOut])
+async def list_projects(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvProjectOut]:
+    rows = (
+        await db.execute(
+            select(SvProject)
+            .where(SvProject.owner_id == current_user.id)
+            .order_by(SvProject.updated_at.desc())
+        )
+    ).scalars().all()
+    return [await _project_out(db, p) for p in rows]
+
+
+@router.post("/projects", response_model=SvProjectOut, status_code=201)
+async def create_project(
+    payload: SvProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvProjectOut:
+    await _validate_project_settings(db, current_user, payload.settings)
+    project = SvProject(
+        owner_id=current_user.id,
+        name=payload.name.strip()[:255],
+        description=(payload.description or None),
+        settings=payload.settings.model_dump(),
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return await _project_out(db, project)
+
+
+@router.get("/projects/{project_id}", response_model=SvProjectOut)
+async def get_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvProjectOut:
+    project = await _owned_project(db, project_id, current_user)
+    return await _project_out(db, project)
+
+
+@router.patch("/projects/{project_id}", response_model=SvProjectOut)
+async def update_project(
+    project_id: int,
+    payload: SvProjectUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvProjectOut:
+    project = await _owned_project(db, project_id, current_user)
+    if payload.name is not None:
+        project.name = payload.name.strip()[:255]
+    if payload.description is not None:
+        project.description = payload.description or None
+    if payload.settings is not None:
+        await _validate_project_settings(db, current_user, payload.settings)
+        project.settings = payload.settings.model_dump()
+    await db.commit()
+    await db.refresh(project)
+    return await _project_out(db, project)
+
+
+@router.delete("/projects/{project_id}", response_model=Message)
+async def delete_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    project = await _owned_project(db, project_id, current_user)
+    # Don't delete the work — just unfile it (SQLite has no FK cascade here).
+    await db.execute(
+        SvStory.__table__.update().where(SvStory.project_id == project.id).values(project_id=None)
+    )
+    await db.execute(
+        SvVideo.__table__.update().where(SvVideo.project_id == project.id).values(project_id=None)
+    )
+    await db.delete(project)
+    await db.commit()
+    return Message(detail="Project deleted")
+
+
+@router.post("/projects/{project_id}/run", response_model=SvProjectRunResult)
+async def run_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvProjectRunResult:
+    """One click: collect fresh stories, then queue videos for the best ones.
+
+    Each queued video runs the full pipeline (script → narration → captions →
+    footage → preview). When the project has ``auto_publish`` on, the worker
+    also renders the final cut and queues it to the saved channels — so a single
+    click carries a story all the way to "ready to publish".
+    """
+    project = await _owned_project(db, project_id, current_user)
+    s = SvProjectSettings(**(project.settings or {}))
+
+    stories_added = 0
+    if s.story_source == "reddit" and s.communities:
+        stories_added = await _collect_reddit_into_project(db, current_user, project, s)
+
+    # Best ready stories in this folder that don't have a video yet.
+    used_subq = select(SvVideo.story_id).where(SvVideo.project_id == project.id)
+    stories = (
+        await db.execute(
+            select(SvStory)
+            .where(
+                SvStory.owner_id == current_user.id,
+                SvStory.project_id == project.id,
+                SvStory.deleted_at.is_(None),
+                SvStory.status.in_(_READY_STORY_STATUSES),
+                SvStory.id.notin_(used_subq),
+            )
+            .order_by(SvStory.score.desc())
+            .limit(s.videos_per_run)
+        )
+    ).scalars().all()
+
+    voice, speed = await _resolve_voice(db, current_user, s.voice, s.speed)
+    queued: list[SvVideo] = []
+    for story in stories:
+        video = SvVideo(
+            owner_id=current_user.id,
+            story_id=story.id,
+            project_id=project.id,
+            title=story.title[:512],
+            duration_target=s.duration_target,
+            hook_style=s.hook_style,
+            narration_style=s.narration_style,
+            drama_level=s.drama_level,
+            voice=voice,
+            speed=speed,
+            caption_style=s.caption_style,
+            background_category=s.background_category,
+            background_id=s.background_id,
+            script_engine=s.script_engine,
+            status=SvVideoStatus.QUEUED.value,
+        )
+        db.add(video)
+        queued.append(video)
+    await db.commit()
+    for video in queued:
+        await db.refresh(video)
+        task = sv_generate_video_task.delay(video.id)
+        video.celery_task_id = task.id
+    if queued:
+        await db.commit()
+
+    n = len(queued)
+    if stories_added == 0 and n == 0:
+        detail = (
+            "No new stories to turn into videos. Add stories to this project, "
+            "or set a story source and upvote thresholds it can reach."
+        )
+    else:
+        bits = []
+        if stories_added:
+            bits.append(f"collected {stories_added} new {'story' if stories_added == 1 else 'stories'}")
+        if n:
+            bits.append(f"queued {n} {'video' if n == 1 else 'videos'}")
+        detail = "Run started — " + " and ".join(bits) + "."
+        if s.auto_publish and n:
+            detail += " They'll render and queue for publishing automatically."
+    return SvProjectRunResult(stories_added=stories_added, videos_queued=n, detail=detail)
+
+
 @router.get("/dashboard", response_model=SvDashboardOut)
 async def dashboard(
     current_user: User = Depends(get_current_user),
@@ -855,6 +1206,7 @@ async def list_stories(
     category: str | None = Query(default=None),
     q: str | None = Query(default=None),
     sort: str = Query(default="score"),  # score|newest|upvotes
+    project_id: int | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
@@ -862,6 +1214,8 @@ async def list_stories(
     stmt = select(SvStory).where(SvStory.owner_id == current_user.id, SvStory.deleted_at.is_(None))
     if status:
         stmt = stmt.where(SvStory.status == status)
+    if project_id is not None:
+        stmt = stmt.where(SvStory.project_id == project_id)
     if category:
         stmt = stmt.where(SvStory.category == category)
     if q:
@@ -1065,37 +1419,18 @@ async def create_video(
         bg = await db.get(SvBackground, payload.background_id)
         if not bg or bg.owner_id != current_user.id:
             raise HTTPException(status_code=404, detail="Footage not found")
+    # Optional project folder must belong to the caller.
+    if payload.project_id is not None:
+        await _owned_project(db, payload.project_id, current_user)
     # Voice resolution:
     #   "Auto" (None)        → the user's default Voice Lab preset, if one exists
     #   "preset:<id>"        → that saved preset, picked explicitly in the studio
     #   any other string     → a SAPI system voice name, used verbatim
-    voice = payload.voice
-    speed = payload.speed
-    if voice is None:
-        default_preset = (
-            await db.execute(
-                select(SvVoicePreset).where(
-                    SvVoicePreset.owner_id == current_user.id,
-                    SvVoicePreset.deleted_at.is_(None),
-                    SvVoicePreset.is_default.is_(True),
-                )
-            )
-        ).scalars().first()
-        if default_preset:
-            voice = default_preset.voice
-    elif voice.startswith("preset:"):
-        try:
-            preset_id = int(voice.split(":", 1)[1])
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid voice preset")
-        preset = await db.get(SvVoicePreset, preset_id)
-        if not preset or preset.owner_id != current_user.id or preset.deleted_at is not None:
-            raise HTTPException(status_code=404, detail="Voice preset not found")
-        voice = preset.voice
-        speed = preset.speed
+    voice, speed = await _resolve_voice(db, current_user, payload.voice, payload.speed)
     video = SvVideo(
         owner_id=current_user.id,
         story_id=story.id,
+        project_id=payload.project_id,
         title=story.title[:512],
         duration_target=payload.duration_target,
         hook_style=payload.hook_style,
@@ -1123,6 +1458,7 @@ async def create_video(
 @router.get("/videos", response_model=list[SvVideoOut])
 async def list_videos(
     status: str | None = Query(default=None),
+    project_id: int | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
@@ -1134,6 +1470,8 @@ async def list_videos(
     )
     if status:
         stmt = stmt.where(SvVideo.status == status)
+    if project_id is not None:
+        stmt = stmt.where(SvVideo.project_id == project_id)
     rows = (await db.execute(stmt.order_by(SvVideo.updated_at.desc()).limit(limit))).all()
     return [_video_out(v, story_title=t) for v, t in rows]
 

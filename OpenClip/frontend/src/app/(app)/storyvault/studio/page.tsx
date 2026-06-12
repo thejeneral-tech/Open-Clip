@@ -23,6 +23,7 @@ import {
   useSvBackgrounds,
   useSvCreateVideo,
   useSvMeta,
+  useSvProjects,
   useSvRetryVideo,
   useSvStories,
   useSvTemplates,
@@ -32,7 +33,7 @@ import {
 } from "@/hooks/use-api";
 import { PhonePreview } from "@/components/storyvault/template-preview";
 import { categoryLabel } from "@/lib/utils";
-import type { SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
+import type { SvProject, SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
 
 const ACTIVE_STATUSES = new Set(["queued", "processing", "rendering", "failed"]);
 const PICKABLE_STATUSES = new Set(["new", "saved", "approved"]);
@@ -116,6 +117,7 @@ function StudioInner() {
   const storyParam = searchParams.get("story");
   const captionParam = searchParams.get("caption");
   const templateParam = searchParams.get("template");
+  const projectParam = searchParams.get("project");
 
   const { data: stories = [], isLoading: storiesLoading } = useSvStories({ status: undefined, sort: "score" });
   const { data: meta } = useSvMeta();
@@ -124,6 +126,7 @@ function StudioInner() {
   const { data: templates = [] } = useSvTemplates();
   const { data: backgrounds = [] } = useSvBackgrounds();
   const { data: voicePresets = [] } = useSvVoicePresets();
+  const { data: projects = [] } = useSvProjects();
   const createVideo = useSvCreateVideo();
 
   // Footage the user can pin to the gameplay layer — only ready clips with segments.
@@ -146,6 +149,38 @@ function StudioInner() {
   const [templateId, setTemplateId] = useState<number | null>(
     templateParam ? Number(templateParam) : null,
   );
+  const [projectId, setProjectId] = useState(projectParam ?? "none");
+
+  // Pull a project's saved recipe into the form so the whole thing is pre-filled.
+  const applyProject = (p: SvProject) => {
+    setProjectId(String(p.id));
+    const s = p.settings;
+    setDuration(String(s.duration_target));
+    setVoice(s.voice ?? "auto");
+    setCaptionStyle(s.caption_style);
+    setBackgroundCategory(s.background_category ?? "any");
+    setFootageId(s.background_id != null ? String(s.background_id) : "auto");
+    setScriptEngine(s.script_engine);
+    if (s.template_id != null) setTemplateId(s.template_id);
+  };
+
+  const onProjectChange = (value: string) => {
+    if (value === "none") {
+      setProjectId("none");
+      return;
+    }
+    const p = projects.find((proj) => proj.id === Number(value));
+    if (p) applyProject(p);
+  };
+
+  // When arriving via ?project=, auto-fill once the projects load.
+  useEffect(() => {
+    if (projectParam && projectId === projectParam) {
+      const p = projects.find((proj) => proj.id === Number(projectParam));
+      if (p && duration === "60") applyProject(p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects]);
 
   // Preselect the preset: the one passed in via ?template=, else the user's default.
   useEffect(() => {
@@ -174,6 +209,7 @@ function StudioInner() {
         background_id: isSplitScreen && footageId !== "auto" ? Number(footageId) : undefined,
         script_engine: scriptEngine,
         template_id: templateId ?? undefined,
+        project_id: projectId !== "none" ? Number(projectId) : undefined,
       });
       toast.success("Video queued — it will appear in Publishing when ready");
     } catch (err) {
@@ -201,6 +237,31 @@ function StudioInner() {
               </div>
             ) : (
               <form onSubmit={onSubmit} className="space-y-4">
+                {projects.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Project</Label>
+                    <Select value={projectId} onValueChange={onProjectChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="No project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {projectId !== "none" && (
+                      <p className="text-xs text-muted-foreground">
+                        Settings below are pre-filled from this project. Tweak any of them before
+                        generating.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label>Story</Label>
                   <Select value={storyId} onValueChange={setStoryId}>
