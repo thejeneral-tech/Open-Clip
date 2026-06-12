@@ -2,6 +2,7 @@
 
 import { Loader2, Star } from "lucide-react";
 import { useState } from "react";
+import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,22 +68,6 @@ function isClonedVoice(preset: SvVoicePreset): boolean {
 function truncate(text: string, max = 32): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
-
-// "true_crime" -> "True crime" for the raw enum strings meta hands back.
-function prettyLabel(value: string): string {
-  const spaced = value.replace(/[_-]+/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-const DRAMA_LEVELS: { value: number; label: string }[] = [
-  { value: 1, label: "1 · Subtle" },
-  { value: 2, label: "2 · Light" },
-  { value: 3, label: "3 · Balanced" },
-  { value: 4, label: "4 · Heavy" },
-  { value: 5, label: "5 · Intense" },
-];
-
-const VOICE_SPEEDS = [0.8, 0.9, 1.0, 1.1, 1.2];
 
 // One-line descriptor for a preset, mirroring the Video Studio + Presets page.
 function templateTagline(t: SvTemplateData): string {
@@ -157,6 +142,11 @@ export function ProjectForm({
   // Footage selection only applies to split-screen presets (gameplay fills the
   // bottom half); full-screen presets use the whole frame.
   const isSplitScreen = selectedTemplate?.data?.gameplay?.mode === "split_bottom";
+
+  // Caption look (style · position · text/highlight colours) is stored on the
+  // preset, so the editor binds to the selected preset and persists onto it —
+  // mirroring the Video Studio's Captions section.
+  const captionEditor = useCaptionEditor(selectedTemplate);
 
   const toggleConnector = (id: number) =>
     setS((prev) => ({
@@ -359,21 +349,6 @@ export function ProjectForm({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Caption style</Label>
-            <Select value={s.caption_style} onValueChange={(v) => set("caption_style", v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(meta?.caption_styles ?? ["modern_tiktok"]).map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
             <Label>Background gameplay</Label>
             <Select
               value={s.background_category ?? "any"}
@@ -447,69 +422,49 @@ export function ProjectForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Hook style</Label>
-            <Select value={s.hook_style} onValueChange={(v) => set("hook_style", v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(meta?.hook_styles ?? [s.hook_style]).map((h) => (
-                  <SelectItem key={h} value={h}>
-                    {prettyLabel(h)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        </div>
+
+        {/* Captions — style, position and colours, saved onto the selected preset */}
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Captions</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedTemplate ? (
+                  <>
+                    Style the captions for{" "}
+                    <span className="font-medium text-foreground">{selectedTemplate.name}</span>.
+                    Saved changes apply to this preset.
+                  </>
+                ) : (
+                  "Pick a preset above to style its captions and colours."
+                )}
+              </p>
+            </div>
+            {selectedTemplate && (
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!captionEditor.dirty || captionEditor.saving}
+                  onClick={() => captionEditor.reset()}
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!captionEditor.dirty || captionEditor.saving}
+                  onClick={() => captionEditor.save()}
+                >
+                  {captionEditor.saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save captions
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Narration style</Label>
-            <Select value={s.narration_style} onValueChange={(v) => set("narration_style", v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(meta?.narration_styles ?? [s.narration_style]).map((n) => (
-                  <SelectItem key={n} value={n}>
-                    {prettyLabel(n)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Drama level</Label>
-            <Select
-              value={String(s.drama_level)}
-              onValueChange={(v) => set("drama_level", Number(v))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DRAMA_LEVELS.map((d) => (
-                  <SelectItem key={d.value} value={String(d.value)}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Voice speed</Label>
-            <Select value={String(s.speed)} onValueChange={(v) => set("speed", Number(v))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {VOICE_SPEEDS.map((sp) => (
-                  <SelectItem key={sp} value={String(sp)}>
-                    {sp.toFixed(1)}× {sp === 1 ? "(normal)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {selectedTemplate && <CaptionControls editor={captionEditor} />}
         </div>
       </fieldset>
 
