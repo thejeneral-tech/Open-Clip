@@ -57,6 +57,12 @@ uploads/
 !data/storage/storyvault/voices/
 !data/storage/storyvault/voices/presets/
 !data/storage/storyvault/voices/presets/*.wav
+
+# Bundled built-in voice-preset audition clips (the TikTok clone voices) are
+# source assets seeded for every user — they must be committed, not ignored.
+!backend/app/services/storyvault/assets/
+!backend/app/services/storyvault/assets/voice_presets/
+!backend/app/services/storyvault/assets/voice_presets/*.wav
 !data/storage/storyvault/backgrounds/
 !data/storage/storyvault/backgrounds/.gitignore
 !data/storage/storyvault/backgrounds/*/
