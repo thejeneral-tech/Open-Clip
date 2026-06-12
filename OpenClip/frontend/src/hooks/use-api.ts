@@ -255,10 +255,72 @@ export function useSvDashboard(poll = false) {
   });
 }
 
-export function useSvStories(params: { status?: string; category?: string; q?: string; sort?: string } = {}) {
+export function useSvStories(
+  params: { status?: string; category?: string; q?: string; sort?: string; project_id?: number } = {},
+) {
   return useQuery({
     queryKey: ["sv-stories", params],
     queryFn: () => api.svListStories(params),
+  });
+}
+
+// ---------------------------------------------- story vault: projects
+export function useSvProjects() {
+  return useQuery({ queryKey: ["sv-projects"], queryFn: api.svListProjects });
+}
+
+export function useSvProject(id: number, poll = false) {
+  return useQuery({
+    queryKey: ["sv-project", id],
+    queryFn: () => api.svGetProject(id),
+    enabled: !!id,
+    refetchInterval: poll ? 5000 : false,
+  });
+}
+
+export function useSvCreateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.svCreateProject>[0]) => api.svCreateProject(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-projects"] }),
+  });
+}
+
+export function useSvUpdateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; data: Parameters<typeof api.svUpdateProject>[1] }) =>
+      api.svUpdateProject(vars.id, vars.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["sv-projects"] });
+      qc.invalidateQueries({ queryKey: ["sv-project", vars.id] });
+    },
+  });
+}
+
+export function useSvDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteProject(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sv-projects"] });
+      qc.invalidateQueries({ queryKey: ["sv-stories"] });
+      qc.invalidateQueries({ queryKey: ["sv-videos"] });
+    },
+  });
+}
+
+export function useSvRunProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svRunProject(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["sv-projects"] });
+      qc.invalidateQueries({ queryKey: ["sv-project", id] });
+      qc.invalidateQueries({ queryKey: ["sv-stories"] });
+      qc.invalidateQueries({ queryKey: ["sv-videos"] });
+      qc.invalidateQueries({ queryKey: ["sv-dashboard"] });
+    },
   });
 }
 
@@ -338,10 +400,10 @@ export function useSvDeleteBackground() {
   });
 }
 
-export function useSvVideos(status?: string, poll = false) {
+export function useSvVideos(status?: string, poll = false, projectId?: number) {
   return useQuery({
-    queryKey: ["sv-videos", status ?? "all"],
-    queryFn: () => api.svListVideos(status),
+    queryKey: ["sv-videos", status ?? "all", projectId ?? "all"],
+    queryFn: () => api.svListVideos(status, projectId),
     refetchInterval: poll ? 4000 : false,
   });
 }

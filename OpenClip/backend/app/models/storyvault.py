@@ -47,6 +47,11 @@ class SvStory(TimestampMixin, Base):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
+    # Optional: the Project (auto-workflow folder) this story was collected into.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sv_projects.id", ondelete="SET NULL"), default=None, index=True
+    )
+
     scripts: Mapped[list["SvScript"]] = relationship(
         "SvScript", back_populates="story", cascade="all, delete-orphan"
     )
@@ -125,6 +130,11 @@ class SvVideo(TimestampMixin, Base):
     )
     script_id: Mapped[int | None] = mapped_column(
         ForeignKey("sv_scripts.id", ondelete="SET NULL"), default=None
+    )
+    # Optional: the Project (auto-workflow folder) this video belongs to. Drives
+    # auto-publish chaining in the worker when the project has it enabled.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sv_projects.id", ondelete="SET NULL"), default=None, index=True
     )
 
     title: Mapped[str | None] = mapped_column(String(512), default=None)
@@ -275,3 +285,28 @@ class SvExport(CreatedAtMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     video: Mapped["SvVideo"] = relationship("SvVideo")
+
+
+class SvProject(TimestampMixin, Base):
+    """An 'auto-workflow' folder that makes a content series flow smoothly.
+
+    A project saves one reusable recipe — story source, background gameplay,
+    voice, caption style, render + publishing settings — and groups the stories
+    and videos produced for that series. Running it drives the whole pipeline
+    (collect stories → script → narrate → caption → render → queue publishing)
+    from one click, with each new video inheriting the project's settings.
+
+    The full recipe lives in ``settings`` (see
+    ``schemas.storyvault.SvProjectSettings``) so the knobs can grow without a
+    migration on a self-hosted SQLite database.
+    """
+
+    __tablename__ = "sv_projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)

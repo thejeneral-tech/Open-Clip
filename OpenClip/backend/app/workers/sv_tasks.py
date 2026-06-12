@@ -19,6 +19,7 @@ from app.models.publishing import PublishingConnector
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvProject,
     SvPublishJob,
     SvScript,
     SvSegment,
@@ -53,6 +54,81 @@ _PREVIEW = (0.62, 1.0)
 
 def _lerp(band: tuple[float, float], frac: float) -> float:
     return band[0] + (band[1] - band[0]) * max(0.0, min(1.0, frac))
+
+
+# =====================================================================
+# Auto-workflow chaining (projects with auto_publish on)
+# =====================================================================
+def _project_settings(db, project_id: int | None) -> dict | None:
+    """Return the project's auto-workflow settings, or None when not auto."""
+    if not project_id:
+        return None
+    project = db.get(SvProject, project_id)
+    if not project:
+        return None
+    settings = project.settings or {}
+    return settings if settings.get("auto_publish") else None
+
+
+def _maybe_auto_advance(sv_video_id: int) -> None:
+    """After a preview is ready, auto-approve + final-render if the project says so."""
+    try:
+        with session_scope() as db:
+            video = db.get(SvVideo, sv_video_id)
+            if not video or video.status != SvVideoStatus.READY_FOR_REVIEW.value:
+                return
+            if _project_settings(db, video.project_id) is None:
+                return
+            video.status = SvVideoStatus.APPROVED.value
+            video.reject_reason = None
+        sv_render_video_task.delay(sv_video_id, "tiktok")
+    except Exception:  # noqa: BLE001 — chaining is best-effort; the preview is safe in review
+        logger.exception("Auto-advance failed for story video %s", sv_video_id)
+
+
+def _maybe_auto_publish(sv_video_id: int) -> None:
+    """After a final render, queue uploads to the project's saved channels."""
+    try:
+        job_ids: list[int] = []
+        with session_scope() as db:
+            video = db.get(SvVideo, sv_video_id)
+            if not video:
+                return
+            settings = _project_settings(db, video.project_id)
+            if settings is None:
+                return
+            connector_ids = settings.get("publish_connector_ids") or []
+            if not connector_ids:
+                return
+            # Never double-publish — skip if this video already has jobs.
+            if db.query(SvPublishJob).filter(SvPublishJob.sv_video_id == sv_video_id).count():
+                return
+            connectors = (
+                db.query(PublishingConnector)
+                .filter(
+                    PublishingConnector.id.in_(connector_ids),
+                    PublishingConnector.owner_id == video.owner_id,
+                )
+                .all()
+            )
+            privacy = settings.get("privacy", "public")
+            title = (video.title or "Story video")[:100]
+            for connector in connectors:
+                job = SvPublishJob(
+                    owner_id=video.owner_id,
+                    sv_video_id=sv_video_id,
+                    connector_id=connector.id,
+                    platform=connector.platform,
+                    title=title,
+                    payload={"privacy": privacy},
+                )
+                db.add(job)
+                db.flush()
+                job_ids.append(job.id)
+        for job_id in job_ids:
+            sv_publish_job_task.delay(job_id)
+    except Exception:  # noqa: BLE001 — best-effort; the finished export stays available
+        logger.exception("Auto-publish failed for story video %s", sv_video_id)
 
 
 # =====================================================================
@@ -335,6 +411,10 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         logger.exception("Story video %s pipeline failed", sv_video_id)
         tracker.fail("pipeline", str(exc)[:1000])
 
+    # Auto-workflow: if this video belongs to an auto-publish project, carry it
+    # straight to the final render (the status guard no-ops on the failure path).
+    _maybe_auto_advance(sv_video_id)
+
 
 # =====================================================================
 # Caption-style preset previews
@@ -456,6 +536,9 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
                 db.delete(export)
         tracker.fail("render", str(exc)[:1000])
         raise
+
+    # Auto-workflow: queue uploads to the project's saved channels (success path only).
+    _maybe_auto_publish(sv_video_id)
 
 
 # =====================================================================

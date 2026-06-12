@@ -54,6 +54,7 @@ const SECTIONS: NavSection[] = [
     label: "Story Vault",
     items: [
       { href: "/storyvault/command", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/storyvault/projects", label: "Projects", icon: FolderKanban },
       { href: "/storyvault/library", label: "Library", icon: BookOpen },
       { href: "/storyvault/studio", label: "Video Studio", icon: Clapperboard },
       { href: "/storyvault/voicelab", label: "Voice Lab", icon: Mic },

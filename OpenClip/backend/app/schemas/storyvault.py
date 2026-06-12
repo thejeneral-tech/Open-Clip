@@ -45,6 +45,7 @@ class SvStoryOut(BaseModel):
     score: float
     score_breakdown: dict[str, Any] | None = None
     status: str
+    project_id: int | None = None
     created_at: datetime
 
 
@@ -112,6 +113,7 @@ class SvVideoCreate(BaseModel):
     background_category: str | None = None
     background_id: int | None = None   # pin gameplay footage to one background
     script_engine: str = "auto"        # auto|ai|heuristic
+    project_id: int | None = None      # file the video under a project folder
 
 
 class SvVideoReject(BaseModel):
@@ -139,6 +141,7 @@ class SvVideoOut(BaseModel):
     background_category: str | None = None
     background_id: int | None = None
     script_engine: str
+    project_id: int | None = None
     narration_duration: float | None = None
     status: str
     stage: str | None = None
@@ -318,6 +321,80 @@ class SvPublishJobOut(BaseModel):
     # Enriched by the endpoint:
     video_title: str | None = None
     channel_name: str | None = None
+
+
+# ------------------------------------------------------------------ projects
+class SvProjectSettings(BaseModel):
+    """The reusable 'auto-workflow' recipe stored on a project.
+
+    Every field has a sensible default so a half-configured project still runs.
+    """
+
+    # Where stories come from.
+    story_source: str = "reddit"                       # reddit|manual
+    communities: list[str] = Field(default_factory=list, max_length=20)
+    discovery_sort: str = "top"                        # hot|top|new|rising
+    discovery_time_window: str = "week"                # hour|day|week|month|year|all
+    min_upvotes: int = Field(default=500, ge=0)
+    min_length: int = Field(default=600, ge=0)
+
+    # How each video is built (mirrors the Video Studio knobs).
+    duration_target: int = Field(default=60, ge=15, le=300)
+    hook_style: str = "conflict"
+    narration_style: str = "dramatic"
+    drama_level: int = Field(default=3, ge=1, le=5)
+    voice: str | None = None                           # "preset:<id>" | SAPI name | null=auto
+    speed: float = Field(default=1.0, ge=0.7, le=1.4)
+    caption_style: str = "modern_tiktok"
+    background_category: str | None = None
+    background_id: int | None = None
+    template_id: int | None = None
+    script_engine: str = "auto"                        # auto|ai|heuristic
+
+    # Publishing.
+    publish_connector_ids: list[int] = Field(default_factory=list, max_length=10)
+    privacy: str = "public"                            # public|unlisted|private
+
+    # Orchestration.
+    videos_per_run: int = Field(default=3, ge=1, le=25)
+    auto_publish: bool = False                         # render + queue publishing without review
+
+
+class SvProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    settings: SvProjectSettings = Field(default_factory=SvProjectSettings)
+
+
+class SvProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    settings: SvProjectSettings | None = None
+
+
+class SvProjectOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None = None
+    settings: SvProjectSettings
+    created_at: datetime
+    updated_at: datetime
+    # Enriched by the endpoint — the project's pipeline at a glance.
+    stories_total: int = 0
+    stories_ready: int = 0          # new|saved|approved (not yet used)
+    videos_total: int = 0
+    videos_in_pipeline: int = 0     # queued|processing|rendering
+    videos_in_review: int = 0       # ready_for_review
+    videos_completed: int = 0       # completed
+    videos_published: int = 0       # has a published publish-job
+
+
+class SvProjectRunResult(BaseModel):
+    stories_added: int
+    videos_queued: int
+    detail: str
 
 
 class SvDashboardOut(BaseModel):

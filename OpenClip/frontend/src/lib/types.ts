@@ -423,7 +423,54 @@ export interface SvStory {
   score: number;
   score_breakdown: Record<string, number> | null;
   status: SvStoryStatus;
+  project_id: number | null;
   created_at: string;
+}
+
+export interface SvProjectSettings {
+  story_source: string; // reddit|manual
+  communities: string[];
+  discovery_sort: string;
+  discovery_time_window: string;
+  min_upvotes: number;
+  min_length: number;
+  duration_target: number;
+  hook_style: string;
+  narration_style: string;
+  drama_level: number;
+  voice: string | null;
+  speed: number;
+  caption_style: string;
+  background_category: string | null;
+  background_id: number | null;
+  template_id: number | null;
+  script_engine: string;
+  publish_connector_ids: number[];
+  privacy: string;
+  videos_per_run: number;
+  auto_publish: boolean;
+}
+
+export interface SvProject {
+  id: number;
+  name: string;
+  description: string | null;
+  settings: SvProjectSettings;
+  created_at: string;
+  updated_at: string;
+  stories_total: number;
+  stories_ready: number;
+  videos_total: number;
+  videos_in_pipeline: number;
+  videos_in_review: number;
+  videos_completed: number;
+  videos_published: number;
+}
+
+export interface SvProjectRunResult {
+  stories_added: number;
+  videos_queued: number;
+  detail: string;
 }
 
 export interface SvDiscoveryResult {
@@ -475,6 +522,7 @@ export interface SvVideoCreate {
   background_id?: number | null;
   script_engine: string;
   template_id?: number | null;
+  project_id?: number | null;
 }
 
 export interface SvVideo {
@@ -492,6 +540,7 @@ export interface SvVideo {
   background_category: string | null;
   background_id: number | null;
   script_engine: string;
+  project_id: number | null;
   narration_duration: number | null;
   status: SvVideoStatus;
   stage: string | null;

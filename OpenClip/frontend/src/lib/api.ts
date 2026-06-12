@@ -20,6 +20,9 @@ import type {
   SvDiscoveryResult,
   SvExport,
   SvMeta,
+  SvProject,
+  SvProjectRunResult,
+  SvProjectSettings,
   SvPublishJob,
   SvScript,
   SvStory,
@@ -357,6 +360,18 @@ export const api = {
   svMeta: () => request<SvMeta>("/storyvault/meta"),
   svVoices: () => request<SvVoice[]>("/storyvault/voices"),
   svDashboard: () => request<SvDashboard>("/storyvault/dashboard"),
+  // ---- story vault: projects (auto-workflow folders) ----
+  svListProjects: () => request<SvProject[]>("/storyvault/projects"),
+  svGetProject: (id: number) => request<SvProject>(`/storyvault/projects/${id}`),
+  svCreateProject: (data: { name: string; description?: string; settings?: Partial<SvProjectSettings> }) =>
+    request<SvProject>("/storyvault/projects", { method: "POST", body: JSON.stringify(data) }),
+  svUpdateProject: (
+    id: number,
+    data: { name?: string; description?: string; settings?: Partial<SvProjectSettings> },
+  ) => request<SvProject>(`/storyvault/projects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  svDeleteProject: (id: number) => request<void>(`/storyvault/projects/${id}`, { method: "DELETE" }),
+  svRunProject: (id: number) =>
+    request<SvProjectRunResult>(`/storyvault/projects/${id}/run`, { method: "POST" }),
   svDiscoverySearch: (data: {
     communities: string[];
     sort?: string;
@@ -366,12 +381,15 @@ export const api = {
   }) => request<SvDiscoveryResult>("/storyvault/discovery/search", { method: "POST", body: JSON.stringify(data) }),
   svImportStory: (data: { title: string; body: string; category?: string; source_url?: string }) =>
     request<SvStory>("/storyvault/stories/import", { method: "POST", body: JSON.stringify(data) }),
-  svListStories: (params: { status?: string; category?: string; q?: string; sort?: string } = {}) => {
+  svListStories: (
+    params: { status?: string; category?: string; q?: string; sort?: string; project_id?: number } = {},
+  ) => {
     const q = new URLSearchParams();
     if (params.status) q.set("status", params.status);
     if (params.category) q.set("category", params.category);
     if (params.q) q.set("q", params.q);
     if (params.sort) q.set("sort", params.sort);
+    if (params.project_id != null) q.set("project_id", String(params.project_id));
     return request<SvStory[]>(`/storyvault/stories?${q.toString()}`);
   },
   svGetStory: (id: number) => request<SvStory>(`/storyvault/stories/${id}`),
@@ -396,8 +414,13 @@ export const api = {
   svDeleteBackground: (id: number) => request<void>(`/storyvault/backgrounds/${id}`, { method: "DELETE" }),
   svCreateVideo: (data: SvVideoCreate) =>
     request<SvVideo>("/storyvault/videos", { method: "POST", body: JSON.stringify(data) }),
-  svListVideos: (status?: string) =>
-    request<SvVideo[]>(`/storyvault/videos${status ? `?status=${status}` : ""}`),
+  svListVideos: (status?: string, projectId?: number) => {
+    const q = new URLSearchParams();
+    if (status) q.set("status", status);
+    if (projectId != null) q.set("project_id", String(projectId));
+    const qs = q.toString();
+    return request<SvVideo[]>(`/storyvault/videos${qs ? `?${qs}` : ""}`);
+  },
   svGetVideo: (id: number) => request<SvVideo>(`/storyvault/videos/${id}`),
   svApproveVideo: (id: number, platform: string) =>
     request<SvVideo>(`/storyvault/videos/${id}/approve`, { method: "POST", body: JSON.stringify({ platform }) }),
