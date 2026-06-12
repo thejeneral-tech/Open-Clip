@@ -201,8 +201,10 @@ export default function ModelsPage() {
                   <p className="text-xs text-muted-foreground">
                     Open-Clip&apos;s own services — the API server, the background worker (which runs
                     Whisper transcription and diarization in-process), the web frontend, and the model
-                    servers it drives (Ollama for LLM/embeddings, Fish Speech for voice) — with the GPU
-                    memory each is using (a dash means it&apos;s on CPU only right now). Toggle one{" "}
+                    servers it drives (Ollama for LLM/embeddings, Fish Speech for voice) — plus any
+                    helper program it&apos;s running right now (ffmpeg, yt-dlp and other subprocesses,
+                    which come and go with each job), with the GPU memory each is using (a dash means
+                    CPU only). Toggle one{" "}
                     <span className="font-medium">off to pause it</span> (freezes the whole service so it
                     stops working) and back <span className="font-medium">on to resume</span> — or use the
                     trash button to terminate it. The API server runs this page, so it stays locked.

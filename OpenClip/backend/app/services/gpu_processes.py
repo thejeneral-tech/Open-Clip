@@ -8,7 +8,10 @@ the API server, the background worker and the web frontend (from the pid-files
 diarization run in-process inside the worker, so their GPU memory is already counted
 under the "Background worker" row — there's no separate process for them.) Services
 that aren't currently using the GPU still appear (``used_vram_bytes == 0``) so they
-can be managed from one place. Each row has a toggle that **suspends** the service
+can be managed from one place. While a job runs, the helper programs Open-Clip
+spawns (ffmpeg for GPU encode/decode, yt-dlp, …) appear as their own rows too — and
+so does any other descendant that grabs GPU memory — then disappear when done. Each
+row has a toggle that **suspends** the service
 (freezes every thread in its process tree so it stops doing CPU/GPU work) and
 **resumes** it later — reversible, "until we need it on again" — plus an optional
 hard terminate.
@@ -97,6 +100,27 @@ _EXTERNAL_SERVERS: tuple[_ExternalServer, ...] = (
     _ExternalServer("Ollama (LLM + embeddings)", settings.OLLAMA_BASE_URL, ("ollama",)),
     _ExternalServer("Fish Speech (voice)", settings.FISH_TTS_URL, ("s2",), ("--server", "s2-pro")),
 )
+
+# Helper programs Open-Clip spawns *during jobs* (children of the worker): ffmpeg
+# does GPU-accelerated encode/decode (NVENC/QSV/AMF), the others are CPU/IO tools.
+# They're transient, so they only appear here while a job is running. Keyed by
+# image name with any ``.exe`` stripped. Beyond these, *any* descendant holding GPU
+# memory is surfaced too (see :func:`_child_units`), so a future GPU helper shows up
+# without a code change.
+_HELPER_PROGRAMS: dict[str, str] = {
+    "ffmpeg": "ffmpeg (encode/decode)",
+    "ffprobe": "ffprobe (media probe)",
+    "yt-dlp": "yt-dlp (download)",
+    "yt_dlp": "yt-dlp (download)",
+}
+
+
+def _helper_label(name: str) -> str | None:
+    """Friendly label for a known helper program by image name, else ``None``."""
+    base = name.lower()
+    if base.endswith(".exe"):
+        base = base[:-4]
+    return _HELPER_PROGRAMS.get(base)
 
 # The per-process VRAM probe shells out to PowerShell (``Get-Counter``) on
 # Windows, which costs ~1-2s per call — far too slow to repeat on every 5s poll
@@ -234,18 +258,25 @@ def _external_server_tree(server: _ExternalServer) -> list[psutil.Process]:
 
 
 def _build_unit(
-    label: str, tree: list[psutil.Process], usage: dict[int, int], *, locked: bool = False
+    label: str,
+    tree: list[psutil.Process],
+    usage: dict[int, int],
+    *,
+    locked: bool = False,
+    exclude: set[int] = frozenset(),
 ) -> dict:
     """Collapse a service's process tree into one dashboard row.
 
-    VRAM is summed across the whole tree; ``can_control`` is ``False`` when
-    ``locked`` (the API server, which runs this request), when the tree contains
-    this very process, or when any member is a protected system process.
-    ``command`` and ``suspended`` come from the root.
+    VRAM is summed across the tree, skipping ``exclude`` PIDs — these are helper
+    programs (e.g. ffmpeg) surfaced as their own rows, so counting them here too
+    would double-count. ``can_control`` is ``False`` when ``locked`` (the API
+    server, which runs this request), when the tree contains this very process, or
+    when any member is a protected system process. ``command``/``suspended`` come
+    from the root.
     """
     root = tree[0]
     pids = {p.pid for p in tree}
-    vram = sum(usage.get(pid, 0) for pid in pids)
+    vram = sum(usage.get(pid, 0) for pid in pids if pid not in exclude)
     try:
         command = " ".join(root.cmdline()) or root.name()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
@@ -267,6 +298,37 @@ def _build_unit(
         "suspended": suspended,
         "can_control": controllable,
     }
+
+
+def _child_units(
+    tree: list[psutil.Process], usage: dict[int, int], root_pid: int
+) -> tuple[list[dict], set[int]]:
+    """Surface notable child programs in an owner tree as their own rows.
+
+    A descendant becomes its own row when it's a known helper program (ffmpeg,
+    yt-dlp, …) *or* it's holding GPU memory — so "every program the app runs"
+    appears here while it's running, including future GPU tools. Returns the child
+    rows plus the set of PIDs they claim, which the owner must exclude from its own
+    VRAM tally to avoid double-counting.
+    """
+    units: list[dict] = []
+    claimed: set[int] = set()
+    for proc in tree:
+        if proc.pid == root_pid or proc.pid in claimed:
+            continue
+        try:
+            name = proc.name()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+        label = _helper_label(name)
+        if label is None and usage.get(proc.pid, 0) <= 0:
+            continue  # not a known helper and not on the GPU → leave it folded in
+        subtree = _process_tree(proc.pid)
+        if not subtree:
+            continue
+        claimed |= {p.pid for p in subtree}
+        units.append(_build_unit(label or name, subtree, usage))
+    return units, claimed
 
 
 _PID_RE = re.compile(r"pid_(\d+)")
@@ -372,10 +434,13 @@ def list_gpu_processes() -> list[dict]:
     """This program's services, with the GPU VRAM each is using.
 
     One row per launcher-tracked service (API server, background worker, web
-    frontend) plus each model server Open-Clip drives (Ollama, Fish Speech) — *not*
-    every GPU consumer on the machine. Whisper and diarization run inside the worker,
-    so their VRAM is counted there. Services that aren't using the GPU still appear,
-    with ``used_vram_bytes == 0``, so the dashboard can pause/resume/terminate them.
+    frontend), each model server Open-Clip drives (Ollama, Fish Speech), and each
+    helper program it's currently running (ffmpeg and any other GPU-using
+    subprocess) — *not* every GPU consumer on the machine. Whisper and diarization
+    run inside the worker, so their VRAM is counted there. Services that aren't using
+    the GPU still appear with ``used_vram_bytes == 0``, so the dashboard can
+    pause/resume/terminate them; helper programs come and go with the jobs that
+    spawn them.
 
     Each entry: ``{pid, name, command, used_vram_bytes, suspended, can_control}``,
     sorted by VRAM descending. ``suspended`` reflects the live process state so the
@@ -402,9 +467,21 @@ def list_gpu_processes() -> list[dict]:
 
 
 def _collect_gpu_processes() -> list[dict]:
-    """Uncached, one row per program service — see :func:`list_gpu_processes`."""
+    """Uncached, one row per program service + each helper program it's running.
+
+    See :func:`list_gpu_processes`. Owner rows (services, model servers) come first;
+    each owner's notable child programs (ffmpeg and any GPU-using descendant) are
+    surfaced as their own rows, with that VRAM moved off the owner.
+    """
     usage = _vram_by_pid()  # ``pid -> VRAM bytes``; empty on CPU-only hosts
-    units: list[dict] = []
+    owners: list[dict] = []
+    children: list[dict] = []
+
+    def add_owner(label: str, tree: list[psutil.Process], *, locked: bool = False) -> None:
+        kids, claimed = _child_units(tree, usage, tree[0].pid)
+        children.extend(kids)
+        owners.append(_build_unit(label, tree, usage, locked=locked, exclude=claimed))
+
     for stem, label in _SERVICES:
         pid = _read_service_pid(stem)
         if pid is None:
@@ -412,11 +489,13 @@ def _collect_gpu_processes() -> list[dict]:
         tree = _process_tree(pid)
         if tree:
             # The API server answers this very request — never offer to pause/kill it.
-            units.append(_build_unit(label, tree, usage, locked=stem == "api"))
+            add_owner(label, tree, locked=stem == "api")
     for server in _EXTERNAL_SERVERS:
         tree = _external_server_tree(server)
         if tree:
-            units.append(_build_unit(server.label, tree, usage))
+            add_owner(server.label, tree)
+
+    units = owners + children
     units.sort(key=lambda u: u["used_vram_bytes"], reverse=True)
     return units
 
