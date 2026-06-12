@@ -194,12 +194,14 @@ export default function ModelsPage() {
             <CardContent>
               {!status?.gpu_processes?.length ? (
                 <p className="text-sm text-muted-foreground">
-                  Nothing on this computer is using GPU VRAM right now (or no GPU / counters unavailable).
+                  Open-Clip isn&apos;t using any GPU VRAM right now — the app and the Ollama model server
+                  are idle (or there&apos;s no GPU / counters are unavailable).
                 </p>
               ) : (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Every process on this computer currently using GPU memory. Toggle one{" "}
+                    Open-Clip&apos;s GPU processes — the app&apos;s own workers and the Ollama model server
+                    it drives — currently using GPU memory. Toggle one{" "}
                     <span className="font-medium">off to pause it</span> (freezes the process so it stops
                     working) and back <span className="font-medium">on to resume</span> — or use the trash
                     button to terminate it. Critical system processes are locked.

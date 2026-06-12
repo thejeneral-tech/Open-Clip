@@ -1,10 +1,12 @@
-"""GPU (VRAM-consuming) processes on the local machine — list + pause/resume.
+"""GPU (VRAM-consuming) processes that belong to this program — list + pause/resume.
 
-The Models & GPU dashboard lists *every* process currently holding GPU memory on
-this computer (Chrome, games, Ollama, the clipping tool itself, …) so the operator
-can free the GPU up on demand. Each process has a toggle that **suspends** it
-(freezes all its threads so it stops doing CPU/GPU work) and **resumes** it later —
-reversible, "until we need it on again" — plus an optional hard terminate.
+The Models & GPU dashboard lists only *this program's* processes that are holding
+GPU memory: the Open-Clip process tree (the launcher and every worker it spawns)
+plus the **Ollama** model server Open-Clip drives for inference. Unrelated GPU
+consumers on the machine (Chrome, games, other apps) are filtered out — see
+:func:`_program_pids`. Each process has a toggle that **suspends** it (freezes all
+its threads so it stops doing CPU/GPU work) and **resumes** it later — reversible,
+"until we need it on again" — plus an optional hard terminate.
 
 Suspending or killing certain Windows processes (the session/kernel critical ones,
 the desktop compositor, this very API server) would hang the machine or deadlock
@@ -24,12 +26,27 @@ import subprocess
 import sys
 import threading
 import time
+from collections import defaultdict
+from pathlib import Path
 
 import psutil
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Root directory of the Open-Clip app (the folder holding ``launch.py`` and
+# ``backend/``). Every program process — the launcher, the API server, the Celery
+# workers — runs with this path in its command line or executable, so it's how we
+# recognize "our" processes when scoping the GPU list (see :func:`_program_pids`).
+# This file lives at ``<root>/backend/app/services/gpu_processes.py``.
+_PROGRAM_ROOT = str(Path(__file__).resolve().parents[3]).lower()
+
+# Image-name prefix of the Ollama model server (``ollama.exe serve`` and the
+# inference runners it spawns). Ollama installs outside the project tree, so it's
+# matched by name rather than path. Open-Clip drives it for inference, so it counts
+# as part of "this program" for the GPU dashboard.
+_OLLAMA_PREFIX = "ollama"
 
 # The per-process VRAM probe shells out to PowerShell (``Get-Counter``) on
 # Windows, which costs ~1-2s per call — far too slow to repeat on every 5s poll
@@ -82,6 +99,56 @@ def _is_controllable(proc: psutil.Process) -> bool:
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return False
     return True
+
+
+def _program_pids() -> set[int]:
+    """PIDs that belong to this program: the Open-Clip tree plus Ollama.
+
+    Used to scope the GPU dashboard to *our* GPU consumers and hide everything
+    else on the machine. A process is "ours" if either:
+
+    * it (or an ancestor) runs from the Open-Clip root — the launcher, the API
+      server, the Celery workers, and any helper they spawn. We seed on the
+      launcher/API processes (whose command line carries the project path) and
+      expand to all their descendants, so worker processes started via a bare
+      ``-m uvicorn``/``-m celery`` command line (no project path of their own)
+      are still included via their parent; **or**
+    * its image name is the Ollama model server (and its inference-runner
+      children), which Open-Clip drives for inference.
+
+    Returns the set of owning PIDs. Best-effort: processes that vanish or deny
+    access mid-scan are simply skipped.
+    """
+    children: dict[int, list[int]] = defaultdict(list)
+    seeds: set[int] = {os.getpid()}
+    for proc in psutil.process_iter(["pid", "ppid", "name", "exe", "cmdline"]):
+        info = proc.info
+        pid = info.get("pid")
+        if pid is None:
+            continue
+        ppid = info.get("ppid")
+        if ppid is not None:
+            children[ppid].append(pid)
+        if (info.get("name") or "").lower().startswith(_OLLAMA_PREFIX):
+            seeds.add(pid)
+            continue
+        haystack = " ".join(
+            [info.get("exe") or "", *(info.get("cmdline") or [])]
+        ).lower()
+        if _PROGRAM_ROOT in haystack:
+            seeds.add(pid)
+
+    # Expand each seed to its whole subtree so child workers/runners that don't
+    # carry the project path themselves are pulled in via their parent.
+    owned: set[int] = set()
+    stack = list(seeds)
+    while stack:
+        pid = stack.pop()
+        if pid in owned:
+            continue
+        owned.add(pid)
+        stack.extend(children.get(pid, ()))
+    return owned
 
 
 _PID_RE = re.compile(r"pid_(\d+)")
@@ -184,8 +251,10 @@ def _invalidate_cache() -> None:
 
 
 def list_gpu_processes() -> list[dict]:
-    """Every process on this machine currently using GPU VRAM.
+    """This program's processes currently using GPU VRAM.
 
+    Scoped to the Open-Clip process tree plus the Ollama model server (see
+    :func:`_program_pids`); unrelated GPU consumers on the machine are excluded.
     Each entry: ``{pid, name, command, used_vram_bytes, suspended, can_control}``,
     sorted by VRAM descending. ``suspended`` reflects the live process state so the
     UI toggle stays in sync; ``can_control`` is ``False`` for protected processes.
@@ -212,6 +281,12 @@ def list_gpu_processes() -> list[dict]:
 def _collect_gpu_processes() -> list[dict]:
     """Uncached enumeration of GPU-VRAM-holding processes — see :func:`list_gpu_processes`."""
     usage = _vram_by_pid()
+    if not usage:
+        return []
+    # Keep only VRAM held by this program (Open-Clip tree + Ollama); drop every
+    # unrelated GPU consumer on the machine.
+    owned = _program_pids()
+    usage = {pid: vram for pid, vram in usage.items() if pid in owned}
     if not usage:
         return []
     procs: list[dict] = []
