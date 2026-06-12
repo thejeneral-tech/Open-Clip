@@ -1,11 +1,14 @@
 """This program's services and their GPU memory use — list + pause/resume.
 
 The Models & GPU dashboard lists *this program's own services* — one row each for
-the API server, the background worker, the web frontend (from the pid-files
-``launch.py`` records under ``data/run``) and the **Ollama** model server Open-Clip
-drives for inference — rather than every GPU consumer on the machine. Services that
-aren't currently using the GPU still appear (``used_vram_bytes == 0``) so they can
-be managed from one place. Each row has a toggle that **suspends** the service
+the API server, the background worker and the web frontend (from the pid-files
+``launch.py`` records under ``data/run``), plus the model servers Open-Clip drives:
+**Ollama** (LLM + embeddings) and the **Fish Speech / s2.cpp** voice server. It does
+*not* list every GPU consumer on the machine. (Whisper transcription and pyannote
+diarization run in-process inside the worker, so their GPU memory is already counted
+under the "Background worker" row — there's no separate process for them.) Services
+that aren't currently using the GPU still appear (``used_vram_bytes == 0``) so they
+can be managed from one place. Each row has a toggle that **suspends** the service
 (freezes every thread in its process tree so it stops doing CPU/GPU work) and
 **resumes** it later — reversible, "until we need it on again" — plus an optional
 hard terminate.
@@ -31,9 +34,11 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import psutil
 
+from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -51,17 +56,47 @@ _RUN_DIR = _PROGRAM_ROOT / "data" / "run"
 # The launcher-tracked services, in dashboard display order, as
 # ``(pid_file_stem, friendly_label)``. Each maps to a small process tree (e.g. the
 # frontend is ``cmd → npm → node``); we collapse each tree into a single row.
+#
+# NOTE: Whisper transcription (faster-whisper) and pyannote diarization run
+# *in-process* inside the Celery worker, not as separate processes — so their GPU
+# memory already shows up under the "Background worker" row; there's nothing extra
+# to list for them.
 _SERVICES: tuple[tuple[str, str], ...] = (
     ("api", "API server"),
-    ("worker", "Background worker"),
+    ("worker", "Background worker (Whisper + jobs)"),
     ("frontend", "Web frontend"),
 )
 
-# Image-name prefix of the Ollama model server (``ollama.exe serve``, ``ollama
-# app.exe`` and the inference runners they spawn). Ollama installs outside the
-# project tree and often runs without a launcher pid-file, so it's matched by name.
-# Open-Clip drives it for inference, so it counts as part of "this program".
-_OLLAMA_PREFIX = "ollama"
+
+class _ExternalServer:
+    """A model server Open-Clip drives but ``launch.py`` doesn't track via a pid-file.
+
+    These run on their own (a system ``ollama serve``, the s2.cpp voice server
+    started from its own launcher), so we discover them at runtime: first by the
+    loopback port they listen on (read from settings), then by an image-name /
+    command-line fallback. Only shown when actually running.
+    """
+
+    def __init__(self, label: str, url: str | None, name_prefixes: tuple[str, ...], cmdline_hints: tuple[str, ...] = ()):
+        self.label = label
+        self.url = url
+        self.name_prefixes = name_prefixes
+        self.cmdline_hints = cmdline_hints
+
+    def matches(self, name: str, cmdline: str) -> bool:
+        if not name.startswith(self.name_prefixes):
+            return False
+        # When hints are given (e.g. s2's ``--server``), require one so we don't
+        # grab an unrelated binary that merely shares the name prefix.
+        return not self.cmdline_hints or any(h in cmdline for h in self.cmdline_hints)
+
+
+# Model servers Open-Clip talks to that aren't launcher-managed. Ports come from
+# settings so they track the operator's config.
+_EXTERNAL_SERVERS: tuple[_ExternalServer, ...] = (
+    _ExternalServer("Ollama (LLM + embeddings)", settings.OLLAMA_BASE_URL, ("ollama",)),
+    _ExternalServer("Fish Speech (voice)", settings.FISH_TTS_URL, ("s2",), ("--server", "s2-pro")),
+)
 
 # The per-process VRAM probe shells out to PowerShell (``Get-Counter``) on
 # Windows, which costs ~1-2s per call — far too slow to repeat on every 5s poll
@@ -151,35 +186,51 @@ def _process_tree(pid: int) -> list[psutil.Process]:
     return tree
 
 
-def _ollama_tree() -> list[psutil.Process]:
-    """Ollama's processes — its launcher pid-file tree, or discovery by image name.
+def _pid_listening_on(port: int) -> int | None:
+    """PID of the process listening on a loopback ``port``, if we can see it.
 
-    Ollama frequently runs outside ``launch.py`` (a pre-existing ``ollama serve`` /
-    tray app), so when there's no pid-file we gather every ``ollama*`` process and
-    their children, with the ``ollama.exe`` server preferred as the display root.
+    The most reliable way to find a model server is "who owns the port Open-Clip
+    connects to" — independent of how the binary is named or where it was started.
+    Best-effort: returns ``None`` if the connection table is inaccessible.
     """
-    pid = _read_service_pid("ollama")
-    if pid is not None:
-        tree = _process_tree(pid)
-        if tree:
-            return tree
+    try:
+        conns = psutil.net_connections(kind="inet")
+    except (psutil.AccessDenied, psutil.Error, OSError) as exc:
+        logger.debug("Could not read socket table for port %s: %s", port, exc)
+        return None
+    for conn in conns:
+        if (
+            conn.status == psutil.CONN_LISTEN
+            and conn.laddr
+            and conn.laddr.port == port
+            and conn.pid
+        ):
+            return conn.pid
+    return None
+
+
+def _external_server_tree(server: _ExternalServer) -> list[psutil.Process]:
+    """The process tree of an :class:`_ExternalServer`, or ``[]`` if it isn't running.
+
+    Resolves the server first by the loopback port it listens on (from settings),
+    then by an image-name/command-line scan — so it's found whether or not it was
+    started by Open-Clip and regardless of the exe's exact name.
+    """
+    port = urlsplit(server.url).port if server.url else None
+    if port is not None:
+        pid = _pid_listening_on(port)
+        if pid is not None:
+            tree = _process_tree(pid)
+            if tree:
+                return tree
     found: dict[int, psutil.Process] = {}
-    server_pid: int | None = None
-    for proc in psutil.process_iter(["pid", "name"]):
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         name = (proc.info.get("name") or "").lower()
-        if not name.startswith(_OLLAMA_PREFIX):
-            continue
-        for member in _process_tree(proc.info["pid"]):
-            found[member.pid] = member
-        if name == "ollama.exe":
-            server_pid = proc.info["pid"]
-    if not found:
-        return []
-    ordered = list(found.values())
-    if server_pid is not None and server_pid in found:
-        # Put the server process first so it becomes the unit's display root.
-        ordered.sort(key=lambda p: p.pid != server_pid)
-    return ordered
+        cmdline = " ".join(proc.info.get("cmdline") or []).lower()
+        if server.matches(name, cmdline):
+            for member in _process_tree(proc.info["pid"]):
+                found[member.pid] = member
+    return list(found.values())
 
 
 def _build_unit(
@@ -321,9 +372,10 @@ def list_gpu_processes() -> list[dict]:
     """This program's services, with the GPU VRAM each is using.
 
     One row per launcher-tracked service (API server, background worker, web
-    frontend) plus the Ollama model server — *not* every GPU consumer on the
-    machine. Services that aren't using the GPU still appear, with
-    ``used_vram_bytes == 0``, so the dashboard can pause/resume/terminate them too.
+    frontend) plus each model server Open-Clip drives (Ollama, Fish Speech) — *not*
+    every GPU consumer on the machine. Whisper and diarization run inside the worker,
+    so their VRAM is counted there. Services that aren't using the GPU still appear,
+    with ``used_vram_bytes == 0``, so the dashboard can pause/resume/terminate them.
 
     Each entry: ``{pid, name, command, used_vram_bytes, suspended, can_control}``,
     sorted by VRAM descending. ``suspended`` reflects the live process state so the
@@ -361,9 +413,10 @@ def _collect_gpu_processes() -> list[dict]:
         if tree:
             # The API server answers this very request — never offer to pause/kill it.
             units.append(_build_unit(label, tree, usage, locked=stem == "api"))
-    ollama_tree = _ollama_tree()
-    if ollama_tree:
-        units.append(_build_unit("Ollama (model server)", ollama_tree, usage))
+    for server in _EXTERNAL_SERVERS:
+        tree = _external_server_tree(server)
+        if tree:
+            units.append(_build_unit(server.label, tree, usage))
     units.sort(key=lambda u: u["used_vram_bytes"], reverse=True)
     return units
 
