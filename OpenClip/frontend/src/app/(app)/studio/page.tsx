@@ -1,4 +1,573 @@
-// OpenClip-section Video Studio — reuses the StoryVault Video Studio UI verbatim
-// (story → preset → voice → captions form + live pipeline). The Presets page's
-// "Create video with this" button routes here (/studio?template=<id>).
-export { default } from "../storyvault/studio/page";
+"use client";
+
+// OpenClip-section Video Studio — a STANDALONE, PROJECT-DRIVEN fork of the
+// StoryVault Video Studio. You pick a Project and Generate runs that project's
+// saved recipe (its stories + voice/preset/footage settings) via the project-run
+// pipeline. The form fields below mirror the selected project's recipe so you can
+// see what it will use; the preview shows captions only (no Reddit topic card /
+// author intro). The StoryVault studio keeps story-by-story creation + all three
+// preview beats.
+
+import { Clapperboard, Loader2, RotateCcw, Save, Star, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  useSvBackgrounds,
+  useSvMeta,
+  useSvProjects,
+  useSvRetryVideo,
+  useSvRunProject,
+  useSvTemplates,
+  useSvVideos,
+  useSvVoicePresets,
+  useSvVoices,
+} from "@/hooks/use-api";
+import { PhonePreview } from "@/components/storyvault/template-preview";
+import { categoryLabel } from "@/lib/utils";
+import type { SvProject, SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
+
+const ACTIVE_STATUSES = new Set(["queued", "processing", "rendering", "failed"]);
+
+// Captions are styled per-preset in the Captions editor below; the render still
+// needs a base caption_style string, so send the prior default unconditionally.
+const DEFAULT_CAPTION_STYLE = "modern_tiktok";
+
+function truncate(text: string, max = 60): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+// Fish Speech (cloned) presets vs. plain SAPI system-voice presets. Prefer the
+// explicit engine; fall back to sniffing the voice string for older rows.
+function isClonedVoice(preset: SvVoicePreset): boolean {
+  if (preset.engine) return preset.engine !== "sapi";
+  return /clone|fish/i.test(preset.voice);
+}
+
+// One-line descriptor for a preset, mirroring the Presets page.
+function templateTagline(t: SvTemplateData): string {
+  const cap = t.captions || {};
+  const style = cap.style === "pop" ? "Pop" : "Karaoke";
+  const split = t.gameplay?.mode === "split_bottom" ? " · split" : "";
+  return `${style} · ${cap.size || 80}px${split}`;
+}
+
+function TemplateBadge({ t }: { t: SvTemplate }) {
+  if (t.is_default) {
+    return (
+      <Badge variant="success" className="gap-1">
+        <Star className="h-3 w-3 fill-current" /> Default
+      </Badge>
+    );
+  }
+  if (t.builtin) return <Badge variant="secondary">Built-in</Badge>;
+  return (
+    <Badge variant="outline" className="border-primary/40 text-primary">
+      Custom
+    </Badge>
+  );
+}
+
+function PipelineRow({ video }: { video: SvVideo }) {
+  const retryVideo = useSvRetryVideo();
+  const active = video.status === "queued" || video.status === "processing" || video.status === "rendering";
+
+  const onRetry = async () => {
+    try {
+      await retryVideo.mutateAsync(video.id);
+      toast.success("Video requeued");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to retry video");
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="line-clamp-1 text-sm font-medium">
+          {video.title || video.story_title || `Video #${video.id}`}
+        </p>
+        <Badge variant={video.status === "failed" ? "destructive" : "secondary"}>{video.status}</Badge>
+      </div>
+      {active && (
+        <div className="space-y-1">
+          {video.stage && <p className="text-xs text-muted-foreground">{video.stage}</p>}
+          <Progress value={video.progress * 100} />
+        </div>
+      )}
+      {video.status === "failed" && (
+        <div className="space-y-2">
+          {video.error && <p className="line-clamp-2 text-xs text-destructive">{video.error}</p>}
+          <Button variant="outline" size="sm" disabled={retryVideo.isPending} onClick={onRetry}>
+            <RotateCcw className="h-4 w-4" /> Retry
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Renders the phone preview scaled to fully fit the space it's given (by height,
+// capped by width) so the whole 9:16 frame is always visible without clipping or
+// scrolling, however tall the column is. This OpenClip fork shows captions only —
+// no Reddit topic card / author intro beats.
+function PreviewPane({ data }: { data: SvTemplateData }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(240);
+  const aspect = ((data.canvas?.width ?? 1080) / (data.canvas?.height ?? 1920));
+  const aspectRef = useRef(aspect);
+  aspectRef.current = aspect;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const byHeight = el.clientHeight * aspectRef.current;
+      const fit = Math.min(el.clientWidth, byHeight, 360);
+      setWidth(Math.max(120, Math.floor(fit)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+      <PhonePreview t={data} width={width} phase="caption" />
+    </div>
+  );
+}
+
+function StudioInner() {
+  const searchParams = useSearchParams();
+  const templateParam = searchParams.get("template");
+  const projectParam = searchParams.get("project");
+
+  const { data: meta } = useSvMeta();
+  const { data: voices = [] } = useSvVoices();
+  const { data: videos = [] } = useSvVideos(undefined, true);
+  const { data: templates = [] } = useSvTemplates();
+  const { data: backgrounds = [] } = useSvBackgrounds();
+  const { data: voicePresets = [] } = useSvVoicePresets();
+  const { data: projects = [], isLoading: projectsLoading } = useSvProjects();
+  const runProject = useSvRunProject();
+
+  // Footage the user can pin to the gameplay layer — only ready clips with segments.
+  const readyFootage = backgrounds.filter((b) => b.status === "completed" && b.segment_count > 0);
+
+  // Cloned voices made in Voice Lab — selectable alongside the system SAPI voices.
+  const clonedPresets = voicePresets.filter(isClonedVoice);
+
+  const pipeline = videos.filter((v) => ACTIVE_STATUSES.has(v.status));
+
+  const [duration, setDuration] = useState("60");
+  const [voice, setVoice] = useState("auto");
+  // Base caption style for the render. No longer a visible control — the preset's
+  // caption config (edited below) drives the look — but a project recipe can still
+  // carry one, so it's kept in state.
+  const [captionStyle, setCaptionStyle] = useState(DEFAULT_CAPTION_STYLE);
+  const [backgroundCategory, setBackgroundCategory] = useState("any");
+  const [footageId, setFootageId] = useState("auto");
+  const [scriptEngine, setScriptEngine] = useState("auto");
+  const [templateId, setTemplateId] = useState<number | null>(
+    templateParam ? Number(templateParam) : null,
+  );
+  const [projectId, setProjectId] = useState(projectParam ?? "none");
+
+  // Selecting a project mirrors its saved recipe into the form so you can see
+  // exactly what the run will use (the run reads these from the project server-side).
+  const applyProject = (p: SvProject) => {
+    setProjectId(String(p.id));
+    const s = p.settings;
+    setDuration(String(s.duration_target));
+    setVoice(s.voice ?? "auto");
+    setCaptionStyle(s.caption_style);
+    setBackgroundCategory(s.background_category ?? "any");
+    setFootageId(s.background_id != null ? String(s.background_id) : "auto");
+    setScriptEngine(s.script_engine);
+    if (s.template_id != null) setTemplateId(s.template_id);
+  };
+
+  const onProjectChange = (value: string) => {
+    const p = projects.find((proj) => proj.id === Number(value));
+    if (p) applyProject(p);
+  };
+
+  // When arriving via ?project=, auto-fill once the projects load.
+  useEffect(() => {
+    if (projectParam && projectId === projectParam) {
+      const p = projects.find((proj) => proj.id === Number(projectParam));
+      if (p && duration === "60") applyProject(p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects]);
+
+  // Preselect the preset: the one passed in via ?template=, else the user's default.
+  useEffect(() => {
+    if (templates.length === 0) return;
+    if (templateId !== null && templates.some((t) => t.id === templateId)) return;
+    const def = templates.find((t) => t.is_default) ?? templates[0];
+    setTemplateId(def.id);
+  }, [templates, templateId]);
+
+  const selectedTemplate = templates.find((t) => t.id === templateId) ?? null;
+  const selectedProject = projects.find((p) => String(p.id) === projectId) ?? null;
+  // Footage selection only applies to split-screen presets (gameplay fills the
+  // bottom half); full-screen presets use the whole frame.
+  const isSplitScreen = selectedTemplate?.data?.gameplay?.mode === "split_bottom";
+  // Caption-editing state for the selected preset, shared by the controls (under
+  // the form) and the live preview (right column).
+  const capEditor = useCaptionEditor(selectedTemplate);
+
+  // Generate runs the selected project's pipeline (collect/score → script →
+  // narrate → caption → render) using the project's saved recipe.
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject) return;
+    try {
+      const res = await runProject.mutateAsync(selectedProject.id);
+      toast.success(
+        res.videos_queued > 0
+          ? `Running “${selectedProject.name}” — ${res.videos_queued} video${res.videos_queued === 1 ? "" : "s"} queued`
+          : `“${selectedProject.name}” has no ready stories to generate right now`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to run project");
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col gap-3 p-4 lg:p-5">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold tracking-tight">Video Studio</h1>
+        <p className="text-sm text-muted-foreground">Pick a project and generate videos from its saved recipe.</p>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader className="shrink-0 pb-3">
+            <CardTitle>Create a video</CardTitle>
+            <CardDescription>Pick a project and tune the narration and background.</CardDescription>
+          </CardHeader>
+          <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            {projectsLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+              <form id="sv-create" onSubmit={onSubmit} className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Projects</Label>
+                  <Select value={projectId !== "none" ? projectId : undefined} onValueChange={onProjectChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="pick project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {projects.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No projects yet — create one in{" "}
+                      <Link href="/storyvault/projects" className="underline">
+                        Projects
+                      </Link>
+                      .
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Preset</Label>
+                  <Select
+                    value={templateId !== null ? String(templateId) : ""}
+                    onValueChange={(v) => setTemplateId(Number(v))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick a preset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate ? (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/60 bg-primary/5 px-4 py-3 ring-1 ring-primary/30">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-primary">{selectedTemplate.name}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {templateTagline(selectedTemplate.data)}
+                        </div>
+                      </div>
+                      <TemplateBadge t={selectedTemplate} />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No presets yet — create one in{" "}
+                      <Link href="/storyvault/presets" className="underline">
+                        Presets
+                      </Link>
+                      .
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Duration</Label>
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(meta?.durations ?? [60]).map((d) => (
+                          <SelectItem key={d} value={String(d)}>
+                            {d}s
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Voice</Label>
+                    <Select value={voice} onValueChange={setVoice}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto</SelectItem>
+                        {clonedPresets.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Cloned voices (Fish Speech)</SelectLabel>
+                            {clonedPresets.map((p) => (
+                              <SelectItem key={`preset-${p.id}`} value={`preset:${p.id}`}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        <SelectGroup>
+                          <SelectLabel>System voices</SelectLabel>
+                          {voices.map((v) => (
+                            <SelectItem key={v.name} value={v.name}>
+                              {v.name}
+                              {v.gender ? ` (${v.gender})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Background</Label>
+                    <Select
+                      value={backgroundCategory}
+                      onValueChange={setBackgroundCategory}
+                      disabled={isSplitScreen && footageId !== "auto"}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any</SelectItem>
+                        {(meta?.background_categories ?? []).map((b) => (
+                          <SelectItem key={b} value={b}>
+                            {categoryLabel(b)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {isSplitScreen && (
+                    <div className="space-y-2">
+                      <Label>Footage</Label>
+                      <Select value={footageId} onValueChange={setFootageId}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (from category)</SelectItem>
+                          {readyFootage.map((b) => (
+                            <SelectItem key={b.id} value={String(b.id)}>
+                              {truncate(b.original_filename || `Footage #${b.id}`, 32)} · {b.segment_count} seg
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {footageId !== "auto" && (
+                        <p className="text-xs text-muted-foreground">
+                          Gameplay segments come from this clip only.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Script engine</Label>
+                    <Select value={scriptEngine} onValueChange={setScriptEngine}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">AI with fallback</SelectItem>
+                        <SelectItem value="ai">AI only</SelectItem>
+                        <SelectItem value="heuristic">Instant, no AI</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {selectedProject && (
+                  <p className="text-xs text-muted-foreground">
+                    Generating uses “{selectedProject.name}”’s saved recipe and its ready stories. The
+                    fields above mirror that recipe — edit it on the{" "}
+                    <Link href="/storyvault/projects" className="underline">
+                      Projects
+                    </Link>{" "}
+                    page.
+                  </p>
+                )}
+              </form>
+
+              {selectedTemplate && (
+                <div className="space-y-3 border-t pt-4">
+                  <div>
+                    <h3 className="text-sm font-semibold tracking-tight">Captions</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Edits apply to {selectedTemplate.name}.
+                    </p>
+                  </div>
+                  <CaptionControls editor={capEditor} />
+                </div>
+              )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex min-h-0 flex-col gap-4">
+        <Card className="flex min-h-0 flex-1 flex-col">
+          <CardHeader className="shrink-0 pb-3">
+            <CardTitle>Preview</CardTitle>
+            <CardDescription>How the selected preset renders, with your caption edits.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-2 pb-4">
+            {selectedTemplate && capEditor.editedData ? (
+              <>
+                <PreviewPane data={capEditor.editedData} />
+                <p className="shrink-0 text-center text-xs text-muted-foreground">
+                  Live preview — reflects every caption setting.
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                <Clapperboard className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Pick a preset to preview it.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shrink-0">
+          <CardHeader className="pb-3">
+            <CardTitle>Pipeline</CardTitle>
+            <CardDescription>Videos currently being generated.</CardDescription>
+          </CardHeader>
+          <CardContent className="max-h-44 space-y-3 overflow-y-auto">
+            {pipeline.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-center">
+                <Clapperboard className="h-7 w-7 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Nothing processing.</p>
+              </div>
+            ) : (
+              pipeline.map((v) => <PipelineRow key={v.id} video={v} />)
+            )}
+            <Link
+              href="/storyvault/publishing"
+              className="block text-sm text-muted-foreground hover:text-primary"
+            >
+              Go to publishing →
+            </Link>
+          </CardContent>
+        </Card>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-3">
+        <Button
+          type="submit"
+          form="sv-create"
+          disabled={!selectedProject || runProject.isPending}
+          className="disabled:opacity-80"
+        >
+          {runProject.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Wand2 className="h-4 w-4" />
+          )}
+          Generate video
+        </Button>
+        {selectedTemplate && (
+          <div className="flex items-center overflow-hidden rounded-md border border-input bg-background shadow-sm">
+            <Button
+              variant="ghost"
+              onClick={() => capEditor.save()}
+              disabled={!capEditor.dirty || capEditor.saving}
+              className="rounded-none"
+            >
+              {capEditor.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save
+            </Button>
+            <div className="h-5 w-px shrink-0 bg-border" />
+            <Button
+              variant="ghost"
+              onClick={capEditor.reset}
+              disabled={!capEditor.dirty}
+              className="rounded-none"
+            >
+              <RotateCcw className="h-4 w-4" /> Reset
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function VideoStudioPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <StudioInner />
+    </Suspense>
+  );
+}

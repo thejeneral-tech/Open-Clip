@@ -38,21 +38,94 @@ export function outline(width: number, col = "#000"): string {
   return s.join(",");
 }
 
-// A to-scale 9:16 mock of what THIS template renders: gameplay layer + topic
-// card + body caption, every size/position/colour scaled from canvas px by
-// k = previewWidth / canvasWidth.
-export function PhonePreview({ t }: { t: SvTemplateData }) {
+// One beat of the intro sequence. Omitting `phase` renders gameplay + captions
+// only (the static mock used by the Presets pages); a `phase` shows exactly one
+// intro beat so the Studio can cycle topic card → author intro → captions.
+export type PreviewPhase = "topic" | "author" | "caption";
+
+// The real story fields the Studio preview draws so the card / author intro
+// match what the burned video shows (vs. the hardcoded sample below).
+export interface PreviewStory {
+  title: string;
+  body?: string | null;
+  author?: string | null;
+  community?: string | null;
+  upvotes?: number;
+  num_comments?: number;
+}
+
+// Reddit handle on the card / author intro — mirrors overlays._handle_from:
+// the post author, else a community-derived name, else a stable generic.
+function deriveHandle(story?: PreviewStory | null): string {
+  const a = (story?.author || "").trim().replace(/^u\//i, "").replace(/\//g, "").trim();
+  if (a && !["deleted", "removed", "automoderator"].includes(a.toLowerCase())) return a;
+  const c = (story?.community || "").trim().replace(/^r\//i, "").replace(/\//g, "").trim();
+  if (c) return `${c.charAt(0).toUpperCase()}${c.slice(1).replace(/\s+/g, "")}Stories`;
+  return "RedditStories";
+}
+
+// How many "UPDATE"/"EDIT" beats the body has — drives the red card line
+// (mirrors overlays._count_updates).
+function countUpdates(body?: string | null): number {
+  if (!body) return 0;
+  const m = body.match(/^\s*(?:edit|update)\s*(?:#?\s*\d+)?\s*[:-]/gim);
+  return m ? m.length : 0;
+}
+
+// Compact engagement count (mirrors overlays._fmt_count).
+function fmtCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  if (n > 99) return "99+";
+  return String(Math.max(0, n));
+}
+
+const AWARD_COLORS = ["#ffb428", "#ff8a4c", "#b478e8", "#5ac478", "#ec5c78"];
+
+// A to-scale 9:16 mock of what THIS template renders: gameplay layer + (in the
+// Studio) the Reddit topic card / author intro / body caption, every size,
+// position and colour scaled from canvas px by k = previewWidth / canvasWidth.
+// When a `story` is supplied the card/author intro use its real data; a `phase`
+// isolates one intro beat. With neither prop only gameplay + captions render, so
+// the Presets pages are unaffected.
+export function PhonePreview({
+  t,
+  width = 252,
+  story,
+  phase,
+}: {
+  t: SvTemplateData;
+  width?: number;
+  story?: PreviewStory | null;
+  phase?: PreviewPhase;
+}) {
   const cv = t.canvas || {};
   const tc = t.topicCard || {};
   const cap = t.captions || {};
+  const ai = t.authorIntro || {};
   const gp = t.gameplay || {};
   const safe = t.safe || {};
   const CW = cv.width || 1080;
   const CH = cv.height || 1920;
-  const PW = 252;
+  const PW = width;
   const k = PW / CW;
   const PH = CH * k;
   const split = gp.mode === "split_bottom";
+
+  // The card and author intro only appear in phase mode (the Studio cycle), so
+  // callers that pass no `phase` (the Presets pages) keep rendering captions
+  // only — exactly as before.
+  const showTopic = phase === "topic" && tc.enabled !== false;
+  const showAuthor = phase === "author" && ai.enabled !== false;
+  const showCaption = (phase === undefined || phase === "caption") && cap.enabled !== false;
+
+  // Card content: real story when given, else a representative sample.
+  const handle = deriveHandle(story);
+  const displayName = story ? (handle.length <= 22 ? handle : `${handle.slice(0, 21)}…`) : "Salty-Yeti-4489";
+  const metaHandle = story ? `u/${handle}` : "u/Salty-Yeti-4489";
+  const cardTitle = story?.title || "AITA for charging my family rent after they moved in?";
+  const updates = story ? countUpdates(story.body) : 0;
+  const likes = story ? fmtCount((story.upvotes ?? 0) || 990) : "99+";
+  const comments = story ? fmtCount((story.num_comments ?? 0) || 99) : "99+";
 
   const gameGrad = "linear-gradient(150deg,#28374f 0%,#16202f 55%,#0c121c 100%)";
   const layers: React.ReactNode[] = [];
@@ -72,8 +145,8 @@ export function PhonePreview({ t }: { t: SvTemplateData }) {
     </div>,
   );
 
-  // ---- Stage 1: topic card ----
-  if (tc.enabled !== false) {
+  // ---- Stage 1: Reddit topic card ----
+  if (showTopic) {
     const cardW = (tc.width || 820) * k;
     const titleSize = (tc.titleSize || 50) * k;
     const metaSize = (tc.metaSize || 34) * k;
@@ -94,30 +167,61 @@ export function PhonePreview({ t }: { t: SvTemplateData }) {
         <div style={{ display: "flex", alignItems: "center", gap: px(10 * k), marginBottom: px(10 * k) }}>
           {showAvatar && (
             <div style={{ width: px(avR * 2), height: px(avR * 2), borderRadius: "50%", background: "#3a95b3", color: "#fff", fontWeight: 800, fontSize: px(nameSize), display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>
-              S
+              {(displayName[0] || "R").toUpperCase()}
             </div>
           )}
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: "1 1 auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: px(6 * k) }}>
-              <span style={{ fontWeight: 800, color: "#141414", fontSize: px(nameSize), whiteSpace: "nowrap" }}>Salty-Yeti-4489</span>
+              <span style={{ fontWeight: 800, color: "#141414", fontSize: px(nameSize), whiteSpace: "nowrap" }}>{displayName}</span>
               <span style={{ width: px(20 * k), height: px(20 * k), borderRadius: "50%", background: "#1d96e8", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: px(13 * k), flex: "0 0 auto" }}>✓</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: px(4 * k), marginLeft: px(4 * k) }}>
+                {AWARD_COLORS.map((c) => (
+                  <span key={c} style={{ width: px(13 * k), height: px(13 * k), borderRadius: "50%", background: c, flex: "0 0 auto" }} />
+                ))}
+              </span>
             </div>
-            <div style={{ color: "#777", fontSize: px(metaSize), marginTop: px(2 * k) }}>u/Salty-Yeti-4489</div>
+            <div style={{ color: "#777", fontSize: px(metaSize), marginTop: px(2 * k) }}>{metaHandle}</div>
           </div>
         </div>
-        <div style={{ fontWeight: 800, color: "#141414", fontSize: px(titleSize), lineHeight: 1.16, marginBottom: px(10 * k) }}>
-          AITA for charging my family rent after they moved in?
+        <div style={{ fontWeight: 800, color: "#141414", fontSize: px(titleSize), lineHeight: 1.16, marginBottom: px(updates > 0 ? 6 * k : 10 * k) }}>
+          {cardTitle}
         </div>
+        {updates > 0 && (
+          <div style={{ fontWeight: 800, color: "#e0241b", fontSize: px(titleSize * 0.82), marginBottom: px(10 * k) }}>
+            Plus {updates} {updates === 1 ? "update" : "updates"}.
+          </div>
+        )}
         <div style={{ fontSize: px(metaSize), color: "#777" }}>
-          <span style={{ color: "#e02430", fontWeight: 700 }}>♥ </span>99+
-          <span style={{ display: "inline-block", width: px(18 * k) }} />🗨 99+
+          <span style={{ color: "#e02430", fontWeight: 700 }}>♥ </span>{likes}
+          <span style={{ display: "inline-block", width: px(18 * k) }} />🗨 {comments}
         </div>
       </div>,
     );
   }
 
+  // ---- Stage 2: author intro ("Posted by u/…") ----
+  if (showAuthor) {
+    const longest = Math.max("Posted by".length, metaHandle.length);
+    const maxW = CW - 2 * 70;
+    const aSize = Math.max(60, Math.min(Number(ai.maxSize) || 138, Math.round(maxW / (0.56 * longest)))) * k;
+    layers.push(
+      <div
+        key="author"
+        style={{
+          position: "absolute", left: "50%", top: "46%", transform: "translate(-50%,-50%)",
+          width: px((CW - 2 * (safe.side || 60)) * k), textAlign: "center",
+          color: "#fff000", fontWeight: 800, fontFamily: "Arial,sans-serif",
+          fontSize: px(aSize), lineHeight: 1.12, textShadow: outline((Number(ai.outline) || 9) * k, "#000"),
+        }}
+      >
+        <div>Posted by</div>
+        <div>{metaHandle}</div>
+      </div>,
+    );
+  }
+
   // ---- Stage 3: body captions ----
-  if (cap.enabled !== false) {
+  if (showCaption) {
     const capY = posInfo(t).y * k;
     const fs = (cap.size || 80) * k;
     const pop = cap.style === "pop";

@@ -642,7 +642,11 @@ export interface SvTemplateData {
     centerY?: number; width?: number; radius?: number; titleSize?: number;
     metaSize?: number; avatar?: boolean; fade?: number;
   };
-  authorIntro?: { enabled?: boolean; minSeconds?: number; maxSeconds?: number };
+  authorIntro?: {
+    enabled?: boolean; minSeconds?: number; maxSeconds?: number;
+    prefixReddit?: string; prefixQuora?: string;
+    maxSize?: number; minSize?: number; outline?: number; fade?: number; popScale?: number;
+  };
   captions?: {
     enabled?: boolean; style?: string; size?: number; outline?: number;
     marginV?: number; centerY?: number; maxWords?: number; maxChars?: number;

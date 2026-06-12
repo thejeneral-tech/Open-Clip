@@ -1,11 +1,9 @@
 "use client";
 
-import { Loader2, Palette, RotateCcw, Save, Sparkles, Type } from "lucide-react";
+import { Palette, Sparkles, Type } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { assToCss, cssToAss, PhonePreview, posInfo } from "@/components/storyvault/template-preview";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { assToCss, cssToAss, posInfo } from "@/components/storyvault/template-preview";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,7 +21,7 @@ import { cn } from "@/lib/utils";
 const CAPTION_SWATCHES = ["#ffffff", "#ffd400", "#000000", "#ff3b30", "#34c759", "#0a84ff", "#ff2d92"];
 
 // Reusable swatch row + native colour picker + hex readout.
-export function ColorField({
+function ColorField({
   label,
   icon: Icon,
   hint,
@@ -37,12 +35,12 @@ export function ColorField({
   onChange: (hex: string) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <Label className="flex items-center gap-1.5">
         {Icon && <Icon className="h-3.5 w-3.5" />} {label}
         {hint && <span className="font-normal text-muted-foreground">· {hint}</span>}
       </Label>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {CAPTION_SWATCHES.map((c) => (
           <button
             key={c}
@@ -50,7 +48,7 @@ export function ColorField({
             onClick={() => onChange(c)}
             aria-label={c}
             className={cn(
-              "h-7 w-7 rounded-full border border-border ring-offset-2 ring-offset-background transition",
+              "h-6 w-6 rounded-full border border-border ring-offset-2 ring-offset-background transition",
               value.toLowerCase() === c.toLowerCase() && "ring-2 ring-primary",
             )}
             style={{ background: c }}
@@ -61,7 +59,7 @@ export function ColorField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label={`${label} custom colour`}
-          className="h-7 w-7 cursor-pointer rounded-full border border-dashed border-border bg-transparent p-0"
+          className="h-6 w-6 cursor-pointer rounded-full border border-dashed border-border bg-transparent p-0"
         />
         <span className="ml-1 font-mono text-xs uppercase text-muted-foreground">{value}</span>
       </div>
@@ -69,22 +67,27 @@ export function ColorField({
   );
 }
 
-// Caption-generation editor — style (karaoke/pop) + vertical position + text and
-// highlight colours, with a live phone preview. Edits are local until saved, at
-// which point they persist onto the preset's caption config. Shared by the
-// Presets page and the Video Studio so both drive captions the same way.
-//
-// `presetSelect` is an optional control (e.g. a preset dropdown) rendered atop
-// the editor; pages that already pick the preset elsewhere can omit it.
-export function CaptionGenerator({
-  selected,
-  presetSelect,
-  className,
-}: {
-  selected: SvTemplate;
-  presetSelect?: React.ReactNode;
-  className?: string;
-}) {
+// The caption-editing state for a selected preset, shared between the controls and
+// a live preview that may render in different places on the page. Edits are local
+// until saved, then they persist onto the preset's caption config.
+export interface CaptionEditor {
+  selected: SvTemplate | null;
+  capStyle: "karaoke" | "pop";
+  setCapStyle: (v: "karaoke" | "pop") => void;
+  capPos: number;
+  setCapPos: (n: number) => void;
+  capPrimary: string;
+  setCapPrimary: (hex: string) => void;
+  capHighlight: string;
+  setCapHighlight: (hex: string) => void;
+  editedData: SvTemplateData | null; // the preset with in-progress edits applied
+  dirty: boolean;
+  saving: boolean;
+  reset: () => void;
+  save: () => Promise<void>;
+}
+
+export function useCaptionEditor(selected: SvTemplate | null): CaptionEditor {
   const update = useSvUpdateTemplate();
 
   const [capStyle, setCapStyle] = useState<"karaoke" | "pop">("karaoke");
@@ -94,6 +97,7 @@ export function CaptionGenerator({
 
   // Seed the editor from the selected preset (and re-seed after a save).
   useEffect(() => {
+    if (!selected) return;
     const cap = selected.data.captions || {};
     setCapStyle(cap.style === "pop" ? "pop" : "karaoke");
     setCapPos(posInfo(selected.data).pct);
@@ -101,8 +105,8 @@ export function CaptionGenerator({
     setCapHighlight(assToCss(cap.highlight, "#ffd400").toLowerCase());
   }, [selected]);
 
-  // The selected preset with the in-progress caption edits applied, for preview.
-  const editedData: SvTemplateData = useMemo(() => {
+  const editedData = useMemo<SvTemplateData | null>(() => {
+    if (!selected) return null;
     const CH = (selected.data.canvas || {}).height || 1920;
     return {
       ...selected.data,
@@ -116,8 +120,8 @@ export function CaptionGenerator({
     };
   }, [selected, capStyle, capPos, capPrimary, capHighlight]);
 
-  // Have the caption edits diverged from what's saved?
-  const capDirty = useMemo(() => {
+  const dirty = useMemo(() => {
+    if (!selected) return false;
     const cap = selected.data.captions || {};
     return (
       capStyle !== (cap.style === "pop" ? "pop" : "karaoke") ||
@@ -127,7 +131,8 @@ export function CaptionGenerator({
     );
   }, [selected, capStyle, capPos, capPrimary, capHighlight]);
 
-  const resetCaptions = () => {
+  const reset = () => {
+    if (!selected) return;
     const cap = selected.data.captions || {};
     setCapStyle(cap.style === "pop" ? "pop" : "karaoke");
     setCapPos(posInfo(selected.data).pct);
@@ -135,7 +140,8 @@ export function CaptionGenerator({
     setCapHighlight(assToCss(cap.highlight, "#ffd400").toLowerCase());
   };
 
-  const onSaveCaptions = async () => {
+  const save = async () => {
+    if (!selected || !editedData) return;
     try {
       await update.mutateAsync({ id: selected.id, data: { data: { captions: editedData.captions } } });
       toast.success("Caption style saved");
@@ -144,92 +150,89 @@ export function CaptionGenerator({
     }
   };
 
+  return {
+    selected,
+    capStyle, setCapStyle,
+    capPos, setCapPos,
+    capPrimary, setCapPrimary,
+    capHighlight, setCapHighlight,
+    editedData,
+    dirty,
+    saving: update.isPending,
+    reset,
+    save,
+  };
+}
+
+// The caption controls (style · vertical position · text/highlight colours · save
+// / reset), driven by a CaptionEditor. Laid out as a compact 2-column grid so it
+// sits neatly beneath the create-video form.
+export function CaptionControls({ editor, className }: { editor: CaptionEditor; className?: string }) {
+  const {
+    capStyle, setCapStyle,
+    capPos, setCapPos,
+    capPrimary, setCapPrimary,
+    capHighlight, setCapHighlight,
+  } = editor;
+
   return (
-    <div className={cn("grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]", className)}>
-      {/* ---- Live preview ---- */}
-      <Card>
-        <CardContent className="space-y-3 py-6">
-          <p className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Live preview — {selected.name}
-          </p>
-          <PhonePreview t={editedData} />
-          <p className="text-center text-xs text-muted-foreground">
-            Caption position and colours update as you change them. Save to keep.
-          </p>
-        </CardContent>
-      </Card>
+    <div className={cn("space-y-3", className)}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {/* Caption style */}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" /> Caption style
+          </Label>
+          <Select value={capStyle} onValueChange={(v) => setCapStyle(v as "karaoke" | "pop")}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="karaoke">Karaoke — last word highlighted</SelectItem>
+              <SelectItem value="pop">Pop word — words appear one at a time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-      {/* ---- Controls ---- */}
-      <Card className="lg:sticky lg:top-6">
-        <CardContent className="space-y-6 py-6">
-          {presetSelect}
-
-          {/* Caption style */}
-          <div className="space-y-2">
+        {/* Vertical position */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
             <Label className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" /> Caption style
+              <Type className="h-3.5 w-3.5" /> Text position
             </Label>
-            <Select value={capStyle} onValueChange={(v) => setCapStyle(v as "karaoke" | "pop")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="karaoke">Karaoke — last word highlighted</SelectItem>
-                <SelectItem value="pop">Pop word — words appear one at a time</SelectItem>
-              </SelectContent>
-            </Select>
+            <span className="text-xs text-muted-foreground">
+              {capPos}% {capPos <= 52 ? "(centered)" : "(lower)"}
+            </span>
           </div>
-
-          {/* Vertical position */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-1.5">
-                <Type className="h-3.5 w-3.5" /> Text position
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                {capPos}% {capPos <= 52 ? "(centered)" : "(lower)"}
-              </span>
-            </div>
-            <Slider min={20} max={90} step={1} value={[capPos]} onValueChange={([v]) => setCapPos(v)} />
-            <div className="flex flex-wrap gap-2">
-              {[
-                ["Top", 30],
-                ["Center", 50],
-                ["Lower", 62],
-                ["Bottom", 80],
-              ].map(([label, pct]) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setCapPos(pct as number)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs transition",
-                    capPos === pct
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <Slider min={20} max={90} step={1} value={[capPos]} onValueChange={([v]) => setCapPos(v)} />
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              ["Top", 30],
+              ["Center", 50],
+              ["Lower", 62],
+              ["Bottom", 80],
+            ].map(([label, pct]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setCapPos(pct as number)}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs transition",
+                  capPos === pct
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {/* Colours */}
-          <ColorField label="Text colour" icon={Palette} value={capPrimary} onChange={(c) => setCapPrimary(c)} />
-          <ColorField label="Highlight colour" hint="karaoke" value={capHighlight} onChange={(c) => setCapHighlight(c)} />
-
-          <div className="flex gap-2 pt-1">
-            <Button onClick={onSaveCaptions} disabled={!capDirty || update.isPending}>
-              {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
-            </Button>
-            <Button variant="outline" onClick={resetCaptions} disabled={!capDirty}>
-              <RotateCcw className="h-4 w-4" /> Reset
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Colours */}
+        <ColorField label="Text colour" icon={Palette} value={capPrimary} onChange={(c) => setCapPrimary(c)} />
+        <ColorField label="Highlight colour" hint="karaoke" value={capHighlight} onChange={(c) => setCapHighlight(c)} />
+      </div>
     </div>
   );
 }

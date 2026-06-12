@@ -1,11 +1,11 @@
 "use client";
 
-import { Clapperboard, Loader2, RotateCcw, Star, Wand2 } from "lucide-react";
+import { Clapperboard, Loader2, RotateCcw, Save, Star, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CaptionGenerator } from "@/components/storyvault/caption-generator";
+import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,7 @@ import {
   useSvVoicePresets,
   useSvVoices,
 } from "@/hooks/use-api";
-import { PhonePreview } from "@/components/storyvault/template-preview";
+import { PhonePreview, type PreviewPhase, type PreviewStory } from "@/components/storyvault/template-preview";
 import { categoryLabel } from "@/lib/utils";
 import type { SvProject, SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
 
@@ -114,6 +114,82 @@ function PipelineRow({ video }: { video: SvVideo }) {
         </div>
       )}
     </div>
+  );
+}
+
+// The intro beats the render burns in, in play order, with their chip labels.
+const PHASE_LABEL: Record<PreviewPhase, string> = {
+  topic: "Reddit card",
+  author: "Author intro",
+  caption: "Captions",
+};
+
+// Renders the phone preview scaled to fully fit the space it's given (by height,
+// capped by width) so the whole 9:16 frame is always visible without clipping or
+// scrolling, however tall the column is. It also cycles through the intro beats
+// the render burns in — Reddit card → "Posted by u/…" → captions — drawing the
+// selected story's real data so the preview matches the exported video.
+function PreviewPane({ data, story }: { data: SvTemplateData; story: PreviewStory | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(240);
+  const aspect = ((data.canvas?.width ?? 1080) / (data.canvas?.height ?? 1920));
+  const aspectRef = useRef(aspect);
+  aspectRef.current = aspect;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const byHeight = el.clientHeight * aspectRef.current;
+      const fit = Math.min(el.clientWidth, byHeight, 360);
+      setWidth(Math.max(120, Math.floor(fit)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const phases: PreviewPhase[] = [];
+  if (data.topicCard?.enabled !== false) phases.push("topic");
+  if (data.authorIntro?.enabled !== false) phases.push("author");
+  if (data.captions?.enabled !== false) phases.push("caption");
+  if (phases.length === 0) phases.push("caption");
+
+  // Manual beat selection via the chips below — no auto-cycling. Reset to the
+  // first beat when the set of beats changes (e.g. switching presets).
+  const [idx, setIdx] = useState(0);
+  const phaseKey = phases.join(",");
+  useEffect(() => {
+    setIdx(0);
+  }, [phaseKey]);
+  const phase = phases[Math.min(idx, phases.length - 1)];
+
+  return (
+    <>
+      <div ref={ref} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <div key={phase} className="animate-in fade-in duration-500">
+          <PhonePreview t={data} width={width} story={story} phase={phase} />
+        </div>
+      </div>
+      {phases.length > 1 && (
+        <div className="flex shrink-0 items-center justify-center gap-2">
+          {phases.map((p, i) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setIdx(i)}
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
+                p === phase ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${p === phase ? "bg-primary" : "bg-muted-foreground/40"}`} />
+              {PHASE_LABEL[p]}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -201,6 +277,11 @@ function StudioInner() {
   // Footage selection only applies to split-screen presets (gameplay fills the
   // bottom half); full-screen presets use the whole frame.
   const isSplitScreen = selectedTemplate?.data?.gameplay?.mode === "split_bottom";
+  // The story whose real text/handle/counts the preview card should show.
+  const selectedStory = stories.find((s) => String(s.id) === storyId) ?? null;
+  // Caption-editing state for the selected preset, shared by the controls (under
+  // the form) and the live preview (right column).
+  const capEditor = useCaptionEditor(selectedTemplate);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,25 +306,26 @@ function StudioInner() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Video Studio</h1>
-        <p className="text-muted-foreground">Turn a curated story into a narrated short-form video.</p>
+    <div className="flex h-full flex-col gap-3 p-4 lg:p-5">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold tracking-tight">Video Studio</h1>
+        <p className="text-sm text-muted-foreground">Turn a curated story into a narrated short-form video.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <Card>
-          <CardHeader>
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader className="shrink-0 pb-3">
             <CardTitle>Create a video</CardTitle>
             <CardDescription>Pick a story and tune the narration and background.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto">
             {storiesLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <form onSubmit={onSubmit} className="space-y-4">
+              <>
+              <form id="sv-create" onSubmit={onSubmit} className="space-y-3">
                 {projects.length > 0 && (
                   <div className="space-y-2">
                     <Label>Project</Label>
@@ -332,7 +414,7 @@ function StudioInner() {
                   )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Duration</Label>
                     <Select value={duration} onValueChange={setDuration}>
@@ -435,36 +517,41 @@ function StudioInner() {
                     </Select>
                   </div>
                 </div>
-
-                <Button type="submit" disabled={!storyId || createVideo.isPending}>
-                  {createVideo.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Wand2 className="h-4 w-4" />
-                  )}
-                  Generate video
-                </Button>
               </form>
+
+              {selectedTemplate && (
+                <div className="space-y-3 border-t pt-4">
+                  <div>
+                    <h3 className="text-sm font-semibold tracking-tight">Captions</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Edits apply to {selectedTemplate.name}.
+                    </p>
+                  </div>
+                  <CaptionControls editor={capEditor} />
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-        <Card className="h-fit">
-          <CardHeader>
+        <div className="flex min-h-0 flex-col gap-4">
+        <Card className="flex min-h-0 flex-1 flex-col">
+          <CardHeader className="shrink-0 pb-3">
             <CardTitle>Preview</CardTitle>
-            <CardDescription>How the selected preset renders.</CardDescription>
+            <CardDescription>How the selected preset renders, with your caption edits.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {selectedTemplate ? (
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-2 pb-4">
+            {selectedTemplate && capEditor.editedData ? (
               <>
-                <PhonePreview t={selectedTemplate.data} />
-                <p className="text-center text-xs text-muted-foreground">
-                  To-scale mock of the card + caption styling. Gameplay footage is a placeholder.
+                <PreviewPane data={capEditor.editedData} story={selectedStory} />
+                <p className="shrink-0 text-center text-xs text-muted-foreground">
+                  Live preview — tap a beat to see the intro card, author intro, or captions
+                  {selectedStory ? " for the selected story" : ""}.
                 </p>
               </>
             ) : (
-              <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Clapperboard className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Pick a preset to preview it.</p>
               </div>
@@ -472,15 +559,15 @@ function StudioInner() {
           </CardContent>
         </Card>
 
-        <Card className="h-fit">
-          <CardHeader>
+        <Card className="shrink-0">
+          <CardHeader className="pb-3">
             <CardTitle>Pipeline</CardTitle>
             <CardDescription>Videos currently being generated.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="max-h-44 space-y-3 overflow-y-auto">
             {pipeline.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center">
-                <Clapperboard className="h-8 w-8 text-muted-foreground" />
+              <div className="flex flex-col items-center gap-2 py-6 text-center">
+                <Clapperboard className="h-7 w-7 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Nothing processing.</p>
               </div>
             ) : (
@@ -497,19 +584,43 @@ function StudioInner() {
         </div>
       </div>
 
-      {selectedTemplate && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Captions</h2>
-            <p className="text-sm text-muted-foreground">
-              Style the captions for{" "}
-              <span className="font-medium text-foreground">{selectedTemplate.name}</span>. Saved
-              changes apply to this preset.
-            </p>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-3">
+        <Button
+          type="submit"
+          form="sv-create"
+          disabled={!storyId || createVideo.isPending}
+          className="disabled:opacity-80"
+        >
+          {createVideo.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Wand2 className="h-4 w-4" />
+          )}
+          Generate video
+        </Button>
+        {selectedTemplate && (
+          <div className="flex items-center overflow-hidden rounded-md border border-input bg-background shadow-sm">
+            <Button
+              variant="ghost"
+              onClick={() => capEditor.save()}
+              disabled={!capEditor.dirty || capEditor.saving}
+              className="rounded-none"
+            >
+              {capEditor.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save
+            </Button>
+            <div className="h-5 w-px shrink-0 bg-border" />
+            <Button
+              variant="ghost"
+              onClick={capEditor.reset}
+              disabled={!capEditor.dirty}
+              className="rounded-none"
+            >
+              <RotateCcw className="h-4 w-4" /> Reset
+            </Button>
           </div>
-          <CaptionGenerator selected={selectedTemplate} />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
