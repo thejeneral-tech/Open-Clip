@@ -1093,6 +1093,14 @@ async def create_video(
             raise HTTPException(status_code=404, detail="Voice preset not found")
         voice = preset.voice
         speed = preset.speed
+    # Snapshot the selected preset's caption config so the burned-in captions
+    # match its preview, frozen at queue time against later template edits.
+    caption_config = None
+    if payload.template_id is not None:
+        tpl = await _owned_template(db, payload.template_id, current_user)
+        caps = tpl.data.get("captions") if isinstance(tpl.data, dict) else None
+        if isinstance(caps, dict):
+            caption_config = caps
     video = SvVideo(
         owner_id=current_user.id,
         story_id=story.id,
@@ -1104,6 +1112,7 @@ async def create_video(
         voice=voice,
         speed=speed,
         caption_style=payload.caption_style,
+        caption_config=caption_config,
         background_category=payload.background_category,
         background_id=payload.background_id,
         script_engine=payload.script_engine,

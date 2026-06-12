@@ -9,6 +9,7 @@ Turns clip words into styled, animated captions:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -98,6 +99,47 @@ STYLES: dict[str, StylePreset] = {
 
 def get_style(name: str) -> StylePreset:
     return STYLES.get(name, STYLES[CaptionStyle.HORMOZI.value])
+
+
+# ----------------------------------------------- preset (template) overrides
+# A selected StoryVault preset carries a ``captions`` config blob that overrides
+# the named style's colours, font, size, word-grouping and vertical placement so
+# the burned-in captions match the preset's on-screen preview. Every key below is
+# optional; absent keys fall back to the named style + global lower-third layout.
+
+
+def _norm_ass_color(val: Any) -> str | None:
+    """Normalise a preset colour into an ASS literal (``&HAABBGGRR``), or None.
+
+    Accepts ASS literals (``&H`` + 6 or 8 hex digits) and CSS ``#RRGGBB``.
+    """
+    if not isinstance(val, str):
+        return None
+    s = val.strip()
+    m = re.fullmatch(r"&[Hh]([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})", s)
+    if m:
+        hexd = m.group(1)
+        if len(hexd) == 6:
+            hexd = "00" + hexd
+        return "&H" + hexd.upper()
+    m = re.fullmatch(r"#?([0-9A-Fa-f]{6})", s)
+    if m:
+        h = m.group(1)
+        return _ass_color(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    return None
+
+
+def _caption_center_y(overrides: dict[str, Any], height: int) -> int | None:
+    """Caption vertical centre in PlayRes px from the top, or None to keep the
+    global lower-third placement. ``centerY`` (from the top) wins; otherwise
+    ``marginV`` (from the bottom) is converted to a centre."""
+    cy = overrides.get("centerY")
+    if isinstance(cy, (int, float)) and cy > 0:
+        return max(0, min(int(round(cy)), height))
+    mv = overrides.get("marginV")
+    if isinstance(mv, (int, float)) and mv >= 0:
+        return max(0, min(int(round(height - mv)), height))
+    return None
 
 
 # --------------------------------------------------------------------- tokens
@@ -350,21 +392,63 @@ def render_ass(
     width: int,
     height: int,
     max_words: int | None = None,
+    overrides: dict[str, Any] | None = None,
 ) -> str:
     """Render an ASS subtitle document with word-level highlighting.
 
     ``max_words`` overrides the preset's words-per-cue (set by the learning
     profile to slow down content that reads too fast); ``None`` uses the preset.
+
+    ``overrides`` is a selected preset's ``captions`` config blob (colours, font,
+    size, ``maxWords``, ``style`` karaoke/pop, and vertical placement). It is
+    layered on top of the named style so the render matches the preset's preview.
     """
     style = get_style(style_name)
     if max_words:
         style = replace(style, max_words=max_words)
-    fontsize = max(12, int(round(style.font_scale * height * CAPTION_SIZE_SCALE)))
+
+    overrides = overrides or {}
+    # Colours / font from the preset, each falling back to the named style.
+    primary = _norm_ass_color(overrides.get("primary")) or style.primary
+    highlight = _norm_ass_color(overrides.get("highlight")) or style.highlight
+    font_ov = overrides.get("font")
+    fontname = font_ov.strip() if isinstance(font_ov, str) and font_ov.strip() else style.fontname
+    # "Pop word" reads as plain words appearing in sequence — no karaoke colour or
+    # grow on the spoken word; "karaoke" (the default) lights the active word.
+    if str(overrides.get("style") or "").lower() == "pop":
+        highlight = primary
+        style = replace(style, active_scale=1.0)
+    ov_max_words = overrides.get("maxWords")
+    if isinstance(ov_max_words, int) and ov_max_words > 0:
+        style = replace(style, max_words=ov_max_words)
+    style = replace(style, primary=primary, highlight=highlight, fontname=fontname)
+
+    # Font size: a preset ``size`` is absolute px in the 1080×1920 canvas (which
+    # equals the render height), used verbatim; otherwise the style's height-
+    # relative size at 65%.
+    ov_size = overrides.get("size")
+    if isinstance(ov_size, (int, float)) and ov_size > 0:
+        fontsize = max(12, int(round(ov_size)))
+    else:
+        fontsize = max(12, int(round(style.font_scale * height * CAPTION_SIZE_SCALE)))
+    ov_outline = overrides.get("outline")
+    outline = (
+        float(ov_outline) if isinstance(ov_outline, (int, float)) and ov_outline >= 0 else style.outline
+    )
     bold = -1 if style.bold else 0
-    # Override each preset's own placement so captions always land in the lower
-    # third, bottom-centered, regardless of the chosen style.
-    alignment = CAPTION_ALIGNMENT
-    margin_v = max(0, int(round(height * CAPTION_MARGIN_V_FRAC)))
+
+    # Placement. Default: bottom-centred in the lower third, regardless of style.
+    # A preset may instead pin the vertical centre (centerY from the top, or
+    # height − marginV), rendered with an \an5\pos() prefix on every cue.
+    center_y = _caption_center_y(overrides, height)
+    if center_y is not None:
+        alignment = 5  # middle-centre; \pos fixes the exact anchor point
+        margin_v = 0
+        pos_tag = f"{{\\an5\\pos({width // 2},{center_y})}}"
+    else:
+        alignment = CAPTION_ALIGNMENT
+        margin_v = max(0, int(round(height * CAPTION_MARGIN_V_FRAC)))
+        pos_tag = ""
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -375,20 +459,27 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{style.outline_color},{BLACK},{bold},0,0,0,100,100,0,0,1,{style.outline},{style.shadow},{alignment},40,40,{margin_v},1
+Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{style.outline_color},{BLACK},{bold},0,0,0,100,100,0,0,1,{outline},{style.shadow},{alignment},40,40,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     events = [
-        f"Dialogue: 0,{_fmt_time(seg['start'])},{_fmt_time(seg['end'])},Default,,0,0,0,,{seg['text']}"
+        f"Dialogue: 0,{_fmt_time(seg['start'])},{_fmt_time(seg['end'])},Default,,0,0,0,,{pos_tag}{seg['text']}"
         for seg in build_segments(tokens, style)
     ]
     return header + "\n".join(events) + "\n"
 
 
-def write_ass(path: str, tokens: list[dict[str, Any]], style_name: str, width: int, height: int) -> str:
+def write_ass(
+    path: str,
+    tokens: list[dict[str, Any]],
+    style_name: str,
+    width: int,
+    height: int,
+    overrides: dict[str, Any] | None = None,
+) -> str:
     # Consult the self-tuning profile for a learned words-per-cue, then feed this
     # render's quality back into it. Both steps are best-effort and never block a
     # render — the deterministic no-overlap guarantee does not depend on them.
@@ -400,7 +491,7 @@ def write_ass(path: str, tokens: list[dict[str, Any]], style_name: str, width: i
     except Exception:  # pragma: no cover - learning is optional
         learning = None
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(render_ass(tokens, style_name, width, height, max_words=max_words))
+        fh.write(render_ass(tokens, style_name, width, height, max_words=max_words, overrides=overrides))
     if learning is not None:
         try:
             learning.record_render(style_name, audit_timeline(tokens, style_name, max_words))

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CaptionGenerator } from "@/components/storyvault/caption-generator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,10 @@ import type { SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/t
 
 const ACTIVE_STATUSES = new Set(["queued", "processing", "rendering", "failed"]);
 const PICKABLE_STATUSES = new Set(["new", "saved", "approved"]);
+
+// Captions are styled per-preset in the Captions editor below; the render still
+// needs a base caption_style string, so send the prior default unconditionally.
+const DEFAULT_CAPTION_STYLE = "modern_tiktok";
 
 function truncate(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -113,7 +118,6 @@ function PipelineRow({ video }: { video: SvVideo }) {
 function StudioInner() {
   const searchParams = useSearchParams();
   const storyParam = searchParams.get("story");
-  const captionParam = searchParams.get("caption");
   const templateParam = searchParams.get("template");
 
   const { data: stories = [], isLoading: storiesLoading } = useSvStories({ status: undefined, sort: "score" });
@@ -138,7 +142,6 @@ function StudioInner() {
   const [duration, setDuration] = useState("60");
   const hookStyle = "conflict";
   const [voice, setVoice] = useState("auto");
-  const [captionStyle, setCaptionStyle] = useState(captionParam || "modern_tiktok");
   const [backgroundCategory, setBackgroundCategory] = useState("any");
   const [footageId, setFootageId] = useState("auto");
   const [scriptEngine, setScriptEngine] = useState("auto");
@@ -168,7 +171,7 @@ function StudioInner() {
         duration_target: Number(duration),
         hook_style: hookStyle,
         voice: voice === "auto" ? undefined : voice,
-        caption_style: captionStyle,
+        caption_style: DEFAULT_CAPTION_STYLE,
         background_category: backgroundCategory === "any" ? undefined : backgroundCategory,
         background_id: isSplitScreen && footageId !== "auto" ? Number(footageId) : undefined,
         script_engine: scriptEngine,
@@ -191,7 +194,7 @@ function StudioInner() {
         <Card>
           <CardHeader>
             <CardTitle>Create a video</CardTitle>
-            <CardDescription>Pick a story and tune the narration, captions, and background.</CardDescription>
+            <CardDescription>Pick a story and tune the narration and background.</CardDescription>
           </CardHeader>
           <CardContent>
             {storiesLoading ? (
@@ -310,21 +313,6 @@ function StudioInner() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Caption style</Label>
-                    <Select value={captionStyle} onValueChange={setCaptionStyle}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(meta?.caption_styles ?? ["modern_tiktok"]).map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>Background</Label>
                     <Select
                       value={backgroundCategory}
@@ -418,6 +406,20 @@ function StudioInner() {
           </CardContent>
         </Card>
       </div>
+
+      {selectedTemplate && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Captions</h2>
+            <p className="text-sm text-muted-foreground">
+              Style the captions for{" "}
+              <span className="font-medium text-foreground">{selectedTemplate.name}</span>. Saved
+              changes apply to this preset.
+            </p>
+          </div>
+          <CaptionGenerator selected={selectedTemplate} />
+        </div>
+      )}
     </div>
   );
 }

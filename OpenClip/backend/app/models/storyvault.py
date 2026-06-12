@@ -137,6 +137,10 @@ class SvVideo(TimestampMixin, Base):
     voice: Mapped[str | None] = mapped_column(String(128), default=None)  # SAPI voice name
     speed: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)  # 0.7-1.4
     caption_style: Mapped[str] = mapped_column(String(32), default="hormozi", nullable=False)
+    # Snapshot of the selected preset's caption config (style/size/colours/
+    # position) at queue time, so the burned-in captions match the preset even if
+    # the template is later edited or deleted. None → use caption_style alone.
+    caption_config: Mapped[dict | None] = mapped_column(JSON, default=None)
     background_category: Mapped[str | None] = mapped_column(String(64), default=None)
     # Optional: pin the gameplay/footage to one specific background. When set it
     # overrides background_category (segments are drawn only from this footage).

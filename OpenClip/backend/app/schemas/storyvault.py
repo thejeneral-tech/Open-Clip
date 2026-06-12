@@ -112,6 +112,7 @@ class SvVideoCreate(BaseModel):
     background_category: str | None = None
     background_id: int | None = None   # pin gameplay footage to one background
     script_engine: str = "auto"        # auto|ai|heuristic
+    template_id: int | None = None     # snapshot this preset's caption config
 
 
 class SvVideoReject(BaseModel):
