@@ -282,6 +282,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             "voice": video.voice,
             "speed": video.speed,
             "caption_style": video.caption_style,
+            "caption_config": video.caption_config,
             "background_category": video.background_category,
             "background_id": video.background_id,
             "script_engine": video.script_engine,
@@ -353,7 +354,8 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         ass_key = sv_captions_key(sv_video_id, "ass")
         srt_key = sv_captions_key(sv_video_id, "srt")
         captions_svc.write_ass(
-            storage.abspath(ass_key), tokens, opts["caption_style"], composer.RENDER_W, composer.RENDER_H
+            storage.abspath(ass_key), tokens, opts["caption_style"],
+            composer.RENDER_W, composer.RENDER_H, overrides=opts.get("caption_config"),
         )
         storage.commit(ass_key)
         with open(storage.abspath(srt_key), "w", encoding="utf-8") as fh:

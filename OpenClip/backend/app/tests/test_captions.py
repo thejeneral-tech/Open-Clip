@@ -192,3 +192,63 @@ def test_audit_timeline_reports_no_overlaps():
     audit = cap.audit_timeline(messy, "hormozi")
     assert audit["overlaps"] == 0
     assert audit["groups"] >= 1
+
+
+# ----------------------------------------------------- preset (template) overrides
+def test_norm_ass_color_accepts_ass_and_css():
+    assert cap._norm_ass_color("&H0000F0FF") == "&H0000F0FF"
+    assert cap._norm_ass_color("&hff00ff") == "&H00FF00FF"        # 6-digit → alpha 00, upper
+    assert cap._norm_ass_color("&H8000F0FF") == "&H8000F0FF"      # 8-digit alpha preserved
+    assert cap._norm_ass_color("#ffffff") == "&H00FFFFFF"          # white #RRGGBB → ASS BGR
+    assert cap._norm_ass_color("#ff0000") == "&H000000FF"          # red → B0 G0 Rff
+    assert cap._norm_ass_color("nonsense") is None
+    assert cap._norm_ass_color(None) is None
+
+
+def test_render_ass_overrides_apply_colours_size_outline():
+    ass = render_ass(
+        _tokens(), "modern_tiktok", 1080, 1920,
+        overrides={"primary": "&H00FFFFFF", "highlight": "&H0000F0FF",
+                   "size": 120, "outline": 9},
+    )
+    fields = _style_fields(ass)
+    assert fields[2] == "120"            # font size used verbatim
+    assert fields[3] == "&H00FFFFFF"     # primary colour
+    assert fields[4] == "&H0000F0FF"     # highlight colour
+    assert fields[16] == "9.0"           # outline width
+
+
+def test_render_ass_overrides_pin_vertical_centre():
+    ass = render_ass(_tokens(), "modern_tiktok", 1080, 1920, overrides={"centerY": 960})
+    fields = _style_fields(ass)
+    assert int(fields[-5]) == 5          # alignment middle-centre
+    assert int(fields[-2]) == 0          # margin handed to \pos instead
+    dialogue = [l for l in ass.splitlines() if l.startswith("Dialogue")]
+    assert dialogue and all("\\an5\\pos(540,960)" in l for l in dialogue)
+
+
+def test_render_ass_overrides_margin_v_converts_to_centre():
+    # marginV (from the bottom) → centre at height − marginV when centerY absent.
+    ass = render_ass(_tokens(), "modern_tiktok", 1080, 1920, overrides={"marginV": 520})
+    dialogue = [l for l in ass.splitlines() if l.startswith("Dialogue")]
+    assert dialogue and all("\\pos(540,1400)" in l for l in dialogue)  # 1920 - 520
+
+
+def test_render_ass_pop_style_disables_karaoke_highlight():
+    ass = render_ass(
+        _tokens(), "modern_tiktok", 1080, 1920,
+        overrides={"style": "pop", "primary": "&H00FFFFFF", "highlight": "&H0000F0FF"},
+    )
+    fields = _style_fields(ass)
+    assert fields[4] == fields[3] == "&H00FFFFFF"  # highlight collapses to primary
+    # No spoken word lights up in the highlight colour anywhere in the cues.
+    assert "&H0000F0FF" not in ass
+
+
+def test_render_ass_no_overrides_keeps_lower_third():
+    # Backward compatible: absent overrides → unchanged bottom-centred placement.
+    ass = render_ass(_tokens(), "modern_tiktok", 1080, 1920)
+    fields = _style_fields(ass)
+    assert int(fields[-5]) == 2
+    assert int(fields[-2]) == round(1920 * cap.CAPTION_MARGIN_V_FRAC)
+    assert "\\pos(" not in ass

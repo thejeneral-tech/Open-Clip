@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CaptionGenerator } from "@/components/storyvault/caption-generator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +38,10 @@ import type { SvProject, SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } fr
 
 const ACTIVE_STATUSES = new Set(["queued", "processing", "rendering", "failed"]);
 const PICKABLE_STATUSES = new Set(["new", "saved", "approved"]);
+
+// Captions are styled per-preset in the Captions editor below; the render still
+// needs a base caption_style string, so send the prior default unconditionally.
+const DEFAULT_CAPTION_STYLE = "modern_tiktok";
 
 function truncate(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -115,7 +120,6 @@ function PipelineRow({ video }: { video: SvVideo }) {
 function StudioInner() {
   const searchParams = useSearchParams();
   const storyParam = searchParams.get("story");
-  const captionParam = searchParams.get("caption");
   const templateParam = searchParams.get("template");
   const projectParam = searchParams.get("project");
 
@@ -142,7 +146,10 @@ function StudioInner() {
   const [duration, setDuration] = useState("60");
   const hookStyle = "conflict";
   const [voice, setVoice] = useState("auto");
-  const [captionStyle, setCaptionStyle] = useState(captionParam || "modern_tiktok");
+  // Base caption style for the render. No longer a visible control — the preset's
+  // caption config (edited below) drives the look — but a project recipe can still
+  // carry one, so it's kept in state and sent with the request.
+  const [captionStyle, setCaptionStyle] = useState(DEFAULT_CAPTION_STYLE);
   const [backgroundCategory, setBackgroundCategory] = useState("any");
   const [footageId, setFootageId] = useState("auto");
   const [scriptEngine, setScriptEngine] = useState("auto");
@@ -228,7 +235,7 @@ function StudioInner() {
         <Card>
           <CardHeader>
             <CardTitle>Create a video</CardTitle>
-            <CardDescription>Pick a story and tune the narration, captions, and background.</CardDescription>
+            <CardDescription>Pick a story and tune the narration and background.</CardDescription>
           </CardHeader>
           <CardContent>
             {storiesLoading ? (
@@ -372,21 +379,6 @@ function StudioInner() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Caption style</Label>
-                    <Select value={captionStyle} onValueChange={setCaptionStyle}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(meta?.caption_styles ?? ["modern_tiktok"]).map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
                     <Label>Background</Label>
                     <Select
                       value={backgroundCategory}
@@ -504,6 +496,20 @@ function StudioInner() {
         </Card>
         </div>
       </div>
+
+      {selectedTemplate && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Captions</h2>
+            <p className="text-sm text-muted-foreground">
+              Style the captions for{" "}
+              <span className="font-medium text-foreground">{selectedTemplate.name}</span>. Saved
+              changes apply to this preset.
+            </p>
+          </div>
+          <CaptionGenerator selected={selectedTemplate} />
+        </div>
+      )}
     </div>
   );
 }
