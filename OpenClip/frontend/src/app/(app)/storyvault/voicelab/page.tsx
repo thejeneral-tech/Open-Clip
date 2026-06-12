@@ -43,7 +43,7 @@ function fmtBytes(n: number): string {
 
 function StepBadge({ n }: { n: number }) {
   return (
-    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-[12px] font-bold text-primary-foreground shadow-sm shadow-primary/25">
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary text-[12px] font-bold text-primary-foreground">
       {n}
     </span>
   );
@@ -104,7 +104,7 @@ function PresetRow({
         onClick={onPreview}
         disabled={previewing}
         title="Preview"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm transition hover:brightness-110 disabled:opacity-60"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition hover:brightness-110 disabled:opacity-60"
       >
         {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
       </button>
@@ -574,7 +574,7 @@ export default function VoiceLabPage() {
                   type="button"
                   onClick={() => void generate()}
                   disabled={generateMut.isPending}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-primary to-primary/80 px-5 py-2.5 font-mono text-[13px] font-bold text-primary-foreground shadow-lg shadow-primary/20 transition hover:brightness-110 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-mono text-[13px] font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-60"
                 >
                   {generateMut.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
