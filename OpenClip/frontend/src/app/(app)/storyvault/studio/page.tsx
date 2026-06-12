@@ -30,6 +30,7 @@ import {
   useSvVoicePresets,
   useSvVoices,
 } from "@/hooks/use-api";
+import { PhonePreview } from "@/components/storyvault/template-preview";
 import { categoryLabel } from "@/lib/utils";
 import type { SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
 
@@ -395,6 +396,29 @@ function StudioInner() {
           </CardContent>
         </Card>
 
+        <div className="space-y-6">
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle>Preview</CardTitle>
+            <CardDescription>How the selected preset renders.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {selectedTemplate ? (
+              <>
+                <PhonePreview t={selectedTemplate.data} />
+                <p className="text-center text-xs text-muted-foreground">
+                  To-scale mock of the card + caption styling. Gameplay footage is a placeholder.
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-2 py-8 text-center">
+                <Clapperboard className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Pick a preset to preview it.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="h-fit">
           <CardHeader>
             <CardTitle>Pipeline</CardTitle>
@@ -417,6 +441,7 @@ function StudioInner() {
             </Link>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );
