@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_session
+from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -25,7 +27,9 @@ from app.schemas.auth import (
     Token,
 )
 from app.schemas.user import UserOut
+from app.services.storyvault.voice_presets import ensure_voice_presets
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -68,6 +72,12 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_sess
     db.add(UserSettings(user_id=user.id))
     await db.commit()
     await db.refresh(user)
+    # Give the brand-new account the built-in TikTok voice presets right away
+    # (non-fatal: startup + Voice Lab seeding are backups if this ever fails).
+    try:
+        await run_in_threadpool(ensure_voice_presets, user.id)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Voice-preset seeding skipped for new user %s: %s", user.id, exc)
     return _issue_tokens(user)
 
 
