@@ -84,6 +84,7 @@ from app.services.storage import (
     sv_background_key,
     sv_caption_preview_key,
     sv_voice_clone_key,
+    sv_voice_preset_preview_key,
     sv_voice_ref_key,
     sv_voice_sample_key,
 )
@@ -91,6 +92,10 @@ from app.services.ffmpeg import ffmpeg
 from app.services.storyvault import fish_clone, reddit, scoring
 from app.services.storyvault import tts as tts_svc
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
+from app.services.storyvault.voice_presets_data import (
+    BUILTIN_VOICE_PRESETS,
+    voice_preset_asset,
+)
 from app.workers.sv_tasks import (
     sv_caption_previews_task,
     sv_generate_video_task,
@@ -201,15 +206,83 @@ async def voice_sample(
 
 
 # ------------------------------------------------------------- voice presets
+async def _seed_voice_presets(db: AsyncSession, user: User) -> None:
+    """Seed the built-in TikTok clone voices for a user, idempotently by key.
+
+    Built-ins already present (including soft-deleted ones) are left untouched,
+    so a deleted built-in stays gone and an existing default is never reset.
+    Each preset's bundled audition clip is copied into storage once (a shared
+    ``builtin_<key>`` key) so the Voice Lab Preview button plays it.
+    """
+    have = set(
+        (
+            await db.execute(
+                select(SvVoicePreset.preset_key).where(
+                    SvVoicePreset.owner_id == user.id,
+                    SvVoicePreset.preset_key.is_not(None),
+                )
+            )
+        ).scalars().all()
+    )
+    has_default = bool(
+        (
+            await db.execute(
+                select(SvVoicePreset.id).where(
+                    SvVoicePreset.owner_id == user.id,
+                    SvVoicePreset.deleted_at.is_(None),
+                    SvVoicePreset.is_default.is_(True),
+                )
+            )
+        ).scalars().first()
+    )
+    new = False
+    for spec in BUILTIN_VOICE_PRESETS:
+        if spec["key"] in have:
+            continue
+        # Copy the bundled audition clip into storage once (shared across users).
+        preview_url: str | None = None
+        key = sv_voice_preset_preview_key(f"builtin_{spec['key']}")
+        if not storage.exists(key):
+            asset = voice_preset_asset(spec["preview"])
+            if asset is not None:
+                await run_in_threadpool(storage.save_file, str(asset), key)
+        if storage.exists(key):
+            preview_url = storage.url(key)
+
+        make_default = bool(spec.get("isDefault")) and not has_default
+        if make_default:
+            has_default = True
+        db.add(
+            SvVoicePreset(
+                owner_id=user.id,
+                name=spec["name"],
+                voice=spec["voice"],
+                speed=spec["speed"],
+                engine=spec["engine"],
+                preview_url=preview_url,
+                is_default=make_default,
+                builtin=True,
+                preset_key=spec["key"],
+            )
+        )
+        new = True
+    if new:
+        await db.commit()
+
+
 @router.get("/voices/presets", response_model=list[SvVoicePresetOut])
 async def list_voice_presets(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ) -> list[SvVoicePresetOut]:
+    await _seed_voice_presets(db, current_user)
     rows = (
         await db.execute(
             select(SvVoicePreset)
-            .where(SvVoicePreset.owner_id == current_user.id)
+            .where(
+                SvVoicePreset.owner_id == current_user.id,
+                SvVoicePreset.deleted_at.is_(None),
+            )
             .order_by(SvVoicePreset.is_default.desc(), SvVoicePreset.created_at.desc())
         )
     ).scalars().all()
@@ -244,7 +317,7 @@ async def create_voice_preset(
 
 async def _owned_preset(db: AsyncSession, preset_id: int, user: User) -> SvVoicePreset:
     preset = await db.get(SvVoicePreset, preset_id)
-    if not preset or preset.owner_id != user.id:
+    if not preset or preset.owner_id != user.id or preset.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Voice preset not found")
     return preset
 
@@ -292,7 +365,28 @@ async def delete_voice_preset(
     db: AsyncSession = Depends(get_session),
 ) -> Message:
     preset = await _owned_preset(db, preset_id, current_user)
-    await db.delete(preset)
+    was_default = preset.is_default
+    if preset.builtin:
+        # Soft-delete built-ins so re-seeding never resurrects them.
+        preset.deleted_at = func.now()
+        preset.is_default = False
+    else:
+        await db.delete(preset)
+    # If we removed the default, promote a surviving preset to keep one active.
+    if was_default:
+        survivor = (
+            await db.execute(
+                select(SvVoicePreset)
+                .where(
+                    SvVoicePreset.owner_id == current_user.id,
+                    SvVoicePreset.deleted_at.is_(None),
+                    SvVoicePreset.id != preset.id,
+                )
+                .order_by(SvVoicePreset.created_at.desc())
+            )
+        ).scalars().first()
+        if survivor:
+            survivor.is_default = True
     await db.commit()
     return Message(detail="Voice preset deleted")
 
@@ -1048,6 +1142,7 @@ async def create_video(
             await db.execute(
                 select(SvVoicePreset).where(
                     SvVoicePreset.owner_id == current_user.id,
+                    SvVoicePreset.deleted_at.is_(None),
                     SvVoicePreset.is_default.is_(True),
                 )
             )
@@ -1060,7 +1155,7 @@ async def create_video(
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid voice preset")
         preset = await db.get(SvVoicePreset, preset_id)
-        if not preset or preset.owner_id != current_user.id:
+        if not preset or preset.owner_id != current_user.id or preset.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Voice preset not found")
         voice = preset.voice
         speed = preset.speed

@@ -186,6 +186,14 @@ class SvVoicePreset(CreatedAtMixin, Base):
     # Preview plays the saved sample instead of re-synthesizing.
     preview_url: Mapped[str | None] = mapped_column(String(1024), default=None)
 
+    # Built-in presets (the bundled TikTok clone voices) are seeded per user from
+    # ``voice_presets_data.BUILTIN_VOICE_PRESETS`` and carry a stable
+    # ``preset_key`` so re-seeding is idempotent and a soft-deleted built-in
+    # (``deleted_at`` set) is never resurrected — mirroring ``SvTemplate``.
+    preset_key: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    builtin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
 
 class SvTemplate(TimestampMixin, Base):
     """A video template (preset) — the full set of render knobs that drives a
