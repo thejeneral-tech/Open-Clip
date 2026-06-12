@@ -607,26 +607,64 @@ def ensure_fish_models() -> None:
             print(out)
 
     # 2. S2-Pro GGUF voice model + tokenizer (HuggingFace) ------------------------
+    # The two files are checked independently: an interrupted run can leave the
+    # GGUF present but the tokenizer missing, and that gap must heal on rerun.
     gguf_dir = MODELS / "s2-pro-gguf"
-    if (gguf_dir / FISH_GGUF).exists():
-        ok(f"Fish voice model present ({FISH_GGUF})")
+    tokenizer = gguf_dir / "tokenizer.json"
+    need_gguf = not (gguf_dir / FISH_GGUF).exists()
+    need_tok = not tokenizer.exists()
+    if not need_gguf and not need_tok:
+        ok(f"Fish voice model present ({FISH_GGUF} + tokenizer.json)")
+        return
+    gguf_dir.mkdir(parents=True, exist_ok=True)
+
+    # Lock files left by a killed download make the next hf_hub_download block
+    # forever waiting to acquire them. Nothing else downloads into this folder
+    # concurrently with setup, so stale locks are always safe to clear.
+    hf_dl_cache = gguf_dir / ".cache" / "huggingface" / "download"
+    if hf_dl_cache.is_dir():
+        for stale in hf_dl_cache.glob("*.lock"):
+            stale.unlink(missing_ok=True)
+
+    # tokenizer.json is tiny, so skip hf_hub_download's lock/cache machinery
+    # (which has hung on it) and fetch it directly with a hard socket timeout —
+    # a stalled connection errors out instead of hanging silently.
+    if need_tok:
+        url = f"https://huggingface.co/{FISH_HF_REPO}/resolve/main/tokenizer.json"
+        tmp = tokenizer.with_suffix(".json.part")
+        try:
+            with Spinner("Downloading tokenizer.json"):
+                with urllib.request.urlopen(url, timeout=60) as resp, open(tmp, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            tmp.replace(tokenizer)
+            ok("Downloaded tokenizer.json")
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            warn(f"tokenizer.json download failed ({exc}) — rerun setup to retry.")
+
+    if not need_gguf:
         return
     if not venv_python().exists():
         warn("Backend venv missing — skipping the GGUF download (rerun setup once it exists)")
         return
-    gguf_dir.mkdir(parents=True, exist_ok=True)
-    info(f"Downloading {FISH_GGUF} + tokenizer.json from {FISH_HF_REPO} (~3.5 GB, one time)…")
+    info(f"Downloading {FISH_GGUF} from {FISH_HF_REPO} (~3.5 GB, one time)…")
     # huggingface_hub ships with faster-whisper, so it's already in the venv. Stream
     # the download (and its progress bar) straight to the terminal via capture=False.
     code = (
         "from huggingface_hub import hf_hub_download\n"
-        f"for fn in [{FISH_GGUF!r}, 'tokenizer.json']:\n"
-        f"    p = hf_hub_download(repo_id={FISH_HF_REPO!r}, filename=fn, local_dir={str(gguf_dir)!r})\n"
-        "    print('  saved', p, flush=True)\n"
+        f"p = hf_hub_download(repo_id={FISH_HF_REPO!r}, filename={FISH_GGUF!r}, local_dir={str(gguf_dir)!r})\n"
+        "print('  saved', p, flush=True)\n"
     )
     rc, _ = run(
         [str(venv_python()), "-u", "-c", code],
-        env=child_env({"HF_HUB_ENABLE_HF_TRANSFER": "0"}),
+        env=child_env({
+            "HF_HUB_ENABLE_HF_TRANSFER": "0",
+            # The xet transfer path and a dead socket can both stall without
+            # erroring; disable the former and bound the latter.
+            "HF_HUB_DISABLE_XET": "1",
+            "HF_HUB_DOWNLOAD_TIMEOUT": "30",
+            "HF_HUB_ETAG_TIMEOUT": "30",
+        }),
     )
     if rc == 0 and (gguf_dir / FISH_GGUF).exists():
         ok(f"Downloaded Fish voice model → {gguf_dir}")
