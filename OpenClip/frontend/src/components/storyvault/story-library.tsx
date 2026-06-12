@@ -346,7 +346,7 @@ export function StoryLibrary() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
