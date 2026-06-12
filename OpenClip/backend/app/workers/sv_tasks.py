@@ -38,7 +38,7 @@ from app.services.storage import (
     sv_narration_key,
     sv_preview_key,
 )
-from app.services.storyvault import composer, scripts as scripts_svc, tts
+from app.services.storyvault import composer, overlays as overlays_svc, scripts as scripts_svc, tts
 from app.workers.celery_app import celery_app
 from app.workers.progress import ProgressTracker
 
@@ -54,6 +54,19 @@ _PREVIEW = (0.62, 1.0)
 
 def _lerp(band: tuple[float, float], frac: float) -> float:
     return band[0] + (band[1] - band[0]) * max(0.0, min(1.0, frac))
+
+
+def _story_meta(story: SvStory) -> dict:
+    """The fields the intro Reddit card / author intro overlays draw from."""
+    return {
+        "title": story.title,
+        "body": story.body,
+        "author": story.author,
+        "community": story.community,
+        "source": story.source,
+        "upvotes": story.upvotes,
+        "num_comments": story.num_comments,
+    }
 
 
 # =====================================================================
@@ -287,6 +300,8 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             "background_id": video.background_id,
             "script_engine": video.script_engine,
             "script_id": video.script_id,
+            "template_config": video.template_config,
+            "story_meta": _story_meta(story),
         }
 
     try:
@@ -351,11 +366,25 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         tracker.set(stage="captions", progress=_CAPTIONS[0], message="Building captions")
         tokens = captions_svc.build_tokens(result.words)
         tokens = captions_svc.heuristic_emphasis(tokens)
+        # Intro Reddit card + author intro own the opening seconds; hold the
+        # caption track back so it never collides with them. Timing is
+        # resolution-independent, so the offset baked into the (RENDER-res) ASS
+        # here also applies to the preview and final renders.
+        intro = overlays_svc.prepare_intro_overlays(
+            sv_video_id=sv_video_id,
+            story_meta=opts["story_meta"],
+            template_config=opts.get("template_config"),
+            total_duration=result.duration,
+            width=composer.RENDER_W,
+            height=composer.RENDER_H,
+        )
+        intro_end = intro["intro_end"]
         ass_key = sv_captions_key(sv_video_id, "ass")
         srt_key = sv_captions_key(sv_video_id, "srt")
         captions_svc.write_ass(
             storage.abspath(ass_key), tokens, opts["caption_style"],
             composer.RENDER_W, composer.RENDER_H, overrides=opts.get("caption_config"),
+            start_offset=intro_end,
         )
         storage.commit(ass_key)
         with open(storage.abspath(srt_key), "w", encoding="utf-8") as fh:
@@ -385,6 +414,14 @@ def sv_generate_video_task(sv_video_id: int) -> None:
 
         # ---------------------------------------------------------- 5. preview
         preview_key = sv_preview_key(sv_video_id)
+        preview_intro = overlays_svc.prepare_intro_overlays(
+            sv_video_id=sv_video_id,
+            story_meta=opts["story_meta"],
+            template_config=opts.get("template_config"),
+            total_duration=result.duration,
+            width=composer.PREVIEW_W,
+            height=composer.PREVIEW_H,
+        )
         spec = composer.RenderSpec(
             narration_path=storage.abspath(narration_key, ensure_parent=False),
             total_duration=result.duration,
@@ -393,6 +430,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             output_path=storage.abspath(preview_key),
             width=composer.PREVIEW_W,
             height=composer.PREVIEW_H,
+            overlays=preview_intro["overlays"],
         )
         composer.render_video(
             spec,
@@ -490,11 +528,28 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
         ass_key = video.captions_ass_path
         plan = video.segment_plan or []
         duration = video.narration_duration or 0.0
+        template_config = video.template_config
+        story_meta = _story_meta(story) if story else None
         video.status = SvVideoStatus.RENDERING.value
         video.stage = "render"
         video.progress = 0.0
 
     try:
+        # Rebuild the intro overlays at full render resolution. Timing matches
+        # the offset already baked into the ASS during the preview pass (both
+        # derive deterministically from the same story + template + duration).
+        intro = (
+            overlays_svc.prepare_intro_overlays(
+                sv_video_id=sv_video_id,
+                story_meta=story_meta,
+                template_config=template_config,
+                total_duration=duration,
+                width=composer.RENDER_W,
+                height=composer.RENDER_H,
+            )
+            if story_meta is not None
+            else {"overlays": []}
+        )
         out_key = sv_export_key(sv_video_id, export_id)
         spec = composer.RenderSpec(
             narration_path=storage.abspath(narration_key, ensure_parent=False),
@@ -504,6 +559,7 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             output_path=storage.abspath(out_key),
             width=composer.RENDER_W,
             height=composer.RENDER_H,
+            overlays=intro["overlays"],
         )
         result = composer.render_video(
             spec,

@@ -80,6 +80,15 @@ def sv_preview_key(sv_video_id: int) -> str:
     return f"{sv_video_dir(sv_video_id)}/preview.mp4"
 
 
+def sv_overlay_key(sv_video_id: int, name: str, width: int) -> str:
+    """Burned-in intro overlay PNG (Reddit topic card / author intro).
+
+    Keyed by ``width`` because the preview (540px) and final (1080px) renders
+    need the card rasterized at their own canvas scale.
+    """
+    return f"{sv_video_dir(sv_video_id)}/overlay_{name}_{int(width)}.png"
+
+
 def sv_export_key(sv_video_id: int, export_id: int) -> str:
     return f"{sv_video_dir(sv_video_id)}/export_{export_id}.mp4"
 

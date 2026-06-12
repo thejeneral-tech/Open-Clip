@@ -393,6 +393,7 @@ def render_ass(
     height: int,
     max_words: int | None = None,
     overrides: dict[str, Any] | None = None,
+    start_offset: float = 0.0,
 ) -> str:
     """Render an ASS subtitle document with word-level highlighting.
 
@@ -402,6 +403,11 @@ def render_ass(
     ``overrides`` is a selected preset's ``captions`` config blob (colours, font,
     size, ``maxWords``, ``style`` karaoke/pop, and vertical placement). It is
     layered on top of the named style so the render matches the preset's preview.
+
+    ``start_offset`` holds the caption track back by this many seconds: segments
+    that finish before it are dropped and one straddling it is clipped to start
+    at it. Used so captions don't collide with the intro Reddit card / author
+    intro overlays, which own the opening seconds of the video.
     """
     style = get_style(style_name)
     if max_words:
@@ -465,9 +471,19 @@ Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{st
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
+    segments = build_segments(tokens, style)
+    if start_offset > 0:
+        held: list[dict[str, Any]] = []
+        for seg in segments:
+            if seg["end"] <= start_offset:
+                continue
+            seg = {**seg, "start": max(seg["start"], start_offset)}
+            if seg["end"] > seg["start"]:
+                held.append(seg)
+        segments = held
     events = [
         f"Dialogue: 0,{_fmt_time(seg['start'])},{_fmt_time(seg['end'])},Default,,0,0,0,,{pos_tag}{seg['text']}"
-        for seg in build_segments(tokens, style)
+        for seg in segments
     ]
     return header + "\n".join(events) + "\n"
 
@@ -479,6 +495,7 @@ def write_ass(
     width: int,
     height: int,
     overrides: dict[str, Any] | None = None,
+    start_offset: float = 0.0,
 ) -> str:
     # Consult the self-tuning profile for a learned words-per-cue, then feed this
     # render's quality back into it. Both steps are best-effort and never block a
@@ -491,7 +508,10 @@ def write_ass(
     except Exception:  # pragma: no cover - learning is optional
         learning = None
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(render_ass(tokens, style_name, width, height, max_words=max_words, overrides=overrides))
+        fh.write(render_ass(
+            tokens, style_name, width, height,
+            max_words=max_words, overrides=overrides, start_offset=start_offset,
+        ))
     if learning is not None:
         try:
             learning.record_render(style_name, audit_timeline(tokens, style_name, max_words))

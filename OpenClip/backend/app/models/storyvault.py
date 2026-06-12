@@ -151,6 +151,10 @@ class SvVideo(TimestampMixin, Base):
     # position) at queue time, so the burned-in captions match the preset even if
     # the template is later edited or deleted. None → use caption_style alone.
     caption_config: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # Full snapshot of the selected template's render config (canvas, topicCard,
+    # authorIntro, captions, …) at queue time. Drives the burned-in Reddit topic
+    # card and "Posted by u/…" author intro. None → no intro overlays.
+    template_config: Mapped[dict | None] = mapped_column(JSON, default=None)
     background_category: Mapped[str | None] = mapped_column(String(64), default=None)
     # Optional: pin the gameplay/footage to one specific background. When set it
     # overrides background_category (segments are drawn only from this footage).
