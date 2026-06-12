@@ -41,15 +41,15 @@
 }
 
 /* ───────────────────── Theme variables ─────────────────────
-   Defaults = the "dark" (original Odysseus) palette. The ThemeProvider
-   overrides these on <html> at runtime; this :root block is the pre-hydration
+   Defaults = the "open-code-default" palette. The ThemeProvider overrides
+   these on <html> at runtime; this :root block is the pre-hydration
    fallback and the source for the no-flash bootstrap script. */
 :root {
-  --bg: #282c34;
-  --fg: #9cdef2;
-  --panel: #111111;
-  --border: #355a66;
-  --red: #e06c75;
+  --bg: #1f231f;
+  --fg: #d5dcd6;
+  --panel: #141514;
+  --border: #404f41;
+  --red: #65c26c;
 
   --accent-contrast: #111111;
   --muted-fg: color-mix(in srgb, var(--fg) 58%, var(--bg));

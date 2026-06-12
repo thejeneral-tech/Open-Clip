@@ -29,8 +29,8 @@ import {
   saveTheme,
   saveCustomTheme as persistCustomTheme,
   deleteCustomTheme as removeCustomTheme,
+  DEFAULT_FROSTED,
   THEME_DEFAULT_EFFECT_COLOR,
-  THEME_DEFAULT_FROSTED,
   THEME_DEFAULT_INTENSITY,
   THEME_DEFAULT_PATTERN,
   THEMES,
@@ -78,7 +78,7 @@ function defaultState(): ThemeState {
     bgEffectColor: THEME_DEFAULT_EFFECT_COLOR[DEFAULT_THEME] || "",
     bgEffectIntensity: THEME_DEFAULT_INTENSITY[DEFAULT_THEME] ?? 1,
     bgEffectSize: 1,
-    frosted: THEME_DEFAULT_FROSTED[DEFAULT_THEME] ?? false,
+    frosted: DEFAULT_FROSTED,
   };
 }
 
@@ -95,7 +95,7 @@ function stateFromSaved(saved: SavedTheme): ThemeState {
         ? saved.bgEffectIntensity
         : THEME_DEFAULT_INTENSITY[saved.name] ?? 1,
     bgEffectSize: saved.bgEffectSize ?? 1,
-    frosted: saved.frosted ?? THEME_DEFAULT_FROSTED[saved.name] ?? false,
+    frosted: saved.frosted ?? DEFAULT_FROSTED,
   };
 }
 
@@ -235,7 +235,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         bgEffectColor: THEME_DEFAULT_EFFECT_COLOR[name] || "",
         bgEffectIntensity: THEME_DEFAULT_INTENSITY[name] ?? 1,
         bgEffectSize: 1,
-        frosted: THEME_DEFAULT_FROSTED[name] ?? false,
+        frosted: DEFAULT_FROSTED,
       };
       saveTheme(next.name, next.colors, opts(next));
       return next;
@@ -265,7 +265,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           bgEffectColor: bgEffectColor || "",
           bgEffectIntensity: bgEffectIntensity ?? 1,
           bgEffectSize: bgEffectSize ?? 1,
-          frosted: frosted ?? false,
+          frosted: frosted ?? DEFAULT_FROSTED,
         };
         saveTheme(next.name, next.colors, opts(next));
         return next;

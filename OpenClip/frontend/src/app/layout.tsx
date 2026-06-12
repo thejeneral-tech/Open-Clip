@@ -29,7 +29,7 @@ const BOOTSTRAP = `(function(){try{
   s.setProperty('--hover-bg', 'color-mix(in srgb, '+c.fg+' 8%, '+c.bg+')');
   var FONTS = {mono:"'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace", sans:"system-ui, -apple-system, 'Segoe UI', sans-serif", serif:"Georgia, 'Times New Roman', serif"};
   if (saved && saved.font && FONTS[saved.font]) s.setProperty('--font-family', FONTS[saved.font]);
-  var DEFP = {'open-code-default':'perlin-flow',dark:'none',light:'dots',midnight:'rain',paper:'dots',cyberpunk:'synapse',retrowave:'embers',forest:'petals',ocean:'constellations',terminal:'perlin-flow',organs:'rain',ume:'petals',cute:'sparkles'};
+  var DEFP = {'open-code-default':'perlin-flow',light:'dots',midnight:'rain',paper:'dots',cyberpunk:'synapse',retrowave:'embers',forest:'petals',ocean:'constellations',terminal:'perlin-flow',organs:'rain',ume:'petals',cute:'sparkles'};
   var de = document.documentElement;
   if (saved && saved.density && saved.density !== 'comfortable') de.classList.add('density-' + saved.density);
   if (saved && saved.bgEffectColor) s.setProperty('--bg-effect-color', saved.bgEffectColor);
@@ -37,7 +37,7 @@ const BOOTSTRAP = `(function(){try{
   document.addEventListener('DOMContentLoaded', function(){
     var pat = (saved && saved.bgPattern) ? saved.bgPattern : (saved ? (DEFP[saved.name]||'none') : 'perlin-flow');
     if (pat && pat !== 'none') document.body.classList.add('bg-pattern-' + pat);
-    if (saved && saved.frosted) document.body.classList.add('theme-frosted');
+    if (!saved || saved.frosted !== false) document.body.classList.add('theme-frosted');
   });
 }catch(e){}})();`;
 
