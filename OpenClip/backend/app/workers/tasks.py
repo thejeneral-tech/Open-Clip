@@ -273,6 +273,25 @@ def _transcribe(video_id: int, opts: ProcessOptions, models: dict[str, str],
     return result
 
 
+def _resolve_caption_config(db, opts: ProcessOptions) -> dict[str, Any] | None:
+    """Effective caption override blob for a run: a chosen preset's caption
+    config (colours, size, position, style) with the dialog's caption overrides
+    (style · text/highlight colour) layered on top so the dialog wins. None when
+    nothing is set, which keeps the named caption_style's defaults."""
+    cfg: dict[str, Any] = {}
+    template_id = getattr(opts, "template_id", None)
+    if template_id:
+        from app.models.storyvault import SvTemplate
+
+        tpl = db.get(SvTemplate, template_id)
+        data = tpl.data if tpl else None
+        if isinstance(data, dict) and isinstance(data.get("captions"), dict):
+            cfg.update(data["captions"])
+    if opts.caption_config:
+        cfg.update({k: v for k, v in opts.caption_config.items() if v is not None})
+    return cfg or None
+
+
 def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
             models: dict[str, str], tracker: ProgressTracker) -> list[int]:
     tracker.set(stage="detect", progress=_DETECT[0], message="Finding viral moments")
@@ -291,6 +310,7 @@ def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
     clip_ids: list[int] = []
     aspect = opts.aspect_ratios[0].value if opts.aspect_ratios else "9:16"
     with session_scope() as db:
+        caption_cfg = _resolve_caption_config(db, opts)
         for a in analyses:
             db.add(_ai_analysis(video_id, **a))
         for idx, cand in enumerate(candidates):
@@ -306,6 +326,7 @@ def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
                 viral_score=cand.viral_score,
                 aspect_ratio=aspect,
                 caption_style=opts.caption_style.value,
+                caption_config=caption_cfg,
                 status=JobStatus.PENDING.value,
             )
             db.add(clip)
@@ -324,6 +345,7 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
         clip = db.get(Clip, clip_id)
         start, end = clip.start_time, clip.end_time
         aspect, style = clip.aspect_ratio, clip.caption_style
+        caption_cfg = clip.caption_config
         title, project_id, video_id = clip.title, None, clip.video_id
         clip.status = JobStatus.PROCESSING.value
         video = db.get(Video, clip.video_id)
@@ -422,6 +444,7 @@ def _enrich_clip(clip_id: int, source_path: str, segments: list[dict[str, Any]],
             reframe_data=reframe_data,
             caption_tokens=tokens if opts.enable_captions else None,
             caption_style=style,
+            caption_overrides=caption_cfg,
             burn_captions=opts.enable_captions,
             on_progress=lambda f: clip_tracker.set(
                 stage="render", progress=0.85 + f * 0.13, persist=False),
@@ -533,6 +556,7 @@ def render_preview_task(self, clip_id: int) -> dict[str, Any]:
             params = dict(
                 start=clip.start_time, end=clip.end_time, aspect=clip.aspect_ratio,
                 style=clip.caption_style, tokens=clip.captions or [], reframe=clip.reframe_data or {},
+                caption_config=clip.caption_config,
             )
             clip.status = JobStatus.PROCESSING.value
 
@@ -544,6 +568,7 @@ def render_preview_task(self, clip_id: int) -> dict[str, Any]:
             start=params["start"], end=params["end"], aspect_ratio=params["aspect"],
             resolution="1080p", reframe_data=params["reframe"],
             caption_tokens=params["tokens"], caption_style=params["style"],
+            caption_overrides=params["caption_config"],
             burn_captions=bool(params["tokens"]),
             on_progress=lambda f: tracker.set(stage="render", progress=0.1 + f * 0.85, persist=False),
         )
@@ -588,6 +613,7 @@ def export_clip_task(self, export_id: int) -> dict[str, Any]:
                 tokens=clip.captions or [], reframe=clip.reframe_data or {},
                 fmt=export.format, resolution=export.resolution,
                 aspect=export.aspect_ratio, burn=export.burn_captions,
+                caption_config=clip.caption_config,
             )
             export.status = JobStatus.PROCESSING.value
             export.hwaccel = settings.HWACCEL
@@ -602,6 +628,7 @@ def export_clip_task(self, export_id: int) -> dict[str, Any]:
             start=params["start"], end=params["end"], aspect_ratio=params["aspect"],
             resolution=params["resolution"], reframe_data=params["reframe"],
             caption_tokens=params["tokens"], caption_style=params["style"],
+            caption_overrides=params["caption_config"],
             burn_captions=params["burn"], hwaccel=settings.HWACCEL,
             on_progress=lambda f: tracker.set(stage="export", progress=0.05 + f * 0.9, persist=False),
         )

@@ -194,6 +194,10 @@ export interface ProcessOptions {
   max_clip_seconds: number;
   aspect_ratios: AspectRatio[];
   caption_style: CaptionStyle;
+  // Caption animation style + colours, layered on the named caption_style at render.
+  caption_config?: { style?: "karaoke" | "pop"; primary?: string; highlight?: string } | null;
+  // Optional preset (Story Vault template) whose caption look seeds caption_config.
+  template_id?: number | null;
   language?: string | null;
   generate_titles: boolean;
   generate_descriptions: boolean;

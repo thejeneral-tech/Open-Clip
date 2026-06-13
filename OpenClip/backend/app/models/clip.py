@@ -45,6 +45,10 @@ class Clip(TimestampMixin, Base):
     caption_style: Mapped[str] = mapped_column(
         String(32), default=CaptionStyle.HORMOZI.value, nullable=False
     )
+    # Optional caption override blob (animation style karaoke/pop, text + highlight
+    # colours, and any preset overrides) layered on top of the named caption_style
+    # at render time. None keeps the named style's defaults.
+    caption_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     title_variations: Mapped[list[Any]] = mapped_column(JSON, default=list, nullable=False)
     hashtags: Mapped[list[Any]] = mapped_column(JSON, default=list, nullable=False)
     keywords: Mapped[list[Any]] = mapped_column(JSON, default=list, nullable=False)

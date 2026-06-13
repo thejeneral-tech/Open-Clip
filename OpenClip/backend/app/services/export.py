@@ -183,6 +183,7 @@ def render_clip(
     reframe_data: dict[str, Any] | None = None,
     caption_tokens: list[dict[str, Any]] | None = None,
     caption_style: str = "hormozi",
+    caption_overrides: dict[str, Any] | None = None,
     burn_captions: bool = True,
     hwaccel: str | None = None,
     on_progress: ProgressCb | None = None,
@@ -244,7 +245,7 @@ def render_clip(
     # ---- captions ----
     if burn_captions and caption_tokens:
         ass_path = os.path.join(tempfile.gettempdir(), f"caps_{os.getpid()}_{int(start*1000)}.ass")
-        captions_svc.write_ass(ass_path, caption_tokens, caption_style, out_w, out_h)
+        captions_svc.write_ass(ass_path, caption_tokens, caption_style, out_w, out_h, overrides=caption_overrides)
         tmp_files.append(ass_path)
         vchain.append(f"ass='{_escape_path(ass_path)}'")
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Palette, Sparkles, Type } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { useModels, useProcessVideo, useSettings } from "@/hooks/use-api";
-import type { AspectRatio, CaptionStyle, ProcessOptions } from "@/lib/types";
+import { assToCss } from "@/components/storyvault/template-preview";
+import { useModels, useProcessVideo, useSettings, useSvTemplates } from "@/hooks/use-api";
+import type { AspectRatio, ProcessOptions } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ASPECTS: { value: AspectRatio; label: string }[] = [
@@ -27,13 +28,54 @@ const ASPECTS: { value: AspectRatio; label: string }[] = [
   { value: "16:9", label: "16:9" },
 ];
 
-const STYLES: { value: CaptionStyle; label: string }[] = [
-  { value: "hormozi", label: "Alex Hormozi" },
-  { value: "modern_tiktok", label: "Modern TikTok" },
-  { value: "minimal", label: "Minimal" },
-  { value: "gaming", label: "Gaming" },
-  { value: "podcast", label: "Podcast" },
-];
+// Swatches offered in the caption colour pickers (plus a free-form picker),
+// mirroring the Presets caption editor.
+const CAPTION_SWATCHES = ["#ffffff", "#ffd400", "#000000", "#ff3b30", "#34c759", "#0a84ff", "#ff2d92"];
+
+// Compact swatch row + native colour picker + hex readout.
+function ColorRow({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5">
+        <Palette className="h-3.5 w-3.5" /> {label}
+        {hint && <span className="font-normal text-muted-foreground">· {hint}</span>}
+      </Label>
+      <div className="flex flex-wrap items-center gap-2">
+        {CAPTION_SWATCHES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            aria-label={c}
+            className={cn(
+              "h-7 w-7 rounded-full border border-input ring-offset-2 ring-offset-background transition",
+              value.toLowerCase() === c.toLowerCase() && "ring-2 ring-primary",
+            )}
+            style={{ background: c }}
+          />
+        ))}
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={`${label} custom colour`}
+          className="h-7 w-7 cursor-pointer rounded-full border border-dashed border-input bg-transparent p-0"
+        />
+        <span className="ml-1 font-mono text-xs uppercase text-muted-foreground">{value}</span>
+      </div>
+    </div>
+  );
+}
 
 export function ProcessDialog({
   videoId,
@@ -46,6 +88,7 @@ export function ProcessDialog({
 }) {
   const { data: settings } = useSettings();
   const { data: models = [] } = useModels();
+  const { data: templates = [] } = useSvTemplates();
   const processVideo = useProcessVideo();
 
   const [opts, setOpts] = useState<Partial<ProcessOptions>>({
@@ -53,6 +96,8 @@ export function ProcessDialog({
     min_clip_seconds: 15,
     max_clip_seconds: 60,
     aspect_ratios: ["9:16"],
+    // Hidden base named style — font / outline / layout. The visible controls
+    // below refine it (karaoke/pop + colours) and an optional preset.
     caption_style: "hormozi",
     generate_titles: true,
     generate_descriptions: true,
@@ -60,6 +105,29 @@ export function ProcessDialog({
     enable_reframe: true,
     enable_captions: true,
   });
+
+  // New caption look: animation style + text/highlight colours, optionally seeded
+  // from a preset. Sent to the backend as `caption_config` (+ `template_id`).
+  const [templateId, setTemplateId] = useState<number | null>(null);
+  const [capStyle, setCapStyle] = useState<"karaoke" | "pop">("karaoke");
+  const [primary, setPrimary] = useState("#ffffff");
+  const [highlight, setHighlight] = useState("#ffd400");
+
+  // Picking a preset seeds the caption style + colours from its caption config.
+  const onPreset = (v: string) => {
+    if (v === "none") {
+      setTemplateId(null);
+      return;
+    }
+    const id = Number(v);
+    setTemplateId(id);
+    const caps = templates.find((t) => t.id === id)?.data?.captions;
+    if (caps) {
+      setCapStyle(caps.style === "pop" ? "pop" : "karaoke");
+      setPrimary(assToCss(caps.primary, "#ffffff").toLowerCase());
+      setHighlight(assToCss(caps.highlight, "#ffd400").toLowerCase());
+    }
+  };
 
   const toggleAspect = (a: AspectRatio) => {
     const current = opts.aspect_ratios || [];
@@ -75,7 +143,15 @@ export function ProcessDialog({
       return;
     }
     try {
-      await processVideo.mutateAsync({ id: videoId, options: { ...opts, model: opts.model ?? settings?.default_model } });
+      await processVideo.mutateAsync({
+        id: videoId,
+        options: {
+          ...opts,
+          model: opts.model ?? settings?.default_model,
+          caption_config: { style: capStyle, primary, highlight },
+          template_id: templateId,
+        },
+      });
       toast.success("Processing started");
       onOpenChange(false);
     } catch (err) {
@@ -151,19 +227,38 @@ export function ProcessDialog({
             </div>
           </div>
 
+          {/* Preset — seeds the caption style + colours below */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" /> Preset
+            </Label>
+            <Select value={templateId != null ? String(templateId) : "none"} onValueChange={onPreset}>
+              <SelectTrigger>
+                <SelectValue placeholder="No preset" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No preset</SelectItem>
+                {templates.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Caption style</Label>
-              <Select value={opts.caption_style} onValueChange={(v) => setOpts({ ...opts, caption_style: v as CaptionStyle })}>
+              <Label className="flex items-center gap-1.5">
+                <Type className="h-3.5 w-3.5" /> Caption style
+              </Label>
+              <Select value={capStyle} onValueChange={(v) => setCapStyle(v as "karaoke" | "pop")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STYLES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="karaoke">Karaoke — last word highlighted</SelectItem>
+                  <SelectItem value="pop">Pop word — one word at a time</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -185,6 +280,17 @@ export function ProcessDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Caption colours */}
+          <div className="grid grid-cols-2 gap-4">
+            <ColorRow label="Text colour" value={primary} onChange={setPrimary} />
+            <ColorRow
+              label="Highlight colour"
+              hint={capStyle === "pop" ? "karaoke only" : undefined}
+              value={highlight}
+              onChange={setHighlight}
+            />
           </div>
 
           <div className="space-y-3 rounded-lg border p-4">
