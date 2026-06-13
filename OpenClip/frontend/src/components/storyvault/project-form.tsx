@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS: SvProjectSettings = {
   privacy: "public",
   videos_per_run: 3,
   auto_publish: false,
+  no_duplicates: false,
 };
 
 function isClonedVoice(preset: SvVoicePreset): boolean {
@@ -535,6 +536,16 @@ export function ProjectForm({
             </p>
           </div>
           <Switch checked={s.auto_publish} onCheckedChange={(v) => set("auto_publish", v)} />
+        </div>
+        <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+          <div>
+            <p className="text-sm font-medium">No duplicates</p>
+            <p className="text-xs text-muted-foreground">
+              Never reuse a story that's already become a video, and skip cross-posts of the same
+              story — so every video in this project is unique.
+            </p>
+          </div>
+          <Switch checked={s.no_duplicates} onCheckedChange={(v) => set("no_duplicates", v)} />
         </div>
       </fieldset>
 
