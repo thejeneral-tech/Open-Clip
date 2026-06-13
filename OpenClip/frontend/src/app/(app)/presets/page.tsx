@@ -13,7 +13,6 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -139,7 +138,6 @@ function TemplateBadge({ t }: { t: SvTemplate }) {
 }
 
 export default function PresetsPage() {
-  const router = useRouter();
   const { data: templates = [], isLoading } = useSvTemplates();
   const setDefault = useSvSetDefaultTemplate();
   const duplicate = useSvDuplicateTemplate();
@@ -270,17 +268,6 @@ export default function PresetsPage() {
     }
   };
 
-  const onCreateVideo = () => {
-    if (!selected) return;
-    // Carry the chosen template into the OpenClip Video Studio (the generator).
-    try {
-      sessionStorage.setItem("sv_template_id", String(selected.id));
-    } catch {
-      /* sessionStorage may be unavailable — navigation still works */
-    }
-    router.push(`/studio?template=${selected.id}`);
-  };
-
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -379,9 +366,6 @@ export default function PresetsPage() {
                   >
                     <Star className={cn("h-4 w-4", selected.is_default && "fill-current")} />
                     {selected.is_default ? "Default" : "Use for next run"}
-                  </Button>
-                  <Button variant="outline" onClick={onCreateVideo}>
-                    <Clapperboard className="h-4 w-4" /> Create video with this
                   </Button>
                   <Button variant="outline" onClick={onDuplicate} disabled={duplicate.isPending}>
                     <Copy className="h-4 w-4" /> Duplicate
