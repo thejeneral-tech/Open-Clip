@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,12 @@ logger = get_logger(__name__)
 
 _SCRIPT = os.path.join(os.path.dirname(__file__), "sapi_tts.ps1")
 _LAST_WORD_TAIL = 0.45  # seconds the final word is held on screen
+
+# Silence detection used to anchor captions to where speech *actually* is in the
+# rendered WAV (SAPI's reported clock drifts — see ``_calibrate``).
+_SILENCE_NOISE_DB = -35     # below this RMS counts as silence
+_SILENCE_MIN_DUR = 0.18     # shorter dips (stop consonants) are not pauses
+_PIN_SLACK = 0.4            # tolerance when checking a clause break straddles a pause
 
 
 class TTSError(RuntimeError):
@@ -145,7 +152,193 @@ def _run_sapi(
     return raw, duration
 
 
-def _build_words(raw: list[dict[str, Any]], total: float) -> list[dict[str, Any]]:
+def _detect_silences(wav_path: str) -> list[tuple[float, float]]:
+    """Silence intervals ``[(start, end), ...]`` in the rendered WAV, in order.
+
+    Uses ffmpeg's ``silencedetect`` so captions can be pinned to where speech
+    actually is, not where SAPI *says* it is (its clock drifts — see
+    :func:`_calibrate`). Best-effort: any failure (no ffmpeg, missing file)
+    returns ``[]`` and the caller falls back to raw-duration calibration.
+    """
+    if not wav_path or not os.path.exists(wav_path):
+        return []
+    try:
+        proc = subprocess.run(
+            [ffmpeg.bin, "-hide_banner", "-nostats", "-i", wav_path,
+             "-af", f"silencedetect=noise={_SILENCE_NOISE_DB}dB:d={_SILENCE_MIN_DUR}",
+             "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except Exception as exc:  # pragma: no cover - environment dependent
+        logger.warning("silencedetect failed (%s); using raw-duration calibration", exc)
+        return []
+    out = proc.stderr or ""
+    starts = [float(m) for m in re.findall(r"silence_start:\s*([0-9.]+)", out)]
+    ends = [float(m) for m in re.findall(r"silence_end:\s*([0-9.]+)", out)]
+    return list(zip(starts, ends))
+
+
+def _speech_bounds(
+    silences: list[tuple[float, float]], total: float
+) -> tuple[float, float, list[tuple[float, float]]]:
+    """Resolve detected silences into ``(speech_start, speech_end, pauses)``.
+
+    A silence touching the start of the file is the lead-in (its end is the
+    speech onset); one touching the end is the trailing pad (its start is where
+    speech stops); everything between is an internal pause (a sentence/beat
+    boundary). A run that flags more than half the clip as silent is implausible
+    (a too-hot noise floor) and is discarded — the caller then anchors on the raw
+    duration, exactly as with no detection at all.
+    """
+    speech_start, speech_end = 0.0, total
+    pauses: list[tuple[float, float]] = []
+    for s, e in silences:
+        if s <= 0.05:
+            speech_start = max(speech_start, e)
+        elif e >= total - 0.05:
+            speech_end = min(speech_end, s)
+        else:
+            pauses.append((s, e))
+    if total <= 0 or speech_end - speech_start < 0.5 * total:
+        return 0.0, total, []
+    return speech_start, speech_end, pauses
+
+
+def _piecewise(
+    R: list[float], bounds: list[int], runs: list[tuple[float, float]]
+) -> list[float]:
+    """Distribute reported word starts ``R`` across the real speech ``runs``.
+
+    ``bounds[k]`` is the index of the last word in run ``k`` (the clause break
+    after it); ``runs[k] = (start, end)`` is that run's real on-audio window.
+    Within a run the words keep their reported relative spacing, and the run's
+    last word is left ending at the run end — its highlight then naturally holds
+    across the following pause downstream. The result is exact at every run
+    start, so sentence/beat openings land precisely on the voice.
+    """
+    n = len(R)
+    out = [0.0] * n
+    lo = 0
+    for k, (rs, re) in enumerate(runs):
+        hi = bounds[k] if k < len(bounds) else n - 1  # inclusive last index
+        idx = list(range(lo, hi + 1))
+        lo = hi + 1
+        if not idx:
+            continue
+        if len(idx) == 1:
+            out[idx[0]] = rs
+            continue
+        gaps = [R[idx[j + 1]] - R[idx[j]] for j in range(len(idx) - 1)]
+        typ = sorted(gaps)[len(gaps) // 2]               # median reported word gap
+        r_first, r_end = R[idx[0]], R[idx[-1]] + max(typ, 1e-3)
+        denom = r_end - r_first
+        for j in idx:
+            frac = (R[j] - r_first) / denom if denom > 0 else 0.0
+            out[j] = rs + frac * (re - rs)
+    return out
+
+
+def _calibrate(
+    deduped: list[dict[str, Any]],
+    total: float,
+    silences: list[tuple[float, float]],
+) -> float:
+    """Map SAPI's reported word positions onto where speech actually is.
+
+    SAPI's ``SpeakProgress.AudioPosition`` clock runs measurably ahead of the
+    audio it writes to the WAV — on this engine ~20-25% fast, so a 10s clip's
+    last word is reported near 12.2s. Because the render trims the video to the
+    real audio duration, those over-reported words land past the end and their
+    captions are **cut off** (the voice says them, the highlight never arrives);
+    every earlier word also drifts progressively late off the spoken word.
+
+    Two stages, the second refining the first:
+
+    * **Envelope-linear (always):** the drift is very nearly linear in true audio
+      time, so a single linear map — first word to the speech onset, last word
+      ending at the speech offset (from :func:`_speech_bounds`) — removes the
+      bulk drift *and* the leading/trailing silence the raw duration wrongly
+      included. Only ever compresses an over-running clock; a no-op when the
+      clock already fits and no pauses were detected (well-behaved engines and
+      the even-spacing fallback are untouched).
+    * **Run-pinning (when the pause structure is unambiguous):** each spoken run
+      between detected pauses is pinned to its real silence-bounded window, so
+      sentence/beat starts land exactly on the voice. Each detected pause is
+      matched to the reported inter-word gap that brackets it (by position, in
+      the envelope-mapped timeline — *not* by size, since a multi-syllable word
+      like "47" → "forty-seven" can open a within-clause gap wider than a real
+      boundary). Used only when every break then straddles its pause — otherwise
+      the envelope map stands.
+
+    Returns ``speech_end`` so the caller can hold the final word to the true end
+    of speech rather than into the trailing silence. ``charPos`` / ``charCount``
+    are left untouched, so the multi-beat split still keys off the source map.
+    """
+    speech_start, speech_end, pauses = _speech_bounds(silences, total)
+    n = len(deduped)
+    if n < 2 or total <= 0:
+        return speech_end
+    R = [float(d["audioMs"]) / 1000.0 for d in deduped]
+    r0, rN = R[0], R[-1]
+    span = rN - r0
+    target = speech_end - _LAST_WORD_TAIL - speech_start
+    if span <= 0 or target <= 0:
+        return speech_end
+
+    k = target / span
+    if k >= 1.0 and not pauses:  # clock already fits and nothing to pin
+        return speech_end
+    k = min(k, 1.0)
+    result = [speech_start + (r - r0) * k for r in R]  # stage 1: envelope-linear
+
+    # Stage 2: pin spoken runs between real pauses.
+    if pauses and len(pauses) < n:
+        m = len(pauses)
+        # Match each pause to the reported gap that brackets it: the break is the
+        # last word whose envelope-mapped start falls before the pause midpoint
+        # (the next word is then the first one spoken after the pause). Scanning
+        # left-to-right keeps the breaks strictly ordered, one gap per pause.
+        bounds: list[int] = []
+        lo = 0
+        for s, e in pauses:
+            mid = (s + e) / 2
+            cand = -1
+            for i in range(lo, n - 1):  # i+1 must exist, so stop at n-2
+                if result[i] <= mid:
+                    cand = i
+                else:
+                    break  # result is monotonic — no later word can qualify
+            if cand < 0:
+                break
+            bounds.append(cand)
+            lo = cand + 1
+        runs: list[tuple[float, float]] = []
+        prev = speech_start
+        for s, e in pauses:
+            runs.append((prev, s))
+            prev = e
+        runs.append((prev, speech_end))
+        straddles = len(bounds) == m and all(
+            result[bounds[i]] <= pauses[i][1] + _PIN_SLACK
+            and result[bounds[i] + 1] >= pauses[i][0] - _PIN_SLACK
+            for i in range(m)
+        )
+        if straddles and all(re > rs for rs, re in runs):
+            result = _piecewise(R, bounds, runs)
+
+    prev_t = -1.0
+    for d, t in zip(deduped, result):
+        t = max(0.0, t, prev_t + 1e-3)  # strictly monotonic, never negative
+        d["audioMs"] = t * 1000.0
+        prev_t = t
+    return speech_end
+
+
+def _build_words(
+    raw: list[dict[str, Any]],
+    total: float,
+    silences: list[tuple[float, float]] | None = None,
+) -> list[dict[str, Any]]:
     """Caption tokens from raw SAPI word-boundary events, de-duplicated.
 
     SAPI raises one SpeakProgress event per *spoken* word, but a single written
@@ -159,6 +352,10 @@ def _build_words(raw: list[dict[str, Any]], total: float) -> list[dict[str, Any]
     character map, not the rendered phonemes, so it holds for every SAPI voice
     with no per-voice tuning. ``charPos`` / ``charCount`` are kept so a multi-beat
     narration can be split back into its title / author / body parts.
+
+    The de-duplicated positions are then calibrated onto the real audio timeline
+    (:func:`_calibrate`, using the detected ``silences``) so the highlight tracks
+    the voice end-to-end.
     """
     deduped: list[dict[str, Any]] = []
     for t in raw:
@@ -177,6 +374,8 @@ def _build_words(raw: list[dict[str, Any]], total: float) -> list[dict[str, Any]
             {"word": text, "audioMs": float(t.get("audioMs") or 0), "charPos": cp, "charCount": cc}
         )
 
+    speech_end = _calibrate(deduped, total, silences or [])
+
     words: list[dict[str, Any]] = []
     for i, d in enumerate(deduped):
         start = max(0.0, d["audioMs"] / 1000.0)
@@ -184,7 +383,9 @@ def _build_words(raw: list[dict[str, Any]], total: float) -> list[dict[str, Any]
             nxt = max(start, deduped[i + 1]["audioMs"] / 1000.0)
             end = min(nxt, start + 1.5) if nxt > start else start + 0.3
         else:
-            end = min(total or start + _LAST_WORD_TAIL, start + _LAST_WORD_TAIL) or (start + _LAST_WORD_TAIL)
+            # Hold the final word to the true end of speech, not into the
+            # trailing silence (which the raw duration would have included).
+            end = min(speech_end or start + _LAST_WORD_TAIL, start + _LAST_WORD_TAIL) or (start + _LAST_WORD_TAIL)
         if end <= start:
             end = start + 0.2
         words.append(
@@ -222,7 +423,7 @@ def synthesize(
 ) -> NarrationResult:
     """Synthesize ``text`` to ``wav_path`` and return real word timings."""
     raw, duration = _run_sapi(text, wav_path, voice=voice, speed=speed)
-    words = _build_words(raw, duration) or _even_spacing(text, duration)
+    words = _build_words(raw, duration, _detect_silences(wav_path)) or _even_spacing(text, duration)
     if not duration and words:
         duration = words[-1]["end"]
     return NarrationResult(
@@ -312,7 +513,7 @@ def synthesize_story(
     if not combined.strip() or not ranges:
         raise TTSError("No narration text")
     raw, duration = _run_sapi(combined, wav_path, voice=voice, speed=speed)
-    words = _build_words(raw, duration) or _even_spacing(combined, duration)
+    words = _build_words(raw, duration, _detect_silences(wav_path)) or _even_spacing(combined, duration)
     if not duration and words:
         duration = words[-1]["end"]
 

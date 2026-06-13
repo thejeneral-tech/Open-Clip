@@ -34,6 +34,78 @@ def test_build_words_keeps_genuine_repeats():
     assert [w["word"] for w in tts._build_words(raw, 1.5)] == ["very", "very", "good"]
 
 
+# ----------------------------------------- real-audio timeline calibration
+def test_build_words_compresses_overshooting_sapi_clock():
+    # SAPI's AudioPosition runs ahead of the rendered WAV: here the last word is
+    # reported at 12.0s for a clip whose real audio is only 10.0s long. Without
+    # calibration that word lands past the trimmed video end and its caption is
+    # cut off; after it, the last word starts _LAST_WORD_TAIL before the true end
+    # and every word is pulled back proportionally (first word anchored).
+    raw = [
+        {"word": "one", "audioMs": 0, "charPos": 0, "charCount": 3},
+        {"word": "two", "audioMs": 6000, "charPos": 4, "charCount": 3},
+        {"word": "three", "audioMs": 12000, "charPos": 8, "charCount": 5},
+    ]
+    words = tts._build_words(raw, 10.0)
+    assert [w["word"] for w in words] == ["one", "two", "three"]
+    assert words[0]["start"] == 0.0                       # first word anchored
+    assert words[-1]["start"] == round(10.0 - tts._LAST_WORD_TAIL, 3)  # 9.555
+    # Linear: the midpoint word sits halfway along the compressed span.
+    assert abs(words[1]["start"] - words[-1]["start"] / 2) < 0.01
+    # Every word now lands inside the real audio.
+    assert all(w["start"] < 10.0 for w in words)
+
+
+def test_build_words_leaves_fitting_clock_untouched():
+    # When SAPI's clock already fits the audio (no overshoot), nothing moves.
+    raw = [
+        {"word": "a", "audioMs": 0, "charPos": 0, "charCount": 1},
+        {"word": "b", "audioMs": 1000, "charPos": 2, "charCount": 1},
+        {"word": "c", "audioMs": 2000, "charPos": 4, "charCount": 1},
+    ]
+    words = tts._build_words(raw, 5.0)
+    assert [w["start"] for w in words] == [0.0, 1.0, 2.0]
+
+
+# ------------------------------------------- speech-envelope / run-pinning
+def test_speech_bounds_classifies_silences():
+    # Lead-in → speech onset; trailing pad → speech offset; the rest are pauses.
+    sil = [(0.0, 0.2), (2.0, 3.0), (5.5, 6.0)]
+    start, end, pauses = tts._speech_bounds(sil, 6.0)
+    assert (start, end) == (0.2, 5.5)
+    assert pauses == [(2.0, 3.0)]
+
+
+def test_speech_bounds_rejects_implausible_envelope():
+    # If detection flags most of the clip as silent, distrust it and fall back.
+    start, end, pauses = tts._speech_bounds([(0.0, 5.0)], 6.0)
+    assert (start, end, pauses) == (0.0, 6.0, [])
+
+
+def test_build_words_pins_runs_to_real_speech():
+    # Two 3-word clauses, an over-running SAPI clock, and a real pause at 2.0-3.0s
+    # with the audio padded out to 6.0s. Each clause must be pinned to its real
+    # silence-bounded run, so the second clause's first word lands EXACTLY where
+    # the voice resumes after the pause (3.0s) — not late, not in the silence.
+    raw = [
+        {"word": "the", "audioMs": 0, "charPos": 0, "charCount": 3},
+        {"word": "first", "audioMs": 500, "charPos": 4, "charCount": 5},
+        {"word": "clause", "audioMs": 1000, "charPos": 10, "charCount": 6},
+        {"word": "second", "audioMs": 4000, "charPos": 17, "charCount": 6},
+        {"word": "clause", "audioMs": 4500, "charPos": 24, "charCount": 6},
+        {"word": "here", "audioMs": 5000, "charPos": 31, "charCount": 4},
+    ]
+    silences = [(2.0, 3.0), (5.5, 6.0)]  # one internal pause + trailing pad
+    words = tts._build_words(raw, 6.0, silences)
+    assert [w["word"] for w in words] == ["the", "first", "clause", "second", "clause", "here"]
+    assert words[0]["start"] == 0.0       # clause 1 opens at the speech onset
+    assert words[3]["start"] == 3.0       # clause 2 opens exactly as the voice resumes
+    starts = [w["start"] for w in words]
+    assert starts == sorted(starts)       # monotonic
+    assert all(w["start"] < 5.5 for w in words)   # all inside the real speech span
+    assert words[-1]["end"] <= 5.5 + 1e-6         # held to speech end, not into the pad
+
+
 # ----------------------------------------------------- multi-beat narration
 PARTS = [
     {"kind": "card", "text": "Title here."},        # chars [0, 11)
