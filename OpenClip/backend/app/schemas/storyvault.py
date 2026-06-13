@@ -359,6 +359,10 @@ class SvProjectSettings(BaseModel):
     # Orchestration.
     videos_per_run: int = Field(default=3, ge=1, le=25)
     auto_publish: bool = False                         # render + queue publishing without review
+    # When on, a run never builds a video from a story whose content already
+    # became a video (any project), and skips cross-posts/re-pastes of the same
+    # story — so every video the project makes is unique.
+    no_duplicates: bool = False
 
 
 class SvProjectCreate(BaseModel):

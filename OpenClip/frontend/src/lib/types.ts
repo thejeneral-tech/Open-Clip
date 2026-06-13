@@ -449,6 +449,7 @@ export interface SvProjectSettings {
   privacy: string;
   videos_per_run: number;
   auto_publish: boolean;
+  no_duplicates: boolean;
 }
 
 export interface SvProject {

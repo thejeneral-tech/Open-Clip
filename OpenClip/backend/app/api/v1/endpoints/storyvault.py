@@ -810,6 +810,18 @@ async def delete_template(
 
 
 # ------------------------------------------------------------------ projects
+def _story_key(title: str) -> str:
+    """Normalised content key for duplicate detection.
+
+    Lower-cased, apostrophes dropped (so "sister's" == "sisters"), other
+    punctuation collapsed to spaces — so a Reddit cross-post, a re-paste, or the
+    same post collected twice all reduce to the same key. Drives a project's
+    ``no_duplicates`` guard.
+    """
+    text = (title or "").lower().replace("'", "").replace("’", "")
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
 async def _validate_project_settings(
     db: AsyncSession, user: User, s: SvProjectSettings
 ) -> None:
@@ -872,11 +884,26 @@ async def _collect_reddit_into_project(
             )
         ).scalars()
     )
+    # With no-duplicates on, also reject cross-posts/re-pastes whose title matches
+    # a story already in the vault — not just exact external-id repeats.
+    existing_keys: set[str] = set()
+    if s.no_duplicates:
+        existing_keys = {
+            _story_key(t)
+            for t in (
+                await db.execute(select(SvStory.title).where(SvStory.owner_id == user.id))
+            ).scalars()
+        }
 
     added = 0
     for item in fetched:
         if item["external_id"] in existing_ids:
             continue
+        if s.no_duplicates:
+            key = _story_key(item["title"])
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
         existing_ids.add(item["external_id"])
         scored = scoring.score_story(
             item["title"], item["body"], item["upvotes"], item["num_comments"]
@@ -903,6 +930,42 @@ async def _collect_reddit_into_project(
     if added:
         await db.commit()
     return added
+
+
+async def _select_unique_stories(
+    db: AsyncSession, user: User, base_q, limit: int
+) -> list[SvStory]:
+    """Pick up to ``limit`` ready stories whose content hasn't already become a
+    video — the project's ``no_duplicates`` guard.
+
+    A candidate is skipped when its normalised title matches one already turned
+    into a video (any project of this user) or another story chosen in this same
+    batch, so cross-posts and re-pastes never yield a second identical video.
+    Normalisation isn't portable across SQLite/Postgres in SQL, so the de-dupe
+    runs in Python over a widened candidate pool.
+    """
+    used_keys = {
+        _story_key(t)
+        for t in (
+            await db.execute(
+                select(SvStory.title)
+                .join(SvVideo, SvVideo.story_id == SvStory.id)
+                .where(SvStory.owner_id == user.id)
+            )
+        ).scalars()
+    }
+    pool = (await db.execute(base_q.limit(max(limit * 5, 25)))).scalars().all()
+    chosen: list[SvStory] = []
+    seen = set(used_keys)
+    for story in pool:
+        key = _story_key(story.title)
+        if key in seen:
+            continue
+        seen.add(key)
+        chosen.append(story)
+        if len(chosen) >= limit:
+            break
+    return chosen
 
 
 @router.get("/projects", response_model=list[SvProjectOut])
@@ -1010,20 +1073,22 @@ async def run_project(
 
     # Best ready stories in this folder that don't have a video yet.
     used_subq = select(SvVideo.story_id).where(SvVideo.project_id == project.id)
-    stories = (
-        await db.execute(
-            select(SvStory)
-            .where(
-                SvStory.owner_id == current_user.id,
-                SvStory.project_id == project.id,
-                SvStory.deleted_at.is_(None),
-                SvStory.status.in_(_READY_STORY_STATUSES),
-                SvStory.id.notin_(used_subq),
-            )
-            .order_by(SvStory.score.desc())
-            .limit(s.videos_per_run)
+    base_q = (
+        select(SvStory)
+        .where(
+            SvStory.owner_id == current_user.id,
+            SvStory.project_id == project.id,
+            SvStory.deleted_at.is_(None),
+            SvStory.status.in_(_READY_STORY_STATUSES),
+            SvStory.id.notin_(used_subq),
         )
-    ).scalars().all()
+        .order_by(SvStory.score.desc())
+    )
+    if s.no_duplicates:
+        # Skip any story whose content already became a video (any project).
+        stories = await _select_unique_stories(db, current_user, base_q, s.videos_per_run)
+    else:
+        stories = (await db.execute(base_q.limit(s.videos_per_run))).scalars().all()
 
     voice, speed = await _resolve_voice(db, current_user, s.voice, s.speed)
     template_config, caption_config = await _template_snapshot(db, current_user, s.template_id)
