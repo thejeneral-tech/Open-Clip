@@ -1,3 +1,5 @@
+import re
+
 from app.services import captions as cap
 from app.services.captions import build_tokens, get_style, render_ass, render_srt, render_vtt
 
@@ -60,8 +62,14 @@ def test_render_ass_caption_text_has_no_leading_comma():
     for line in ass.splitlines():
         if line.startswith("Dialogue"):
             text = line.split(",", n_fields - 1)[n_fields - 1]
-            assert "," not in text
-            assert not text.lstrip().startswith(",")
+            # Smooth karaoke animates words via ASS \t(...) transforms, which use
+            # commas *inside* override blocks ({...}); libass parses Text as the
+            # final field so those are safe. The invariant that still matters is
+            # the *visible* words carry no stray comma — strip the override blocks
+            # and check what's actually drawn.
+            visible = re.sub(r"\{[^}]*\}", "", text)
+            assert "," not in visible
+            assert not visible.lstrip().startswith(",")
 
 
 def test_render_ass_size_is_65_percent():

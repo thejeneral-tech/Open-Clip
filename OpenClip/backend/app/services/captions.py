@@ -68,6 +68,27 @@ MIN_SEG_DUR = 0.10
 # a caption doesn't linger through a long pause / music break.
 MAX_HOLD = 1.2
 
+# --- Smooth karaoke animation (all in milliseconds, relative to each cue's own
+# start). Instead of the spoken word snapping to the highlight colour/size for a
+# frame, it *glides*: the colour leads (fast, for tight lip-sync to the voice)
+# and the scale trails (a smooth "pop"), then both ease back as the next word
+# takes over — so exactly one word is lit at any instant and the highlight flows
+# with the narration. These animate via ASS \t transforms inside one stable cue,
+# so the line itself never re-draws between words (no flicker). ---
+_COLOR_RISE_MS = 70    # active word reaches the highlight colour quickly (sync)
+_COLOR_FALL_MS = 100   # ...and returns to the base colour as the next word lights
+_SCALE_RISE_MS = 150   # active word grows smoothly into the "pop"
+_SCALE_FALL_MS = 130   # ...and settles back down smoothly
+# Emphasised words (numbers, long/important words) sit a touch larger even when
+# not the active word; this is the fraction of the active grow they keep at rest.
+_EMPHASIS_REST = 0.5
+# Every cue lifts in from slightly transparent rather than hard-cutting onto the
+# screen — a soft entrance that never dips to blank (so the centre stays filled).
+# The final cue of the track additionally fades fully out for a clean ending.
+_CUE_LIFT_MS = 110
+_CUE_LIFT_ALPHA = "&H50&"   # ~69% opaque at the start of the lift -> fully opaque
+_CUE_FADE_OUT_MS = 220
+
 STYLES: dict[str, StylePreset] = {
     CaptionStyle.HORMOZI.value: StylePreset(
         fontname="DejaVu Sans", font_scale=0.072, bold=True, uppercase=True,
@@ -273,43 +294,107 @@ def _fmt_time(seconds: float) -> str:
     return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def _word_text(tok: dict[str, Any], style: StylePreset, active: bool) -> str:
-    word = tok["word"].upper() if style.uppercase else tok["word"]
-    word = word.replace("{", "(").replace("}", ")")  # ASS-safe
-    scale = int(style.active_scale * 100)
-    if active:
-        # Only the word being spoken right now lights up (highlight colour + grow).
-        # This is the karaoke effect — exactly one word per segment is active, so
-        # the colour always tracks the voice.
-        override = f"{{\\c{style.highlight}\\fscx{scale}\\fscy{scale}}}"
-        word = f"{override}{word}{{\\r}}"
-    elif tok.get("emphasis"):
-        # Emphasised words (numbers, long/important words) stay slightly larger so
-        # they still stand out, but keep the base colour — never the highlight
-        # colour — so they're never mistaken for the word currently being spoken.
-        word = f"{{\\fscx{scale}\\fscy{scale}}}{word}{{\\r}}"
-    if tok.get("emoji"):
-        word = f"{word} {tok['emoji']}"
-    return word
+def _karaoke_enabled(style: StylePreset) -> bool:
+    """True when the spoken word should visibly light up / grow.
+
+    A style with no distinct highlight colour *and* no grow (Minimal, or any
+    preset rendered in "pop" mode) has nothing to animate per word, so the cue
+    is drawn as plain words — never emitting the highlight colour.
+    """
+    return style.highlight != style.primary or style.active_scale != 1.0
+
+
+def _render_cue(
+    tokens: list[dict[str, Any]],
+    group: list[int],
+    group_start: float,
+    group_end: float,
+    style: StylePreset,
+    *,
+    time_base: float,
+    karaoke: bool,
+    is_last: bool,
+) -> str:
+    """The full ASS text for one cue (group of words).
+
+    Every word in the group is on screen for the whole cue; the spoken word
+    smoothly lights up and grows exactly when the voice reaches it, then eases
+    back as the next word takes over — driven by ASS ``\\t`` transforms whose
+    times are relative to ``time_base`` (the cue's on-screen start). Because it
+    is one stable line, nothing re-draws between words: the highlight simply
+    glides across, in lock-step with the narration.
+    """
+    active_pct = int(round(style.active_scale * 100))
+    emph_pct = (
+        int(round((1.0 + (style.active_scale - 1.0) * _EMPHASIS_REST) * 100))
+        if style.active_scale > 1.0
+        else 100
+    )
+    pieces: list[str] = []
+    for pos, idx in enumerate(group):
+        tok = tokens[idx]
+        word = tok["word"].upper() if style.uppercase else tok["word"]
+        word = word.replace("{", "(").replace("}", ")")  # ASS-safe
+        emphasis = bool(tok.get("emphasis"))
+        if karaoke:
+            base_pct = emph_pct if emphasis else 100
+            w_start = max(float(tok["start"]), group_start)
+            # The word stays lit until the next word in the group is spoken (or,
+            # for the last word, until it finishes) — so only ever one is active.
+            if pos + 1 < len(group):
+                w_off = max(float(tokens[group[pos + 1]]["start"]), w_start)
+            else:
+                w_off = max(float(tok["end"]), w_start)
+            rise = max(0, int(round((w_start - time_base) * 1000)))
+            fall = max(rise, int(round((w_off - time_base) * 1000)))
+            piece = (
+                f"{{\\c{style.primary}\\fscx{base_pct}\\fscy{base_pct}"
+                f"\\t({rise},{rise + _COLOR_RISE_MS},\\c{style.highlight})"
+                f"\\t({rise},{rise + _SCALE_RISE_MS},\\fscx{active_pct}\\fscy{active_pct})"
+                f"\\t({fall},{fall + _COLOR_FALL_MS},\\c{style.primary})"
+                f"\\t({fall},{fall + _SCALE_FALL_MS},\\fscx{base_pct}\\fscy{base_pct})}}"
+                f"{word}"
+            )
+        else:
+            # No-highlight styles (Minimal / "pop" mode): plain words, in order.
+            piece = word
+        if tok.get("emoji"):
+            piece = f"{piece} {tok['emoji']}"
+        pieces.append(piece)
+
+    # Cue entrance: a soft alpha lift (never a hard cut, never a blank dip) so a
+    # new line glides in; the final cue of the track also fades fully out.
+    dur_ms = max(1, int(round((group_end - time_base) * 1000)))
+    lift = f"\\alpha{_CUE_LIFT_ALPHA}\\t(0,{min(_CUE_LIFT_MS, dur_ms)},\\alpha&H00&)"
+    if is_last:
+        out_start = max(min(_CUE_LIFT_MS, dur_ms), dur_ms - _CUE_FADE_OUT_MS)
+        lift += f"\\t({out_start},{dur_ms},\\alpha&HFF&)"
+    return f"{{{lift}}}{' '.join(pieces)}"
 
 
 def build_segments(
-    tokens: list[dict[str, Any]], style: StylePreset
+    tokens: list[dict[str, Any]], style: StylePreset, start_offset: float = 0.0
 ) -> list[dict[str, Any]]:
-    """Non-overlapping ``{start, end, text}`` caption segments for the clip.
+    """Non-overlapping ``{start, end, text}`` caption cues for the clip.
 
-    The single source of truth for *when* each caption is on screen:
+    The single source of truth for *when* each caption is on screen and *how* its
+    words animate:
 
     * timings are sanitized to a clean, monotonic timeline,
     * tokens are chunked into on-screen groups,
-    * each group is shown as a run of word-highlight segments that tile the
-      group's window, and the group is **held until the next group begins** so
-      the centre is never momentarily blank,
+    * each group becomes **one stable cue** whose words light up/grow in sync with
+      the voice (see :func:`_render_cue`); the cue is **held until the next group
+      begins** so the centre is never momentarily blank,
+    * ``start_offset`` (seconds) holds the whole track back: cues finishing before
+      it are dropped and one straddling it starts at it, with the word animation
+      re-based onto the clipped start so sync is preserved,
     * a final clamp guarantees ``end[i] <= start[i+1]`` for every pair — no two
-      captions can ever be on screen at once, which is what used to stack them.
+      cues can ever be on screen at once, which is what used to stack them.
     """
     tokens = sanitize_timing(tokens)
     groups = group_tokens(tokens, style)
+    karaoke = _karaoke_enabled(style)
+    n = len(groups)
     segments: list[dict[str, Any]] = []
     for gi, group in enumerate(groups):
         group_start = tokens[group[0]]["start"]
@@ -317,28 +402,31 @@ def build_segments(
         # Hold this group until the next group's first word (never past it), but
         # not more than MAX_HOLD past the last spoken word so it doesn't linger
         # through a long pause. The final group simply ends with its last word.
-        if gi + 1 < len(groups):
+        if gi + 1 < n:
             group_end = min(tokens[groups[gi + 1][0]]["start"], last_end + MAX_HOLD)
         else:
             group_end = last_end
-        for pos, idx in enumerate(group):
-            seg_start = tokens[idx]["start"]
-            seg_end = (
-                tokens[group[pos + 1]]["start"]
-                if pos + 1 < len(group)
-                else group_end
-            )
-            seg_start = min(max(seg_start, group_start), group_end)
-            seg_end = min(max(seg_end, seg_start), group_end)
-            pieces = [_word_text(tokens[j], style, active=(j == idx)) for j in group]
-            segments.append(
-                {"start": seg_start, "end": seg_end, "text": " ".join(pieces)}
-            )
+        if group_end <= group_start:
+            group_end = group_start + MIN_SEG_DUR
+
+        ev_start = group_start
+        if start_offset > 0:
+            if group_end <= start_offset:
+                continue                       # cue is entirely before the offset
+            ev_start = max(group_start, start_offset)
+        if group_end <= ev_start:
+            continue
+        ev_start = round(ev_start, 3)
+        text = _render_cue(
+            tokens, group, group_start, round(group_end, 3), style,
+            time_base=ev_start, karaoke=karaoke, is_last=(gi == n - 1),
+        )
+        segments.append({"start": ev_start, "end": round(group_end, 3), "text": text})
     return _clamp_no_overlap(segments)
 
 
 def _clamp_no_overlap(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Force strictly sequential segments and drop any zero-length ones."""
+    """Force strictly sequential cues and drop any zero-length ones."""
     out = [s for s in segments if s["end"] > s["start"]]
     for i in range(len(out) - 1):
         if out[i]["end"] > out[i + 1]["start"]:
@@ -471,16 +559,9 @@ Style: Default,{style.fontname},{fontsize},{style.primary},{style.highlight},{st
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    segments = build_segments(tokens, style)
-    if start_offset > 0:
-        held: list[dict[str, Any]] = []
-        for seg in segments:
-            if seg["end"] <= start_offset:
-                continue
-            seg = {**seg, "start": max(seg["start"], start_offset)}
-            if seg["end"] > seg["start"]:
-                held.append(seg)
-        segments = held
+    # build_segments owns the clipping so each cue's word animation is re-based
+    # onto its (possibly offset) on-screen start — the highlight stays in sync.
+    segments = build_segments(tokens, style, start_offset=start_offset)
     events = [
         f"Dialogue: 0,{_fmt_time(seg['start'])},{_fmt_time(seg['end'])},Default,,0,0,0,,{pos_tag}{seg['text']}"
         for seg in segments
