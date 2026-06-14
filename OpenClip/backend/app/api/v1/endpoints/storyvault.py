@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -195,13 +196,42 @@ async def _project_out(db: AsyncSession, project: SvProject) -> SvProjectOut:
     return out
 
 
+@dataclass
+class ResolvedVoice:
+    """A stored voice choice resolved into what the render needs.
+
+    ``voice``/``speed`` drive the default Windows SAPI path. ``voice_config`` is
+    set only for a cloned (Fish Speech) voice — it's snapshotted onto the video so
+    the worker narrates with the cloned voice instead of SAPI. See
+    :attr:`SvVideo.voice_config`.
+    """
+
+    voice: str | None
+    speed: float
+    voice_config: dict | None = None
+
+
+def _voice_config_for(preset: SvVoicePreset) -> dict | None:
+    """The render-time voice_config for a preset, or ``None`` for plain SAPI."""
+    if (preset.engine or "sapi") == "sapi":
+        return None
+    return {
+        "engine": preset.engine,
+        "ref_key": preset.ref_key,
+        "prompt_text": preset.prompt_text or "",
+        "name": preset.name,
+    }
+
+
 async def _resolve_voice(
     db: AsyncSession, user: User, voice: str | None, speed: float
-) -> tuple[str | None, float]:
-    """Turn a stored voice choice into a concrete (voice, speed) pair.
+) -> ResolvedVoice:
+    """Turn a stored voice choice into what the render needs.
 
     ``None`` → the user's default Voice Lab preset (if any); ``"preset:<id>"`` →
-    that saved preset; anything else → a SAPI voice name used verbatim.
+    that saved preset; anything else → a SAPI voice name used verbatim. A cloned
+    (Fish Speech) preset additionally carries a ``voice_config`` so the worker
+    routes narration to the clone engine rather than SAPI.
     """
     if voice is None:
         default_preset = (
@@ -213,7 +243,9 @@ async def _resolve_voice(
                 )
             )
         ).scalars().first()
-        return (default_preset.voice if default_preset else None), speed
+        if default_preset:
+            return ResolvedVoice(default_preset.voice, speed, _voice_config_for(default_preset))
+        return ResolvedVoice(None, speed, None)
     if voice.startswith("preset:"):
         try:
             preset_id = int(voice.split(":", 1)[1])
@@ -222,8 +254,8 @@ async def _resolve_voice(
         preset = await db.get(SvVoicePreset, preset_id)
         if not preset or preset.owner_id != user.id or preset.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Voice preset not found")
-        return preset.voice, preset.speed
-    return voice, speed
+        return ResolvedVoice(preset.voice, preset.speed, _voice_config_for(preset))
+    return ResolvedVoice(voice, speed, None)
 
 
 # ---------------------------------------------------------------------- meta
@@ -1090,7 +1122,7 @@ async def run_project(
     else:
         stories = (await db.execute(base_q.limit(s.videos_per_run))).scalars().all()
 
-    voice, speed = await _resolve_voice(db, current_user, s.voice, s.speed)
+    rv = await _resolve_voice(db, current_user, s.voice, s.speed)
     template_config, caption_config = await _template_snapshot(db, current_user, s.template_id)
     queued: list[SvVideo] = []
     for story in stories:
@@ -1103,8 +1135,9 @@ async def run_project(
             hook_style=s.hook_style,
             narration_style=s.narration_style,
             drama_level=s.drama_level,
-            voice=voice,
-            speed=speed,
+            voice=rv.voice,
+            speed=rv.speed,
+            voice_config=rv.voice_config,
             caption_style=s.caption_style,
             caption_config=caption_config,
             template_config=template_config,
@@ -1516,7 +1549,9 @@ async def create_video(
     #   "Auto" (None)        → the user's default Voice Lab preset, if one exists
     #   "preset:<id>"        → that saved preset, picked explicitly in the studio
     #   any other string     → a SAPI system voice name, used verbatim
-    voice, speed = await _resolve_voice(db, current_user, payload.voice, payload.speed)
+    # A cloned (Fish Speech) preset also yields a voice_config so the worker
+    # narrates with the clone engine instead of SAPI.
+    rv = await _resolve_voice(db, current_user, payload.voice, payload.speed)
     # Snapshot the selected template's full render config (frozen at queue time
     # against later edits): the caption sub-blob keeps the burned-in captions
     # matching the preview, and the topicCard/authorIntro drive the intro
@@ -1531,8 +1566,9 @@ async def create_video(
         hook_style=payload.hook_style,
         narration_style=payload.narration_style,
         drama_level=payload.drama_level,
-        voice=voice,
-        speed=speed,
+        voice=rv.voice,
+        speed=rv.speed,
+        voice_config=rv.voice_config,
         caption_style=payload.caption_style,
         caption_config=caption_config,
         template_config=template_config,

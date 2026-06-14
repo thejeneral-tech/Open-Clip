@@ -144,8 +144,13 @@ class SvVideo(TimestampMixin, Base):
     hook_style: Mapped[str] = mapped_column(String(32), default="conflict", nullable=False)
     narration_style: Mapped[str] = mapped_column(String(32), default="dramatic", nullable=False)
     drama_level: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
-    voice: Mapped[str | None] = mapped_column(String(128), default=None)  # SAPI voice name
+    voice: Mapped[str | None] = mapped_column(String(128), default=None)  # SAPI voice name (or "fish-clone")
     speed: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)  # 0.7-1.4
+    # Snapshot at queue time of the resolved narration engine + its inputs, so the
+    # worker renders with the voice the user picked even if the preset is later
+    # edited/deleted. None → plain Windows SAPI using ``voice`` (the default path).
+    # For a cloned voice: {"engine": "fish-clone", "ref_key", "prompt_text", "name"}.
+    voice_config: Mapped[dict | None] = mapped_column(JSON, default=None)
     caption_style: Mapped[str] = mapped_column(String(32), default="hormozi", nullable=False)
     # Snapshot of the selected preset's caption config (style/size/colours/
     # position) at queue time, so the burned-in captions match the preset even if
@@ -209,6 +214,12 @@ class SvVoicePreset(CreatedAtMixin, Base):
     # Pre-rendered audition clip (media key URL). Set for imported clone presets so
     # Preview plays the saved sample instead of re-synthesizing.
     preview_url: Mapped[str | None] = mapped_column(String(1024), default=None)
+    # Cloning reference for fish-clone presets: the storage key of the voice clip
+    # the engine matches against, plus the exact words spoken in it. Both are
+    # required to actually clone (the s2 engine needs the reference text); without
+    # them a fish preset can only do generic, un-cloned synthesis. None for SAPI.
+    ref_key: Mapped[str | None] = mapped_column(String(1024), default=None)
+    prompt_text: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Built-in presets (the bundled TikTok clone voices) are seeded per user from
     # ``voice_presets_data.BUILTIN_VOICE_PRESETS`` and carry a stable
