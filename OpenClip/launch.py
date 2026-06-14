@@ -53,6 +53,7 @@ MODELS = ROOT / "models"
 API_PORT = 8000
 WEB_PORT = 3000
 OLLAMA_PORT = 11434
+FISH_PORT = 8080  # s2.cpp Fish Speech HTTP server (cloned voices); matches backend FISH_TTS_URL
 # uvicorn binds IPv4 127.0.0.1; probe that directly so health checks don't first
 # try IPv6 ::1 (which "localhost" resolves to on Windows) and stall ~2s per try.
 LOOPBACK = "127.0.0.1"
@@ -675,6 +676,386 @@ def ensure_fish_models() -> None:
 
 
 # --------------------------------------------------------------------------- #
+#  Fish Speech engine (build + run the s2.cpp server for cloned voices)
+# --------------------------------------------------------------------------- #
+# The "Tiktok …" cloned voices are produced by the s2.cpp engine running as a
+# local HTTP server. ``ensure_fish_models`` fetched its source + the GGUF voice
+# model; the helpers below *compile* the engine (``ensure_fish_engine``, run from
+# setup) and *run* it as a managed service alongside the API/worker/frontend
+# (``ensure_fish_server``, run from up). The build auto-selects the best GPU
+# backend present — CUDA > Vulkan > CPU — so it accelerates on whatever the user
+# has and still works (just slower) on a plain CPU build. Everything here is
+# best-effort and never fails setup: with no compiler/GPU SDK the cloned voices
+# simply stay unavailable and the rest of the app is unaffected.
+S2_BUILD_DIR = MODELS / "s2.cpp" / "build"
+
+
+def find_fish_engine() -> Path | None:
+    """The built s2 server binary, or ``None`` if it hasn't been compiled yet."""
+    exe = "s2.exe" if IS_WIN else "s2"
+    for cand in (S2_BUILD_DIR / exe, S2_BUILD_DIR / "Release" / exe, S2_BUILD_DIR / "Debug" / exe):
+        if cand.exists():
+            return cand
+    return None
+
+
+def _fish_dll_dir(exe: Path) -> Path | None:
+    """Directory holding the engine's ggml shared libs (so they're on the DLL path).
+
+    Ninja places ``s2.exe`` in ``build/`` but the ggml DLLs in ``build/bin/``; a
+    Visual Studio (multi-config) build nests them under a ``Release``/``Debug``
+    subdir. Search the known layouts so the binary can always find its libs.
+    """
+    lib = "ggml.dll" if IS_WIN else "libggml.so"
+    cands = [
+        exe.parent, exe.parent / "bin",
+        S2_BUILD_DIR / "bin", S2_BUILD_DIR,
+        S2_BUILD_DIR / "bin" / "Release", S2_BUILD_DIR / "bin" / "Debug",
+        S2_BUILD_DIR / "Release", S2_BUILD_DIR / "Debug",
+    ]
+    for cand in cands:
+        if (cand / lib).exists():
+            return cand
+    return None
+
+
+def _find_cmake() -> Path | None:
+    """CMake on PATH, else the copy bundled with Visual Studio (Windows)."""
+    p = which("cmake")
+    if p:
+        return Path(p)
+    if IS_WIN:
+        for root in (os.environ.get("ProgramFiles", r"C:\Program Files"),
+                     os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")):
+            base = Path(root) / "Microsoft Visual Studio"
+            if base.is_dir():
+                hits = sorted(base.glob("*/*/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"))
+                if hits:
+                    return hits[-1]
+    return None
+
+
+def _bundled_ninja(cmake: Path) -> Path | None:
+    """Ninja shipped next to a VS-bundled CMake (…/CMake/Ninja/ninja.exe), or on PATH."""
+    ninja = cmake.parent.parent.parent / "Ninja" / "ninja.exe"
+    if ninja.exists():
+        return ninja
+    found = which("ninja")
+    return Path(found) if found else None
+
+
+def _find_vcvars() -> Path | None:
+    """Locate vcvars64.bat (the MSVC build environment) on Windows."""
+    if not IS_WIN:
+        return None
+    vswhere = (Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+               / "Microsoft Visual Studio" / "Installer" / "vswhere.exe")
+    if vswhere.exists():
+        code, out = run([str(vswhere), "-latest", "-products", "*",
+                         "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                         "-property", "installationPath"], capture=True)
+        if code == 0 and out.strip():
+            cand = Path(out.strip().splitlines()[0].strip()) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+            if cand.exists():
+                return cand
+    for root in (os.environ.get("ProgramFiles", r"C:\Program Files"),
+                 os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")):
+        base = Path(root) / "Microsoft Visual Studio"
+        if base.is_dir():
+            hits = sorted(base.glob("*/*/VC/Auxiliary/Build/vcvars64.bat"))
+            if hits:
+                return hits[-1]
+    return None
+
+
+# cmake flag per backend label; "" = CPU (no GPU flag).
+_FISH_BACKEND_FLAG = {"cpu": "", "vulkan": "-DS2_VULKAN=ON", "cuda": "-DS2_CUDA=ON", "metal": "-DS2_METAL=ON"}
+
+
+def _detect_fish_backend() -> str:
+    """Best s2.cpp backend to build here. ``FISH_BACKEND`` in .env forces a choice
+    (cpu|vulkan|cuda|metal); otherwise auto-detect: Metal on macOS, else CUDA if the
+    toolkit (nvcc) is present, else Vulkan if its SDK is, else CPU."""
+    forced = read_env().get("FISH_BACKEND", "").strip().lower()
+    if forced in _FISH_BACKEND_FLAG:
+        return forced
+    if sys.platform == "darwin":
+        return "metal"
+    if which("nvcc"):
+        return "cuda"
+    if which("glslc") or os.environ.get("VULKAN_SDK"):
+        return "vulkan"
+    return "cpu"
+
+
+def _fish_fallback_chain(backend: str) -> list[str]:
+    """Backends to try in order if the preferred one fails to build — always
+    ending at CPU so a usable (if slow) engine is produced when possible."""
+    return {"cuda": ["cuda", "vulkan", "cpu"], "vulkan": ["vulkan", "cpu"],
+            "metal": ["metal", "cpu"], "cpu": ["cpu"]}.get(backend, ["cpu"])
+
+
+def _fish_backend_marker() -> Path:
+    return S2_BUILD_DIR / ".s2_backend"
+
+
+def _probe_built_backend(exe: Path | None) -> str | None:
+    """Infer the compiled backend from the ggml backend libs next to the engine —
+    the ground truth (``ggml-cuda``/``ggml-vulkan`` exist only for those builds)."""
+    if not exe:
+        return None
+    d = _fish_dll_dir(exe) or exe.parent
+    suf, pre = (".dll", "") if IS_WIN else (".so", "lib")
+    if (d / f"{pre}ggml-cuda{suf}").exists():
+        return "cuda"
+    if (d / f"{pre}ggml-vulkan{suf}").exists():
+        return "vulkan"
+    if (d / f"{pre}ggml-metal{suf}").exists():
+        return "metal"
+    return None  # only the cpu/base backend libs are present
+
+
+def fish_built_backend() -> str:
+    """Which backend the engine was actually compiled with.
+
+    Trusts the recorded marker first; if it's missing (e.g. the engine was built
+    outside the launcher) falls back to probing the ggml backend libs, so the
+    server still gets the right GPU flag instead of silently running on CPU.
+    """
+    try:
+        rec = _fish_backend_marker().read_text(encoding="utf-8").strip().lower()
+        if rec in _FISH_BACKEND_FLAG:
+            return rec
+    except OSError:
+        pass
+    return _probe_built_backend(find_fish_engine()) or "cpu"
+
+
+def _win_run_in_vcvars(vcvars: Path, commands: list[list[str]]) -> bool:
+    """Run command(s) inside the MSVC dev environment via a temp .bat (Windows).
+
+    A native build needs cl.exe + the MSVC INCLUDE/LIB env that vcvars64.bat sets,
+    so the configure + build steps run from a generated batch file that sources it.
+    ``chcp 65001`` keeps non-ASCII paths intact through cmd.exe's codepage parsing.
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    lines = ["@echo off", "chcp 65001 >nul", f'call "{vcvars}" || exit /b 1']
+    for i, cmd in enumerate(commands, start=2):
+        quoted = " ".join(f'"{a}"' if (" " in a or "\\" in a) else a for a in cmd)
+        lines.append(f"{quoted} || exit /b {i}")
+    bat = LOG_DIR / "s2_build.bat"
+    bat.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+    try:
+        code, _ = run([os.environ.get("COMSPEC", "cmd.exe"), "/c", str(bat)])
+    finally:
+        bat.unlink(missing_ok=True)
+    return code == 0
+
+
+def _fish_configure_build_cmds(cmake: Path, src: Path, flag: str, ninja: Path | None) -> tuple[list[str], list[str]]:
+    """(configure, build) command lines for one backend. Ninja → single-config;
+    otherwise a multi-config (Visual Studio) generator, which needs ``--config
+    Release`` on the build step (it ignores CMAKE_BUILD_TYPE)."""
+    cfg = [str(cmake), "-S", str(src), "-B", str(S2_BUILD_DIR), "-DCMAKE_BUILD_TYPE=Release"]
+    if flag:
+        cfg.append(flag)
+    build = [str(cmake), "--build", str(S2_BUILD_DIR), "--parallel"]
+    if ninja:
+        cfg += ["-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={ninja}"]
+    else:
+        build += ["--config", "Release"]  # multi-config generators ignore CMAKE_BUILD_TYPE
+    return cfg, build
+
+
+def ensure_fish_engine() -> None:
+    """Compile the s2.cpp Fish Speech engine. Idempotent; never fails setup.
+
+    Picks the best backend present (Metal on macOS, else CUDA > Vulkan > CPU;
+    override with FISH_BACKEND). If the preferred backend fails to build it falls
+    back toward CPU so a usable engine is still produced. On Windows the build runs
+    inside the MSVC environment (vcvars64.bat) with the VS-bundled CMake + Ninja
+    when a standalone CMake isn't on PATH. Records the backend it built.
+    """
+    step("Building the Fish Speech engine (cloned voices)")
+    src = MODELS / "s2.cpp"
+    if not (src / "CMakeLists.txt").exists():
+        warn("s2.cpp source not present — skipping engine build (rerun setup once the clone succeeds).")
+        return
+    existing = find_fish_engine()
+    if existing:
+        built = fish_built_backend()
+        want = _detect_fish_backend()
+        # Self-heal a missing marker so the server still gets the right GPU flag.
+        if not _fish_backend_marker().exists():
+            try:
+                _fish_backend_marker().write_text(built, encoding="utf-8")
+            except OSError:
+                pass
+        ok(f"Fish Speech engine already built ({built}) — {existing.name}")
+        if built == "cpu" and want != "cpu":
+            warn(f"A {want.upper()} GPU SDK is now available but the engine is a CPU build. "
+                 f"To rebuild on GPU: delete '{S2_BUILD_DIR}' and rerun setup.")
+        return
+    cmake = _find_cmake()
+    if not cmake:
+        warn("CMake not found — can't build the Fish Speech engine. Install Visual Studio Build "
+             "Tools with the 'Desktop development with C++' workload (includes CMake + Ninja), then "
+             "rerun setup. Cloned voices stay unavailable until the engine is built; everything else works.")
+        return
+    ninja = _bundled_ninja(cmake)
+    if IS_WIN:
+        vcvars = _find_vcvars()
+        if not vcvars:
+            warn("Visual Studio C++ Build Tools not found (no vcvars64.bat). Install the 'Desktop "
+                 "development with C++' workload, then rerun setup. Cloned voices unavailable for now.")
+            return
+        if len(str(S2_BUILD_DIR)) > 120:
+            warn("The build path is long; MSVC caps object paths at ~250 chars and the compile may "
+                 "fail partway. If it does, move the checkout closer to the drive root and rerun setup.")
+    elif not ninja and not which("make"):
+        warn("Neither ninja nor make found — install a C/C++ toolchain (build-essential / Xcode CLT) "
+             "plus ninja or make, then rerun setup. Cloned voices unavailable for now.")
+        return
+
+    chain = _fish_fallback_chain(_detect_fish_backend())
+    backend = ""
+    for i, b in enumerate(chain):
+        if i > 0:
+            warn(f"{chain[i - 1].upper()} build failed — retrying with {b.upper()}…")
+        info(f"Compiling s2.cpp with the {b.upper()} backend — one-time, can take 10–25 min…")
+        if S2_BUILD_DIR.exists():
+            shutil.rmtree(S2_BUILD_DIR, ignore_errors=True)  # clean: the cache pins the backend
+        cfg, build = _fish_configure_build_cmds(cmake, src, _FISH_BACKEND_FLAG[b], ninja)
+        built_ok = _win_run_in_vcvars(_find_vcvars(), [cfg, build]) if IS_WIN \
+            else (run(cfg)[0] == 0 and run(build)[0] == 0)
+        if built_ok and find_fish_engine():
+            backend = b
+            break
+
+    exe = find_fish_engine()
+    if backend and exe:
+        _fish_backend_marker().write_text(backend, encoding="utf-8")
+        ok(f"Fish Speech engine built ({backend.upper()}) → {exe}")
+    else:
+        warn("Fish Speech engine build didn't produce a binary — see the output above. Try setting "
+             "FISH_BACKEND=cpu in .env and rerunning setup. Cloned voices stay unavailable; the rest "
+             "of the app is unaffected.")
+
+
+def fish_reachable() -> bool:
+    """Whether the s2 server is bound on the Fish port. It binds only after the
+    voice model finishes loading, so a listening socket means it's ready."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            return s.connect_ex((LOOPBACK, FISH_PORT)) == 0
+    except OSError:
+        return False
+
+
+def wait_for_port(port: int, timeout: float = 180.0, pid_name: str | None = None) -> bool:
+    """Wait until ``port`` accepts a connection. Returns early as ``False`` if
+    ``pid_name`` is given and that managed service's process has died (so a crash
+    during model load isn't mistaken for a slow load)."""
+    import socket
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            if s.connect_ex((LOOPBACK, port)) == 0:
+                return True
+        if pid_name and not is_running(pid_name):
+            return False
+        time.sleep(1.0)
+    return False
+
+
+def fish_server_cmd(exe: Path) -> list[str]:
+    """The ``s2 --server`` command line, with GPU flags for the built backend.
+
+    Tunable via .env: FISH_GPU_LAYERS (transformer layers on GPU; blank = all),
+    FISH_GPU_DEVICE (device index, default 0), FISH_CODEC_CPU (keep the codec on
+    CPU to save VRAM, default on). On a CPU-only build no GPU flags are passed.
+    """
+    gguf = MODELS / "s2-pro-gguf" / FISH_GGUF
+    env = read_env()
+    cmd = [str(exe), "--server", "--host", LOOPBACK, "--port", str(FISH_PORT),
+           "--model", str(gguf), "--log-level", "info"]
+    backend = fish_built_backend()
+    if backend == "metal":
+        cmd.append("--metal")  # macOS GPU; selects the default Metal device
+    elif backend in ("vulkan", "cuda"):
+        cmd += [("--vulkan" if backend == "vulkan" else "--cuda"), env.get("FISH_GPU_DEVICE", "0")]
+    if backend != "cpu":
+        ngl = env.get("FISH_GPU_LAYERS", "").strip()
+        if ngl:
+            cmd += ["--gpu-layers", ngl]
+        if env.get("FISH_CODEC_CPU", "1").strip().lower() not in ("0", "false", "no", "off"):
+            cmd.append("--codec-cpu")
+    return cmd
+
+
+def _fish_spawn_env() -> dict:
+    """child_env with the engine's ggml shared-lib directory on the load path."""
+    exe = find_fish_engine()
+    extra: dict[str, str] = {}
+    dll_dir = _fish_dll_dir(exe) if exe else None
+    if dll_dir:
+        extra["PATH"] = f"{dll_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        if not IS_WIN:
+            extra["LD_LIBRARY_PATH"] = f"{dll_dir}{os.pathsep}{os.environ.get('LD_LIBRARY_PATH', '')}"
+    return child_env(extra)
+
+
+def ensure_fish_server() -> None:
+    """Start the s2.cpp Fish Speech server (cloned voices) as a managed service.
+
+    No-op when already up, when autostart is disabled (FISH_AUTOSTART=0 in .env),
+    or when the engine/model isn't present yet (cloned voices just stay
+    unavailable). Loading the voice model takes a little while, so the wait is
+    generous and non-fatal — the first video generation will use it once ready.
+    """
+    if read_env().get("FISH_AUTOSTART", "1").strip().lower() in ("0", "false", "no", "off"):
+        return
+    if fish_reachable():
+        ok("Fish Speech server is running")
+        return
+    exe = find_fish_engine()
+    gguf = MODELS / "s2-pro-gguf" / FISH_GGUF
+    if not exe:
+        info("Fish Speech engine not built — cloned voices unavailable. Run setup (option 6) to build it.")
+        return
+    if not gguf.exists():
+        warn("Fish voice model missing — run setup (option 6) to download it. Cloned voices unavailable.")
+        return
+    backend = fish_built_backend()
+    if backend == "cpu":
+        info("Cloned voices will run on CPU (no GPU SDK was present at build time) — synthesis "
+             "can take minutes per clip. Install a Vulkan/CUDA SDK and rebuild for usable speed.")
+    step("Starting the Fish Speech server (cloned voices)")
+    if not start_service("fish", fish_server_cmd(exe), MODELS / "s2.cpp", _fish_spawn_env()):
+        warn("Fish Speech server failed to start (see `logs fish`). Cloned voices unavailable.")
+        return
+    try:
+        timeout = float(read_env().get("FISH_START_TIMEOUT", "120"))
+    except ValueError:
+        timeout = 120.0
+    with Spinner("Waiting for Fish Speech (loading the voice model)"):
+        up = wait_for_port(FISH_PORT, timeout=timeout, pid_name="fish")
+    if up:
+        ok("Fish Speech server is running")
+    elif is_running("fish"):
+        info("Fish Speech is still loading the voice model in the background — cloned voices "
+             "will work shortly (check `logs fish`).")
+    else:
+        stop_service("fish")  # clear the stale pid the dead process left behind
+        warn("Fish Speech server exited during startup (often VRAM/OOM on a shared GPU, or a bad "
+             "model). See `logs fish`. Try lowering FISH_GPU_LAYERS (e.g. 18) or setting "
+             "FISH_AUTOSTART=0 in .env. Cloned voices unavailable until it starts cleanly.")
+
+
+# --------------------------------------------------------------------------- #
 #  Setup
 # --------------------------------------------------------------------------- #
 def _setup_done() -> bool:
@@ -768,8 +1149,11 @@ def cmd_setup(_=None) -> bool:
             print(out)
             healthy = False
 
-    # 4. Fish Speech models (Voice Lab) — large & optional, never fails setup ------
+    # 4. Fish Speech models + engine (Voice Lab cloned voices) — optional, never
+    # fails setup. Fetch the source + GGUF, then compile the s2.cpp engine with the
+    # best GPU backend present (CUDA > Vulkan > CPU); a missing toolchain just warns.
     ensure_fish_models()
+    ensure_fish_engine()
 
     print()
     (ok if healthy else err)(
@@ -839,11 +1223,33 @@ def cmd_doctor(_=None) -> bool:
     else:
         warn("ollama not found — install from https://ollama.com/download for AI features")
 
+    # Fish Speech cloned-voice engine (optional): built? on which backend? running?
+    fish_exe = find_fish_engine()
+    if fish_exe:
+        state = "running" if fish_reachable() else "not started"
+        ok(f"Fish Speech engine built ({fish_built_backend().upper()}, {state}) — cloned voices ready")
+    elif (MODELS / "s2.cpp" / "CMakeLists.txt").exists():
+        info("Fish Speech engine not built yet — run setup (option 6) to compile it "
+             + ("(CMake found)" if _find_cmake() else "(install VS Build Tools / CMake first)")
+             + ". Cloned voices are optional.")
+    else:
+        info("Fish Speech source not fetched — run setup (option 6) for cloned voices (optional).")
+
     if which("nvidia-smi"):
-        code, out = run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture=True)
+        code, out = run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], capture=True)
         gpus = [g.strip() for g in out.splitlines() if g.strip()] if code == 0 else []
         if gpus:
             ok(f"NVIDIA GPU detected: {', '.join(gpus)} (set WHISPER_DEVICE=cuda for speed)")
+            # On an ≤8GB card, Ollama (LLM), the cloned-voice engine, and Whisper all
+            # compete for VRAM — warn so the operator can budget it via the FISH_* knobs.
+            try:
+                total_mb = max(int(g.split(",")[1].strip().split()[0]) for g in gpus)
+                if total_mb <= 8800:
+                    warn(f"~{total_mb // 1024} GB VRAM: Ollama, the cloned-voice engine, and Whisper "
+                         "share it. If the voice server OOMs, lower FISH_GPU_LAYERS (e.g. 18) or set "
+                         "FISH_AUTOSTART=0 in .env to keep VRAM for Ollama.")
+            except (ValueError, IndexError):
+                pass
         else:
             info("nvidia-smi present but no GPU reported (CPU mode will be used)")
     else:
@@ -932,6 +1338,10 @@ def cmd_up(args=None) -> bool:
         web_ready = wait_for(f"http://{LOOPBACK}:{WEB_PORT}", timeout=180)
     (ok if web_ready else warn)("Web app is serving" if web_ready else "Web app still starting (check `logs frontend`)")
 
+    # Cloned-voice engine (Voice Lab "Tiktok …" voices). Started after the core app
+    # so the UI is usable immediately; loading the voice model can take a moment.
+    ensure_fish_server()
+
     print()
     panel(
         "OpenClip is ready",
@@ -953,7 +1363,7 @@ def cmd_up(args=None) -> bool:
 
 def cmd_down(_=None) -> bool:
     step("Stopping the stack")
-    for name in ("frontend", "worker", "api", "ollama"):
+    for name in ("fish", "frontend", "worker", "api", "ollama"):
         if is_running(name):
             stop_service(name)
             ok(f"Stopped {name}")
@@ -972,7 +1382,7 @@ def cmd_restart(_=None) -> bool:
 def cmd_status(_=None) -> bool:
     step("Services")
     rows = []
-    for name in ("api", "worker", "frontend", "ollama"):
+    for name in ("api", "worker", "frontend", "ollama", "fish"):
         state = paint("● running", C_OK, bold=True) if is_running(name) else paint("○ stopped", C_DIM)
         pid = _read_pid(name)
         rows.append((paint(name, PRIMARY_LT), f"{state}{paint(f'  pid {pid}', C_DIM) if pid and is_running(name) else ''}"))
@@ -986,6 +1396,11 @@ def cmd_status(_=None) -> bool:
     ]
     for name, url in checks:
         (ok if http_ok(url) else err)(f"{name:<8} {paint(url, C_DIM)}")
+    # Fish Speech binds its port only after the voice model loads, so check the
+    # socket rather than an HTTP route; "loading" is informative, not an error.
+    (ok if fish_reachable() else info)(
+        f"{'Fish':<8} {paint(f'127.0.0.1:{FISH_PORT} (cloned voices)', C_DIM)}"
+        + ("" if fish_reachable() else "  — not running / still loading"))
     return True
 
 
@@ -1019,7 +1434,7 @@ def _tail(paths: list[Path]) -> None:
 
 def cmd_logs(args=None) -> bool:
     service = getattr(args, "service", None)
-    names = [service] if service else ["api", "worker", "frontend", "ollama"]
+    names = [service] if service else ["api", "worker", "frontend", "ollama", "fish"]
     paths = [LOG_DIR / f"{n}.log" for n in names if (LOG_DIR / f"{n}.log").exists() or not service]
     if not paths:
         warn(f"No log file for '{service}' yet")
@@ -1125,7 +1540,7 @@ def main() -> int:
     sub.add_parser("restart", help="restart the stack")
     sub.add_parser("status", help="service & health overview", aliases=["ps"])
     logs = sub.add_parser("logs", help="tail logs")
-    logs.add_argument("service", nargs="?", help="service name (api, worker, frontend, ollama)")
+    logs.add_argument("service", nargs="?", help="service name (api, worker, frontend, ollama, fish)")
     sub.add_parser("open", help="open the app in your browser")
     sub.add_parser("doctor", help="check prerequisites")
     sub.add_parser("nuke", help="delete the local database + media (destructive)")
