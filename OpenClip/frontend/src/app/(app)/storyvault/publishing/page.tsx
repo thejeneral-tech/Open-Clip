@@ -4,14 +4,20 @@ import {
   Check,
   Download,
   ExternalLink,
+  Facebook,
+  Instagram,
   Loader2,
+  Lock,
+  Music2,
   RefreshCw,
   Send,
   Trash2,
+  Twitter,
   Youtube,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useConnectors,
@@ -34,6 +41,7 @@ import {
   useSvRetryPublishJob,
   useSvRetryVideo,
   useSvVideos,
+  useYouTubeStatus,
 } from "@/hooks/use-api";
 import { api } from "@/lib/api";
 import type { Connector, SvVideo } from "@/lib/types";
@@ -41,6 +49,14 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 
 const PUBLISHABLE = new Set(["ready_for_review", "approved", "completed"]);
 const BUSY = new Set(["queued", "processing", "rendering"]);
+
+// More platforms, shown as locked previews — mirrors the main OpenClip Publishing tab.
+const COMING_SOON = [
+  { key: "tiktok", label: "TikTok", Icon: Music2 },
+  { key: "instagram", label: "Instagram", Icon: Instagram },
+  { key: "x", label: "X (Twitter)", Icon: Twitter },
+  { key: "facebook", label: "Facebook", Icon: Facebook },
+] as const;
 
 function jobBadge(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "published") return "default";
@@ -131,7 +147,7 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
             <Label>Channels</Label>
             {channels.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No channels yet — connect a YouTube channel above.
+                No channels yet — connect a YouTube channel in the Channels tab.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -224,18 +240,86 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
   );
 }
 
-export default function StoryVaultPublishingPage() {
-  const { data: videos = [], isLoading: videosLoading } = useSvVideos(undefined, true);
-  const { data: connectors = [] } = useConnectors();
-  const { data: jobs = [], isLoading: jobsLoading } = useSvPublishJobs(true);
-  const retryJob = useSvRetryPublishJob();
-  const deleteJob = useSvDeletePublishJob();
-  const retryVideo = useSvRetryVideo();
-  const [connecting, setConnecting] = useState(false);
+// ----------------------------------------------------------------- channels
+// One connected channel: default privacy + disconnect. (StoryVault publishes
+// per-video, so unlike the main app's card there's no bot assignment here.)
+function SvChannelCard({ c }: { c: Connector }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const refresh = () => qc.invalidateQueries({ queryKey: ["connectors"] });
 
-  const publishable = videos.filter((v) => PUBLISHABLE.has(v.status));
-  const busy = videos.filter((v) => BUSY.has(v.status));
-  const failed = videos.filter((v) => v.status === "failed");
+  const run = async (fn: () => Promise<unknown>, msg: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(msg);
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const thumb = c.config.channel_thumbnail;
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center gap-4 p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {thumb ? (
+          <img src={thumb} alt="" className="h-10 w-10 shrink-0 rounded-full" />
+        ) : (
+          <Youtube className="h-10 w-10 shrink-0 text-red-600" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium">{c.config.channel_title || c.name}</span>
+            <Badge variant={c.status === "connected" ? "default" : "destructive"}>{c.status}</Badge>
+          </div>
+          {c.last_error && <p className="truncate text-xs text-destructive">{c.last_error}</p>}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Privacy</span>
+          <Select
+            disabled={busy}
+            value={c.config.privacy || "public"}
+            onValueChange={(v) =>
+              run(() => api.updateConnector(c.id, { config: { ...c.config, privacy: v } }), "Privacy updated")
+            }
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["public", "unlisted", "private"].map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive"
+          disabled={busy}
+          onClick={() => run(() => api.deleteConnector(c.id), "Channel disconnected")}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChannelsTab() {
+  const { data: connectors = [] } = useConnectors();
+  const { data: yt, isLoading } = useYouTubeStatus();
+  const [connecting, setConnecting] = useState(false);
+  const channels = connectors.filter((c) => c.platform === "youtube");
 
   const connect = async () => {
     setConnecting(true);
@@ -249,43 +333,82 @@ export default function StoryVaultPublishingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Publishing</h1>
-          <p className="text-muted-foreground">
-            Pick the channels each story video goes to — the final 1080×1920 render and upload run
-            automatically.
-          </p>
+    <div className="space-y-6">
+      {/* ---- YouTube ---- */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Youtube className="h-5 w-5 text-red-600" />
+            <h2 className="font-semibold">YouTube</h2>
+          </div>
+          <Button onClick={connect} disabled={connecting || (yt && !yt.configured)}>
+            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
+            Connect channel
+          </Button>
         </div>
-        <Button variant="outline" onClick={connect} disabled={connecting}>
-          {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
-          Connect YouTube channel
-        </Button>
-      </div>
 
-      {/* Connected channels */}
-      <div className="flex flex-wrap gap-2">
-        {connectors.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No channels connected yet. Connect a YouTube channel to start publishing.
-          </p>
-        ) : (
-          connectors.map((c) => {
-            const ready = channelReady(c);
-            return (
-              <Badge key={c.id} variant={ready.ok ? "secondary" : "outline"} className="gap-1.5">
-                <span
-                  className={cn("h-1.5 w-1.5 rounded-full", ready.ok ? "bg-emerald-400" : "bg-muted-foreground")}
-                />
-                {c.name}
-                <span className="text-[10px] uppercase text-muted-foreground">{c.platform}</span>
-              </Badge>
-            );
-          })
+        {!isLoading && yt && !yt.configured && (
+          <Card className="border-dashed">
+            <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">YouTube isn&apos;t configured yet.</p>
+              <p>
+                Add a Google OAuth client to <code>.env</code> (<code>GOOGLE_CLIENT_ID</code> /{" "}
+                <code>GOOGLE_CLIENT_SECRET</code>) with the YouTube Data API v3 enabled, then register
+                this redirect URI on the client:
+              </p>
+              <code className="block break-all rounded bg-muted px-2 py-1 text-xs">{yt.redirect_uri}</code>
+            </CardContent>
+          </Card>
         )}
-      </div>
 
+        {channels.length === 0 ? (
+          yt?.configured && (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No channels connected. Click <b>Connect channel</b>, then pick it for each story video in
+              the Queue tab.
+            </p>
+          )
+        ) : (
+          <div className="space-y-2">{channels.map((c) => <SvChannelCard key={c.id} c={c} />)}</div>
+        )}
+      </section>
+
+      {/* ---- Coming soon ---- */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">More platforms</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {COMING_SOON.map(({ key, label, Icon }) => (
+            <Card key={key} className="opacity-60">
+              <CardContent className="flex flex-col items-center gap-2 p-4 text-center">
+                <Icon className="h-6 w-6 text-muted-foreground" />
+                <span className="text-sm font-medium">{label}</span>
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <Lock className="h-3 w-3" /> Coming soon
+                </Badge>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------- queue
+function QueueTab() {
+  const { data: videos = [], isLoading: videosLoading } = useSvVideos(undefined, true);
+  const { data: connectors = [] } = useConnectors();
+  const { data: jobs = [], isLoading: jobsLoading } = useSvPublishJobs(true);
+  const retryJob = useSvRetryPublishJob();
+  const deleteJob = useSvDeletePublishJob();
+  const retryVideo = useSvRetryVideo();
+
+  const publishable = videos.filter((v) => PUBLISHABLE.has(v.status));
+  const busy = videos.filter((v) => BUSY.has(v.status));
+  const failed = videos.filter((v) => v.status === "failed");
+
+  return (
+    <div className="space-y-6">
       {/* Ready to publish */}
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -417,6 +540,38 @@ export default function StoryVaultPublishingPage() {
           </Card>
         )}
       </section>
+    </div>
+  );
+}
+
+export default function StoryVaultPublishingPage() {
+  // Surface the result of the OAuth redirect (?connected / ?error), then clean the URL.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const connected = p.get("connected");
+    const error = p.get("error");
+    if (connected === "youtube") toast.success(`Connected ${p.get("channel") || "YouTube channel"}`);
+    else if (error) toast.error(error);
+    if (connected || error) window.history.replaceState({}, "", window.location.pathname);
+  }, []);
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Publishing</h1>
+        <p className="text-muted-foreground">
+          Connect channels, then pick where each story video goes — the final 1080×1920 render and
+          upload run automatically.
+        </p>
+      </div>
+      <Tabs defaultValue="channels">
+        <TabsList>
+          <TabsTrigger value="channels"><Youtube className="mr-1 h-4 w-4" /> Channels</TabsTrigger>
+          <TabsTrigger value="queue"><Send className="mr-1 h-4 w-4" /> Queue</TabsTrigger>
+        </TabsList>
+        <TabsContent value="channels" className="pt-4"><ChannelsTab /></TabsContent>
+        <TabsContent value="queue" className="pt-4"><QueueTab /></TabsContent>
+      </Tabs>
     </div>
   );
 }
