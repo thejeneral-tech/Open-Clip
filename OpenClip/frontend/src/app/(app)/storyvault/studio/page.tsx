@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import {
   useSvBackgrounds,
+  useSvCloneStatus,
   useSvCreateVideo,
   useSvMeta,
   useSvProjects,
@@ -233,6 +234,12 @@ function StudioInner() {
     templateParam ? Number(templateParam) : null,
   );
   const [projectId, setProjectId] = useState(projectParam ?? "none");
+
+  // A cloned (Fish Speech) voice is selected as "preset:<id>"; its engine must be
+  // running to generate. Poll its status only while one is picked, so the studio
+  // shows the choice is recognized — and warns early if the server is offline.
+  const selectedIsClone = voice.startsWith("preset:");
+  const { data: cloneStatus } = useSvCloneStatus(selectedIsClone);
 
   // Pull a project's saved recipe into the form so the whole thing is pre-filled.
   const applyProject = (p: SvProject) => {
@@ -459,6 +466,20 @@ function StudioInner() {
                         </SelectGroup>
                       </SelectContent>
                     </Select>
+                    {selectedIsClone && (
+                      <p className="flex items-center gap-1.5 text-xs">
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            cloneStatus?.reachable ? "bg-emerald-500" : "bg-amber-500"
+                          }`}
+                        />
+                        <span className="text-muted-foreground">
+                          {cloneStatus?.reachable
+                            ? "Cloned voice — narration runs on the Fish Speech server."
+                            : "Fish Speech server is offline — start it (Voice Lab shows its status), or this video will fail."}
+                        </span>
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Background</Label>

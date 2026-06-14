@@ -38,7 +38,13 @@ from app.services.storage import (
     sv_narration_key,
     sv_preview_key,
 )
-from app.services.storyvault import composer, overlays as overlays_svc, scripts as scripts_svc, tts
+from app.services.storyvault import (
+    composer,
+    fish_clone,
+    overlays as overlays_svc,
+    scripts as scripts_svc,
+    tts,
+)
 from app.workers.celery_app import celery_app
 from app.workers.progress import ProgressTracker
 
@@ -293,6 +299,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             "narration_style": video.narration_style,
             "drama_level": video.drama_level,
             "voice": video.voice,
+            "voice_config": video.voice_config,
             "speed": video.speed,
             "caption_style": video.caption_style,
             "caption_config": video.caption_config,
@@ -345,32 +352,48 @@ def sv_generate_video_task(sv_video_id: int) -> None:
 
         # ------------------------------------------------------- 2. narration
         # Read the title (shown on the topic card) and the author intro, then the
-        # story body — all in one synthesis pass so they share a single audio
-        # timeline. Each intro card is shown for exactly as long as its line is
-        # spoken, and the body captions begin the instant the body narration does.
-        # With no intro template the narration is body-only, exactly as before.
+        # story body — all on one audio timeline. Each intro card is shown for
+        # exactly as long as its line is spoken, and the body captions begin the
+        # instant the body narration does. With no intro template the narration is
+        # body-only. A cloned (Fish Speech) voice routes to the clone engine (which
+        # produces the same NarrationResult/StoryNarration shape, with captions
+        # recovered by aligning the synthesized speech); everything else uses SAPI.
         tracker.set(stage="narration", progress=_NARRATE[0], message="Synthesizing narration")
         narration_key = sv_narration_key(sv_video_id)
+        narration_abspath = storage.abspath(narration_key)
         beats = overlays_svc.intro_beats(opts["story_meta"], opts.get("template_config"))
+        story_parts = [*beats, {"kind": "body", "text": script_text}] if beats else None
         card_window = author_window = None
-        if beats:
-            narr = tts.synthesize_story(
-                [*beats, {"kind": "body", "text": script_text}],
-                storage.abspath(narration_key),
-                voice=opts["voice"], speed=opts["speed"],
+
+        voice_cfg = opts.get("voice_config") or {}
+        use_clone = (voice_cfg.get("engine") or "sapi") != "sapi"
+        if use_clone:
+            ref_key = voice_cfg.get("ref_key")
+            ref_path = (
+                storage.abspath(ref_key, ensure_parent=False)
+                if ref_key and storage.exists(ref_key) else None
             )
+            narr_kw = {"ref_path": ref_path, "prompt_text": voice_cfg.get("prompt_text") or "", "speed": opts["speed"]}
+            story_fn, body_fn = fish_clone.narrate_story, fish_clone.narrate
+        else:
+            narr_kw = {"voice": opts["voice"], "speed": opts["speed"]}
+            story_fn, body_fn = tts.synthesize_story, tts.synthesize
+
+        if story_parts:
+            narr = story_fn(story_parts, narration_abspath, **narr_kw)
             body_words, body_start = narr.body_words, narr.body_start
             card_window, author_window = narr.card_window, narr.author_window
             duration = narr.duration
         else:
-            result = tts.synthesize(
-                script_text, storage.abspath(narration_key),
-                voice=opts["voice"], speed=opts["speed"],
-            )
+            result = body_fn(script_text, narration_abspath, **narr_kw)
             body_words, body_start, duration = result.words, 0.0, result.duration
         storage.commit(narration_key)
         if duration <= 0.5:
-            raise RuntimeError("Narration came back empty — is a SAPI voice installed?")
+            raise RuntimeError(
+                "Cloned-voice narration came back empty — is the Fish Speech server running?"
+                if use_clone
+                else "Narration came back empty — is a SAPI voice installed?"
+            )
         intro_plan = {
             "card": list(card_window) if card_window else None,
             "author": list(author_window) if author_window else None,

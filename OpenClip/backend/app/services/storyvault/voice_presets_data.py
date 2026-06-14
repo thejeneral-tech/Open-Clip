@@ -8,7 +8,9 @@ templates in :mod:`templates_data`.
 Each preset carries a stable string ``key`` so per-user seeding stays idempotent
 and a soft-deleted built-in is never resurrected. ``preview`` names a WAV under
 :data:`ASSETS_DIR` — the saved audition clip the Voice Lab "Preview" button
-plays (clone presets have no SAPI voice to re-synthesize from).
+plays (clone presets have no SAPI voice to re-synthesize from). That same clip
+doubles as the **cloning reference**, and ``transcript`` is the exact words spoken
+in it — the s2 engine needs both to clone the voice when narrating a video.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ BUILTIN_VOICE_PRESETS: list[dict[str, Any]] = [
         "voice": "fish-clone",
         "speed": 1.0,
         "preview": "tiktok_adam.wav",
+        "transcript": "This is the best idea we have had.",
         "isDefault": True,
     },
     {
@@ -36,6 +39,7 @@ BUILTIN_VOICE_PRESETS: list[dict[str, Any]] = [
         "voice": "fish-clone",
         "speed": 1.0,
         "preview": "tiktok_anton.wav",
+        "transcript": "This is the best thing we have ever done.",
         "isDefault": False,
     },
     {
@@ -45,6 +49,7 @@ BUILTIN_VOICE_PRESETS: list[dict[str, Any]] = [
         "voice": "fish-clone",
         "speed": 1.0,
         "preview": "tiktok_jessie.wav",
+        "transcript": "This is the best thing we have made.",
         "isDefault": False,
     },
 ]

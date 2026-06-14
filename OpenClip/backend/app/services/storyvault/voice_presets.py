@@ -30,16 +30,21 @@ logger = get_logger(__name__)
 def seed_voice_presets_for_user(db: Session, user_id: int) -> int:
     """Seed the built-ins for one user on an open session. Returns count added.
 
+    Also backfills the cloning reference (``ref_key`` + ``prompt_text``) onto any
+    built-in clone preset that was seeded before those fields existed, so existing
+    accounts get working cloned-voice narration without re-creating the presets.
+
     The caller owns the transaction (``session_scope`` commits on exit).
     """
-    have = set(
-        db.execute(
-            select(SvVoicePreset.preset_key).where(
+    existing = {
+        p.preset_key: p
+        for p in db.execute(
+            select(SvVoicePreset).where(
                 SvVoicePreset.owner_id == user_id,
                 SvVoicePreset.preset_key.is_not(None),
             )
         ).scalars().all()
-    )
+    }
     has_default = bool(
         db.execute(
             select(SvVoicePreset.id).where(
@@ -51,17 +56,27 @@ def seed_voice_presets_for_user(db: Session, user_id: int) -> int:
     )
     added = 0
     for spec in BUILTIN_VOICE_PRESETS:
-        if spec["key"] in have:
-            continue
         # Copy the bundled audition clip into storage once (shared across users).
-        preview_url: str | None = None
-        key = sv_voice_preset_preview_key(f"builtin_{spec['key']}")
-        if not storage.exists(key):
+        # It also serves as the clone reference, so a clone preset records its key.
+        preview_key = sv_voice_preset_preview_key(f"builtin_{spec['key']}")
+        if not storage.exists(preview_key):
             asset = voice_preset_asset(spec["preview"])
             if asset is not None:
-                storage.save_file(str(asset), key)
-        if storage.exists(key):
-            preview_url = storage.url(key)
+                storage.save_file(str(asset), preview_key)
+        has_clip = storage.exists(preview_key)
+        preview_url = storage.url(preview_key) if has_clip else None
+        is_clone = (spec.get("engine") or "sapi") != "sapi"
+        transcript = spec.get("transcript") or None
+        ref_key = preview_key if (is_clone and has_clip) else None
+
+        prior = existing.get(spec["key"])
+        if prior is not None:
+            # Already seeded — backfill the cloning reference if it's missing.
+            if is_clone and ref_key and not prior.ref_key:
+                prior.ref_key = ref_key
+            if is_clone and transcript and not prior.prompt_text:
+                prior.prompt_text = transcript
+            continue
 
         make_default = bool(spec.get("isDefault")) and not has_default
         if make_default:
@@ -74,6 +89,8 @@ def seed_voice_presets_for_user(db: Session, user_id: int) -> int:
                 speed=spec["speed"],
                 engine=spec["engine"],
                 preview_url=preview_url,
+                ref_key=ref_key,
+                prompt_text=transcript,
                 is_default=make_default,
                 builtin=True,
                 preset_key=spec["key"],
