@@ -11,8 +11,10 @@ it builds the multipart body by hand (stdlib only) and writes the returned WAV.
 """
 from __future__ import annotations
 
+import difflib
 import json
 import os
+import re
 import tempfile
 import urllib.error
 import urllib.request
@@ -223,10 +225,12 @@ def synthesize(
 # ===================================================================== narration
 # The video pipeline needs more than a raw clip: word-synced caption timings, and
 # (for stories with an intro) the on-screen window of each intro beat. The s2
-# engine returns neither — only a WAV — so we recover word timings by aligning the
-# rendered speech with faster-whisper (the same engine the app already uses for
-# transcription), and we get exact beat windows by synthesizing each beat on its
-# own and measuring it. This mirrors what :mod:`tts` produces for SAPI, so the
+# engine returns neither — only a WAV — so we recover word *timings* by aligning
+# the rendered speech with faster-whisper (the same engine the app already uses
+# for transcription). Crucially, only whisper's timing is used: the caption text
+# stays the known script (see :func:`_align_to_text`), so a mis-recognised word
+# never reaches the screen. Exact beat windows come from synthesizing each beat on
+# its own and measuring it. This mirrors what :mod:`tts` produces for SAPI, so the
 # downstream caption + overlay code is identical for both engines.
 _BEAT_GAP = 0.18  # seconds of silence between intro beats (matches the SAPI feel)
 
@@ -274,9 +278,10 @@ def _concat_with_gaps(wavs: list[str], out_wav: str, *, gap: float = _BEAT_GAP, 
 
 
 def _whisper_words(wav_path: str) -> list[dict]:
-    """Caption tokens ``[{word, start, end}]`` for a synthesized clip, recovered by
-    aligning it with faster-whisper. Best-effort: ``[]`` on any failure, so the
-    caller falls back to even spacing exactly as the SAPI path does."""
+    """Recognised word tokens ``[{word, start, end}]`` for a synthesized clip, from
+    faster-whisper. These supply *timing* only — :func:`_align_to_text` maps the
+    known script text onto them. Best-effort: ``[]`` on any failure, so the caller
+    falls back to even spacing exactly as the SAPI path does."""
     try:
         from app.services.transcription import transcribe
 
@@ -303,6 +308,105 @@ def _offset(words: list[dict], by: float) -> list[dict]:
     ]
 
 
+_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _norm(word: str) -> str:
+    """Alignment key for a token: lowercased, punctuation/spacing stripped."""
+    return _ALNUM.sub("", word.lower())
+
+
+def _spread(words: list[dict], lo: int, hi: int, t0: float, t1: float) -> None:
+    """Time the unanchored tokens ``words[lo:hi]`` across ``[t0, t1]`` in place.
+
+    Script words whisper failed to recognise get no timestamp of their own; we
+    fill them between their surrounding anchors, giving longer words proportionally
+    more time so the highlight still glides at a natural pace.
+    """
+    if hi <= lo:
+        return
+    t1 = max(t1, t0)
+    weights = [max(1, len(words[i]["word"])) for i in range(lo, hi)]
+    total = sum(weights) or 1
+    span = t1 - t0
+    cursor = t0
+    for off, i in enumerate(range(lo, hi)):
+        nxt = cursor + span * weights[off] / total
+        words[i]["start"] = cursor
+        words[i]["end"] = nxt
+        cursor = nxt
+
+
+def _align_to_text(text: str, whisper_words: list[dict], duration: float) -> list[dict]:
+    """Caption tokens showing the *known* script text, timed from the whisper words.
+
+    Whisper transcribes the *synthesized* speech, so its word **text** drifts from
+    the script — mishearings, merged words, numbers spelled out — and burning that
+    straight in is the "slurred / wrong-lettering" caption bug. Here whisper is
+    used only for **timing**: the script's own words are the caption text, each
+    timestamped from the whisper word it aligns to, with any unmatched word
+    interpolated between its neighbours. The displayed letters are therefore
+    always exactly the script, however the recogniser heard the audio.
+
+    Falls back to even spacing of the script when whisper returned nothing (or
+    nothing that aligns), so captions still read correctly.
+    """
+    from app.services.storyvault.tts import _even_spacing
+
+    display = [w for w in text.split() if w.strip()]
+    if not display:
+        return []
+
+    def _even() -> list[dict]:
+        return [
+            {"word": w["word"], "start": w["start"], "end": w["end"]}
+            for w in _even_spacing(text, duration)
+        ]
+
+    if not whisper_words:
+        return _even()
+
+    a = [_norm(w) for w in display]
+    b = [_norm(w["word"]) for w in whisper_words]
+    out: list[dict] = [{"word": w, "start": None, "end": None} for w in display]
+
+    # 1) Anchor every script word whisper recognised verbatim to that word's
+    # measured (start, end). SequenceMatcher's equal blocks are the run-length
+    # matches between the script tokens and the recognised tokens.
+    sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    anchors: list[int] = []
+    for ai, bj, size in sm.get_matching_blocks():
+        for k in range(size):
+            ww = whisper_words[bj + k]
+            out[ai + k]["start"] = float(ww["start"])
+            out[ai + k]["end"] = float(ww["end"])
+            anchors.append(ai + k)
+
+    if not anchors:
+        # Whisper heard something entirely different — no reliable timing to map.
+        return _even()
+
+    # 2) Fill the gaps around the anchors: the leading run, each internal run, and
+    # the trailing run, each spread across the time between its bracketing anchors.
+    end_t = max(duration, out[anchors[-1]]["end"])
+    _spread(out, 0, anchors[0], 0.0, out[anchors[0]]["start"])
+    for p, q in zip(anchors, anchors[1:]):
+        _spread(out, p + 1, q, out[p]["end"], out[q]["start"])
+    _spread(out, anchors[-1] + 1, len(out), out[anchors[-1]]["end"], end_t)
+
+    # 3) Clean, non-zero-length tokens (the caption layer owns final ordering).
+    clean: list[dict] = []
+    prev = 0.0
+    for w in out:
+        s = max(0.0, float(w["start"] if w["start"] is not None else prev))
+        e = float(w["end"] if w["end"] is not None else s)
+        if e <= s:
+            e = s + 0.06
+        clean.append({"word": w["word"], "start": round(s, 3), "end": round(e, 3)})
+        prev = e
+    return clean
+
+
 def narrate(
     text: str,
     out_wav: str,
@@ -316,14 +420,14 @@ def narrate(
     The SAPI counterpart is :func:`tts.synthesize`; this returns the same
     :class:`tts.NarrationResult` so the caption pipeline is engine-agnostic.
     """
-    from app.services.storyvault.tts import NarrationResult, _even_spacing
+    from app.services.storyvault.tts import NarrationResult
 
     synthesize(text, out_wav, ref_path=ref_path, prompt_text=prompt_text)
     _apply_tempo(out_wav, speed)
     duration = _probe_duration(out_wav)
-    words = _whisper_words(out_wav) or [
-        {"word": w["word"], "start": w["start"], "end": w["end"]} for w in _even_spacing(text, duration)
-    ]
+    # Whisper supplies only the *timing*; the caption text is the known script, so
+    # a mis-recognised word never reaches the screen (see :func:`_align_to_text`).
+    words = _align_to_text(text, _whisper_words(out_wav), duration)
     if not duration and words:
         duration = words[-1]["end"]
     return NarrationResult(wav_path=out_wav, duration=duration, voice="fish-clone", words=words)
@@ -345,7 +449,7 @@ def narrate_story(
     whisper-aligned (then shifted onto the combined timeline). Mirrors
     :func:`tts.synthesize_story`.
     """
-    from app.services.storyvault.tts import StoryNarration, _even_spacing
+    from app.services.storyvault.tts import StoryNarration
 
     present = [p for p in parts if (p.get("text") or "").strip()]
     if not present:
@@ -380,10 +484,11 @@ def narrate_story(
         author_start = starts.get("author")
         body_wav = next((w for k, w in ordered if k == "body"), None)
         body_text = next((p["text"] for p in present if p["kind"] == "body"), "")
-        raw = (_whisper_words(body_wav) if body_wav else []) or [
-            {"word": w["word"], "start": w["start"], "end": w["end"]}
-            for w in _even_spacing(body_text, durations.get("body", 0.0))
-        ]
+        # Caption the known body text, timed by aligning it to the recognised
+        # words (whisper's text is discarded — only its timing is trusted).
+        raw = _align_to_text(
+            body_text, _whisper_words(body_wav) if body_wav else [], durations.get("body", 0.0)
+        )
         body_words = _offset(raw, body_start)
 
     card_window = (
