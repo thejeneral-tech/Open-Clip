@@ -36,17 +36,17 @@ def test_build_words_keeps_genuine_repeats():
 
 # ---------------------------------------------- acronym spelling
 def test_speechify_spells_acronyms_as_bare_letters():
-    # Bare spaced letters — a fluent, distinct spelling on both SAPI and the s2
-    # cloned voice (verified by transcribing the audio).
-    assert tts.speechify_acronyms("AITA") == "A I T A"
-    assert tts.speechify_acronyms("TIFU") == "T I F U"
-    assert tts.speechify_acronyms("OP") == "O P"
+    # Bare spaced letters + trailing period — a fluent, distinct spelling on both
+    # SAPI and the s2 cloned voice (verified by transcribing the audio).
+    assert tts.speechify_acronyms("AITA") == "A I T A."
+    assert tts.speechify_acronyms("TIFU") == "T I F U."
+    assert tts.speechify_acronyms("OP") == "O P."
 
 
 def test_speechify_keeps_sentence_and_punctuation():
     # Only the acronym is rewritten; the rest of the line (and trailing ?) stays.
     out = tts.speechify_acronyms("AITA for refusing to sign off on 4 hours?")
-    assert out == "A I T A for refusing to sign off on 4 hours?"
+    assert out == "A I T A. for refusing to sign off on 4 hours?"
 
 
 def test_speechify_leaves_normal_words_numbers_and_single_letters():

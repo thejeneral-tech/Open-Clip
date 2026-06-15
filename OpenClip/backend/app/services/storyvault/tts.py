@@ -75,13 +75,14 @@ def speed_to_rate(speed: float) -> int:
     return int(round((speed - 1.0) * 10))
 
 
-# Acronyms are spelled by emitting their bare letters, space-separated ("AITA" ->
-# "A I T A"). Both the Windows SAPI and the s2 cloned voice read that as a fluent,
-# distinct spelling — verified by transcribing their output (the cloned voice says
-# "A I T A" in ~1.2s and whisper hears each letter, vowels included). Phonetic
-# spellings ("ay eye tee ay") were worse on both: the neural voice runs spaced
-# sounds into one mush, and per-letter periods make it robotically slow; SAPI
-# mis-stresses the vowel words ("ay" → /aɪ/). So: bare spaced letters, both engines.
+# Acronyms are spelled by emitting their bare letters, space-separated, with a
+# trailing period ("AITA" -> "A I T A."). The period makes the acronym its own
+# sentence-unit so the voice spells it deliberately (~1.2s, each letter distinct)
+# rather than rushing the letters into the following words (~0.6s, mushed) —
+# verified by transcribing the s2 cloned voice. Bare letters beat phonetic
+# spellings on both engines: the neural voice mushes spaced phonetic sounds, and
+# per-letter periods ("ay. eye. tee. ay.") are robotically slow; SAPI mis-stresses
+# the vowel words ("ay" -> /aɪ/). So: bare spaced letters + a trailing period.
 
 # Candidate token: a whole-word run of 2–6 uppercase ASCII letters (AITA, WIBTA,
 # OP, …). 7+ runs are left alone — far more likely a shouted word than an
@@ -129,13 +130,16 @@ def speechify_acronyms(text: str) -> str:
 
     Rewrites only the *spoken* text; captions keep the original acronym (the body
     caption text is the untouched script, aligned to the audio downstream). Each
-    recognised acronym becomes its bare, space-separated letters ("AITA" ->
-    "A I T A") — a fluent, natural spelling on both SAPI and the s2 cloned voice.
-    Emphasis words and non-acronyms are left untouched (see :func:`_should_spell`).
+    recognised acronym becomes its bare, space-separated letters with a trailing
+    period ("AITA" -> "A I T A.") — a fluent, distinct spelling on both SAPI and
+    the s2 cloned voice. Emphasis words and non-acronyms are left untouched (see
+    :func:`_should_spell`).
     """
     def _repl(m):
         word = m.group(0)
-        return " ".join(word) if _should_spell(word) else word
+        # Trailing "." keeps the acronym its own sentence-unit, so the voice spells
+        # it deliberately instead of rushing the letters into the next words.
+        return " ".join(word) + "." if _should_spell(word) else word
 
     return _ACRONYM_RE.sub(_repl, text)
 
