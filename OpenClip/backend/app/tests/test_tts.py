@@ -44,10 +44,11 @@ def test_speechify_spells_acronyms_as_bare_letters_by_default():
 
 
 def test_speechify_phonetic_mode_for_neural_voices():
-    # Cloned/neural voices opt into the phonetic spellings instead.
-    assert tts.speechify_acronyms("AITA", letters=False) == "ay eye tee ay"
-    assert tts.speechify_acronyms("TIFU", letters=False) == "tee eye eff you"
-    assert tts.speechify_acronyms("OP", letters=False) == "oh pee"
+    # Cloned/neural voices opt into the phonetic spellings, period-joined so the
+    # voice enunciates each letter (spaces get mushed into one word by the s2 voice).
+    assert tts.speechify_acronyms("AITA", letters=False) == "ay. eye. tee. ay."
+    assert tts.speechify_acronyms("TIFU", letters=False) == "tee. eye. eff. you."
+    assert tts.speechify_acronyms("OP", letters=False) == "oh. pee."
 
 
 def test_speechify_keeps_sentence_and_punctuation():
