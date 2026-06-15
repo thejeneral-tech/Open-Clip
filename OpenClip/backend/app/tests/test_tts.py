@@ -34,6 +34,30 @@ def test_build_words_keeps_genuine_repeats():
     assert [w["word"] for w in tts._build_words(raw, 1.5)] == ["very", "very", "good"]
 
 
+# ---------------------------------------------- acronym phonetic spelling
+def test_speechify_spells_acronyms_phonetically():
+    assert tts.speechify_acronyms("AITA") == "ay eye tee ay"
+    assert tts.speechify_acronyms("TIFU") == "tee eye eff you"
+    assert tts.speechify_acronyms("OP") == "oh pee"
+
+
+def test_speechify_keeps_sentence_and_punctuation():
+    # Only the acronym is rewritten; the rest of the line (and trailing ?) stays.
+    out = tts.speechify_acronyms("AITA for refusing to sign off on 4 hours?")
+    assert out == "ay eye tee ay for refusing to sign off on 4 hours?"
+
+
+def test_speechify_leaves_normal_words_numbers_and_single_letters():
+    # Sentence-case words, digits, and lone capitals (A / I) are untouched.
+    for s in ["Hello world", "I had a dog", "the year 2010", "grade A work"]:
+        assert tts.speechify_acronyms(s) == s
+
+
+def test_speechify_ignores_overlong_caps_runs():
+    # 7+ all-caps is more likely a shouted word than an acronym — left alone.
+    assert tts.speechify_acronyms("AAAAAAA") == "AAAAAAA"
+
+
 # ----------------------------------------- real-audio timeline calibration
 def test_build_words_compresses_overshooting_sapi_clock():
     # SAPI's AudioPosition runs ahead of the rendered WAV: here the last word is
