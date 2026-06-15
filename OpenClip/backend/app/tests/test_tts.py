@@ -34,17 +34,26 @@ def test_build_words_keeps_genuine_repeats():
     assert [w["word"] for w in tts._build_words(raw, 1.5)] == ["very", "very", "good"]
 
 
-# ---------------------------------------------- acronym phonetic spelling
-def test_speechify_spells_acronyms_phonetically():
-    assert tts.speechify_acronyms("AITA") == "ay eye tee ay"
-    assert tts.speechify_acronyms("TIFU") == "tee eye eff you"
-    assert tts.speechify_acronyms("OP") == "oh pee"
+# ---------------------------------------------- acronym spelling
+def test_speechify_spells_acronyms_as_bare_letters_by_default():
+    # SAPI (the default) reads bare spaced letters by name — verified to sound
+    # right, where the phonetic spelling mis-voices A ("ay" → /aɪ/).
+    assert tts.speechify_acronyms("AITA") == "A I T A"
+    assert tts.speechify_acronyms("TIFU") == "T I F U"
+    assert tts.speechify_acronyms("OP") == "O P"
+
+
+def test_speechify_phonetic_mode_for_neural_voices():
+    # Cloned/neural voices opt into the phonetic spellings instead.
+    assert tts.speechify_acronyms("AITA", letters=False) == "ay eye tee ay"
+    assert tts.speechify_acronyms("TIFU", letters=False) == "tee eye eff you"
+    assert tts.speechify_acronyms("OP", letters=False) == "oh pee"
 
 
 def test_speechify_keeps_sentence_and_punctuation():
     # Only the acronym is rewritten; the rest of the line (and trailing ?) stays.
     out = tts.speechify_acronyms("AITA for refusing to sign off on 4 hours?")
-    assert out == "ay eye tee ay for refusing to sign off on 4 hours?"
+    assert out == "A I T A for refusing to sign off on 4 hours?"
 
 
 def test_speechify_leaves_normal_words_numbers_and_single_letters():
