@@ -622,22 +622,20 @@ function StudioInner() {
                 <CardTitle>Pipeline</CardTitle>
                 <CardDescription>Videos currently being generated.</CardDescription>
               </div>
-              {pipeline.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 text-destructive hover:text-destructive"
-                  disabled={clearQueue.isPending}
-                  onClick={onClearQueue}
-                >
-                  {clearQueue.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  Clear queue
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-destructive hover:text-destructive"
+                disabled={clearQueue.isPending || pipeline.length === 0}
+                onClick={onClearQueue}
+              >
+                {clearQueue.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Clear queue
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="max-h-44 space-y-3 overflow-y-auto">
