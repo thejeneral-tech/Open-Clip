@@ -100,6 +100,7 @@ from app.services.storyvault import fish_clone, reddit, scoring
 from app.services.storyvault import tts as tts_svc
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
 from app.services.storyvault.voice_presets import ensure_voice_presets
+from app.workers.celery_app import celery_app
 from app.workers.sv_tasks import (
     sv_caption_previews_task,
     sv_generate_video_task,
@@ -1676,6 +1677,7 @@ async def approve_video(
         raise HTTPException(status_code=422, detail=f"Unknown platform {payload.platform!r}")
     video.status = SvVideoStatus.APPROVED.value
     video.reject_reason = None
+    video.cancel_requested = False  # clear any stale stop flag before re-dispatch
     await db.commit()
     task = sv_render_video_task.delay(video.id, payload.platform)
     video.celery_task_id = task.id
@@ -1694,6 +1696,7 @@ async def reject_video(
     video = await _owned_video(db, video_id, current_user)
     video.status = SvVideoStatus.REJECTED.value
     video.reject_reason = (payload.reason or "").strip() or None
+    video.cancel_requested = False  # terminal state — drop any stale stop flag
     await db.commit()
     await db.refresh(video)
     return _video_out(video)
@@ -1715,12 +1718,93 @@ async def retry_video(
     video.progress = 0.0
     video.stage = None
     video.script_id = None  # regenerate the script too
+    video.cancel_requested = False  # clear any stale stop flag before re-dispatch
     await db.commit()
     task = sv_generate_video_task.delay(video.id)
     video.celery_task_id = task.id
     await db.commit()
     await db.refresh(video)
     return _video_out(video)
+
+
+# Statuses for which a stop makes sense — the job is still in flight.
+_CANCELLABLE_STATUSES = (
+    SvVideoStatus.QUEUED.value,
+    SvVideoStatus.PROCESSING.value,
+    SvVideoStatus.RENDERING.value,
+)
+
+
+def _request_video_cancel(video: SvVideo) -> None:
+    """Raise the cooperative-cancel flag and best-effort stop the Celery task.
+
+    A running job (processing/rendering) self-aborts at its next checkpoint and
+    the worker parks it in CANCELLED. A still-queued job may never reach a worker
+    once revoked, so we mark it CANCELLED right here; the flag still guards the
+    race where a worker had already picked it up.
+    """
+    video.cancel_requested = True
+    if video.celery_task_id:
+        # Best-effort: ask the worker to drop/terminate the task now (default
+        # signal — SIGKILL isn't portable to the Windows worker). If acks_late
+        # redelivers a terminated task, the cancel flag makes it self-abort at the
+        # first checkpoint, so this never re-runs the whole pipeline.
+        try:
+            celery_app.control.revoke(video.celery_task_id, terminate=True)
+        except Exception:  # noqa: BLE001 — best-effort; the flag is the source of truth
+            logger.warning("Failed to revoke task %s for video %s", video.celery_task_id, video.id)
+    if video.status == SvVideoStatus.QUEUED.value:
+        video.status = SvVideoStatus.CANCELLED.value
+        video.stage = "cancelled"
+        video.progress = 0.0
+    else:
+        video.stage = "cancelling"
+
+
+@router.post("/videos/{video_id}/cancel", response_model=SvVideoOut)
+async def cancel_video(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvVideoOut:
+    """Stop a queued or in-flight video. The worker discards the partial render
+    and the video lands in CANCELLED (dropping out of the studio pipeline)."""
+    video = await _owned_video(db, video_id, current_user)
+    if video.status not in _CANCELLABLE_STATUSES:
+        raise HTTPException(status_code=409, detail=f"Video is {video.status}, not running")
+    _request_video_cancel(video)
+    await db.commit()
+    await db.refresh(video)
+    return _video_out(video)
+
+
+@router.post("/videos/clear-queue", response_model=Message)
+async def clear_video_queue(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    """Empty the studio pipeline: stop every queued/in-flight video and delete the
+    finished-but-listed (failed / cancelled) rows."""
+    removable = (SvVideoStatus.FAILED.value, SvVideoStatus.CANCELLED.value)
+    stmt = select(SvVideo).where(
+        SvVideo.owner_id == current_user.id,
+        SvVideo.status.in_((*_CANCELLABLE_STATUSES, *removable)),
+    )
+    videos = (await db.execute(stmt)).scalars().all()
+    cancelled = 0
+    deleted_ids: list[int] = []
+    for video in videos:
+        if video.status in removable:
+            deleted_ids.append(video.id)
+            await db.delete(video)
+        else:
+            _request_video_cancel(video)
+            cancelled += 1
+    await db.commit()
+    for vid in deleted_ids:
+        storage.delete(f"storyvault/videos/{vid}")
+    total = cancelled + len(deleted_ids)
+    return Message(detail=f"Cleared {total} video{'' if total == 1 else 's'} from the queue")
 
 
 @router.delete("/videos/{video_id}", response_model=Message)

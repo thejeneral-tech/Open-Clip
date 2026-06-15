@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 
 from app.core.database import session_scope
+from app.core.events import publish_progress
 from app.core.logging import get_logger
 from app.models.enums import JobStatus, PublishStatus, SvStoryStatus, SvVideoStatus
 from app.models.publishing import PublishingConnector
@@ -60,6 +61,76 @@ _PREVIEW = (0.62, 1.0)
 
 def _lerp(band: tuple[float, float], frac: float) -> float:
     return band[0] + (band[1] - band[0]) * max(0.0, min(1.0, frac))
+
+
+# =====================================================================
+# Cooperative cancellation (studio Stop / Clear-queue)
+# =====================================================================
+class _VideoCancelled(Exception):
+    """Raised inside the pipeline when the user requested a stop. Caught at the
+    task boundary, which parks the video in CANCELLED rather than FAILED."""
+
+
+def _cancel_requested(sv_video_id: int) -> bool:
+    with session_scope() as db:
+        video = db.get(SvVideo, sv_video_id)
+        return bool(video and video.cancel_requested)
+
+
+def _abort_if_cancelled(sv_video_id: int) -> None:
+    """Raise ``_VideoCancelled`` if the user asked to stop this video. Called at
+    each pipeline checkpoint, so a long job bails out between stages."""
+    if _cancel_requested(sv_video_id):
+        raise _VideoCancelled
+
+
+def _mark_cancelled(sv_video_id: int) -> None:
+    """Park a stopped video in CANCELLED and clear the request flag. The partial
+    render (if any) is left uncommitted and gets cleaned up on delete."""
+    progress = 0.0
+    with session_scope() as db:
+        video = db.get(SvVideo, sv_video_id)
+        if not video:
+            return
+        video.status = SvVideoStatus.CANCELLED.value
+        video.stage = "cancelled"
+        video.error = None
+        video.cancel_requested = False
+        progress = video.progress
+    publish_progress(
+        "sv_video", sv_video_id,
+        stage="cancelled", progress=progress,
+        status=SvVideoStatus.CANCELLED.value, message="Cancelled",
+    )
+
+
+def _clear_cancel_flag(sv_video_id: int) -> None:
+    """Reconcile the cancel flag on a non-cancel terminal transition (a genuine
+    failure). Without this a Stop that raced past the last checkpoint would leave
+    the flag raised on a FAILED row, self-cancelling any later retry."""
+    with session_scope() as db:
+        video = db.get(SvVideo, sv_video_id)
+        if video and video.cancel_requested:
+            video.cancel_requested = False
+
+
+def _render_progress(sv_video_id: int, tracker: ProgressTracker, stage: str, message: str,
+                     band: tuple[float, float] | None = None):
+    """An ffmpeg progress callback that reports into the pipeline (optionally
+    mapped into ``band``) and, every few ticks, checks the cancel flag — raising
+    ``_VideoCancelled`` to abort the render (``ffmpeg.run`` kills the subprocess
+    when its progress callback raises). The DB check is sampled rather than run on
+    every tick so a long render doesn't hammer the database."""
+    ticks = 0
+
+    def cb(frac: float) -> None:
+        nonlocal ticks
+        ticks += 1
+        if ticks % 10 == 0 and _cancel_requested(sv_video_id):
+            raise _VideoCancelled
+        tracker.throttled(stage, _lerp(band, frac) if band else frac, message=message)
+
+    return cb
 
 
 def _story_meta(story: SvStory) -> dict:
@@ -312,6 +383,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         }
 
     try:
+        _abort_if_cancelled(sv_video_id)
         # ---------------------------------------------------------- 1. script
         tracker.set(stage="script", progress=_SCRIPT[0], message="Writing the script")
         script_text: str | None = None
@@ -349,6 +421,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
                 video.title = opts["title"][:512]
             script_text = generated["full_text"]
         tracker.set(stage="script", progress=_SCRIPT[1], message="Script ready")
+        _abort_if_cancelled(sv_video_id)
 
         # ------------------------------------------------------- 2. narration
         # Read the title (shown on the topic card) and the author intro, then the
@@ -406,6 +479,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             video.word_timings = body_words
             video.intro_plan = intro_plan
         tracker.set(stage="narration", progress=_NARRATE[1], message=f"Narration: {duration:.1f}s")
+        _abort_if_cancelled(sv_video_id)
 
         # -------------------------------------------------------- 3. captions
         # Captions cover the body only (the title/author are shown by the intro
@@ -447,6 +521,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
                     seg.times_used += 1
         msg = f"{len(plan)} segments" if plan else "No footage library — using gradient background"
         tracker.set(stage="footage", progress=_FOOTAGE[1], message=msg)
+        _abort_if_cancelled(sv_video_id)
 
         # ---------------------------------------------------------- 5. preview
         preview_key = sv_preview_key(sv_video_id)
@@ -471,22 +546,30 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         )
         composer.render_video(
             spec,
-            on_progress=lambda f: tracker.throttled(
-                "preview", _lerp(_PREVIEW, f), message="Rendering preview"
-            ),
+            on_progress=_render_progress(sv_video_id, tracker, "preview", "Rendering preview", _PREVIEW),
         )
         storage.commit(preview_key)
+        # Final checkpoint: honour a Stop that landed during the render before we
+        # mark the video ready — otherwise it would silently finish with the flag
+        # still raised, which then self-cancels any later approve/retry.
+        _abort_if_cancelled(sv_video_id)
         with session_scope() as db:
             video = db.get(SvVideo, sv_video_id)
             video.preview_path = preview_key
+            video.cancel_requested = False  # genuine success — reconcile the flag
         tracker.set(
             stage="ready", progress=1.0,
             status=SvVideoStatus.READY_FOR_REVIEW.value,
             message="Ready for review",
         )
+    except _VideoCancelled:
+        logger.info("Story video %s cancelled by user", sv_video_id)
+        _mark_cancelled(sv_video_id)
+        return
     except Exception as exc:
         logger.exception("Story video %s pipeline failed", sv_video_id)
         tracker.fail("pipeline", str(exc)[:1000])
+        _clear_cancel_flag(sv_video_id)
 
     # Auto-workflow: if this video belongs to an auto-publish project, carry it
     # straight to the final render (the status guard no-ops on the failure path).
@@ -573,6 +656,7 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
         video.progress = 0.0
 
     try:
+        _abort_if_cancelled(sv_video_id)
         # Rebuild the intro overlays at full render resolution, reusing the exact
         # on-screen windows the narration produced (and the captions were synced
         # to) during the preview pass — stored in intro_plan.
@@ -604,15 +688,18 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
         )
         result = composer.render_video(
             spec,
-            on_progress=lambda f: tracker.throttled(
-                "render", f, message="Rendering final video"
-            ),
+            on_progress=_render_progress(sv_video_id, tracker, "render", "Rendering final video"),
         )
         storage.commit(out_key)
+        # Final checkpoint: honour a Stop that landed during the render before we
+        # mark it complete — this also keeps the auto-publish tail below from
+        # uploading a video the user asked to stop.
+        _abort_if_cancelled(sv_video_id)
 
         with session_scope() as db:
             video = db.get(SvVideo, sv_video_id)
             video.render_path = out_key
+            video.cancel_requested = False  # genuine success — reconcile the flag
             export = db.get(SvExport, export_id)
             export.storage_path = out_key
             export.size_bytes = result["size_bytes"]
@@ -627,6 +714,14 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             status=SvVideoStatus.COMPLETED.value,
             message="Export complete",
         )
+    except _VideoCancelled:
+        logger.info("Story video %s final render cancelled by user", sv_video_id)
+        with session_scope() as db:
+            export = db.get(SvExport, export_id)
+            if export and not export.storage_path:
+                db.delete(export)
+        _mark_cancelled(sv_video_id)
+        return
     except Exception as exc:
         logger.exception("Story video %s final render failed", sv_video_id)
         with session_scope() as db:
@@ -634,6 +729,7 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             if export and not export.storage_path:
                 db.delete(export)
         tracker.fail("render", str(exc)[:1000])
+        _clear_cancel_flag(sv_video_id)
         raise
 
     # Auto-workflow: queue uploads to the project's saved channels (success path only).

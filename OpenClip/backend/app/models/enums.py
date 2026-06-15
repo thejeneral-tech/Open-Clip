@@ -82,6 +82,9 @@ class SvVideoStatus(str, Enum):
     COMPLETED = "completed"
     REJECTED = "rejected"
     FAILED = "failed"
+    # User stopped the job (via the studio's Stop / Clear-queue controls) before
+    # it finished. Terminal — the partial render is discarded; can be deleted.
+    CANCELLED = "cancelled"
 
 
 # Story Vault option vocabularies (mirrored in the frontend forms).
