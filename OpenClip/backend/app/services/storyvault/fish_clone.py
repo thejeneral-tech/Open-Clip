@@ -431,7 +431,7 @@ def narrate(
 
     # Acronyms are spelled out phonetically for the *voice* only ("AITA" ->
     # "ay eye tee ay"); the caption text stays the original script below.
-    synthesize(speechify_acronyms(text), out_wav, ref_path=ref_path, prompt_text=prompt_text)
+    synthesize(speechify_acronyms(text, letters=False), out_wav, ref_path=ref_path, prompt_text=prompt_text)
     _apply_tempo(out_wav, speed)
     duration = _probe_duration(out_wav)
     # Whisper supplies only the *timing*; the caption text is the known script, so
@@ -473,7 +473,7 @@ def narrate_story(
             beat_wav = os.path.join(tmp, f"beat{idx}.wav")
             # Spell acronyms phonetically for the voice only; the body caption text
             # (``body_text`` below) stays the original script.
-            synthesize(speechify_acronyms(p["text"].strip()), beat_wav, ref_path=ref_path, prompt_text=prompt_text)
+            synthesize(speechify_acronyms(p["text"].strip(), letters=False), beat_wav, ref_path=ref_path, prompt_text=prompt_text)
             _apply_tempo(beat_wav, speed)
             ordered.append((p["kind"], beat_wav))
             durations[p["kind"]] = _probe_duration(beat_wav)

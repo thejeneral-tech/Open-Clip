@@ -76,9 +76,13 @@ def speed_to_rate(speed: float) -> int:
 
 
 # How a TTS voice should pronounce each letter when an acronym is spelled out.
-# Plain phonetic words the engine reads as ordinary syllables, so "AITA" is voiced
-# "ay eye tee ay" letter-by-letter instead of mangled into a pseudo-word
-# ("a-e-tay").
+# Two strategies, chosen per engine (see ``speechify_acronyms``):
+#   * Windows SAPI reads a *bare* spaced letter ("W I B T A") by name, including
+#     the tricky vowels A ("ay") and I ("eye") — verified by transcribing its
+#     output. Phonetic spellings are actually worse there: SAPI voices the word
+#     "ay" as /aɪ/, so "AITA" → "ay eye tee ay" comes back sounding like "AITI".
+#   * Cloned/neural voices instead mangle bare letters, so they get the phonetic
+#     spellings below, which they read syllable-by-syllable.
 _LETTER_SOUNDS = {
     "A": "ay", "B": "bee", "C": "see", "D": "dee", "E": "ee", "F": "eff",
     "G": "jee", "H": "aitch", "I": "eye", "J": "jay", "K": "kay", "L": "el",
@@ -86,26 +90,64 @@ _LETTER_SOUNDS = {
     "S": "ess", "T": "tee", "U": "you", "V": "vee", "W": "double-you",
     "X": "ex", "Y": "why", "Z": "zee",
 }
-# An acronym to spell out: a whole-word run of 2–6 uppercase ASCII letters
-# (AITA, WIBTA, TIFU, OP, …). Generated narration is sentence-case prose, so an
-# all-caps run is almost always an initialism, not an emphasised word. Longer
-# runs (7+) are left alone — far more likely a shouted word than an acronym.
+
+# Candidate token: a whole-word run of 2–6 uppercase ASCII letters (AITA, WIBTA,
+# OP, …). 7+ runs are left alone — far more likely a shouted word than an
+# initialism. Whether a candidate is *actually* spelled is decided by
+# :func:`_should_spell`.
 _ACRONYM_RE = re.compile(r"\b[A-Z]{2,6}\b")
+_VOWELS = frozenset("AEIOUY")
+
+# Always spell these — centred on the AITA/relationships stories this app pulls,
+# plus common internet initialisms. Vowel-containing acronyms must be listed
+# here; the vowel-less heuristic below cannot recognise them.
+_KNOWN_ACRONYMS = frozenset(
+    {
+        "AITA", "AITAH", "WIBTA", "WIBTAH", "YTA", "NTA", "ESH", "NAH",
+        "YWBTA", "YWNBTA", "TIFU", "OP", "OOP", "MIL", "FIL", "SIL", "BIL", "DIL",
+        "IMO", "IMHO", "FYI", "AFAIK", "IIRC", "ETA", "ASAP", "FWIW", "IDK", "TMI",
+        "IRL", "AKA", "NSFW", "PTSD", "OCD", "ADHD", "CPS", "CEO", "CFO", "COO",
+    }
+)
+# Vowel-less tokens that are NOT acronyms — keep the vowel-less rule from spelling
+# them (they read fine as the words/titles the engine already expands).
+_NON_ACRONYMS = frozenset(
+    {"MR", "MRS", "DR", "ST", "MS", "HMM", "HMMM", "SHH", "PSST", "GRR",
+     "BRR", "TSK", "MM", "HM", "NTH"}
+)
 
 
-def speechify_acronyms(text: str) -> str:
-    """Spell acronyms out phonetically for the TTS engine.
+def _should_spell(word: str) -> bool:
+    """True if an all-caps token should be read letter-by-letter.
 
-    Cloned/neural voices voice an all-caps token like "AITA" as a garbled
-    pseudo-word; spelling it "ay eye tee ay" makes the voice read it
-    letter-by-letter. This rewrites only the *spoken* text — captions keep the
-    original acronym, because the caption text is the untouched script aligned to
-    the audio downstream. Tokens with any lowercase letter or digit, or shorter
-    than 2 / longer than 6 letters, are left untouched.
+    Conservative on purpose: a writer's CAPS *emphasis* ("I said NO", "he NEVER
+    called") must not be spelled out. Every common emphasis word contains a
+    vowel, so an unknown token is spelled only when it's a vowel-less initialism
+    (BF, DH, TV…); vowel-containing acronyms come from the curated allowlist.
     """
-    return _ACRONYM_RE.sub(
-        lambda m: " ".join(_LETTER_SOUNDS[c] for c in m.group(0)), text
-    )
+    if word in _NON_ACRONYMS:
+        return False
+    if word in _KNOWN_ACRONYMS:
+        return True
+    return not (_VOWELS & frozenset(word))
+
+
+def speechify_acronyms(text: str, *, letters: bool = True) -> str:
+    """Spell recognised acronyms so the voice reads them letter-by-letter.
+
+    Rewrites only the *spoken* text; captions keep the original acronym (the body
+    caption text is the untouched script, aligned to the audio downstream).
+    ``letters=True`` (Windows SAPI) emits bare spaced letters ("W I B T A");
+    ``letters=False`` (cloned/neural voices) emits the phonetic spellings.
+    Emphasis words and non-acronyms are left untouched (see :func:`_should_spell`).
+    """
+    def _repl(m):
+        word = m.group(0)
+        if not _should_spell(word):
+            return word
+        return " ".join(word) if letters else " ".join(_LETTER_SOUNDS[c] for c in word)
+
+    return _ACRONYM_RE.sub(_repl, text)
 
 
 def list_voices() -> list[dict[str, str]]:
@@ -461,6 +503,7 @@ def synthesize(
     speed: float = 1.0,
 ) -> NarrationResult:
     """Synthesize ``text`` to ``wav_path`` and return real word timings."""
+    text = speechify_acronyms(text)  # read acronyms letter by letter (SAPI: bare letters)
     raw, duration = _run_sapi(text, wav_path, voice=voice, speed=speed)
     words = _build_words(raw, duration, _detect_silences(wav_path)) or _even_spacing(text, duration)
     if not duration and words:
@@ -548,6 +591,9 @@ def synthesize_story(
     as their line is read and the body captions begin precisely when the body
     narration does.
     """
+    # Spell acronyms per beat before assembling, so the recorded char ranges
+    # (which drive the per-beat caption split) stay aligned with the spoken text.
+    parts = [{**p, "text": speechify_acronyms(p.get("text") or "")} for p in parts]
     combined, ranges = _assemble(parts)
     if not combined.strip() or not ranges:
         raise TTSError("No narration text")
