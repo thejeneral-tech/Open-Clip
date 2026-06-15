@@ -1348,6 +1348,9 @@ async def list_stories(
         "score": SvStory.score.desc(),
         "newest": SvStory.created_at.desc(),
         "upvotes": SvStory.upvotes.desc(),
+        # Longest body first — surfaces stories with enough material for the
+        # long (10/20/30-minute) videos.
+        "longest": func.length(SvStory.body).desc(),
     }.get(sort, SvStory.score.desc())
     rows = (await db.execute(stmt.order_by(order).limit(limit))).scalars().all()
     return [SvStoryOut.model_validate(s) for s in rows]

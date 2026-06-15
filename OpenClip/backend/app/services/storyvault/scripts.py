@@ -118,6 +118,12 @@ def ai_script(
     voice = _STYLE_HINTS.get(narration_style, _STYLE_HINTS["dramatic"])
     hook_hint = _HOOK_HINTS.get(hook_style, _HOOK_HINTS["conflict"])
 
+    # Feed the model enough of the source to fill the target length. A 30-minute
+    # video needs ~4,400 narration words, so a fixed 6k-char cap would starve it;
+    # scale the cap with the budget (~6 chars/word, ×2 headroom) up to a ceiling
+    # that keeps the prompt within a reasonable local-model context window.
+    source_cap = max(6000, min(48000, budget * 12))
+
     system = (
         "You rewrite internet stories into first-person scripts for narrated "
         "vertical short-form videos (TikTok/Shorts). Output ONLY the narration "
@@ -129,7 +135,7 @@ def ai_script(
         f"Target roughly {budget} words (about {duration_target} seconds spoken). "
         "Keep it first-person, present the events in order, and end with a short "
         "question that invites comments.\n\n"
-        f"TITLE: {title}\n\nSTORY:\n{body[:6000]}"
+        f"TITLE: {title}\n\nSTORY:\n{body[:source_cap]}"
     )
 
     resp = ollama.generate(prompt, model=model, system=system, options={"temperature": 0.8})

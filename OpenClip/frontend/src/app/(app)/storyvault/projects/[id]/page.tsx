@@ -34,6 +34,7 @@ import {
   useSvVideos,
 } from "@/hooks/use-api";
 import type { SvProject, SvStory, SvVideo } from "@/lib/types";
+import { formatDurationLabel } from "@/lib/utils";
 
 const STAGE_STEPS = [
   { key: "stories_ready", label: "Stories ready" },
@@ -186,7 +187,7 @@ export default function StoryVaultProjectDetailPage() {
           {s.story_source === "reddit" && s.communities.length > 0 && (
             <Badge variant="outline">r/{s.communities.join(", r/")}</Badge>
           )}
-          <Badge variant="outline">{s.duration_target}s</Badge>
+          <Badge variant="outline">{formatDurationLabel(s.duration_target)}</Badge>
           <Badge variant="outline">Voice: {s.voice ?? "auto"}</Badge>
           <Badge variant="outline">Captions: {s.caption_style}</Badge>
           <Badge variant="outline">Gameplay: {s.background_category ?? "any"}</Badge>

@@ -130,7 +130,13 @@ def _run_sapi(
         if voice:
             cmd.extend(["-Voice", voice])
 
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        # Scale the timeout with the script length: a 30-minute narration is far
+        # longer than the old fixed 10-minute cap allowed. Estimate the spoken
+        # duration (~2.2 words/sec) and give SAPI ~2× that plus a fixed margin.
+        words = len(text.split())
+        est_audio = words / 2.2
+        timeout = max(600, int(est_audio * 2.0) + 120)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if proc.returncode != 0 or not os.path.exists(wav_path):
             raise TTSError(
                 f"SAPI synthesis failed (rc={proc.returncode}): "

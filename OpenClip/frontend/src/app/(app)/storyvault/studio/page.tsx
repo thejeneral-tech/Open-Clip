@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
+import { DurationPicker } from "@/components/storyvault/duration-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -220,7 +221,7 @@ function StudioInner() {
   const pipeline = videos.filter((v) => ACTIVE_STATUSES.has(v.status));
 
   const [storyId, setStoryId] = useState(storyParam ?? "");
-  const [duration, setDuration] = useState("60");
+  const [duration, setDuration] = useState(60);
   const hookStyle = "conflict";
   const [voice, setVoice] = useState("auto");
   // Base caption style for the render. No longer a visible control — the preset's
@@ -245,7 +246,7 @@ function StudioInner() {
   const applyProject = (p: SvProject) => {
     setProjectId(String(p.id));
     const s = p.settings;
-    setDuration(String(s.duration_target));
+    setDuration(s.duration_target);
     setVoice(s.voice ?? "auto");
     setCaptionStyle(s.caption_style);
     setBackgroundCategory(s.background_category ?? "any");
@@ -267,7 +268,7 @@ function StudioInner() {
   useEffect(() => {
     if (projectParam && projectId === projectParam) {
       const p = projects.find((proj) => proj.id === Number(projectParam));
-      if (p && duration === "60") applyProject(p);
+      if (p && duration === 60) applyProject(p);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects]);
@@ -296,7 +297,7 @@ function StudioInner() {
     try {
       await createVideo.mutateAsync({
         story_id: Number(storyId),
-        duration_target: Number(duration),
+        duration_target: duration,
         hook_style: hookStyle,
         voice: voice === "auto" ? undefined : voice,
         caption_style: captionStyle,
@@ -421,22 +422,12 @@ function StudioInner() {
                   )}
                 </div>
 
+                <div className="space-y-2">
+                  <Label>Duration</Label>
+                  <DurationPicker value={duration} onChange={setDuration} />
+                </div>
+
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Duration</Label>
-                    <Select value={duration} onValueChange={setDuration}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(meta?.durations ?? [60]).map((d) => (
-                          <SelectItem key={d} value={String(d)}>
-                            {d}s
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-2">
                     <Label>Voice</Label>
                     <Select value={voice} onValueChange={setVoice}>
