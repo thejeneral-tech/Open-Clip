@@ -309,6 +309,12 @@ def _offset(words: list[dict], by: float) -> list[dict]:
 
 
 _ALNUM = re.compile(r"[^a-z0-9]+")
+# A single caption word never holds on screen longer than this. Per-beat
+# alignment keeps words sub-second; the cap only bites if whisper hallucinates or
+# duplicates so badly that an unmatched word ends up bracketed by a far-away
+# anchor — then the highlight is bounded instead of stalling for seconds. Mirrors
+# the per-word duration cap on the SAPI path (:func:`tts._build_words`).
+_MAX_WORD_DUR = 2.5
 
 
 def _norm(word: str) -> str:
@@ -402,6 +408,7 @@ def _align_to_text(text: str, whisper_words: list[dict], duration: float) -> lis
         e = float(w["end"] if w["end"] is not None else s)
         if e <= s:
             e = s + 0.06
+        e = min(e, s + _MAX_WORD_DUR)  # never let a word stall on screen
         clean.append({"word": w["word"], "start": round(s, 3), "end": round(e, 3)})
         prev = e
     return clean

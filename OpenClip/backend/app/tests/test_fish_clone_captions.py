@@ -82,6 +82,17 @@ def test_align_falls_back_when_nothing_aligns():
     assert abs(words[-1]["end"] - 1.0) < 1e-6
 
 
+def test_align_caps_pathological_stretch():
+    # Whisper missed "middle" and the surrounding anchors are implausibly far
+    # apart (a hallucination/duplication artifact). The unmatched word would span
+    # ~19s; it's bounded so the highlight can never stall on screen.
+    text = "start middle end"
+    whisper = _ww(("start", 0.0, 0.3), ("end", 20.0, 20.5))
+    words = fish_clone._align_to_text(text, whisper, 20.5)
+    assert [w["word"] for w in words] == ["start", "middle", "end"]
+    assert words[1]["end"] - words[1]["start"] <= fish_clone._MAX_WORD_DUR + 1e-6
+
+
 def test_align_handles_punctuation_attached_by_whisper():
     # faster-whisper returns words with attached punctuation/leading spaces; the
     # match is on the normalised token, so they still anchor.
