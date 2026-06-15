@@ -86,8 +86,6 @@ function PipelineRow({ video }: { video: SvVideo }) {
   const retryVideo = useSvRetryVideo();
   const cancelVideo = useSvCancelVideo();
   const active = video.status === "queued" || video.status === "processing" || video.status === "rendering";
-  // The worker hasn't parked it in CANCELLED yet — it's stopping at its next checkpoint.
-  const stopping = video.stage === "cancelling";
 
   const onRetry = async () => {
     try {
@@ -101,7 +99,7 @@ function PipelineRow({ video }: { video: SvVideo }) {
   const onStop = async () => {
     try {
       await cancelVideo.mutateAsync(video.id);
-      toast.success("Stopping video");
+      toast.success("Video stopped");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to stop video");
     }
@@ -117,21 +115,21 @@ function PipelineRow({ video }: { video: SvVideo }) {
       </div>
       {active && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">{stopping ? "Stopping…" : video.stage || "Queued"}</p>
+          <p className="text-xs text-muted-foreground">{video.stage || "Queued"}</p>
           <Progress value={video.progress * 100} />
           <Button
             variant="outline"
             size="sm"
             className="text-destructive hover:text-destructive"
-            disabled={cancelVideo.isPending || stopping}
+            disabled={cancelVideo.isPending}
             onClick={onStop}
           >
-            {cancelVideo.isPending || stopping ? (
+            {cancelVideo.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Square className="h-4 w-4" />
             )}
-            {stopping ? "Stopping…" : "Stop"}
+            Stop
           </Button>
         </div>
       )}
