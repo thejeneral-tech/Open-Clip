@@ -77,8 +77,10 @@ def speed_to_rate(speed: float) -> int:
 
 # How a TTS voice should pronounce each letter when an acronym is spelled out.
 # Plain phonetic words the engine reads as ordinary syllables, so "AITA" is voiced
-# "ay eye tee ay" letter-by-letter instead of mangled into a pseudo-word
-# ("a-e-tay").
+# "ay. eye. tee. ay." — one letter at a time — instead of mangled into a
+# pseudo-word ("a-e-tay"). The letters are joined with periods (not spaces): the
+# neural voice runs space/comma-separated sounds together into one mush, but a
+# period per letter makes it enunciate each distinctly (verified on the s2 voice).
 _LETTER_SOUNDS = {
     "A": "ay", "B": "bee", "C": "see", "D": "dee", "E": "ee", "F": "eff",
     "G": "jee", "H": "aitch", "I": "eye", "J": "jay", "K": "kay", "L": "el",
@@ -97,14 +99,14 @@ def speechify_acronyms(text: str) -> str:
     """Spell acronyms out phonetically for the TTS engine.
 
     Cloned/neural voices voice an all-caps token like "AITA" as a garbled
-    pseudo-word; spelling it "ay eye tee ay" makes the voice read it
-    letter-by-letter. This rewrites only the *spoken* text — captions keep the
+    pseudo-word; spelling it "ay. eye. tee. ay." makes the voice read it one
+    letter at a time. This rewrites only the *spoken* text — captions keep the
     original acronym, because the caption text is the untouched script aligned to
     the audio downstream. Tokens with any lowercase letter or digit, or shorter
     than 2 / longer than 6 letters, are left untouched.
     """
     return _ACRONYM_RE.sub(
-        lambda m: " ".join(_LETTER_SOUNDS[c] for c in m.group(0)), text
+        lambda m: ". ".join(_LETTER_SOUNDS[c] for c in m.group(0)) + ".", text
     )
 
 

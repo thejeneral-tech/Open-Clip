@@ -36,15 +36,17 @@ def test_build_words_keeps_genuine_repeats():
 
 # ---------------------------------------------- acronym phonetic spelling
 def test_speechify_spells_acronyms_phonetically():
-    assert tts.speechify_acronyms("AITA") == "ay eye tee ay"
-    assert tts.speechify_acronyms("TIFU") == "tee eye eff you"
-    assert tts.speechify_acronyms("OP") == "oh pee"
+    # Letters are joined with periods so the neural voice enunciates each one
+    # (spaces/commas get mushed back into a single word by the s2 voice).
+    assert tts.speechify_acronyms("AITA") == "ay. eye. tee. ay."
+    assert tts.speechify_acronyms("TIFU") == "tee. eye. eff. you."
+    assert tts.speechify_acronyms("OP") == "oh. pee."
 
 
 def test_speechify_keeps_sentence_and_punctuation():
     # Only the acronym is rewritten; the rest of the line (and trailing ?) stays.
     out = tts.speechify_acronyms("AITA for refusing to sign off on 4 hours?")
-    assert out == "ay eye tee ay for refusing to sign off on 4 hours?"
+    assert out == "ay. eye. tee. ay. for refusing to sign off on 4 hours?"
 
 
 def test_speechify_leaves_normal_words_numbers_and_single_letters():
