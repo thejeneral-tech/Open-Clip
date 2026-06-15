@@ -35,20 +35,12 @@ def test_build_words_keeps_genuine_repeats():
 
 
 # ---------------------------------------------- acronym spelling
-def test_speechify_spells_acronyms_as_bare_letters_by_default():
-    # SAPI (the default) reads bare spaced letters by name — verified to sound
-    # right, where the phonetic spelling mis-voices A ("ay" → /aɪ/).
+def test_speechify_spells_acronyms_as_bare_letters():
+    # Bare spaced letters — a fluent, distinct spelling on both SAPI and the s2
+    # cloned voice (verified by transcribing the audio).
     assert tts.speechify_acronyms("AITA") == "A I T A"
     assert tts.speechify_acronyms("TIFU") == "T I F U"
     assert tts.speechify_acronyms("OP") == "O P"
-
-
-def test_speechify_phonetic_mode_for_neural_voices():
-    # Cloned/neural voices opt into the phonetic spellings, period-joined so the
-    # voice enunciates each letter (spaces get mushed into one word by the s2 voice).
-    assert tts.speechify_acronyms("AITA", letters=False) == "ay. eye. tee. ay."
-    assert tts.speechify_acronyms("TIFU", letters=False) == "tee. eye. eff. you."
-    assert tts.speechify_acronyms("OP", letters=False) == "oh. pee."
 
 
 def test_speechify_keeps_sentence_and_punctuation():

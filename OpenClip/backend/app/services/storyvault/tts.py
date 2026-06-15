@@ -75,23 +75,13 @@ def speed_to_rate(speed: float) -> int:
     return int(round((speed - 1.0) * 10))
 
 
-# How a TTS voice should pronounce each letter when an acronym is spelled out.
-# Two strategies, chosen per engine (see ``speechify_acronyms``):
-#   * Windows SAPI reads a *bare* spaced letter ("W I B T A") by name, including
-#     the tricky vowels A ("ay") and I ("eye") — verified by transcribing its
-#     output. Phonetic spellings are actually worse there: SAPI voices the word
-#     "ay" as /aɪ/, so "AITA" → "ay eye tee ay" comes back sounding like "AITI".
-#   * Cloned/neural voices instead mangle bare letters, so they get the phonetic
-#     spellings below, joined with periods ("ay. eye. tee. ay.") — a space or
-#     comma between them gets run back into one mush, but a period per letter
-#     makes the voice enunciate each distinctly (verified on the s2 voice).
-_LETTER_SOUNDS = {
-    "A": "ay", "B": "bee", "C": "see", "D": "dee", "E": "ee", "F": "eff",
-    "G": "jee", "H": "aitch", "I": "eye", "J": "jay", "K": "kay", "L": "el",
-    "M": "em", "N": "en", "O": "oh", "P": "pee", "Q": "cue", "R": "arr",
-    "S": "ess", "T": "tee", "U": "you", "V": "vee", "W": "double-you",
-    "X": "ex", "Y": "why", "Z": "zee",
-}
+# Acronyms are spelled by emitting their bare letters, space-separated ("AITA" ->
+# "A I T A"). Both the Windows SAPI and the s2 cloned voice read that as a fluent,
+# distinct spelling — verified by transcribing their output (the cloned voice says
+# "A I T A" in ~1.2s and whisper hears each letter, vowels included). Phonetic
+# spellings ("ay eye tee ay") were worse on both: the neural voice runs spaced
+# sounds into one mush, and per-letter periods make it robotically slow; SAPI
+# mis-stresses the vowel words ("ay" → /aɪ/). So: bare spaced letters, both engines.
 
 # Candidate token: a whole-word run of 2–6 uppercase ASCII letters (AITA, WIBTA,
 # OP, …). 7+ runs are left alone — far more likely a shouted word than an
@@ -134,25 +124,18 @@ def _should_spell(word: str) -> bool:
     return not (_VOWELS & frozenset(word))
 
 
-def speechify_acronyms(text: str, *, letters: bool = True) -> str:
+def speechify_acronyms(text: str) -> str:
     """Spell recognised acronyms so the voice reads them letter-by-letter.
 
     Rewrites only the *spoken* text; captions keep the original acronym (the body
-    caption text is the untouched script, aligned to the audio downstream).
-    ``letters=True`` (Windows SAPI) emits bare spaced letters ("W I B T A");
-    ``letters=False`` (cloned/neural voices) emits the phonetic spellings, joined
-    with periods ("ay. eye. tee. ay.") so the voice enunciates each letter.
+    caption text is the untouched script, aligned to the audio downstream). Each
+    recognised acronym becomes its bare, space-separated letters ("AITA" ->
+    "A I T A") — a fluent, natural spelling on both SAPI and the s2 cloned voice.
     Emphasis words and non-acronyms are left untouched (see :func:`_should_spell`).
     """
     def _repl(m):
         word = m.group(0)
-        if not _should_spell(word):
-            return word
-        if letters:
-            return " ".join(word)                       # SAPI: bare spaced letters
-        # Neural voices mush space/comma-separated sounds into one word; a period
-        # per letter makes them enunciate each (verified on the s2 voice).
-        return ". ".join(_LETTER_SOUNDS[c] for c in word) + "."
+        return " ".join(word) if _should_spell(word) else word
 
     return _ACRONYM_RE.sub(_repl, text)
 
