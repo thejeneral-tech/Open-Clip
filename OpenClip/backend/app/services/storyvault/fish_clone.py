@@ -427,9 +427,11 @@ def narrate(
     The SAPI counterpart is :func:`tts.synthesize`; this returns the same
     :class:`tts.NarrationResult` so the caption pipeline is engine-agnostic.
     """
-    from app.services.storyvault.tts import NarrationResult
+    from app.services.storyvault.tts import NarrationResult, speechify_acronyms
 
-    synthesize(text, out_wav, ref_path=ref_path, prompt_text=prompt_text)
+    # Acronyms are spelled out phonetically for the *voice* only ("AITA" ->
+    # "ay eye tee ay"); the caption text stays the original script below.
+    synthesize(speechify_acronyms(text), out_wav, ref_path=ref_path, prompt_text=prompt_text)
     _apply_tempo(out_wav, speed)
     duration = _probe_duration(out_wav)
     # Whisper supplies only the *timing*; the caption text is the known script, so
@@ -456,7 +458,7 @@ def narrate_story(
     whisper-aligned (then shifted onto the combined timeline). Mirrors
     :func:`tts.synthesize_story`.
     """
-    from app.services.storyvault.tts import StoryNarration
+    from app.services.storyvault.tts import StoryNarration, speechify_acronyms
 
     present = [p for p in parts if (p.get("text") or "").strip()]
     if not present:
@@ -469,7 +471,9 @@ def narrate_story(
         durations: dict[str, float] = {}
         for idx, p in enumerate(present):
             beat_wav = os.path.join(tmp, f"beat{idx}.wav")
-            synthesize(p["text"].strip(), beat_wav, ref_path=ref_path, prompt_text=prompt_text)
+            # Spell acronyms phonetically for the voice only; the body caption text
+            # (``body_text`` below) stays the original script.
+            synthesize(speechify_acronyms(p["text"].strip()), beat_wav, ref_path=ref_path, prompt_text=prompt_text)
             _apply_tempo(beat_wav, speed)
             ordered.append((p["kind"], beat_wav))
             durations[p["kind"]] = _probe_duration(beat_wav)

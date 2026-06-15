@@ -75,6 +75,39 @@ def speed_to_rate(speed: float) -> int:
     return int(round((speed - 1.0) * 10))
 
 
+# How a TTS voice should pronounce each letter when an acronym is spelled out.
+# Plain phonetic words the engine reads as ordinary syllables, so "AITA" is voiced
+# "ay eye tee ay" letter-by-letter instead of mangled into a pseudo-word
+# ("a-e-tay").
+_LETTER_SOUNDS = {
+    "A": "ay", "B": "bee", "C": "see", "D": "dee", "E": "ee", "F": "eff",
+    "G": "jee", "H": "aitch", "I": "eye", "J": "jay", "K": "kay", "L": "el",
+    "M": "em", "N": "en", "O": "oh", "P": "pee", "Q": "cue", "R": "arr",
+    "S": "ess", "T": "tee", "U": "you", "V": "vee", "W": "double-you",
+    "X": "ex", "Y": "why", "Z": "zee",
+}
+# An acronym to spell out: a whole-word run of 2–6 uppercase ASCII letters
+# (AITA, WIBTA, TIFU, OP, …). Generated narration is sentence-case prose, so an
+# all-caps run is almost always an initialism, not an emphasised word. Longer
+# runs (7+) are left alone — far more likely a shouted word than an acronym.
+_ACRONYM_RE = re.compile(r"\b[A-Z]{2,6}\b")
+
+
+def speechify_acronyms(text: str) -> str:
+    """Spell acronyms out phonetically for the TTS engine.
+
+    Cloned/neural voices voice an all-caps token like "AITA" as a garbled
+    pseudo-word; spelling it "ay eye tee ay" makes the voice read it
+    letter-by-letter. This rewrites only the *spoken* text — captions keep the
+    original acronym, because the caption text is the untouched script aligned to
+    the audio downstream. Tokens with any lowercase letter or digit, or shorter
+    than 2 / longer than 6 letters, are left untouched.
+    """
+    return _ACRONYM_RE.sub(
+        lambda m: " ".join(_LETTER_SOUNDS[c] for c in m.group(0)), text
+    )
+
+
 def list_voices() -> list[dict[str, str]]:
     """Installed SAPI voices (name, culture, gender)."""
     if sys.platform != "win32":
