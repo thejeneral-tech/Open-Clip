@@ -483,6 +483,7 @@ export interface SvDiscoveryResult {
   added: number;
   duplicates: number;
   stories: SvStory[];
+  note?: string | null;
 }
 
 export interface SvScript {

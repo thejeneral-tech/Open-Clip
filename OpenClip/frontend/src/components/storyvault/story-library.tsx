@@ -55,6 +55,23 @@ const MIN_LENGTH_OPTIONS = [
   { value: "24000", label: "Epic — ~30 min+" },
 ];
 
+// Below this minimum (chars) we treat the pull as "long-form" and scan deeper —
+// long stories are a small fraction of any feed, so a shallow scan rarely
+// surfaces a 20–30 minute one. Mirrors the backend project-run threshold.
+const LONG_FORM_MIN_LENGTH = 8000;
+
+// Subreddits known for long-form posts — the ones with enough material for
+// 10–30 minute videos. Surfaced as one-click chips in the Find dialog because
+// the usual short-form subs (AITA, etc.) almost never have 30-minute stories.
+const LONG_FORM_SUBS = [
+  "nosleep",
+  "talesfromtechsupport",
+  "talesfromretail",
+  "LetsNotMeet",
+  "ProRevenge",
+  "Glitch_in_the_Matrix",
+];
+
 function scoreVariant(score: number): "default" | "secondary" | "outline" {
   if (score >= 70) return "default";
   if (score >= 50) return "secondary";
@@ -178,18 +195,40 @@ export function StoryLibrary() {
   const [category, setCategory] = useState("");
   const [body, setBody] = useState("");
 
+  // Append a suggested subreddit to the comma-separated field (no duplicates).
+  const addCommunity = (name: string) => {
+    setCommunities((cur) => {
+      const list = cur
+        .split(/[\s,]+/)
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (list.some((c) => c.replace(/^r\//i, "").toLowerCase() === name.toLowerCase())) {
+        return cur;
+      }
+      return [...list, name].join(", ");
+    });
+  };
+
   const onDiscover = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const length = Number(minLength) || 0;
       const result = await discovery.mutateAsync({
         communities: communities.split(",").map((s) => s.trim()).filter(Boolean),
         sort: discoverSort,
         time_window: timeWindow,
         min_upvotes: Number(minUpvotes) || 0,
-        min_length: Number(minLength) || 0,
+        min_length: length,
+        // Scan deeper when hunting long stories so the rarer ones actually surface.
+        limit: length >= LONG_FORM_MIN_LENGTH ? 100 : 25,
       });
       toast.success(`Added ${result.added} new stories (${result.duplicates} duplicates skipped)`);
-      setFindOpen(false);
+      if (result.note) {
+        // Reddit throttled part of the pull — keep the dialog open and explain.
+        toast.warning(result.note, { duration: 8000 });
+      } else {
+        setFindOpen(false);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to fetch stories");
     }
@@ -244,6 +283,23 @@ export function StoryLibrary() {
                       placeholder="AmItheAsshole, relationship_advice"
                       required
                     />
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        Great for long (10–30 min) videos — tap to add:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {LONG_FORM_SUBS.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => addCommunity(name)}
+                            className="rounded-full border border-input px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                          >
+                            r/{name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -306,7 +362,8 @@ export function StoryLibrary() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Longer stories make longer videos — pick a higher minimum to pull stories with
-                    enough material for 10–30 minute videos.
+                    enough material for 10–30 minute videos. Reddit limits rapid requests, so for
+                    long stories pull one subreddit at a time (wait ~30s between pulls).
                   </p>
                 </div>
                 <DialogFooter>
