@@ -1,6 +1,7 @@
 """Story Vault API — discovery, story library, footage, video pipeline, exports."""
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
@@ -892,14 +893,19 @@ async def _collect_reddit_into_project(
     (best-effort) so a flaky source never blocks the rest of the run.
     """
     fetched: list[dict] = []
-    for community in s.communities:
+    # Scan deeper when the project wants long stories — they're a small fraction
+    # of any feed, so a shallow scan would rarely surface a 20–30 minute story.
+    scan_limit = 100 if s.min_length >= 8000 else 25
+    for i, community in enumerate(s.communities):
+        if i:
+            await asyncio.sleep(1.0)  # space out requests to dodge Reddit's rate limiter
         try:
             fetched.extend(
                 await reddit.fetch_community(
                     community,
                     sort=s.discovery_sort,
                     time_window=s.discovery_time_window,
-                    limit=25,
+                    limit=scan_limit,
                     min_upvotes=s.min_upvotes,
                     min_length=s.min_length,
                 )
@@ -1226,6 +1232,14 @@ async def dashboard(
 
 
 # ----------------------------------------------------------------- discovery
+def _is_rate_limited(exc: Exception) -> bool:
+    """True when a discovery failure is Reddit's HTTP 429 throttle."""
+    resp = getattr(exc, "response", None)
+    if resp is not None and getattr(resp, "status_code", None) == 429:
+        return True
+    return "429" in str(exc)
+
+
 @router.post("/discovery/search", response_model=SvDiscoveryResult)
 async def discovery_search(
     payload: SvDiscoverySearch,
@@ -1234,7 +1248,11 @@ async def discovery_search(
 ) -> SvDiscoveryResult:
     fetched: list[dict] = []
     errors: list[str] = []
-    for community in payload.communities:
+    throttled = False
+    for i, community in enumerate(payload.communities):
+        # Space out requests a little; Reddit throttles rapid unauthenticated reads.
+        if i:
+            await asyncio.sleep(2.0)
         try:
             fetched.extend(
                 await reddit.fetch_community(
@@ -1248,9 +1266,24 @@ async def discovery_search(
             )
         except Exception as exc:
             logger.warning("Discovery failed for %s: %s", community, exc)
+            if _is_rate_limited(exc):
+                # Reddit allows only ~one feed pull per ~30s per IP, with a long
+                # cooldown. Hammering the remaining subreddits would just fail too,
+                # so stop here and keep whatever earlier subreddits returned.
+                errors.append(f"{community}: rate-limited by Reddit")
+                throttled = True
+                break
             errors.append(f"{community}: {exc}")
+
+    note: str | None = None
+    if throttled:
+        note = (
+            "Reddit rate-limited the request — it allows only about one subreddit "
+            "pull every ~30 seconds. For long stories, pull one subreddit at a time "
+            "and wait ~30s between them."
+        )
     if not fetched and errors:
-        raise HTTPException(status_code=502, detail="; ".join(errors)[:500])
+        raise HTTPException(status_code=502, detail=note or "; ".join(errors)[:500])
 
     existing_ids = set(
         (
@@ -1296,6 +1329,7 @@ async def discovery_search(
         added=len(added),
         duplicates=duplicates,
         stories=[SvStoryOut.model_validate(s) for s in added],
+        note=note,
     )
 
 

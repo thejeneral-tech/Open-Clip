@@ -54,6 +54,9 @@ class SvDiscoveryResult(BaseModel):
     added: int
     duplicates: int
     stories: list[SvStoryOut]
+    # Set when the pull was cut short (e.g. Reddit rate-limited the remaining
+    # subreddits) so the UI can explain what happened and what to do next.
+    note: str | None = None
 
 
 class SvScriptOut(BaseModel):

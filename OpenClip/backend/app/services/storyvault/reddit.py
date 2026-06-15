@@ -8,6 +8,7 @@ entries. Trade-off: RSS does not expose score/comment counts, so ``upvotes`` and
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import re
 import xml.etree.ElementTree as ET
@@ -18,6 +19,14 @@ import httpx
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Reddit throttles rapid unauthenticated reads with HTTP 429 — empirically only
+# ~one feed fetch per ~30-40s per IP, with no Retry-After header and a cooldown
+# far too long to wait out inside a request. So we retry only briefly to ride out
+# a genuine transient blip, then fail fast and let the caller surface a clear
+# "rate-limited, try one subreddit at a time" message (see discovery_search).
+_MAX_ATTEMPTS = 2
+_MAX_BACKOFF = 5.0
 
 # Present as a real browser; bare library User-Agents are more likely to be
 # challenged by Reddit's edge.
@@ -99,7 +108,16 @@ async def fetch_community(
     async with httpx.AsyncClient(
         headers=_HEADERS, timeout=30, follow_redirects=True
     ) as client:
-        resp = await client.get(url, params=params)
+        for attempt in range(_MAX_ATTEMPTS):
+            resp = await client.get(url, params=params)
+            if resp.status_code == 429 and attempt < _MAX_ATTEMPTS - 1:
+                # Honour Retry-After when present, else a short fixed backoff.
+                hinted = float(resp.headers.get("retry-after") or 0)
+                wait = min(hinted or _MAX_BACKOFF, _MAX_BACKOFF)
+                logger.info("Reddit r/%s rate-limited (429); one quick retry in %.0fs", sub, wait)
+                await asyncio.sleep(wait)
+                continue
+            break
         resp.raise_for_status()
         feed = resp.text
 
