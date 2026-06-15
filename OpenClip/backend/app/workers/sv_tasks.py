@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 
+from celery.signals import worker_ready
+
 from app.core.database import session_scope
 from app.core.events import publish_progress
 from app.core.logging import get_logger
@@ -131,6 +133,48 @@ def _render_progress(sv_video_id: int, tracker: ProgressTracker, stage: str, mes
         tracker.throttled(stage, _lerp(band, frac) if band else frac, message=message)
 
     return cb
+
+
+def _reconcile_orphaned_videos(**_) -> None:
+    """Heal videos left mid-flight by a previous crash/restart, on worker boot.
+
+    The Windows worker is ``--pool=solo`` (one job at a time) and the filesystem
+    broker does not reliably redeliver an interrupted task, so a video that was
+    PROCESSING/RENDERING when the worker died would otherwise sit frozen forever.
+    At startup nothing can legitimately be in-flight, so reset the strays: a
+    stopped one (``cancel_requested``) → CANCELLED; the rest → FAILED, which the
+    user can simply retry.
+    """
+    try:
+        with session_scope() as db:
+            stuck = (
+                db.query(SvVideo)
+                .filter(
+                    SvVideo.status.in_(
+                        [SvVideoStatus.PROCESSING.value, SvVideoStatus.RENDERING.value]
+                    )
+                )
+                .all()
+            )
+            for video in stuck:
+                if video.cancel_requested:
+                    video.status = SvVideoStatus.CANCELLED.value
+                    video.stage = "cancelled"
+                    # Keep cancel_requested set: if the filesystem broker *does*
+                    # redeliver the task, its first checkpoint must still abort.
+                else:
+                    video.status = SvVideoStatus.FAILED.value
+                    video.stage = "interrupted"
+                    video.error = "Generation was interrupted (the worker restarted). Retry to run it again."
+            if stuck:
+                logger.warning("Reconciled %d orphaned story video(s) on worker startup", len(stuck))
+    except Exception:  # noqa: BLE001 — startup best-effort; never block the worker from coming up
+        logger.exception("Failed to reconcile orphaned story videos on startup")
+
+
+# weak=False keeps a strong reference so the receiver can't be garbage-collected
+# out from under the signal — it must survive for the worker's whole life.
+worker_ready.connect(_reconcile_orphaned_videos, weak=False)
 
 
 def _story_meta(story: SvStory) -> dict:

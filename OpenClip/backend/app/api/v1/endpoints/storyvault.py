@@ -100,7 +100,6 @@ from app.services.storyvault import fish_clone, reddit, scoring
 from app.services.storyvault import tts as tts_svc
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
 from app.services.storyvault.voice_presets import ensure_voice_presets
-from app.workers.celery_app import celery_app
 from app.workers.sv_tasks import (
     sv_caption_previews_task,
     sv_generate_video_task,
@@ -1736,29 +1735,20 @@ _CANCELLABLE_STATUSES = (
 
 
 def _request_video_cancel(video: SvVideo) -> None:
-    """Raise the cooperative-cancel flag and best-effort stop the Celery task.
+    """Stop a queued or in-flight video.
 
-    A running job (processing/rendering) self-aborts at its next checkpoint and
-    the worker parks it in CANCELLED. A still-queued job may never reach a worker
-    once revoked, so we mark it CANCELLED right here; the flag still guards the
-    race where a worker had already picked it up.
+    We mark it CANCELLED immediately — so the UI reflects the stop at once and an
+    orphaned job (the single ``--pool=solo`` worker having restarted/crashed, or
+    being busy on another job) can never sit in ``processing`` forever — and raise
+    ``cancel_requested`` so a still-live worker aborts at its next checkpoint and
+    its progress writes don't resurrect the row. Terminating the Celery task isn't
+    possible without killing the solo Windows worker, so the cooperative flag is
+    the mechanism rather than a broker revoke.
     """
     video.cancel_requested = True
-    if video.celery_task_id:
-        # Best-effort: ask the worker to drop/terminate the task now (default
-        # signal — SIGKILL isn't portable to the Windows worker). If acks_late
-        # redelivers a terminated task, the cancel flag makes it self-abort at the
-        # first checkpoint, so this never re-runs the whole pipeline.
-        try:
-            celery_app.control.revoke(video.celery_task_id, terminate=True)
-        except Exception:  # noqa: BLE001 — best-effort; the flag is the source of truth
-            logger.warning("Failed to revoke task %s for video %s", video.celery_task_id, video.id)
-    if video.status == SvVideoStatus.QUEUED.value:
-        video.status = SvVideoStatus.CANCELLED.value
-        video.stage = "cancelled"
-        video.progress = 0.0
-    else:
-        video.stage = "cancelling"
+    video.status = SvVideoStatus.CANCELLED.value
+    video.stage = "cancelled"
+    video.progress = 0.0
 
 
 @router.post("/videos/{video_id}/cancel", response_model=SvVideoOut)
