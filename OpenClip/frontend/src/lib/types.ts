@@ -411,7 +411,8 @@ export type SvVideoStatus =
   | "rendering"
   | "completed"
   | "rejected"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface SvStory {
   id: number;

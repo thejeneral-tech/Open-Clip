@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, Loader2, RotateCcw, Save, Star, Wand2 } from "lucide-react";
+import { Clapperboard, Loader2, RotateCcw, Save, Square, Star, Trash2, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import {
   useSvBackgrounds,
+  useSvCancelVideo,
+  useSvClearVideoQueue,
   useSvCloneStatus,
   useSvCreateVideo,
   useSvMeta,
@@ -82,7 +84,10 @@ function TemplateBadge({ t }: { t: SvTemplate }) {
 
 function PipelineRow({ video }: { video: SvVideo }) {
   const retryVideo = useSvRetryVideo();
+  const cancelVideo = useSvCancelVideo();
   const active = video.status === "queued" || video.status === "processing" || video.status === "rendering";
+  // The worker hasn't parked it in CANCELLED yet — it's stopping at its next checkpoint.
+  const stopping = video.stage === "cancelling";
 
   const onRetry = async () => {
     try {
@@ -90,6 +95,15 @@ function PipelineRow({ video }: { video: SvVideo }) {
       toast.success("Video requeued");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to retry video");
+    }
+  };
+
+  const onStop = async () => {
+    try {
+      await cancelVideo.mutateAsync(video.id);
+      toast.success("Stopping video");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to stop video");
     }
   };
 
@@ -102,9 +116,23 @@ function PipelineRow({ video }: { video: SvVideo }) {
         <Badge variant={video.status === "failed" ? "destructive" : "secondary"}>{video.status}</Badge>
       </div>
       {active && (
-        <div className="space-y-1">
-          {video.stage && <p className="text-xs text-muted-foreground">{video.stage}</p>}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">{stopping ? "Stopping…" : video.stage || "Queued"}</p>
           <Progress value={video.progress * 100} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            disabled={cancelVideo.isPending || stopping}
+            onClick={onStop}
+          >
+            {cancelVideo.isPending || stopping ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Square className="h-4 w-4" />
+            )}
+            {stopping ? "Stopping…" : "Stop"}
+          </Button>
         </div>
       )}
       {video.status === "failed" && (
@@ -210,6 +238,7 @@ function StudioInner() {
   const { data: voicePresets = [] } = useSvVoicePresets();
   const { data: projects = [] } = useSvProjects();
   const createVideo = useSvCreateVideo();
+  const clearQueue = useSvClearVideoQueue();
 
   // Footage the user can pin to the gameplay layer — only ready clips with segments.
   const readyFootage = backgrounds.filter((b) => b.status === "completed" && b.segment_count > 0);
@@ -310,6 +339,21 @@ function StudioInner() {
       toast.success("Video queued — it will appear in Publishing when ready");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to queue video");
+    }
+  };
+
+  // Empty the pipeline: stop anything still generating and drop failed/stopped
+  // rows. Destructive, so confirm first (matching the library's delete prompt).
+  const onClearQueue = async () => {
+    if (pipeline.length === 0) return;
+    if (!confirm("Clear the queue? This stops any video still generating and clears the pipeline.")) {
+      return;
+    }
+    try {
+      const res = (await clearQueue.mutateAsync()) as { detail?: string };
+      toast.success(res.detail ?? "Queue cleared");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to clear the queue");
     }
   };
 
@@ -573,8 +617,28 @@ function StudioInner() {
 
         <Card className="shrink-0">
           <CardHeader className="pb-3">
-            <CardTitle>Pipeline</CardTitle>
-            <CardDescription>Videos currently being generated.</CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-1">
+                <CardTitle>Pipeline</CardTitle>
+                <CardDescription>Videos currently being generated.</CardDescription>
+              </div>
+              {pipeline.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 text-destructive hover:text-destructive"
+                  disabled={clearQueue.isPending}
+                  onClick={onClearQueue}
+                >
+                  {clearQueue.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Clear queue
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="max-h-44 space-y-3 overflow-y-auto">
             {pipeline.length === 0 ? (

@@ -428,6 +428,8 @@ export const api = {
   svRejectVideo: (id: number, reason?: string) =>
     request<SvVideo>(`/storyvault/videos/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
   svRetryVideo: (id: number) => request<SvVideo>(`/storyvault/videos/${id}/retry`, { method: "POST" }),
+  svCancelVideo: (id: number) => request<SvVideo>(`/storyvault/videos/${id}/cancel`, { method: "POST" }),
+  svClearVideoQueue: () => request<{ detail: string }>(`/storyvault/videos/clear-queue`, { method: "POST" }),
   svDeleteVideo: (id: number) => request<void>(`/storyvault/videos/${id}`, { method: "DELETE" }),
   svVoiceSample: (data: { text?: string; voice?: string | null; speed?: number }) =>
     request<SvVoiceSample>("/storyvault/voices/sample", { method: "POST", body: JSON.stringify(data) }),

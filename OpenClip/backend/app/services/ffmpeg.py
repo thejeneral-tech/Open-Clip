@@ -126,17 +126,26 @@ class FFmpeg:
             with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as errf:
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errf, text=True)
                 assert proc.stdout is not None
-                for line in proc.stdout:
-                    line = line.strip()
-                    if line.startswith("out_time_ms="):
-                        try:
-                            ms = int(line.split("=", 1)[1])
+                try:
+                    for line in proc.stdout:
+                        line = line.strip()
+                        if line.startswith("out_time_ms="):
+                            try:
+                                ms = int(line.split("=", 1)[1])
+                            except ValueError:
+                                continue
                             on_progress(max(0.0, min(1.0, (ms / 1_000_000) / duration)))
-                        except (ValueError, ZeroDivisionError):
-                            pass
-                    elif line == "progress=end":
-                        on_progress(1.0)
-                proc.wait()
+                        elif line == "progress=end":
+                            on_progress(1.0)
+                    proc.wait()
+                except BaseException:
+                    # A progress callback that raises (e.g. a cooperative-cancel
+                    # signal) — or any other error — must not leave ffmpeg running
+                    # detached. Kill it before propagating.
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
+                    raise
                 if proc.returncode != 0:
                     errf.seek(0)
                     err = errf.read()

@@ -450,6 +450,15 @@ export function useSvRetryVideo() {
   return useSvVideoMutation((id: number) => api.svRetryVideo(id));
 }
 
+export function useSvCancelVideo() {
+  return useSvVideoMutation((id: number) => api.svCancelVideo(id));
+}
+
+export function useSvClearVideoQueue() {
+  // `_: void` pins TVars to void so the mutation is callable with no argument.
+  return useSvVideoMutation((_: void) => api.svClearVideoQueue());
+}
+
 export function useSvDeleteVideo() {
   return useSvVideoMutation((id: number) => api.svDeleteVideo(id));
 }

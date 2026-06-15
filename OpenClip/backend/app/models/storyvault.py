@@ -193,6 +193,12 @@ class SvVideo(TimestampMixin, Base):
     error: Mapped[str | None] = mapped_column(Text, default=None)
     reject_reason: Mapped[str | None] = mapped_column(Text, default=None)
     celery_task_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Cooperative-cancel flag, raised by the Stop / Clear-queue endpoints. The
+    # generation worker reads it at every pipeline checkpoint (and on each render
+    # progress tick) and aborts, parking the video in CANCELLED. A still-queued
+    # task is cancelled by the endpoint directly, so this also guards the case of
+    # a worker that picks the job up after the request.
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     story: Mapped["SvStory"] = relationship("SvStory")
     script: Mapped["SvScript | None"] = relationship("SvScript")
