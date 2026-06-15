@@ -3,6 +3,7 @@
 import { Loader2, Star } from "lucide-react";
 import { useState } from "react";
 import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
+import { DurationPicker } from "@/components/storyvault/duration-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -395,20 +396,12 @@ export function ProjectForm({
               )}
             </div>
           )}
-          <div className="space-y-2">
+          <div className="space-y-2 sm:col-span-2">
             <Label>Duration</Label>
-            <Select value={String(s.duration_target)} onValueChange={(v) => set("duration_target", Number(v))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(meta?.durations ?? [60]).map((d) => (
-                  <SelectItem key={d} value={String(d)}>
-                    {d}s
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DurationPicker
+              value={s.duration_target}
+              onChange={(seconds) => set("duration_target", seconds)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Script engine</Label>

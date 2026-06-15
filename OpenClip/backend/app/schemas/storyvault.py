@@ -103,7 +103,9 @@ class SvBackgroundImport(BaseModel):
 # -------------------------------------------------------------------- videos
 class SvVideoCreate(BaseModel):
     story_id: int
-    duration_target: int = Field(default=60, ge=15, le=300)
+    # Up to 30 minutes (1800s). Any value in-range is allowed, so the UI can
+    # offer custom increments (e.g. 12m 50s) alongside the preset durations.
+    duration_target: int = Field(default=60, ge=15, le=1800)
     hook_style: str = "conflict"
     narration_style: str = "dramatic"
     drama_level: int = Field(default=3, ge=1, le=5)
@@ -339,8 +341,8 @@ class SvProjectSettings(BaseModel):
     min_upvotes: int = Field(default=500, ge=0)
     min_length: int = Field(default=600, ge=0)
 
-    # How each video is built (mirrors the Video Studio knobs).
-    duration_target: int = Field(default=60, ge=15, le=300)
+    # How each video is built (mirrors the Video Studio knobs). Up to 30 min.
+    duration_target: int = Field(default=60, ge=15, le=1800)
     hook_style: str = "conflict"
     narration_style: str = "dramatic"
     drama_level: int = Field(default=3, ge=1, le=5)

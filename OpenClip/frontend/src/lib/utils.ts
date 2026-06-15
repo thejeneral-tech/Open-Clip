@@ -14,6 +14,34 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Compact, human duration label for the duration picker and badges:
+// "30s", "5m", "12m 50s", "1h 5m". Distinct from formatDuration's clock format.
+export function formatDurationLabel(seconds: number | null | undefined): string {
+  const total = Math.max(0, Math.round(seconds ?? 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`);
+  return parts.join(" ");
+}
+
+// Natural TTS narration pace at 1.0 speed (mirrors the backend's
+// scripts.WORDS_PER_SECOND) — used to estimate how long a story narrates.
+export const WORDS_PER_SECOND = 2.45;
+
+export function countWords(text: string | null | undefined): number {
+  if (!text) return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Rough spoken length of a story body, in seconds, at normal narration pace. */
+export function estimateNarrationSeconds(text: string | null | undefined): number {
+  return Math.round(countWords(text) / WORDS_PER_SECOND);
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (!bytes) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];

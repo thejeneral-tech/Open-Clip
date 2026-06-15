@@ -87,7 +87,12 @@ class SvVideoStatus(str, Enum):
 # Story Vault option vocabularies (mirrored in the frontend forms).
 SV_HOOK_STYLES = ["conflict", "craziest", "question", "quote", "reveal", "calm", "suspense", "funny"]
 SV_NARRATION_STYLES = ["calm", "dramatic", "suspenseful", "funny", "serious", "confessional", "documentary"]
-SV_DURATIONS = [30, 45, 60, 90, 120, 180, 240, 300]
+# Quick-pick durations (seconds) offered in the UI. Spans short-form clips
+# through long-form 10/20/30-minute videos; the picker also accepts any custom
+# value between SV_DURATION_MIN and SV_DURATION_MAX.
+SV_DURATIONS = [30, 60, 90, 180, 300, 600, 900, 1200, 1800]
+SV_DURATION_MIN = 15      # seconds — floor for any video
+SV_DURATION_MAX = 1800    # seconds — 30-minute ceiling
 SV_CATEGORIES = [
     "AITA", "Relationships", "Revenge", "Scary", "Confessions", "Workplace",
     "Family", "Money", "School", "Wholesome", "Mystery", "Other",

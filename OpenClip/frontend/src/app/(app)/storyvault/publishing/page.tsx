@@ -45,7 +45,7 @@ import {
 } from "@/hooks/use-api";
 import { api } from "@/lib/api";
 import type { Connector, SvVideo } from "@/lib/types";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatDurationLabel, formatRelativeTime } from "@/lib/utils";
 
 const PUBLISHABLE = new Set(["ready_for_review", "approved", "completed"]);
 const BUSY = new Set(["queued", "processing", "rendering"]);
@@ -120,7 +120,7 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            {video.duration_target}s target · {video.caption_style} captions ·{" "}
+            {formatDurationLabel(video.duration_target)} target · {video.caption_style} captions ·{" "}
             {Math.round(video.narration_duration ?? 0)}s narration · {formatRelativeTime(video.updated_at)}
           </p>
 

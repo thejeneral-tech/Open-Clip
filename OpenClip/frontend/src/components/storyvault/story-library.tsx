@@ -35,9 +35,25 @@ import {
   useSvUpdateStory,
 } from "@/hooks/use-api";
 import type { SvStory, SvStoryStatus } from "@/lib/types";
-import { formatRelativeTime } from "@/lib/utils";
+import {
+  countWords,
+  estimateNarrationSeconds,
+  formatDurationLabel,
+  formatRelativeTime,
+} from "@/lib/utils";
 
 const STATUS_OPTIONS: SvStoryStatus[] = ["new", "saved", "approved", "used", "excluded"];
+
+// Minimum-length presets for the "Find stories" dialog, mapped to a body
+// character count. Longer stories are what feed the 10/20/30-minute videos, so
+// each option notes roughly how long a story that size narrates.
+const MIN_LENGTH_OPTIONS = [
+  { value: "300", label: "Any usable length" },
+  { value: "2000", label: "Medium — 2–5 min" },
+  { value: "8000", label: "Long — ~10 min+" },
+  { value: "16000", label: "Very long — ~20 min+" },
+  { value: "24000", label: "Epic — ~30 min+" },
+];
 
 function scoreVariant(score: number): "default" | "secondary" | "outline" {
   if (score >= 70) return "default";
@@ -69,6 +85,9 @@ function StoryCard({ story }: { story: SvStory }) {
     }
   };
 
+  const words = countWords(story.body);
+  const narrationLabel = formatDurationLabel(estimateNarrationSeconds(story.body));
+
   return (
     <Card>
       <CardContent className="space-y-3 pt-6">
@@ -82,6 +101,9 @@ function StoryCard({ story }: { story: SvStory }) {
         <p className="text-sm text-muted-foreground">
           {story.community ?? "manual"} · {story.upvotes} upvotes · {story.num_comments} comments ·{" "}
           {formatRelativeTime(story.created_at)}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {words.toLocaleString()} words · narrates ≈ {narrationLabel}
         </p>
         <p
           className={`whitespace-pre-line text-sm text-muted-foreground ${expanded ? "" : "line-clamp-3"}`}
@@ -147,6 +169,7 @@ export function StoryLibrary() {
   const [discoverSort, setDiscoverSort] = useState("top");
   const [timeWindow, setTimeWindow] = useState("week");
   const [minUpvotes, setMinUpvotes] = useState("100");
+  const [minLength, setMinLength] = useState("300");
 
   // Paste story dialog state
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -163,6 +186,7 @@ export function StoryLibrary() {
         sort: discoverSort,
         time_window: timeWindow,
         min_upvotes: Number(minUpvotes) || 0,
+        min_length: Number(minLength) || 0,
       });
       toast.success(`Added ${result.added} new stories (${result.duplicates} duplicates skipped)`);
       setFindOpen(false);
@@ -253,16 +277,37 @@ export function StoryLibrary() {
                       </Select>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="min-upvotes">Minimum upvotes</Label>
-                    <Input
-                      id="min-upvotes"
-                      type="number"
-                      min={0}
-                      value={minUpvotes}
-                      onChange={(e) => setMinUpvotes(e.target.value)}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="min-upvotes">Minimum upvotes</Label>
+                      <Input
+                        id="min-upvotes"
+                        type="number"
+                        min={0}
+                        value={minUpvotes}
+                        onChange={(e) => setMinUpvotes(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Minimum length</Label>
+                      <Select value={minLength} onValueChange={setMinLength}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MIN_LENGTH_OPTIONS.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Longer stories make longer videos — pick a higher minimum to pull stories with
+                    enough material for 10–30 minute videos.
+                  </p>
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={discovery.isPending}>
@@ -374,6 +419,7 @@ export function StoryLibrary() {
             <SelectItem value="score">Best score</SelectItem>
             <SelectItem value="newest">Newest</SelectItem>
             <SelectItem value="upvotes">Most upvotes</SelectItem>
+            <SelectItem value="longest">Longest</SelectItem>
           </SelectContent>
         </Select>
       </div>

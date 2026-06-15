@@ -378,6 +378,7 @@ export const api = {
     time_window?: string;
     limit?: number;
     min_upvotes?: number;
+    min_length?: number;
   }) => request<SvDiscoveryResult>("/storyvault/discovery/search", { method: "POST", body: JSON.stringify(data) }),
   svImportStory: (data: { title: string; body: string; category?: string; source_url?: string }) =>
     request<SvStory>("/storyvault/stories/import", { method: "POST", body: JSON.stringify(data) }),
