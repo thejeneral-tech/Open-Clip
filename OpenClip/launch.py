@@ -899,9 +899,16 @@ def ensure_fish_engine() -> None:
         return
     cmake = _find_cmake()
     if not cmake:
-        warn("CMake not found — can't build the Fish Speech engine. Install Visual Studio Build "
-             "Tools with the 'Desktop development with C++' workload (includes CMake + Ninja), then "
-             "rerun setup. Cloned voices stay unavailable until the engine is built; everything else works.")
+        if IS_WIN:
+            how = ("Install Visual Studio Build Tools with the 'Desktop development with C++' "
+                   "workload (includes CMake + Ninja)")
+        elif sys.platform == "darwin":
+            how = "Install CMake and Ninja, e.g. `brew install cmake ninja`"
+        else:
+            how = ("Install CMake and a C/C++ toolchain, e.g. "
+                   "`sudo apt install cmake ninja-build build-essential`")
+        warn("CMake not found — can't build the Fish Speech engine (optional; it powers cloned "
+             f"voices in Voice Lab). {how}, then rerun setup. Everything else works without it.")
         return
     ninja = _bundled_ninja(cmake)
     if IS_WIN:
