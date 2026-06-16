@@ -49,7 +49,7 @@ class YouTubeConnector(PublishConnector):
     platform = "youtube"
     requires_credentials = True
 
-    def validate(self, connector: "PublishingConnector") -> tuple[bool, str]:
+    def validate(self, connector: PublishingConnector) -> tuple[bool, str]:
         if not is_configured():
             return False, (
                 "YouTube isn't configured on the server (GOOGLE_CLIENT_ID / "
@@ -63,7 +63,7 @@ class YouTubeConnector(PublishConnector):
         return True, "ready"
 
     def publish(
-        self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector"
+        self, job: PublishingJob, asset_path: str, connector: PublishingConnector
     ) -> PublishResult:
         refresh_token = (connector.credentials or {}).get("refresh_token")
         if not refresh_token:
@@ -154,11 +154,11 @@ class ComingSoonConnector(PublishConnector):
     requires_credentials = False
     label = "This platform"
 
-    def validate(self, connector: "PublishingConnector") -> tuple[bool, str]:
+    def validate(self, connector: PublishingConnector) -> tuple[bool, str]:
         return False, f"{self.label} publishing is coming soon."
 
     def publish(
-        self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector"
+        self, job: PublishingJob, asset_path: str, connector: PublishingConnector
     ) -> PublishResult:
         raise ConnectorNotConfigured(f"{self.label} publishing is coming soon.")
 

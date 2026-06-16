@@ -9,6 +9,7 @@ Turns clip words into styled, animated captions:
 """
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass, replace
 from typing import Any
@@ -155,10 +156,10 @@ def _caption_center_y(overrides: dict[str, Any], height: int) -> int | None:
     global lower-third placement. ``centerY`` (from the top) wins; otherwise
     ``marginV`` (from the bottom) is converted to a centre."""
     cy = overrides.get("centerY")
-    if isinstance(cy, (int, float)) and cy > 0:
+    if isinstance(cy, int | float) and cy > 0:
         return max(0, min(int(round(cy)), height))
     mv = overrides.get("marginV")
-    if isinstance(mv, (int, float)) and mv >= 0:
+    if isinstance(mv, int | float) and mv >= 0:
         return max(0, min(int(round(height - mv)), height))
     return None
 
@@ -402,10 +403,7 @@ def build_segments(
         # Hold this group until the next group's first word (never past it), but
         # not more than MAX_HOLD past the last spoken word so it doesn't linger
         # through a long pause. The final group simply ends with its last word.
-        if gi + 1 < n:
-            group_end = min(tokens[groups[gi + 1][0]]["start"], last_end + MAX_HOLD)
-        else:
-            group_end = last_end
+        group_end = min(tokens[groups[gi + 1][0]]["start"], last_end + MAX_HOLD) if gi + 1 < n else last_end
         if group_end <= group_start:
             group_end = group_start + MIN_SEG_DUR
 
@@ -521,13 +519,13 @@ def render_ass(
     # equals the render height), used verbatim; otherwise the style's height-
     # relative size at 65%.
     ov_size = overrides.get("size")
-    if isinstance(ov_size, (int, float)) and ov_size > 0:
+    if isinstance(ov_size, int | float) and ov_size > 0:
         fontsize = max(12, int(round(ov_size)))
     else:
         fontsize = max(12, int(round(style.font_scale * height * CAPTION_SIZE_SCALE)))
     ov_outline = overrides.get("outline")
     outline = (
-        float(ov_outline) if isinstance(ov_outline, (int, float)) and ov_outline >= 0 else style.outline
+        float(ov_outline) if isinstance(ov_outline, int | float) and ov_outline >= 0 else style.outline
     )
     bold = -1 if style.bold else 0
 
@@ -594,10 +592,9 @@ def write_ass(
             max_words=max_words, overrides=overrides, start_offset=start_offset,
         ))
     if learning is not None:
-        try:
+        # best-effort: the learning profile is optional
+        with contextlib.suppress(Exception):
             learning.record_render(style_name, audit_timeline(tokens, style_name, max_words))
-        except Exception:  # pragma: no cover - learning is optional
-            pass
     return path
 
 

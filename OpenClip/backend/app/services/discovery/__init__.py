@@ -10,11 +10,10 @@ and stays fully self-hosted.
 """
 from __future__ import annotations
 
-from app.services.discovery.base import DiscoveredItem, DiscoveryPlugin
-from app.services.discovery.registry import discover_source, get_plugin, register, registry
-
 # Importing the plugin modules registers them as a side effect.
 from app.services.discovery import reddit, rss, youtube  # noqa: E402,F401
+from app.services.discovery.base import DiscoveredItem, DiscoveryPlugin
+from app.services.discovery.registry import discover_source, get_plugin, register, registry
 
 __all__ = [
     "DiscoveredItem",

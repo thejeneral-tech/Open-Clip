@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
@@ -105,7 +105,7 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_sessio
             raise ValueError("wrong token type")
         user_id = int(decoded["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        raise HTTPException(status_code=401, detail="Invalid refresh token") from None
 
     user = await db.get(User, user_id)
     if not user or not user.is_active:

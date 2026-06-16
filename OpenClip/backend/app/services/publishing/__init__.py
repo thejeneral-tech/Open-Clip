@@ -12,15 +12,14 @@ and post by hand (a real, working "publish queue"). Real social connectors
 """
 from __future__ import annotations
 
+# Import connector modules to register them.
+from app.services.publishing import manual, platforms  # noqa: E402,F401
 from app.services.publishing.base import (
     ConnectorNotConfigured,
     PublishConnector,
     PublishResult,
 )
 from app.services.publishing.registry import get_connector, register, registry
-
-# Import connector modules to register them.
-from app.services.publishing import manual, platforms  # noqa: E402,F401
 
 __all__ = [
     "ConnectorNotConfigured",

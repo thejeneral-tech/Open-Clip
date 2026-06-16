@@ -250,7 +250,7 @@ def _detect_silences(wav_path: str) -> list[tuple[float, float]]:
     out = proc.stderr or ""
     starts = [float(m) for m in re.findall(r"silence_start:\s*([0-9.]+)", out)]
     ends = [float(m) for m in re.findall(r"silence_end:\s*([0-9.]+)", out)]
-    return list(zip(starts, ends))
+    return list(zip(starts, ends, strict=False))
 
 
 def _speech_bounds(
@@ -294,7 +294,7 @@ def _piecewise(
     n = len(R)
     out = [0.0] * n
     lo = 0
-    for k, (rs, re) in enumerate(runs):
+    for k, (rs, rend) in enumerate(runs):
         hi = bounds[k] if k < len(bounds) else n - 1  # inclusive last index
         idx = list(range(lo, hi + 1))
         lo = hi + 1
@@ -309,7 +309,7 @@ def _piecewise(
         denom = r_end - r_first
         for j in idx:
             frac = (R[j] - r_first) / denom if denom > 0 else 0.0
-            out[j] = rs + frac * (re - rs)
+            out[j] = rs + frac * (rend - rs)
     return out
 
 
@@ -402,7 +402,7 @@ def _calibrate(
             result = _piecewise(R, bounds, runs)
 
     prev_t = -1.0
-    for d, t in zip(deduped, result):
+    for d, t in zip(deduped, result, strict=False):
         t = max(0.0, t, prev_t + 1e-3)  # strictly monotonic, never negative
         d["audioMs"] = t * 1000.0
         prev_t = t

@@ -12,8 +12,7 @@ from typing import Any
 
 def iter_words(segments: list[dict[str, Any]]):
     for seg in segments:
-        for w in seg.get("words", []) or []:
-            yield w
+        yield from seg.get("words", []) or []
 
 
 def words_in_range(

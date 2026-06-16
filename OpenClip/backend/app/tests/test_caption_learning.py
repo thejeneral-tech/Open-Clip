@@ -3,8 +3,7 @@ import json
 
 import pytest
 
-from app.services import caption_learning as cl
-from app.services import captions as cap
+from app.services import caption_learning as cl, captions as cap
 
 
 @pytest.fixture

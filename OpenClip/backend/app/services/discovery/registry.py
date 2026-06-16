@@ -27,7 +27,7 @@ def get_plugin(platform: str) -> DiscoveryPlugin | None:
 
 
 def discover_source(
-    source: "TrendSource", *, limit: int = 25, lookback_hours: int = 168
+    source: TrendSource, *, limit: int = 25, lookback_hours: int = 168
 ) -> list[DiscoveredItem]:
     """Run the plugin matching ``source.platform``; never raises."""
     plugin = get_plugin(source.platform)

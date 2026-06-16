@@ -52,7 +52,7 @@ class SvStory(TimestampMixin, Base):
         ForeignKey("sv_projects.id", ondelete="SET NULL"), default=None, index=True
     )
 
-    scripts: Mapped[list["SvScript"]] = relationship(
+    scripts: Mapped[list[SvScript]] = relationship(
         "SvScript", back_populates="story", cascade="all, delete-orphan"
     )
 
@@ -74,7 +74,7 @@ class SvScript(CreatedAtMixin, Base):
     word_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     generator: Mapped[str | None] = mapped_column(String(128), default=None)  # model name | heuristic
 
-    story: Mapped["SvStory"] = relationship("SvStory", back_populates="scripts")
+    story: Mapped[SvStory] = relationship("SvStory", back_populates="scripts")
 
 
 class SvBackground(TimestampMixin, Base):
@@ -99,7 +99,7 @@ class SvBackground(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default=JobStatus.PENDING.value, nullable=False)
     error: Mapped[str | None] = mapped_column(Text, default=None)
 
-    segments: Mapped[list["SvSegment"]] = relationship(
+    segments: Mapped[list[SvSegment]] = relationship(
         "SvSegment", back_populates="background", cascade="all, delete-orphan"
     )
 
@@ -115,7 +115,7 @@ class SvSegment(CreatedAtMixin, Base):
     end_sec: Mapped[float] = mapped_column(Float, nullable=False)
     times_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    background: Mapped["SvBackground"] = relationship("SvBackground", back_populates="segments")
+    background: Mapped[SvBackground] = relationship("SvBackground", back_populates="segments")
 
 
 class SvVideo(TimestampMixin, Base):
@@ -200,8 +200,8 @@ class SvVideo(TimestampMixin, Base):
     # a worker that picks the job up after the request.
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    story: Mapped["SvStory"] = relationship("SvStory")
-    script: Mapped["SvScript | None"] = relationship("SvScript")
+    story: Mapped[SvStory] = relationship("SvStory")
+    script: Mapped[SvScript | None] = relationship("SvScript")
 
 
 class SvVoicePreset(CreatedAtMixin, Base):
@@ -292,7 +292,7 @@ class SvPublishJob(CreatedAtMixin, Base):
     external_url: Mapped[str | None] = mapped_column(Text, default=None)
     error: Mapped[str | None] = mapped_column(Text, default=None)
 
-    video: Mapped["SvVideo"] = relationship("SvVideo")
+    video: Mapped[SvVideo] = relationship("SvVideo")
 
 
 class SvExport(CreatedAtMixin, Base):
@@ -315,7 +315,7 @@ class SvExport(CreatedAtMixin, Base):
     height: Mapped[int | None] = mapped_column(Integer, default=None)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
-    video: Mapped["SvVideo"] = relationship("SvVideo")
+    video: Mapped[SvVideo] = relationship("SvVideo")
 
 
 class SvProject(TimestampMixin, Base):

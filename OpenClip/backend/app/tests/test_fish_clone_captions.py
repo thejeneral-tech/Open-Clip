@@ -36,7 +36,7 @@ def test_align_keeps_script_text_over_whisper_mishearing():
     assert words[3]["start"] == 0.9            # "sign" anchored
     assert words[5]["end"] == 2.0
     # ...and the two misheard words are interpolated between their anchors.
-    assert 0.2 <= words[1]["start"] and words[2]["end"] <= 0.9
+    assert words[1]["start"] >= 0.2 and words[2]["end"] <= 0.9
     starts = [w["start"] for w in words]
     assert starts == sorted(starts)            # monotonic timeline
 
@@ -47,7 +47,7 @@ def test_align_preserves_script_numbers_spelled_out_by_whisper():
     whisper = _ww(("for", 0.0, 0.3), ("four", 0.3, 0.7), ("hours", 0.7, 1.2))
     words = fish_clone._align_to_text(text, whisper, 1.2)
     assert [w["word"] for w in words] == ["for", "4", "hours"]
-    assert 0.3 <= words[1]["start"] and words[1]["end"] <= 0.7
+    assert words[1]["start"] >= 0.3 and words[1]["end"] <= 0.7
 
 
 def test_align_always_returns_one_token_per_script_word():

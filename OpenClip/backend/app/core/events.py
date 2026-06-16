@@ -14,6 +14,7 @@ captures sub-step progress that we intentionally don't persist.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -86,10 +87,8 @@ def publish_progress(
         finally:
             # Never leave an orphaned temp behind (a failed replace would).
             if os.path.exists(tmp):
-                try:
+                with contextlib.suppress(OSError):
                     os.remove(tmp)
-                except OSError:
-                    pass
     except Exception as exc:  # pragma: no cover - never let telemetry kill a job
         logger.warning("Failed to publish progress for %s:%s: %s", scope, scope_id, exc)
 

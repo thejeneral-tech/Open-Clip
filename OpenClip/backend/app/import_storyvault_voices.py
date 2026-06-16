@@ -95,7 +95,7 @@ def main() -> int:
     from app.core.database import session_scope
     from app.models.storyvault import SvVoicePreset
     from app.models.user import User
-    from app.services.storage import sv_voice_preset_preview_key, storage
+    from app.services.storage import storage, sv_voice_preset_preview_key
 
     source = Path(args.source)
     previews_dir = (

@@ -57,7 +57,7 @@ class RssPlugin:
     platform = "rss"
 
     def discover(
-        self, source: "TrendSource", *, limit: int = 25, lookback_hours: int = 168
+        self, source: TrendSource, *, limit: int = 25, lookback_hours: int = 168
     ) -> list[DiscoveredItem]:
         headers = {"User-Agent": settings.DISCOVERY_USER_AGENT}
         with httpx.Client(timeout=30, headers=headers, follow_redirects=True) as client:

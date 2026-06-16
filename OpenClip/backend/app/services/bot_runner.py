@@ -343,9 +343,7 @@ def is_within_active_window(sched: dict[str, Any], now: datetime | None = None) 
         return False
     if hours and now.hour not in hours:
         return False
-    if quiet and now.hour in quiet:
-        return False
-    return True
+    return not (quiet and now.hour in quiet)
 
 
 def compute_next_run(sched: dict[str, Any], now: datetime | None = None) -> datetime:

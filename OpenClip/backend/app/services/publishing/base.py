@@ -28,7 +28,7 @@ class PublishConnector(ABC):
     #: True if real external credentials are required to publish.
     requires_credentials: bool = True
 
-    def validate(self, connector: "PublishingConnector") -> tuple[bool, str]:
+    def validate(self, connector: PublishingConnector) -> tuple[bool, str]:
         """Check the connector is ready to publish. Returns ``(ok, detail)``."""
         if self.requires_credentials and not connector.credentials:
             return False, f"{self.platform} connector has no credentials configured"
@@ -36,13 +36,13 @@ class PublishConnector(ABC):
 
     @abstractmethod
     def publish(
-        self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector"
+        self, job: PublishingJob, asset_path: str, connector: PublishingConnector
     ) -> PublishResult:
         """Deliver ``asset_path`` to the platform for ``job``."""
         raise NotImplementedError
 
     def fetch_analytics(
-        self, job: "PublishingJob", connector: "PublishingConnector"
+        self, job: PublishingJob, connector: PublishingConnector
     ) -> dict[str, Any]:
         """Pull post-publish performance. Default: nothing available."""
         return {}

@@ -67,7 +67,7 @@ async def _sync_bot_platforms(db: AsyncSession, bot_id: int | None) -> None:
             select(PublishingConnector.platform).where(PublishingConnector.bot_id == bot_id)
         )
     ).scalars().all()
-    platforms = sorted({p for p in rows})
+    platforms = sorted(set(rows))
     cfg = dict(bot.publishing_config or {})
     cfg["platforms"] = platforms or ["manual"]
     bot.publishing_config = cfg

@@ -40,7 +40,7 @@ class RedditPlugin:
     platform = "reddit"
 
     def discover(
-        self, source: "TrendSource", *, limit: int = 25, lookback_hours: int = 168
+        self, source: TrendSource, *, limit: int = 25, lookback_hours: int = 168
     ) -> list[DiscoveredItem]:
         url = _listing_url(source.identifier, limit)
         headers = {"User-Agent": settings.DISCOVERY_USER_AGENT}

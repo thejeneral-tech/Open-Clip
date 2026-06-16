@@ -22,7 +22,7 @@ class ManualConnector(PublishConnector):
     requires_credentials = False
 
     def publish(
-        self, job: "PublishingJob", asset_path: str, connector: "PublishingConnector | None" = None
+        self, job: PublishingJob, asset_path: str, connector: PublishingConnector | None = None
     ) -> PublishResult:
         if not asset_path or not os.path.exists(asset_path):
             return PublishResult(success=False, detail="Rendered asset not found for clip")

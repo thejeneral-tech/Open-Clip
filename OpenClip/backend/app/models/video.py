@@ -47,4 +47,4 @@ class Video(TimestampMixin, Base):
     error: Mapped[str | None] = mapped_column(Text, default=None)
     celery_task_id: Mapped[str | None] = mapped_column(String(64), default=None)
 
-    project: Mapped["Project"] = relationship("Project")
+    project: Mapped[Project] = relationship("Project")

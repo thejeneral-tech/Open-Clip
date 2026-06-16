@@ -29,6 +29,7 @@ an ``nvidia-smi`` fallback for non-Windows hosts.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -203,10 +204,8 @@ def _process_tree(pid: int) -> list[psutil.Process]:
     except psutil.NoSuchProcess:
         return []
     tree = [root]
-    try:
+    with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
         tree.extend(root.children(recursive=True))
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        pass
     return tree
 
 
@@ -574,10 +573,9 @@ def terminate_gpu_process(pid: int) -> bool:
             logger.warning("Could not terminate PID %s: %s", proc.pid, exc)
     _, alive = psutil.wait_procs(targets, timeout=5)
     for proc in alive:
-        try:
-            proc.kill()  # graceful term didn't take — force it
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
+        # graceful term didn't take — force it
+        with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
+            proc.kill()
     if asked:
         _invalidate_cache()
         logger.info("Terminated service tree at PID %s (%d process(es))", pid, len(targets))

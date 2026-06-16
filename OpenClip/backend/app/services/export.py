@@ -11,6 +11,7 @@ selected automatically.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import statistics
 import tempfile
@@ -252,7 +253,6 @@ def render_clip(
     filtergraph = f"[0:v]{','.join(vchain)}[v]"
 
     # ---- assemble command ----
-    fmt = "mp4" if output_path.lower().endswith(".mp4") else "mov"
     args = [
         *ffmpeg.decode_args(hwaccel),
         "-ss", f"{start:.3f}", "-i", source_path, "-t", f"{duration:.3f}",
@@ -268,10 +268,8 @@ def render_clip(
         ffmpeg.run(args, duration=duration, on_progress=on_progress)
     finally:
         for f in tmp_files:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(f)
-            except OSError:
-                pass
 
     size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
     return RenderResult(path=output_path, width=out_w, height=out_h, duration=duration, size_bytes=size)

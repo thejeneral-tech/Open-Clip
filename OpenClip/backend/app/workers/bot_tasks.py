@@ -18,7 +18,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.core.config import settings
 from app.core.database import session_scope
 from app.core.events import publish_progress
 from app.core.logging import get_logger

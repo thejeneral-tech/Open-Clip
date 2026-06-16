@@ -12,6 +12,7 @@ the Next.js dev server in local development).
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 from pathlib import Path
@@ -149,10 +150,9 @@ class Storage:
         if ensure_parent:
             local.parent.mkdir(parents=True, exist_ok=True)
         if self.backend == "s3" and not local.exists():
-            try:
+            # may not exist yet (we're about to create it)
+            with contextlib.suppress(Exception):
                 self._s3.download_file(settings.S3_BUCKET, key, str(local))
-            except Exception:
-                pass  # may not exist yet (we're about to create it)
         return str(local)
 
     def exists(self, key: str) -> bool:
@@ -200,10 +200,8 @@ class Storage:
             else:
                 local.unlink(missing_ok=True)
         if self.backend == "s3":
-            try:
+            with contextlib.suppress(Exception):
                 self._s3.delete_object(Bucket=settings.S3_BUCKET, Key=key)
-            except Exception:
-                pass
 
     def size(self, key: str) -> int | None:
         local = self.root / key

@@ -71,4 +71,4 @@ class TrendItem(CreatedAtMixin, Base):
     )
     reason: Mapped[str | None] = mapped_column(Text, default=None)
 
-    source: Mapped["TrendSource | None"] = relationship("TrendSource")
+    source: Mapped[TrendSource | None] = relationship("TrendSource")

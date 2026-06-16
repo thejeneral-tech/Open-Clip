@@ -16,6 +16,7 @@ running multiple API replicas, point exactly one at the scheduler).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, select
@@ -141,8 +142,6 @@ async def stop_scheduler() -> None:
     global _task
     if _task and not _task.done():
         _task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _task
-        except asyncio.CancelledError:
-            pass
     _task = None

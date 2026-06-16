@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import uuid
@@ -87,6 +88,7 @@ from app.schemas.storyvault import (
     SvVoiceSampleOut,
     SvVoiceSampleRequest,
 )
+from app.services.ffmpeg import ffmpeg
 from app.services.storage import (
     storage,
     sv_background_key,
@@ -95,9 +97,7 @@ from app.services.storage import (
     sv_voice_ref_key,
     sv_voice_sample_key,
 )
-from app.services.ffmpeg import ffmpeg
-from app.services.storyvault import fish_clone, reddit, scoring
-from app.services.storyvault import tts as tts_svc
+from app.services.storyvault import fish_clone, reddit, scoring, tts as tts_svc
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
 from app.services.storyvault.voice_presets import ensure_voice_presets
 from app.workers.sv_tasks import (
@@ -251,7 +251,7 @@ async def _resolve_voice(
         try:
             preset_id = int(voice.split(":", 1)[1])
         except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid voice preset")
+            raise HTTPException(status_code=422, detail="Invalid voice preset") from None
         preset = await db.get(SvVoicePreset, preset_id)
         if not preset or preset.owner_id != user.id or preset.deleted_at is not None:
             raise HTTPException(status_code=404, detail="Voice preset not found")
@@ -499,10 +499,8 @@ async def clone_upload(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not decode the audio: {exc}") from exc
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(raw_path)
-        except OSError:
-            pass
 
     return SvCloneUploadOut(reference_id=token, filename=(file.filename or "reference")[:256])
 
@@ -1474,10 +1472,10 @@ async def upload_background(
             while chunk := await file.read(8 * 1024 * 1024):
                 fh.write(chunk)
         storage.commit(key)
-    except Exception:
+    except Exception as exc:
         await db.delete(bg)
         await db.commit()
-        raise HTTPException(status_code=500, detail="Failed to store the upload")
+        raise HTTPException(status_code=500, detail="Failed to store the upload") from exc
 
     bg.storage_path = key
     bg.status = JobStatus.QUEUED.value
@@ -1867,7 +1865,7 @@ async def publish_video(
     await db.commit()
 
     out: list[SvPublishJobOut] = []
-    for job, connector in zip(jobs, connectors):
+    for job, connector in zip(jobs, connectors, strict=False):
         await db.refresh(job)
         sv_publish_job_task.delay(job.id)
         item = SvPublishJobOut.model_validate(job)

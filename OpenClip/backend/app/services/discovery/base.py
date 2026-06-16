@@ -51,7 +51,7 @@ class DiscoveryPlugin(ABC):
 
     @abstractmethod
     def discover(
-        self, source: "TrendSource", *, limit: int = 25, lookback_hours: int = 168
+        self, source: TrendSource, *, limit: int = 25, lookback_hours: int = 168
     ) -> list[DiscoveredItem]:
         """Return up to ``limit`` items for ``source`` within the lookback window."""
         raise NotImplementedError

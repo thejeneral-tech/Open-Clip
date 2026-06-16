@@ -378,7 +378,6 @@ def compute_trajectory(
 
             if chosen is not None:
                 cx_out, cy_out = chosen
-                is_miss = False
                 if method == "face":
                     method_used = "face"
                 elif method == "person" and method_used != "face":
@@ -386,10 +385,8 @@ def compute_trajectory(
             elif lock is not None:  # holding the last subject (pending switch)
                 cx_out, cy_out = lock
                 conf = 0.4
-                is_miss = False
             else:  # genuine detection miss
                 cx_out, cy_out, conf = None, None, 0.0
-                is_miss = True
 
             raw.append({"t": t, "cx": cx_out, "cy": cy_out, "conf": conf,
                         "switch": hard_switch, "scene": scene_cut})

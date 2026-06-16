@@ -10,7 +10,6 @@ live over WebSocket.
 """
 from __future__ import annotations
 
-import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -553,11 +552,11 @@ def render_preview_task(self, clip_id: int) -> dict[str, Any]:
             video = db.get(Video, clip.video_id)
             source_path = _source_path(video)
             project_id, video_id = video.project_id, video.id
-            params = dict(
-                start=clip.start_time, end=clip.end_time, aspect=clip.aspect_ratio,
-                style=clip.caption_style, tokens=clip.captions or [], reframe=clip.reframe_data or {},
-                caption_config=clip.caption_config,
-            )
+            params = {
+                "start": clip.start_time, "end": clip.end_time, "aspect": clip.aspect_ratio,
+                "style": clip.caption_style, "tokens": clip.captions or [], "reframe": clip.reframe_data or {},
+                "caption_config": clip.caption_config,
+            }
             clip.status = JobStatus.PROCESSING.value
 
         tracker.set(stage="render", progress=0.1, message="Rendering preview")
@@ -608,13 +607,13 @@ def export_clip_task(self, export_id: int) -> dict[str, Any]:
             video = db.get(Video, clip.video_id)
             source_path = _source_path(video)
             project_id, video_id, clip_id = video.project_id, video.id, clip.id
-            params = dict(
-                start=clip.start_time, end=clip.end_time, style=clip.caption_style,
-                tokens=clip.captions or [], reframe=clip.reframe_data or {},
-                fmt=export.format, resolution=export.resolution,
-                aspect=export.aspect_ratio, burn=export.burn_captions,
-                caption_config=clip.caption_config,
-            )
+            params = {
+                "start": clip.start_time, "end": clip.end_time, "style": clip.caption_style,
+                "tokens": clip.captions or [], "reframe": clip.reframe_data or {},
+                "fmt": export.format, "resolution": export.resolution,
+                "aspect": export.aspect_ratio, "burn": export.burn_captions,
+                "caption_config": clip.caption_config,
+            }
             export.status = JobStatus.PROCESSING.value
             export.hwaccel = settings.HWACCEL
 
@@ -664,7 +663,7 @@ def regenerate_clip_task(self, clip_id: int, opts: dict[str, Any]) -> dict[str, 
         with session_scope() as db:
             clip = db.get(Clip, clip_id)
             video = db.get(Video, clip.video_id)
-            start, end, title, style = clip.start_time, clip.end_time, clip.title, clip.caption_style
+            start, end, title = clip.start_time, clip.end_time, clip.title
             transcript = (
                 db.query(Transcript).filter(Transcript.video_id == clip.video_id).one_or_none()
             )

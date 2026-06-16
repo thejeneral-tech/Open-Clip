@@ -2,11 +2,13 @@
 name = "openclip-backend"
 version = "1.0.0"
 description = "OpenClip backend — self-hosted AI short-form clip generator"
-requires-python = ">=3.11"
+# 3.10 is the documented floor (README, launcher, setup scripts) — the ML wheels
+# cap the top at 3.12. Keep this and the ruff target in sync with that range.
+requires-python = ">=3.10"
 
 [tool.ruff]
 line-length = 110
-target-version = "py311"
+target-version = "py310"
 extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
@@ -15,6 +17,9 @@ ignore = ["B008", "E501"]  # B008: FastAPI Depends() in defaults is idiomatic
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+# Keep aliased imports in the same parenthesised block as their neighbours
+# instead of exploding each `x as y` onto its own `from … import` line.
+combine-as-imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

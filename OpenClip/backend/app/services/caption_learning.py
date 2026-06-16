@@ -12,6 +12,7 @@ and degrades to "no opinion" (``suggest_max_words`` → ``None``, ``record_rende
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -62,10 +63,8 @@ def _save(data: dict[str, Any]) -> None:
         os.replace(tmp, path)  # atomic swap
     finally:
         if os.path.exists(tmp):
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(tmp)
-            except OSError:
-                pass
 
 
 def _style_entry(data: dict[str, Any], style_name: str) -> dict[str, Any]:

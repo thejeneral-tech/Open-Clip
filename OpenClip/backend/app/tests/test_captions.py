@@ -31,7 +31,7 @@ def test_build_tokens_strips_commas():
 
 
 def _style_fields(ass: str) -> list[str]:
-    line = next(l for l in ass.splitlines() if l.startswith("Style: Default"))
+    line = next(ln for ln in ass.splitlines() if ln.startswith("Style: Default"))
     return line.split(",")
 
 
@@ -40,11 +40,11 @@ def test_render_ass_events_format_field_count_matches_dialogue():
     # Dialogue line provides (incl. the empty Name) — otherwise libass shifts
     # the columns and the Text field absorbs a stray leading comma.
     ass = render_ass(_tokens(), "hormozi", 1080, 1920)
-    fmt = next(l for l in ass.splitlines()
-               if l.startswith("Format:") and "Text" in l and "Start" in l)
+    fmt = next(ln for ln in ass.splitlines()
+               if ln.startswith("Format:") and "Text" in ln and "Start" in ln)
     assert "Name" in fmt
     n_fields = len(fmt.split(":", 1)[1].split(","))
-    dialogue = next(l for l in ass.splitlines() if l.startswith("Dialogue"))
+    dialogue = next(ln for ln in ass.splitlines() if ln.startswith("Dialogue"))
     # values before the Text field == n_fields - 1
     head = dialogue.split(":", 1)[1].split(",", n_fields - 1)
     assert len(head) == n_fields
@@ -56,8 +56,8 @@ def test_render_ass_caption_text_has_no_leading_comma():
         {"word": "1,000", "start": 0.4, "end": 0.8},
     ])
     ass = render_ass(tokens, "hormozi", 1080, 1920)
-    fmt = next(l for l in ass.splitlines()
-               if l.startswith("Format:") and "Text" in l and "Start" in l)
+    fmt = next(ln for ln in ass.splitlines()
+               if ln.startswith("Format:") and "Text" in ln and "Start" in ln)
     n_fields = len(fmt.split(":", 1)[1].split(","))
     for line in ass.splitlines():
         if line.startswith("Dialogue"):
@@ -231,15 +231,15 @@ def test_render_ass_overrides_pin_vertical_centre():
     fields = _style_fields(ass)
     assert int(fields[-5]) == 5          # alignment middle-centre
     assert int(fields[-2]) == 0          # margin handed to \pos instead
-    dialogue = [l for l in ass.splitlines() if l.startswith("Dialogue")]
-    assert dialogue and all("\\an5\\pos(540,960)" in l for l in dialogue)
+    dialogue = [ln for ln in ass.splitlines() if ln.startswith("Dialogue")]
+    assert dialogue and all("\\an5\\pos(540,960)" in ln for ln in dialogue)
 
 
 def test_render_ass_overrides_margin_v_converts_to_centre():
     # marginV (from the bottom) → centre at height − marginV when centerY absent.
     ass = render_ass(_tokens(), "modern_tiktok", 1080, 1920, overrides={"marginV": 520})
-    dialogue = [l for l in ass.splitlines() if l.startswith("Dialogue")]
-    assert dialogue and all("\\pos(540,1400)" in l for l in dialogue)  # 1920 - 520
+    dialogue = [ln for ln in ass.splitlines() if ln.startswith("Dialogue")]
+    assert dialogue and all("\\pos(540,1400)" in ln for ln in dialogue)  # 1920 - 520
 
 
 def test_render_ass_pop_style_disables_karaoke_highlight():

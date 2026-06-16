@@ -93,7 +93,8 @@ def test_build_sendcmd_real_pan_emits_valid_lines(tmp_path):
     p = str(tmp_path / "s.txt")
     pan = [(0.0, 0, 100), (1.0, 400, 100)]
     assert _build_sendcmd(pan, p, grid_fps=30.0, max_x=1000, max_y=1000) is True
-    lines = [ln for ln in open(p, encoding="utf-8").read().splitlines() if ln.strip()]
+    with open(p, encoding="utf-8") as fh:
+        lines = [ln for ln in fh.read().splitlines() if ln.strip()]
     assert lines
     assert all(re.match(r"^[0-9]+\.[0-9]+ crop [xy] -?[0-9]+;$", ln) for ln in lines)
 
@@ -142,7 +143,7 @@ def test_smooth_centers_sustained_move_glides_once_then_locks():
     assert xs[0] == xs[9] == 0.3            # locked before the move
     assert xs[-1] == 0.8                    # locked on the new position
     assert xs == sorted(xs)                 # monotonic glide, no overshoot/wobble
-    assert len({x for x in xs}) <= 8        # static-glide-static, not continuous drift
+    assert len(set(xs)) <= 8        # static-glide-static, not continuous drift
 
 
 def test_smooth_centers_scene_cut_snaps_with_pinned_keyframe():

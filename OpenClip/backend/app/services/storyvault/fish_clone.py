@@ -11,6 +11,7 @@ it builds the multipart body by hand (stdlib only) and writes the returned WAV.
 """
 from __future__ import annotations
 
+import contextlib
 import difflib
 import json
 import os
@@ -203,10 +204,8 @@ def synthesize(
             audio = resp.read()
     except urllib.error.HTTPError as exc:
         detail = ""
-        try:
+        with contextlib.suppress(Exception):
             detail = exc.read().decode("utf-8", "replace")[:200].strip()
-        except Exception:
-            pass
         raise FishCloneError(f"Fish synthesis failed (HTTP {exc.code}{': ' + detail if detail else ''}).") from exc
     except Exception as exc:
         raise FishCloneError(f"Fish synthesis failed ({exc}). Server {server_url()}.") from exc
@@ -396,7 +395,7 @@ def _align_to_text(text: str, whisper_words: list[dict], duration: float) -> lis
     # the trailing run, each spread across the time between its bracketing anchors.
     end_t = max(duration, out[anchors[-1]]["end"])
     _spread(out, 0, anchors[0], 0.0, out[anchors[0]]["start"])
-    for p, q in zip(anchors, anchors[1:]):
+    for p, q in zip(anchors, anchors[1:], strict=False):
         _spread(out, p + 1, q, out[p]["end"], out[q]["start"])
     _spread(out, anchors[-1] + 1, len(out), out[anchors[-1]]["end"], end_t)
 
@@ -421,7 +420,7 @@ def narrate(
     ref_path: str | None = None,
     prompt_text: str | None = None,
     speed: float = 1.0,
-) -> "NarrationResult":
+) -> NarrationResult:
     """Body-only narration in the cloned voice, with word-synced caption timings.
 
     The SAPI counterpart is :func:`tts.synthesize`; this returns the same
@@ -449,7 +448,7 @@ def narrate_story(
     ref_path: str | None = None,
     prompt_text: str | None = None,
     speed: float = 1.0,
-) -> "StoryNarration":
+) -> StoryNarration:
     """Intro-sequence + body narration in the cloned voice.
 
     Each present beat (``card`` / ``author`` / ``body``) is synthesized on its own

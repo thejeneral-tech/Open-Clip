@@ -45,7 +45,7 @@ class YouTubePlugin:
     platform = "youtube"
 
     def discover(
-        self, source: "TrendSource", *, limit: int = 25, lookback_hours: int = 168
+        self, source: TrendSource, *, limit: int = 25, lookback_hours: int = 168
     ) -> list[DiscoveredItem]:
         import yt_dlp
 
