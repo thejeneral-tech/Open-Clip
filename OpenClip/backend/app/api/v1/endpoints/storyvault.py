@@ -1,7 +1,6 @@
 """Story Vault API — discovery, story library, footage, video pipeline, exports."""
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import os
 import re
@@ -894,9 +893,9 @@ async def _collect_reddit_into_project(
     # Scan deeper when the project wants long stories — they're a small fraction
     # of any feed, so a shallow scan would rarely surface a 20–30 minute story.
     scan_limit = 100 if s.min_length >= 8000 else 25
-    for i, community in enumerate(s.communities):
-        if i:
-            await asyncio.sleep(1.0)  # space out requests to dodge Reddit's rate limiter
+    for community in s.communities:
+        # Pacing between subreddits is enforced centrally by the throttle gate in
+        # reddit.fetch_community, so we just fetch each in turn here.
         try:
             fetched.extend(
                 await reddit.fetch_community(
@@ -1247,10 +1246,9 @@ async def discovery_search(
     fetched: list[dict] = []
     errors: list[str] = []
     throttled = False
-    for i, community in enumerate(payload.communities):
-        # Space out requests a little; Reddit throttles rapid unauthenticated reads.
-        if i:
-            await asyncio.sleep(2.0)
+    for community in payload.communities:
+        # Pacing between subreddits is enforced centrally by the throttle gate in
+        # reddit.fetch_community, so we just fetch each in turn here.
         try:
             fetched.extend(
                 await reddit.fetch_community(

@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     # Network identity for public discovery requests (Reddit/RSS) — be a good
     # citizen and identify the deployment.
     DISCOVERY_USER_AGENT: str = "OpenClip-Bot/1.0 (+https://github.com/openclip)"
+    # Optional Reddit app-only OAuth (a free "script" app at reddit.com/prefs/apps).
+    # When both are set, Story Vault discovery uses the authenticated API
+    # (~100 reads/min, with real score/comment counts) instead of the heavily
+    # throttled public RSS feed; left blank, it falls back to RSS. See
+    # app.services.storyvault.reddit.
+    REDDIT_CLIENT_ID: str | None = None
+    REDDIT_CLIENT_SECRET: str | None = None
     # Safety valve: ingestion/processing per bot cycle is capped here regardless
     # of preset settings, so a misconfigured bot can't flood the worker.
     BOT_MAX_VIDEOS_PER_RUN: int = 5
