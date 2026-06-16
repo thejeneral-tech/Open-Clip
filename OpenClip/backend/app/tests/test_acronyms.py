@@ -8,15 +8,17 @@ helper — no SAPI, no audio.
 from app.services.storyvault.tts import speechify_acronyms
 
 
-def test_known_acronyms_spelled_as_bare_letters_for_sapi():
-    assert speechify_acronyms("WIBTA for leaving?") == "W I B T A for leaving?"
-    assert speechify_acronyms("AITA? My MIL is mad.") == "A I T A? My M I L is mad."
-    assert speechify_acronyms("OP said NTA.") == "O P said N T A."
+def test_known_acronyms_spelled_as_bare_letters():
+    # Each recognised acronym becomes its bare, space-separated letters with a
+    # trailing period, so the voice spells it as its own deliberate unit.
+    assert speechify_acronyms("WIBTA for leaving?") == "W I B T A. for leaving?"
+    assert speechify_acronyms("AITA? My MIL is mad.") == "A I T A.? My M I L. is mad."
+    assert speechify_acronyms("OP said NTA.") == "O P. said N T A.."
 
 
 def test_vowelless_initialisms_spelled_even_when_not_listed():
     # BF / DH / DW / TV aren't in the allowlist but are vowel-less initialisms.
-    assert speechify_acronyms("My BF and DH watch TV") == "My B F and D H watch T V"
+    assert speechify_acronyms("My BF and DH watch TV") == "My B F. and D H. watch T V."
 
 
 def test_emphasis_words_are_left_alone():
@@ -30,13 +32,7 @@ def test_non_acronym_abbreviations_left_alone():
 
 
 def test_possessive_acronym_keeps_suffix():
-    assert speechify_acronyms("OP's car") == "O P's car"
-
-
-def test_neural_mode_uses_phonetic_spellings():
-    # Cloned/neural voices get readable syllables, not bare letters.
-    assert speechify_acronyms("WIBTA", letters=False) == "double-you eye bee tee ay"
-    assert speechify_acronyms("OP", letters=False) == "oh pee"
+    assert speechify_acronyms("OP's car") == "O P.'s car"
 
 
 def test_long_caps_runs_are_not_treated_as_acronyms():

@@ -8,13 +8,15 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-# Set BEFORE importing the app so settings picks it up (the .env value is an
-# empty-with-inline-comment that pydantic otherwise mis-parses for scripts).
-DB = r"C:/Users/kevin/Documents/New Folder/Clip tool 2.0/data/openclip.db"
-os.environ.setdefault(
-    "CELERY_RESULT_BACKEND",
-    "db+sqlite:///C:/Users/kevin/Documents/New Folder/Clip tool 2.0/data/celery_results.db",
-)
+# Resolve the DB + Celery result backend from the app's own settings, so this
+# dev helper always targets the same local stack as ``launch.py`` on any OS
+# (no hardcoded, machine-specific paths). ``SQLITE_PATH`` is already resolved to
+# an absolute path and ``celery_result_backend`` yields the correct db+sqlite
+# URI under DATA_DIR.
+from app.core.config import settings  # noqa: E402
+
+DB = settings.SQLITE_PATH
+os.environ.setdefault("CELERY_RESULT_BACKEND", settings.celery_result_backend)
 
 import sqlite3  # noqa: E402
 

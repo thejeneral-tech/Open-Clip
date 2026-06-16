@@ -102,7 +102,10 @@ BUILTIN_TEMPLATES: list[dict[str, Any]] = [
     _variant("center_pop", "Center Pop Captions", {
         "captions": {
             "style": "pop", "size": 116, "outline": 8, "maxWords": 2, "maxChars": 12,
-            "centerY": 960, "font": "Arial Rounded MT Bold",
+            # DejaVu Sans (Pillow/fontconfig-bundled) so the burned caption font is
+            # identical on Windows and Linux — a Windows-only family would silently
+            # fall back to a different face off-Windows.
+            "centerY": 960, "font": "DejaVu Sans",
             "primary": COLORS["white"], "highlight": COLORS["white"],
         },
     }),

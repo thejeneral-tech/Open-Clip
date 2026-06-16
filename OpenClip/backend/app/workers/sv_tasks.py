@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from celery.signals import worker_ready
 
@@ -484,6 +485,16 @@ def sv_generate_video_task(sv_video_id: int) -> None:
 
         voice_cfg = opts.get("voice_config") or {}
         use_clone = (voice_cfg.get("engine") or "sapi") != "sapi"
+        # SAPI narration is Windows-only (System.Speech). On Linux/macOS the UI
+        # never offers a SAPI voice, so this only triggers for Windows-authored
+        # data run elsewhere — fail fast with an actionable message instead of an
+        # opaque TTSError deep inside narration after the whole script generates.
+        if not use_clone and sys.platform != "win32":
+            raise RuntimeError(
+                "This video uses a Windows system (SAPI) voice, which isn't "
+                "available on this host. Pick a Cloned (Fish Speech) voice in "
+                "Voice Lab and try again."
+            )
         if use_clone:
             ref_key = voice_cfg.get("ref_key")
             ref_path = (
@@ -631,6 +642,20 @@ PREVIEW_SAMPLE_TEXT = (
 )
 
 
+def _preview_narration(wav: str):
+    """Narrate the caption-preview sample, engine-agnostic.
+
+    Uses Windows SAPI where it exists; on hosts without it (Linux/macOS) the
+    sample is narrated in the cross-platform cloned voice — the same engine the
+    real pipeline uses — so caption-style previews still render everywhere. The
+    voice is immaterial here: only the word timings drive the preview captions.
+    """
+    try:
+        return tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
+    except tts.TTSError:
+        return fish_clone.narrate(PREVIEW_SAMPLE_TEXT, wav)
+
+
 @celery_app.task(name="app.workers.sv_tasks.sv_caption_previews_task")
 def sv_caption_previews_task(styles: list[str], force: bool = False) -> None:
     import tempfile
@@ -641,7 +666,14 @@ def sv_caption_previews_task(styles: list[str], force: bool = False) -> None:
 
     with tempfile.TemporaryDirectory(prefix="sv_prev_") as tmp:
         wav = os.path.join(tmp, "sample.wav")
-        result = tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
+        try:
+            result = _preview_narration(wav)
+        except Exception:
+            # No narration engine available (e.g. Linux with the Fish server
+            # down): skip preview generation rather than failing the task — the
+            # Presets page falls back to its static placeholders.
+            logger.exception("Caption previews skipped: no narration engine available")
+            return
         tokens = captions_svc.build_tokens(result.words)
         tokens = captions_svc.heuristic_emphasis(tokens)
 
