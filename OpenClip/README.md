@@ -142,6 +142,14 @@ python launch.py logs api   # tail a service (api | worker | frontend | ollama)
 python launch.py down       # stop everything
 ```
 
+Prefer a native launcher? The OS wrappers take the **same** subcommands and
+arguments — they just find Python and hand off to `launch.py`:
+
+```bash
+./launch.sh            # Linux / macOS   — e.g. ./launch.sh up, ./launch.sh logs api
+.\launch.ps1           # Windows / PowerShell — e.g. .\launch.ps1 up
+```
+
 `setup` creates `backend/.venv`, installs the Python + Node dependencies, and
 initializes the SQLite database. `up` then starts four background processes —
 **api** (Uvicorn), **worker** (Celery), **frontend** (Next.js), and **ollama** —
@@ -226,7 +234,9 @@ openclip/
 ├── scripts/          setup.ps1 / setup.sh convenience wrappers
 ├── data/             SQLite DB, media, queue, logs (git-ignored, created at runtime)
 ├── .github/          CI
-└── launch.py         the local control panel
+├── launch.py         the local control panel
+├── launch.sh         native launcher wrapper (Linux / macOS)
+└── launch.ps1        native launcher wrapper (Windows / PowerShell)
 ```
 
 ---

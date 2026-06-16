@@ -1356,7 +1356,7 @@ def cmd_up(args=None) -> bool:
     info("No AI models are installed yet — choose and install them in the web app under Settings → AI models.")
     warn("Change the default admin password in Settings after first login.")
 
-    if not no_open and web_ready:
+    if not no_open and web_ready and _has_display():
         webbrowser.open(app_url())
     return True
 
@@ -1444,7 +1444,23 @@ def cmd_logs(args=None) -> bool:
     return True
 
 
+def _has_display() -> bool:
+    """True only where a browser can open without hijacking the terminal.
+
+    On a headless Linux box (no DISPLAY/WAYLAND_DISPLAY) Python's webbrowser
+    falls back to a console browser (lynx/w3m/links) registered as a
+    GenericBrowser, which runs in the FOREGROUND and blocks the operator's
+    terminal until they quit it. Windows and macOS always open a real browser.
+    """
+    return IS_WIN or sys.platform == "darwin" or bool(
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    )
+
+
 def cmd_open(_=None) -> bool:
+    if not _has_display():
+        info(f"Open {app_url()} in your browser")
+        return True
     step(f"Opening {app_url()}")
     webbrowser.open(app_url())
     return True
