@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PhonePreview, assToCss, cssToAss, posInfo } from "@/components/storyvault/template-preview";
+import { PhonePreview, type PreviewPhase, assToCss, cssToAss, posInfo } from "@/components/storyvault/template-preview";
 import {
   useSvCreateTemplate,
   useSvDeleteTemplate,
@@ -135,6 +135,67 @@ function TemplateBadge({ t }: { t: SvTemplate }) {
     <Badge variant="outline" className="border-primary/40 text-primary">
       Custom
     </Badge>
+  );
+}
+
+// Labels for the preview beat chips (mirrors the Studio cycler).
+const BEAT_LABEL: Record<PreviewPhase, string> = {
+  topic: "Reddit card",
+  author: "Author intro",
+  caption: "Captions",
+};
+
+// Video-preset preview: shows the mock placard (Reddit topic card) the template
+// burns in, plus the other intro beats, with chips to flip between them — the
+// same beats the Studio previews, using sample data since no story is bound.
+function PresetBeatPreview({ t }: { t: SvTemplateData }) {
+  const phases: PreviewPhase[] = [];
+  if (t.topicCard?.enabled !== false) phases.push("topic");
+  if (t.authorIntro?.enabled !== false) phases.push("author");
+  if (t.captions?.enabled !== false) phases.push("caption");
+  if (phases.length === 0) phases.push("caption");
+
+  // Default to the first beat (the placard); reset when the beat set changes.
+  const [idx, setIdx] = useState(0);
+  const phaseKey = phases.join(",");
+  useEffect(() => {
+    setIdx(0);
+  }, [phaseKey]);
+  const phase = phases[Math.min(idx, phases.length - 1)];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-center">
+        <div key={phase} className="animate-in fade-in duration-300">
+          <PhonePreview t={t} phase={phase} />
+        </div>
+      </div>
+      {phases.length > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {phases.map((p, i) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setIdx(i)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors",
+                p === phase
+                  ? "bg-primary/15 font-medium text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  p === phase ? "bg-primary" : "bg-muted-foreground/40",
+                )}
+              />
+              {BEAT_LABEL[p]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -363,9 +424,10 @@ export default function PresetsPage() {
                     <p className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Preview — {selected.name}
                     </p>
-                    <PhonePreview t={selected.data} />
+                    <PresetBeatPreview t={selected.data} />
                     <p className="text-center text-xs text-muted-foreground">
-                      To-scale mock of the card + caption styling. Gameplay footage is a placeholder.
+                      To-scale mock of the placard + caption styling. Flip between the beats below.
+                      Gameplay footage is a placeholder.
                     </p>
                   </CardContent>
                 </Card>
