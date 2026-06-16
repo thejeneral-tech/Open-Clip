@@ -20,6 +20,7 @@ Run it with no arguments for an interactive menu, or use subcommands directly:
     python launch.py doctor      # check prerequisites
     python launch.py open        # open the app in your browser
     python launch.py nuke        # delete the local database + media (destructive)
+    python launch.py install-launcher  # add a double-click desktop launcher (Linux)
 
 The launcher itself is pure standard library — no pip install required. It builds
 an isolated virtualenv under ``backend/.venv`` for the backend dependencies.
@@ -1073,8 +1074,15 @@ def cmd_setup(_=None) -> bool:
         return False
     vlabel = f"{ver[0]}.{ver[1]}" if ver else "?"
     if not _compatible(ver):
-        warn(f"Using Python {vlabel}; 3.10–3.12 is recommended (some ML wheels lack "
-             f"newer builds). Set OPENCLIP_PYTHON to override.")
+        warn(f"Using Python {vlabel}; OpenClip targets 3.10–3.12.")
+        if ver and ver > COMPAT_MAX:
+            warn("The pinned ML wheels (mediapipe, numpy, opencv) have no builds for "
+                 f"Python {vlabel} yet, so the dependency install below will very likely FAIL.")
+            info("Install Python 3.12 and point the launcher at it, e.g.:")
+            info("    sudo apt install python3.12 python3.12-venv   # Debian / Ubuntu")
+            info("    OPENCLIP_PYTHON=$(command -v python3.12) ./launch.sh setup")
+        else:
+            info("Set OPENCLIP_PYTHON to a 3.10–3.12 interpreter to override.")
 
     # A venv whose `python` merely *exists* isn't enough: a pip-less venv (common
     # on Debian when python3-venv/ensurepip isn't installed) or one built from an
@@ -1466,6 +1474,88 @@ def cmd_open(_=None) -> bool:
     return True
 
 
+def _relaunch_in_terminal() -> bool:
+    """Re-exec inside a terminal emulator when started without one.
+
+    Double-clicking launch.py (or "Open with → Python") in a Linux file manager
+    runs us with no controlling TTY, so the interactive menu's first input() hits
+    EOF and the window vanishes in ~1s. When a desktop session is present, relaunch
+    ourselves in konsole / gnome-terminal / xterm so the menu actually has a
+    terminal. Returns True if a terminal was spawned (the caller should exit).
+    """
+    if IS_WIN or sys.platform == "darwin":
+        return False
+    if sys.stdin.isatty() or sys.stdout.isatty():
+        return False  # attached to a terminal — don't hijack the session
+    if os.environ.get("OPENCLIP_IN_TERM"):
+        return False  # we already relaunched once — don't loop
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return False  # truly headless: a printed hint is the best we can do
+    # Prefer launch.sh so the new terminal gets proper Python discovery (it will
+    # pick a 3.10–3.12 interpreter if one is installed); fall back to re-running
+    # this file with the current interpreter if launch.sh is somehow missing.
+    launcher = ROOT / "launch.sh"
+    target = f'"{launcher}"' if launcher.exists() else f'"{sys.executable}" "{Path(__file__).resolve()}"'
+    inner = (
+        f'{target}; '
+        'ec=$?; echo; read -rn1 -p "[OpenClip exited $ec] Press any key to close…"'
+    )
+    env = dict(os.environ, OPENCLIP_IN_TERM="1")
+    candidates = (
+        ["konsole", "--separate", "-e", "bash", "-c", inner],
+        ["gnome-terminal", "--", "bash", "-c", inner],
+        ["xterm", "-e", "bash", "-c", inner],
+        ["x-terminal-emulator", "-e", "bash", "-c", inner],
+    )
+    for argv in candidates:
+        if which(argv[0]):
+            try:
+                subprocess.Popen(argv, env=env, start_new_session=True)
+                return True
+            except OSError:
+                continue
+    return False
+
+
+def cmd_install_launcher(_=None) -> bool:
+    """Create a double-click .desktop launcher (Linux desktops, e.g. KDE / GNOME)."""
+    if IS_WIN or sys.platform == "darwin":
+        warn("install-launcher only applies to Linux desktops — nothing to do here.")
+        return True
+    launcher = ROOT / "launch.sh"
+    try:
+        launcher.chmod(0o755)
+    except OSError:
+        pass
+    apps = Path.home() / ".local" / "share" / "applications"
+    apps.mkdir(parents=True, exist_ok=True)
+    # launch.sh self-promotes into a terminal when it has no TTY, so the entry can
+    # simply point at it with Terminal=false — no fragile nested .desktop quoting.
+    entry = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Version=1.0\n"
+        "Name=OpenClip\n"
+        "GenericName=Local AI video studio\n"
+        "Comment=Start the local OpenClip stack\n"
+        "Icon=utilities-terminal\n"
+        f"Path={ROOT}\n"
+        f'Exec="{launcher}"\n'
+        "Terminal=false\n"
+        "Categories=Development;AudioVideo;\n"
+    )
+    target = apps / "openclip.desktop"
+    target.write_text(entry, encoding="utf-8")
+    target.chmod(0o755)
+    if which("update-desktop-database"):
+        run(["update-desktop-database", str(apps)], capture=True)
+    ok(f"Installed launcher → {target}")
+    info("Search for “OpenClip” in your application menu and launch it from there.")
+    info("To add it to your desktop too:")
+    info(f"    cp '{target}' ~/Desktop/ && chmod +x ~/Desktop/openclip.desktop")
+    return True
+
+
 def cmd_nuke(_=None) -> bool:
     warn("This stops the stack and DELETES the local database, media, and queue.")
     warn(f"Target: {DATA}")
@@ -1496,6 +1586,7 @@ MENU = [
     ("Setup / install dependencies", cmd_setup),
     ("Open in browser", cmd_open),
     ("Doctor (check prerequisites)", cmd_doctor),
+    ("Create a desktop launcher", cmd_install_launcher),
     ("Reset everything (nuke)", cmd_nuke),
 ]
 
@@ -1559,6 +1650,7 @@ def main() -> int:
     logs.add_argument("service", nargs="?", help="service name (api, worker, frontend, ollama, fish)")
     sub.add_parser("open", help="open the app in your browser")
     sub.add_parser("doctor", help="check prerequisites")
+    sub.add_parser("install-launcher", help="create a double-click desktop launcher (Linux)")
     sub.add_parser("nuke", help="delete the local database + media (destructive)")
 
     args = parser.parse_args()
@@ -1573,14 +1665,27 @@ def main() -> int:
         "logs": cmd_logs,
         "open": cmd_open,
         "doctor": cmd_doctor,
+        "install-launcher": cmd_install_launcher,
         "nuke": cmd_nuke,
     }
+
+    # No subcommand + no terminal = double-clicked from a file manager. Pop a real
+    # terminal so the menu is usable instead of vanishing on EOF (see launch.sh).
+    if not args.command and _relaunch_in_terminal():
+        return 0
 
     banner()
     try:
         if args.command:
             handler = dispatch[args.command]
             return 0 if handler(args) else 1
+        if not sys.stdin.isatty():
+            err("No terminal is attached, so the interactive menu can't run.")
+            info("Start OpenClip from a terminal instead:")
+            info("    ./launch.sh           # interactive menu")
+            info("    ./launch.sh up        # just start the stack")
+            info("Or create a double-click launcher:  ./launch.sh install-launcher")
+            return 1
         menu()
         return 0
     except KeyboardInterrupt:
