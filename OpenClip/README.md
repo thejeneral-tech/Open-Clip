@@ -25,7 +25,7 @@ OpenClip ingests long-form videos, finds the most viral-worthy moments, cuts the
 | **Titles & descriptions** | 20 title variations per platform, SEO descriptions, hashtags, keywords |
 | **Batch processing** | Multi-video queues, distributed Celery workers, priority scheduling |
 | **Timeline editor** | Browser-based trim / split / reposition captions / change aspect / replace / overlays |
-| **Export** | MP4 / MOV, 720p–4K, NVENC / QuickSync / AMF hardware acceleration |
+| **Export** | MP4 / MOV, 720p–4K, auto-detected GPU encode (NVENC / QuickSync / VAAPI / AMF), CPU fallback |
 
 ---
 
@@ -122,8 +122,11 @@ Install these once (no Docker required):
 | **FFmpeg** | On PATH (`ffmpeg`/`ffprobe`). Required for all media work. |
 | **Ollama** | <https://ollama.com/download> — the local LLM runtime. |
 
-An NVIDIA GPU is optional: everything runs on CPU, just slower. With a GPU, set
-`WHISPER_DEVICE=cuda` (and `HWACCEL=nvenc`) in `.env`.
+A GPU is optional: everything runs on CPU, just slower. Video encoding defaults
+to `HWACCEL=auto`, which probes the machine and uses the first hardware encoder
+that actually works (NVENC / QuickSync / VAAPI / AMF), falling back to CPU
+otherwise — so AMD/Intel GPUs on Linux are picked up via VAAPI with no config.
+For faster transcription on an NVIDIA GPU, also set `WHISPER_DEVICE=cuda`.
 
 ---
 

@@ -175,7 +175,13 @@ class Settings(BaseSettings):
     # ---- Video processing ----
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
-    HWACCEL: Literal["none", "nvenc", "qsv", "amf"] = "none"
+    # "auto" probes this machine on the first render — it test-encodes a tiny
+    # clip with each hardware encoder and uses the first that actually works
+    # (nvenc → qsv → vaapi → amf), falling back to CPU (libx264) when none do.
+    # Pin a specific value to skip detection. vaapi is the Linux path for
+    # AMD/Intel GPUs. Note: some GPUs (e.g. Tesla P100) have no video-encode
+    # engine at all, so "auto" correctly lands on CPU there.
+    HWACCEL: Literal["auto", "none", "nvenc", "qsv", "vaapi", "amf"] = "auto"
     # How many clips to enrich+render concurrently within one worker process.
     # Each clip render is an ffmpeg subprocess, so >1 overlaps the (ffmpeg-bound)
     # render of one clip with the LLM/reframe work of another. Keep modest: a
