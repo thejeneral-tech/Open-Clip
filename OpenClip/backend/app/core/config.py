@@ -172,6 +172,16 @@ class Settings(BaseSettings):
     # quants are downloaded). Empty = unknown; set it to the s2-pro-gguf folder.
     FISH_MODEL_DIR: str = ""
 
+    # ---- System voices (Piper — the Linux/macOS counterpart to Windows SAPI) ----
+    # Off Windows the "System voices" dropdown is served by Piper, a fast offline
+    # neural TTS. Voices are .onnx models the launcher downloads into
+    # PIPER_VOICES_DIR. Piper is faster than real-time on CPU, so it needs no GPU;
+    # PIPER_DEVICE=cuda is available but optional.
+    PIPER_BIN: str = "piper"                    # explicit binary; else `python -m piper`
+    PIPER_VOICES_DIR: str = "./models/piper"    # resolved absolute under the repo root
+    PIPER_DEFAULT_VOICE: str = "en_US-amy-medium"
+    PIPER_DEVICE: Literal["cpu", "cuda"] = "cpu"
+
     # ---- Video processing ----
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
@@ -257,6 +267,7 @@ class Settings(BaseSettings):
         self.DATA_DIR = _resolve(self.DATA_DIR)
         self.STORAGE_ROOT = _resolve(self.STORAGE_ROOT)
         self.SQLITE_PATH = _resolve(self.SQLITE_PATH)
+        self.PIPER_VOICES_DIR = _resolve(self.PIPER_VOICES_DIR)
         return self
 
     # -------------------------------------------------------------- derived

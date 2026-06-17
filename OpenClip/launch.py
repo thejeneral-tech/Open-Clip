@@ -1064,6 +1064,121 @@ def ensure_fish_server() -> None:
 
 
 # --------------------------------------------------------------------------- #
+#  Piper system voices (the Linux/macOS counterpart to Windows SAPI)
+# --------------------------------------------------------------------------- #
+# Off Windows the "System voices" dropdown is served by Piper — a fast, offline
+# neural TTS invoked as `python -m piper`. The pip package goes in the backend
+# venv; voices are .onnx models downloaded from HuggingFace into models/piper.
+# Faster than real-time on CPU, so no GPU is needed. Best-effort: never fails setup.
+PIPER_DIR = MODELS / "piper"
+PIPER_DEFAULT_VOICE = "en_US-amy-medium"
+PIPER_HF_REPO = "rhasspy/piper-voices"
+
+
+def _piper_voice_present(voice_id: str) -> bool:
+    return (PIPER_DIR / f"{voice_id}.onnx").exists() and (PIPER_DIR / f"{voice_id}.onnx.json").exists()
+
+
+def _piper_hf_files(voice_id: str) -> list[str] | None:
+    """rhasspy/piper-voices paths for a voice id like ``en_US-amy-medium``.
+    Catalog layout: ``<family>/<code>/<name>/<quality>/<id>.onnx(.json)``."""
+    parts = voice_id.split("-")
+    if len(parts) < 3 or "_" not in parts[0]:
+        return None
+    code, name, quality = parts[0], parts[1], parts[-1]
+    family = code.split("_")[0]
+    base = f"{family}/{code}/{name}/{quality}/{voice_id}"
+    return [f"{base}.onnx", f"{base}.onnx.json"]
+
+
+def _download_piper_voice(voice_id: str) -> bool:
+    """Fetch one voice (.onnx + .onnx.json) into models/piper, flat at the top level."""
+    if _piper_voice_present(voice_id):
+        ok(f"Piper voice present ({voice_id})")
+        return True
+    remotes = _piper_hf_files(voice_id)
+    if not remotes:
+        warn(f"Unrecognised Piper voice id {voice_id!r} (expected e.g. en_US-amy-medium).")
+        return False
+    PIPER_DIR.mkdir(parents=True, exist_ok=True)
+    base = f"https://huggingface.co/{PIPER_HF_REPO}/resolve/main/"
+    locals_ = [f"{voice_id}.onnx", f"{voice_id}.onnx.json"]
+    for remote, local_name in zip(remotes, locals_):
+        dst = PIPER_DIR / local_name
+        if dst.exists():
+            continue
+        tmp = PIPER_DIR / (local_name + ".part")
+        try:
+            with Spinner(f"Downloading {local_name}"):
+                with urllib.request.urlopen(base + remote, timeout=120) as resp, open(tmp, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            tmp.replace(dst)
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            warn(f"Piper voice {local_name} download failed ({exc}) — rerun to retry.")
+            return False
+    ok(f"Downloaded Piper voice → {PIPER_DIR / (voice_id + '.onnx')}")
+    return True
+
+
+def ensure_piper() -> None:
+    """Install Piper + a default voice for non-Windows "system voices".
+
+    No-op on Windows (where the System voices are SAPI). Best-effort: a failed
+    install/download just leaves system voices unavailable — cloned (Fish) voices
+    and the rest of the app are unaffected.
+    """
+    if IS_WIN:
+        return
+    step("Setting up Piper system voices (Linux/macOS)")
+    if venv_python().exists():
+        rc, _ = run(
+            [str(venv_python()), "-c",
+             "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('piper') else 1)"],
+            capture=True,
+        )
+        if rc != 0:
+            with Spinner("Installing piper-tts into the backend venv"):
+                code, out = run([str(venv_python()), "-m", "pip", "install", "piper-tts"], capture=True)
+            if code == 0:
+                ok("piper-tts installed")
+            else:
+                warn("piper-tts install failed — system voices stay unavailable "
+                     "(cloned voices still work). See the output below.")
+                print(out)
+                return
+        else:
+            ok("piper-tts present")
+    else:
+        warn("Backend venv missing — skipping Piper install (rerun setup once it exists)")
+        return
+    _download_piper_voice(PIPER_DEFAULT_VOICE)
+
+
+def cmd_voices(args=None) -> bool:
+    """List installed Piper system voices, or add one with ``--add <voice-id>``."""
+    if IS_WIN:
+        info("Windows uses SAPI system voices (managed by the OS) — Piper voices are for Linux/macOS.")
+        return True
+    add = getattr(args, "add", None)
+    if add:
+        return _download_piper_voice(add)
+    PIPER_DIR.mkdir(parents=True, exist_ok=True)
+    installed = sorted(
+        p.stem for p in PIPER_DIR.glob("*.onnx") if (PIPER_DIR / (p.stem + ".onnx.json")).exists()
+    )
+    if installed:
+        ok(f"Installed Piper voices ({len(installed)}):")
+        for v in installed:
+            print(f"  • {v}")
+    else:
+        info("No Piper voices installed yet. Add one, e.g.:")
+        info("    python launch.py voices --add en_US-amy-medium")
+    info(f"Browse the catalog: https://huggingface.co/{PIPER_HF_REPO}/tree/main")
+    return True
+
+
+# --------------------------------------------------------------------------- #
 #  Setup
 # --------------------------------------------------------------------------- #
 def _setup_done() -> bool:
@@ -1170,6 +1285,10 @@ def cmd_setup(_=None) -> bool:
     ensure_fish_models()
     ensure_fish_engine()
 
+    # 5. Piper system voices (Linux/macOS) — the SAPI counterpart. Optional, never
+    # fails setup: installs the engine into the venv and fetches a default voice.
+    ensure_piper()
+
     print()
     (ok if healthy else err)(
         "Setup complete — run `python launch.py up`" if healthy else "Setup hit errors (see above)")
@@ -1250,11 +1369,49 @@ def cmd_doctor(_=None) -> bool:
     else:
         info("Fish Speech source not fetched — run setup (option 6) for cloned voices (optional).")
 
+    # Piper system voices (the "System voices" dropdown off Windows). Both the
+    # engine install and the default voice are best-effort in setup, so surface
+    # their state here rather than letting narration fail empty at generation time.
+    if not IS_WIN:
+        piper_voices = (
+            sorted(p.stem for p in PIPER_DIR.glob("*.onnx")
+                   if (PIPER_DIR / (p.stem + ".onnx.json")).exists())
+            if PIPER_DIR.exists() else []
+        )
+        piper_installed = False
+        if venv_python().exists():
+            rc, _ = run(
+                [str(venv_python()), "-c",
+                 "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('piper') else 1)"],
+                capture=True,
+            )
+            piper_installed = rc == 0
+        if piper_installed and piper_voices:
+            shown = ", ".join(piper_voices[:3]) + ("…" if len(piper_voices) > 3 else "")
+            ok(f"Piper system voices ready ({len(piper_voices)} installed: {shown})")
+        elif piper_installed:
+            info("Piper installed but no voices — `python launch.py voices --add en_US-amy-medium`.")
+        else:
+            info("Piper system voices not set up — run setup, or "
+                 "`python launch.py voices --add en_US-amy-medium`.")
+
     if which("nvidia-smi"):
         code, out = run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], capture=True)
         gpus = [g.strip() for g in out.splitlines() if g.strip()] if code == 0 else []
         if gpus:
             ok(f"NVIDIA GPU detected: {', '.join(gpus)} (set WHISPER_DEVICE=cuda for speed)")
+            # Fish Speech (cloned voices) only accelerates if its GPU backend was
+            # compiled. The NVIDIA *driver* alone isn't enough — the CUDA backend
+            # needs the CUDA *toolkit* (nvcc) at build time. Warn when there's a GPU
+            # but the engine is still CPU-only, so it isn't silently slow.
+            if find_fish_engine() and fish_built_backend() == "cpu":
+                if which("nvcc"):
+                    warn("Fish Speech (cloned voices) was built CPU-only. Set FISH_BACKEND=cuda in "
+                         ".env and rerun setup to rebuild it on the GPU.")
+                else:
+                    warn("Fish Speech (cloned voices) is CPU-only: the NVIDIA driver is present but the "
+                         "CUDA toolkit (nvcc) isn't, so its GPU backend couldn't be compiled. Install the "
+                         "CUDA toolkit (or the Vulkan SDK), then rerun setup to rebuild it on the GPU.")
             # On an ≤8GB card, Ollama (LLM), the cloned-voice engine, and Whisper all
             # compete for VRAM — warn so the operator can budget it via the FISH_* knobs.
             try:
@@ -1657,6 +1814,8 @@ def main() -> int:
     logs.add_argument("service", nargs="?", help="service name (api, worker, frontend, ollama, fish)")
     sub.add_parser("open", help="open the app in your browser")
     sub.add_parser("doctor", help="check prerequisites")
+    voices = sub.add_parser("voices", help="list/add Piper system voices (Linux/macOS)")
+    voices.add_argument("--add", metavar="VOICE_ID", help="download a voice, e.g. en_US-amy-medium")
     sub.add_parser("install-launcher", help="create a double-click desktop launcher (Linux)")
     sub.add_parser("nuke", help="delete the local database + media (destructive)")
 
@@ -1672,6 +1831,7 @@ def main() -> int:
         "logs": cmd_logs,
         "open": cmd_open,
         "doctor": cmd_doctor,
+        "voices": cmd_voices,
         "install-launcher": cmd_install_launcher,
         "nuke": cmd_nuke,
     }

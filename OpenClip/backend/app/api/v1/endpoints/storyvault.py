@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -96,7 +97,7 @@ from app.services.storage import (
     sv_voice_ref_key,
     sv_voice_sample_key,
 )
-from app.services.storyvault import fish_clone, reddit, scoring, tts as tts_svc
+from app.services.storyvault import fish_clone, piper_tts, reddit, scoring, tts as tts_svc
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
 from app.services.storyvault.voice_presets import ensure_voice_presets
 from app.workers.sv_tasks import (
@@ -113,6 +114,15 @@ router = APIRouter()
 
 _ALLOWED_UPLOAD_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 _voices_cache: list[dict] | None = None
+
+
+def _voice_engine():
+    """The platform's "system voice" engine: SAPI on Windows, Piper elsewhere.
+
+    Both expose the same ``list_voices`` / ``synthesize`` API, so the voices
+    dropdown and the audition endpoint are engine-agnostic.
+    """
+    return tts_svc if sys.platform == "win32" else piper_tts
 
 
 # ----------------------------------------------------------------- enrichers
@@ -275,9 +285,19 @@ async def get_meta(current_user: User = Depends(get_current_user)) -> SvMetaOut:
 @router.get("/voices", response_model=list[SvVoiceOut])
 async def list_voices(current_user: User = Depends(get_current_user)) -> list[SvVoiceOut]:
     global _voices_cache
-    if _voices_cache is None:
-        _voices_cache = await run_in_threadpool(tts_svc.list_voices)
-    return [SvVoiceOut(**v) for v in _voices_cache]
+    engine = _voice_engine()
+    # SAPI enumeration spawns PowerShell (slow) and the OS voice set is fixed for
+    # the process, so it's memoized. Piper voices live in a directory the
+    # `launch.py voices --add` CLI mutates while the server runs, and listing is a
+    # cheap glob — so read it fresh each call, or a newly added voice stays
+    # invisible in the dropdown until the backend restarts.
+    if engine is tts_svc:
+        if _voices_cache is None:
+            _voices_cache = await run_in_threadpool(engine.list_voices)
+        voices = _voices_cache
+    else:
+        voices = await run_in_threadpool(engine.list_voices)
+    return [SvVoiceOut(**v) for v in voices]
 
 
 @router.post("/voices/sample", response_model=SvVoiceSampleOut)
@@ -298,7 +318,7 @@ async def voice_sample(
     if not storage.exists(key):
         try:
             result = await run_in_threadpool(
-                tts_svc.synthesize,
+                _voice_engine().synthesize,
                 text,
                 storage.abspath(key),
                 voice=payload.voice,
