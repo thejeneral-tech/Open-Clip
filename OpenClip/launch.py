@@ -20,6 +20,7 @@ Run it with no arguments for an interactive menu, or use subcommands directly:
     python launch.py doctor      # check prerequisites
     python launch.py open        # open the app in your browser
     python launch.py nuke        # delete the local database + media (destructive)
+    python launch.py install-launcher  # add a double-click desktop launcher (Linux)
 
 The launcher itself is pure standard library — no pip install required. It builds
 an isolated virtualenv under ``backend/.venv`` for the backend dependencies.
@@ -898,9 +899,16 @@ def ensure_fish_engine() -> None:
         return
     cmake = _find_cmake()
     if not cmake:
-        warn("CMake not found — can't build the Fish Speech engine. Install Visual Studio Build "
-             "Tools with the 'Desktop development with C++' workload (includes CMake + Ninja), then "
-             "rerun setup. Cloned voices stay unavailable until the engine is built; everything else works.")
+        if IS_WIN:
+            how = ("Install Visual Studio Build Tools with the 'Desktop development with C++' "
+                   "workload (includes CMake + Ninja)")
+        elif sys.platform == "darwin":
+            how = "Install CMake and Ninja, e.g. `brew install cmake ninja`"
+        else:
+            how = ("Install CMake and a C/C++ toolchain, e.g. "
+                   "`sudo apt install cmake ninja-build build-essential`")
+        warn("CMake not found — can't build the Fish Speech engine (optional; it powers cloned "
+             f"voices in Voice Lab). {how}, then rerun setup. Everything else works without it.")
         return
     ninja = _bundled_ninja(cmake)
     if IS_WIN:
@@ -1056,6 +1064,121 @@ def ensure_fish_server() -> None:
 
 
 # --------------------------------------------------------------------------- #
+#  Piper system voices (the Linux/macOS counterpart to Windows SAPI)
+# --------------------------------------------------------------------------- #
+# Off Windows the "System voices" dropdown is served by Piper — a fast, offline
+# neural TTS invoked as `python -m piper`. The pip package goes in the backend
+# venv; voices are .onnx models downloaded from HuggingFace into models/piper.
+# Faster than real-time on CPU, so no GPU is needed. Best-effort: never fails setup.
+PIPER_DIR = MODELS / "piper"
+PIPER_DEFAULT_VOICE = "en_US-amy-medium"
+PIPER_HF_REPO = "rhasspy/piper-voices"
+
+
+def _piper_voice_present(voice_id: str) -> bool:
+    return (PIPER_DIR / f"{voice_id}.onnx").exists() and (PIPER_DIR / f"{voice_id}.onnx.json").exists()
+
+
+def _piper_hf_files(voice_id: str) -> list[str] | None:
+    """rhasspy/piper-voices paths for a voice id like ``en_US-amy-medium``.
+    Catalog layout: ``<family>/<code>/<name>/<quality>/<id>.onnx(.json)``."""
+    parts = voice_id.split("-")
+    if len(parts) < 3 or "_" not in parts[0]:
+        return None
+    code, name, quality = parts[0], parts[1], parts[-1]
+    family = code.split("_")[0]
+    base = f"{family}/{code}/{name}/{quality}/{voice_id}"
+    return [f"{base}.onnx", f"{base}.onnx.json"]
+
+
+def _download_piper_voice(voice_id: str) -> bool:
+    """Fetch one voice (.onnx + .onnx.json) into models/piper, flat at the top level."""
+    if _piper_voice_present(voice_id):
+        ok(f"Piper voice present ({voice_id})")
+        return True
+    remotes = _piper_hf_files(voice_id)
+    if not remotes:
+        warn(f"Unrecognised Piper voice id {voice_id!r} (expected e.g. en_US-amy-medium).")
+        return False
+    PIPER_DIR.mkdir(parents=True, exist_ok=True)
+    base = f"https://huggingface.co/{PIPER_HF_REPO}/resolve/main/"
+    locals_ = [f"{voice_id}.onnx", f"{voice_id}.onnx.json"]
+    for remote, local_name in zip(remotes, locals_):
+        dst = PIPER_DIR / local_name
+        if dst.exists():
+            continue
+        tmp = PIPER_DIR / (local_name + ".part")
+        try:
+            with Spinner(f"Downloading {local_name}"):
+                with urllib.request.urlopen(base + remote, timeout=120) as resp, open(tmp, "wb") as f:
+                    shutil.copyfileobj(resp, f)
+            tmp.replace(dst)
+        except Exception as exc:
+            tmp.unlink(missing_ok=True)
+            warn(f"Piper voice {local_name} download failed ({exc}) — rerun to retry.")
+            return False
+    ok(f"Downloaded Piper voice → {PIPER_DIR / (voice_id + '.onnx')}")
+    return True
+
+
+def ensure_piper() -> None:
+    """Install Piper + a default voice for non-Windows "system voices".
+
+    No-op on Windows (where the System voices are SAPI). Best-effort: a failed
+    install/download just leaves system voices unavailable — cloned (Fish) voices
+    and the rest of the app are unaffected.
+    """
+    if IS_WIN:
+        return
+    step("Setting up Piper system voices (Linux/macOS)")
+    if venv_python().exists():
+        rc, _ = run(
+            [str(venv_python()), "-c",
+             "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('piper') else 1)"],
+            capture=True,
+        )
+        if rc != 0:
+            with Spinner("Installing piper-tts into the backend venv"):
+                code, out = run([str(venv_python()), "-m", "pip", "install", "piper-tts"], capture=True)
+            if code == 0:
+                ok("piper-tts installed")
+            else:
+                warn("piper-tts install failed — system voices stay unavailable "
+                     "(cloned voices still work). See the output below.")
+                print(out)
+                return
+        else:
+            ok("piper-tts present")
+    else:
+        warn("Backend venv missing — skipping Piper install (rerun setup once it exists)")
+        return
+    _download_piper_voice(PIPER_DEFAULT_VOICE)
+
+
+def cmd_voices(args=None) -> bool:
+    """List installed Piper system voices, or add one with ``--add <voice-id>``."""
+    if IS_WIN:
+        info("Windows uses SAPI system voices (managed by the OS) — Piper voices are for Linux/macOS.")
+        return True
+    add = getattr(args, "add", None)
+    if add:
+        return _download_piper_voice(add)
+    PIPER_DIR.mkdir(parents=True, exist_ok=True)
+    installed = sorted(
+        p.stem for p in PIPER_DIR.glob("*.onnx") if (PIPER_DIR / (p.stem + ".onnx.json")).exists()
+    )
+    if installed:
+        ok(f"Installed Piper voices ({len(installed)}):")
+        for v in installed:
+            print(f"  • {v}")
+    else:
+        info("No Piper voices installed yet. Add one, e.g.:")
+        info("    python launch.py voices --add en_US-amy-medium")
+    info(f"Browse the catalog: https://huggingface.co/{PIPER_HF_REPO}/tree/main")
+    return True
+
+
+# --------------------------------------------------------------------------- #
 #  Setup
 # --------------------------------------------------------------------------- #
 def _setup_done() -> bool:
@@ -1073,8 +1196,15 @@ def cmd_setup(_=None) -> bool:
         return False
     vlabel = f"{ver[0]}.{ver[1]}" if ver else "?"
     if not _compatible(ver):
-        warn(f"Using Python {vlabel}; 3.10–3.12 is recommended (some ML wheels lack "
-             f"newer builds). Set OPENCLIP_PYTHON to override.")
+        warn(f"Using Python {vlabel}; OpenClip targets 3.10–3.12.")
+        if ver and ver > COMPAT_MAX:
+            warn("The pinned ML wheels (mediapipe, numpy, opencv) have no builds for "
+                 f"Python {vlabel} yet, so the dependency install below will very likely FAIL.")
+            info("Install Python 3.12 and point the launcher at it, e.g.:")
+            info("    sudo apt install python3.12 python3.12-venv   # Debian / Ubuntu")
+            info("    OPENCLIP_PYTHON=$(command -v python3.12) ./launch.sh setup")
+        else:
+            info("Set OPENCLIP_PYTHON to a 3.10–3.12 interpreter to override.")
 
     # A venv whose `python` merely *exists* isn't enough: a pip-less venv (common
     # on Debian when python3-venv/ensurepip isn't installed) or one built from an
@@ -1154,6 +1284,10 @@ def cmd_setup(_=None) -> bool:
     # best GPU backend present (CUDA > Vulkan > CPU); a missing toolchain just warns.
     ensure_fish_models()
     ensure_fish_engine()
+
+    # 5. Piper system voices (Linux/macOS) — the SAPI counterpart. Optional, never
+    # fails setup: installs the engine into the venv and fetches a default voice.
+    ensure_piper()
 
     print()
     (ok if healthy else err)(
@@ -1235,11 +1369,49 @@ def cmd_doctor(_=None) -> bool:
     else:
         info("Fish Speech source not fetched — run setup (option 6) for cloned voices (optional).")
 
+    # Piper system voices (the "System voices" dropdown off Windows). Both the
+    # engine install and the default voice are best-effort in setup, so surface
+    # their state here rather than letting narration fail empty at generation time.
+    if not IS_WIN:
+        piper_voices = (
+            sorted(p.stem for p in PIPER_DIR.glob("*.onnx")
+                   if (PIPER_DIR / (p.stem + ".onnx.json")).exists())
+            if PIPER_DIR.exists() else []
+        )
+        piper_installed = False
+        if venv_python().exists():
+            rc, _ = run(
+                [str(venv_python()), "-c",
+                 "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('piper') else 1)"],
+                capture=True,
+            )
+            piper_installed = rc == 0
+        if piper_installed and piper_voices:
+            shown = ", ".join(piper_voices[:3]) + ("…" if len(piper_voices) > 3 else "")
+            ok(f"Piper system voices ready ({len(piper_voices)} installed: {shown})")
+        elif piper_installed:
+            info("Piper installed but no voices — `python launch.py voices --add en_US-amy-medium`.")
+        else:
+            info("Piper system voices not set up — run setup, or "
+                 "`python launch.py voices --add en_US-amy-medium`.")
+
     if which("nvidia-smi"):
         code, out = run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], capture=True)
         gpus = [g.strip() for g in out.splitlines() if g.strip()] if code == 0 else []
         if gpus:
             ok(f"NVIDIA GPU detected: {', '.join(gpus)} (set WHISPER_DEVICE=cuda for speed)")
+            # Fish Speech (cloned voices) only accelerates if its GPU backend was
+            # compiled. The NVIDIA *driver* alone isn't enough — the CUDA backend
+            # needs the CUDA *toolkit* (nvcc) at build time. Warn when there's a GPU
+            # but the engine is still CPU-only, so it isn't silently slow.
+            if find_fish_engine() and fish_built_backend() == "cpu":
+                if which("nvcc"):
+                    warn("Fish Speech (cloned voices) was built CPU-only. Set FISH_BACKEND=cuda in "
+                         ".env and rerun setup to rebuild it on the GPU.")
+                else:
+                    warn("Fish Speech (cloned voices) is CPU-only: the NVIDIA driver is present but the "
+                         "CUDA toolkit (nvcc) isn't, so its GPU backend couldn't be compiled. Install the "
+                         "CUDA toolkit (or the Vulkan SDK), then rerun setup to rebuild it on the GPU.")
             # On an ≤8GB card, Ollama (LLM), the cloned-voice engine, and Whisper all
             # compete for VRAM — warn so the operator can budget it via the FISH_* knobs.
             try:
@@ -1466,6 +1638,88 @@ def cmd_open(_=None) -> bool:
     return True
 
 
+def _relaunch_in_terminal() -> bool:
+    """Re-exec inside a terminal emulator when started without one.
+
+    Double-clicking launch.py (or "Open with → Python") in a Linux file manager
+    runs us with no controlling TTY, so the interactive menu's first input() hits
+    EOF and the window vanishes in ~1s. When a desktop session is present, relaunch
+    ourselves in konsole / gnome-terminal / xterm so the menu actually has a
+    terminal. Returns True if a terminal was spawned (the caller should exit).
+    """
+    if IS_WIN or sys.platform == "darwin":
+        return False
+    if sys.stdin.isatty() or sys.stdout.isatty():
+        return False  # attached to a terminal — don't hijack the session
+    if os.environ.get("OPENCLIP_IN_TERM"):
+        return False  # we already relaunched once — don't loop
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return False  # truly headless: a printed hint is the best we can do
+    # Prefer launch.sh so the new terminal gets proper Python discovery (it will
+    # pick a 3.10–3.12 interpreter if one is installed); fall back to re-running
+    # this file with the current interpreter if launch.sh is somehow missing.
+    launcher = ROOT / "launch.sh"
+    target = f'"{launcher}"' if launcher.exists() else f'"{sys.executable}" "{Path(__file__).resolve()}"'
+    inner = (
+        f'{target}; '
+        'ec=$?; echo; read -rn1 -p "[OpenClip exited $ec] Press any key to close…"'
+    )
+    env = dict(os.environ, OPENCLIP_IN_TERM="1")
+    candidates = (
+        ["konsole", "--separate", "-e", "bash", "-c", inner],
+        ["gnome-terminal", "--", "bash", "-c", inner],
+        ["xterm", "-e", "bash", "-c", inner],
+        ["x-terminal-emulator", "-e", "bash", "-c", inner],
+    )
+    for argv in candidates:
+        if which(argv[0]):
+            try:
+                subprocess.Popen(argv, env=env, start_new_session=True)
+                return True
+            except OSError:
+                continue
+    return False
+
+
+def cmd_install_launcher(_=None) -> bool:
+    """Create a double-click .desktop launcher (Linux desktops, e.g. KDE / GNOME)."""
+    if IS_WIN or sys.platform == "darwin":
+        warn("install-launcher only applies to Linux desktops — nothing to do here.")
+        return True
+    launcher = ROOT / "launch.sh"
+    try:
+        launcher.chmod(0o755)
+    except OSError:
+        pass
+    apps = Path.home() / ".local" / "share" / "applications"
+    apps.mkdir(parents=True, exist_ok=True)
+    # launch.sh self-promotes into a terminal when it has no TTY, so the entry can
+    # simply point at it with Terminal=false — no fragile nested .desktop quoting.
+    entry = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Version=1.0\n"
+        "Name=OpenClip\n"
+        "GenericName=Local AI video studio\n"
+        "Comment=Start the local OpenClip stack\n"
+        "Icon=utilities-terminal\n"
+        f"Path={ROOT}\n"
+        f'Exec="{launcher}"\n'
+        "Terminal=false\n"
+        "Categories=Development;AudioVideo;\n"
+    )
+    target = apps / "openclip.desktop"
+    target.write_text(entry, encoding="utf-8")
+    target.chmod(0o755)
+    if which("update-desktop-database"):
+        run(["update-desktop-database", str(apps)], capture=True)
+    ok(f"Installed launcher → {target}")
+    info("Search for “OpenClip” in your application menu and launch it from there.")
+    info("To add it to your desktop too:")
+    info(f"    cp '{target}' ~/Desktop/ && chmod +x ~/Desktop/openclip.desktop")
+    return True
+
+
 def cmd_nuke(_=None) -> bool:
     warn("This stops the stack and DELETES the local database, media, and queue.")
     warn(f"Target: {DATA}")
@@ -1496,6 +1750,7 @@ MENU = [
     ("Setup / install dependencies", cmd_setup),
     ("Open in browser", cmd_open),
     ("Doctor (check prerequisites)", cmd_doctor),
+    ("Create a desktop launcher", cmd_install_launcher),
     ("Reset everything (nuke)", cmd_nuke),
 ]
 
@@ -1559,6 +1814,9 @@ def main() -> int:
     logs.add_argument("service", nargs="?", help="service name (api, worker, frontend, ollama, fish)")
     sub.add_parser("open", help="open the app in your browser")
     sub.add_parser("doctor", help="check prerequisites")
+    voices = sub.add_parser("voices", help="list/add Piper system voices (Linux/macOS)")
+    voices.add_argument("--add", metavar="VOICE_ID", help="download a voice, e.g. en_US-amy-medium")
+    sub.add_parser("install-launcher", help="create a double-click desktop launcher (Linux)")
     sub.add_parser("nuke", help="delete the local database + media (destructive)")
 
     args = parser.parse_args()
@@ -1573,14 +1831,28 @@ def main() -> int:
         "logs": cmd_logs,
         "open": cmd_open,
         "doctor": cmd_doctor,
+        "voices": cmd_voices,
+        "install-launcher": cmd_install_launcher,
         "nuke": cmd_nuke,
     }
+
+    # No subcommand + no terminal = double-clicked from a file manager. Pop a real
+    # terminal so the menu is usable instead of vanishing on EOF (see launch.sh).
+    if not args.command and _relaunch_in_terminal():
+        return 0
 
     banner()
     try:
         if args.command:
             handler = dispatch[args.command]
             return 0 if handler(args) else 1
+        if not sys.stdin.isatty():
+            err("No terminal is attached, so the interactive menu can't run.")
+            info("Start OpenClip from a terminal instead:")
+            info("    ./launch.sh           # interactive menu")
+            info("    ./launch.sh up        # just start the stack")
+            info("Or create a double-click launcher:  ./launch.sh install-launcher")
+            return 1
         menu()
         return 0
     except KeyboardInterrupt:

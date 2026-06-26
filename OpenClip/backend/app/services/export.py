@@ -250,16 +250,21 @@ def render_clip(
         tmp_files.append(ass_path)
         vchain.append(f"ass='{_escape_path(ass_path)}'")
 
-    filtergraph = f"[0:v]{','.join(vchain)}[v]"
-
     # ---- assemble command ----
+    plan = ffmpeg.encode_plan("h264", hwaccel)
+    # VAAPI consumes GPU surfaces: upload the CPU-filtered frames before the
+    # encoder. For every other path upload_filter is empty (no change).
+    tail = f",{plan.upload_filter}" if plan.upload_filter else ""
+    filtergraph = f"[0:v]{','.join(vchain)}{tail}[v]"
+
     args = [
+        *plan.device_args,
         *ffmpeg.decode_args(hwaccel),
         "-ss", f"{start:.3f}", "-i", source_path, "-t", f"{duration:.3f}",
         "-filter_complex", filtergraph,
         "-map", "[v]", "-map", "0:a?",
-        *ffmpeg.encoder_args("h264", hwaccel),
-        "-pix_fmt", "yuv420p",
+        *plan.codec_args,
+        *plan.pix_fmt,
         "-c:a", "aac", "-b:a", "160k",
         "-movflags", "+faststart",
         output_path,

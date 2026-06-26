@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     # Network identity for public discovery requests (Reddit/RSS) — be a good
     # citizen and identify the deployment.
     DISCOVERY_USER_AGENT: str = "OpenClip-Bot/1.0 (+https://github.com/openclip)"
+    # Optional Reddit app-only OAuth (a free "script" app at reddit.com/prefs/apps).
+    # When both are set, Story Vault discovery uses the authenticated API
+    # (~100 reads/min, with real score/comment counts) instead of the heavily
+    # throttled public RSS feed; left blank, it falls back to RSS. See
+    # app.services.storyvault.reddit.
+    REDDIT_CLIENT_ID: str | None = None
+    REDDIT_CLIENT_SECRET: str | None = None
     # Safety valve: ingestion/processing per bot cycle is capped here regardless
     # of preset settings, so a misconfigured bot can't flood the worker.
     BOT_MAX_VIDEOS_PER_RUN: int = 5
@@ -165,10 +172,26 @@ class Settings(BaseSettings):
     # quants are downloaded). Empty = unknown; set it to the s2-pro-gguf folder.
     FISH_MODEL_DIR: str = ""
 
+    # ---- System voices (Piper — the Linux/macOS counterpart to Windows SAPI) ----
+    # Off Windows the "System voices" dropdown is served by Piper, a fast offline
+    # neural TTS. Voices are .onnx models the launcher downloads into
+    # PIPER_VOICES_DIR. Piper is faster than real-time on CPU, so it needs no GPU;
+    # PIPER_DEVICE=cuda is available but optional.
+    PIPER_BIN: str = "piper"                    # explicit binary; else `python -m piper`
+    PIPER_VOICES_DIR: str = "./models/piper"    # resolved absolute under the repo root
+    PIPER_DEFAULT_VOICE: str = "en_US-amy-medium"
+    PIPER_DEVICE: Literal["cpu", "cuda"] = "cpu"
+
     # ---- Video processing ----
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
-    HWACCEL: Literal["none", "nvenc", "qsv", "amf"] = "none"
+    # "auto" probes this machine on the first render — it test-encodes a tiny
+    # clip with each hardware encoder and uses the first that actually works
+    # (nvenc → qsv → vaapi → amf), falling back to CPU (libx264) when none do.
+    # Pin a specific value to skip detection. vaapi is the Linux path for
+    # AMD/Intel GPUs. Note: some GPUs (e.g. Tesla P100) have no video-encode
+    # engine at all, so "auto" correctly lands on CPU there.
+    HWACCEL: Literal["auto", "none", "nvenc", "qsv", "vaapi", "amf"] = "auto"
     # How many clips to enrich+render concurrently within one worker process.
     # Each clip render is an ffmpeg subprocess, so >1 overlaps the (ffmpeg-bound)
     # render of one clip with the LLM/reframe work of another. Keep modest: a
@@ -244,6 +267,7 @@ class Settings(BaseSettings):
         self.DATA_DIR = _resolve(self.DATA_DIR)
         self.STORAGE_ROOT = _resolve(self.STORAGE_ROOT)
         self.SQLITE_PATH = _resolve(self.SQLITE_PATH)
+        self.PIPER_VOICES_DIR = _resolve(self.PIPER_VOICES_DIR)
         return self
 
     # -------------------------------------------------------------- derived

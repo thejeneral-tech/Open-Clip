@@ -46,6 +46,7 @@ from app.services.storyvault import (
     composer,
     fish_clone,
     overlays as overlays_svc,
+    piper_tts,
     scripts as scripts_svc,
     tts,
 )
@@ -485,16 +486,9 @@ def sv_generate_video_task(sv_video_id: int) -> None:
 
         voice_cfg = opts.get("voice_config") or {}
         use_clone = (voice_cfg.get("engine") or "sapi") != "sapi"
-        # SAPI narration is Windows-only (System.Speech). On Linux/macOS the UI
-        # never offers a SAPI voice, so this only triggers for Windows-authored
-        # data run elsewhere — fail fast with an actionable message instead of an
-        # opaque TTSError deep inside narration after the whole script generates.
-        if not use_clone and sys.platform != "win32":
-            raise RuntimeError(
-                "This video uses a Windows system (SAPI) voice, which isn't "
-                "available on this host. Pick a Cloned (Fish Speech) voice in "
-                "Voice Lab and try again."
-            )
+        # Engine routing for a "system" (non-cloned) voice is platform-specific:
+        # Windows uses SAPI (System.Speech); Linux/macOS use Piper neural voices.
+        # A cloned voice always routes to the Fish Speech engine.
         if use_clone:
             ref_key = voice_cfg.get("ref_key")
             ref_path = (
@@ -503,9 +497,12 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             )
             narr_kw = {"ref_path": ref_path, "prompt_text": voice_cfg.get("prompt_text") or "", "speed": opts["speed"]}
             story_fn, body_fn = fish_clone.narrate_story, fish_clone.narrate
-        else:
+        elif sys.platform == "win32":
             narr_kw = {"voice": opts["voice"], "speed": opts["speed"]}
             story_fn, body_fn = tts.synthesize_story, tts.synthesize
+        else:
+            narr_kw = {"voice": opts["voice"], "speed": opts["speed"]}
+            story_fn, body_fn = piper_tts.synthesize_story, piper_tts.synthesize
 
         if story_parts:
             narr = story_fn(story_parts, narration_abspath, **narr_kw)
@@ -517,11 +514,14 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             body_words, body_start, duration = result.words, 0.0, result.duration
         storage.commit(narration_key)
         if duration <= 0.5:
-            raise RuntimeError(
-                "Cloned-voice narration came back empty — is the Fish Speech server running?"
-                if use_clone
-                else "Narration came back empty — is a SAPI voice installed?"
-            )
+            if use_clone:
+                msg = "Cloned-voice narration came back empty — is the Fish Speech server running?"
+            elif sys.platform == "win32":
+                msg = "Narration came back empty — is a SAPI voice installed?"
+            else:
+                msg = ("Narration came back empty — is a Piper voice installed? "
+                       "Run setup or `python launch.py voices --add en_US-amy-medium`.")
+            raise RuntimeError(msg)
         intro_plan = {
             "card": list(card_window) if card_window else None,
             "author": list(author_window) if author_window else None,
@@ -643,16 +643,19 @@ PREVIEW_SAMPLE_TEXT = (
 
 
 def _preview_narration(wav: str):
-    """Narrate the caption-preview sample, engine-agnostic.
+    """Narrate the caption-preview sample with the platform's system-voice engine.
 
-    Uses Windows SAPI where it exists; on hosts without it (Linux/macOS) the
-    sample is narrated in the cross-platform cloned voice — the same engine the
-    real pipeline uses — so caption-style previews still render everywhere. The
-    voice is immaterial here: only the word timings drive the preview captions.
+    Windows uses SAPI; Linux/macOS use Piper — the same system engine the real
+    pipeline uses (see sv_generate_video_task) — so caption-style previews render
+    everywhere without the heavyweight Fish server running. Falls back to a cloned
+    (Fish) voice only if the system engine is unavailable. The voice is immaterial
+    here: only the word timings drive the preview captions.
     """
     try:
-        return tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
-    except tts.TTSError:
+        if sys.platform == "win32":
+            return tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
+        return piper_tts.synthesize(PREVIEW_SAMPLE_TEXT, wav)
+    except (tts.TTSError, piper_tts.PiperError):
         return fish_clone.narrate(PREVIEW_SAMPLE_TEXT, wav)
 
 

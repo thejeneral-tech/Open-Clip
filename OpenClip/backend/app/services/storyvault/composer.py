@@ -4,8 +4,9 @@
 (least-used first, no repeats within one video, optional category filter).
 ``render_video`` assembles: segment slices → cover-crop to 9:16 → concat →
 burned ASS captions → narration audio, with the encode offloaded to the
-configured hardware encoder (QSV on this box). With no footage in the library
-it falls back to a dark gradient background, so the pipeline never dead-ends.
+hardware encoder chosen by ``HWACCEL`` (``auto`` detects one, else CPU). With no
+footage in the library it falls back to a dark gradient background, so the
+pipeline never dead-ends.
 """
 from __future__ import annotations
 
@@ -107,7 +108,9 @@ def plan_segments(
 
 
 # -------------------------------------------------------------------- render
-def render_video(spec: RenderSpec, *, on_progress: ProgressCb | None = None) -> dict[str, Any]:
+def render_video(
+    spec: RenderSpec, *, hwaccel: str | None = None, on_progress: ProgressCb | None = None
+) -> dict[str, Any]:
     """Run the ffmpeg composition; returns {path, width, height, duration, size_bytes}."""
     w, h, total = spec.width, spec.height, max(0.5, spec.total_duration)
     args: list[str] = []
@@ -180,12 +183,19 @@ def render_video(spec: RenderSpec, *, on_progress: ProgressCb | None = None) -> 
         filters.append(",".join(chain) + last)
 
     os.makedirs(os.path.dirname(spec.output_path), exist_ok=True)
+    plan = ffmpeg.encode_plan("h264", hwaccel)
+    vmap = "[vout]"
+    if plan.upload_filter:
+        # VAAPI: upload the composed CPU frames to a GPU surface for the encoder.
+        filters.append(f"[vout]{plan.upload_filter}[venc]")
+        vmap = "[venc]"
     cmd = [
+        *plan.device_args,
         *args,
         "-filter_complex", ";".join(filters),
-        "-map", "[vout]", "-map", f"{audio_idx}:a",
-        *ffmpeg.encoder_args("h264"),
-        "-pix_fmt", "yuv420p",
+        "-map", vmap, "-map", f"{audio_idx}:a",
+        *plan.codec_args,
+        *plan.pix_fmt,
         "-c:a", "aac", "-b:a", "160k",
         "-t", f"{total:.3f}",
         "-movflags", "+faststart",

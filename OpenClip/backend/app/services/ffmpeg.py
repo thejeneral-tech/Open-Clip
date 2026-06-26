@@ -6,7 +6,9 @@ NVENC / QuickSync / AMF, with progress reporting parsed from ``-progress``.
 """
 from __future__ import annotations
 
+import functools
 import json
+import os
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -49,6 +51,13 @@ _ENCODERS: dict[str, dict[str, list[str]]] = {
         "h264": ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "21", "-qp_p", "23"],
         "hevc": ["-c:v", "hevc_amf", "-quality", "balanced", "-rc", "cqp"],
     },
+    # AMD/Intel on Linux. Unlike the drop-in encoders above, VAAPI also needs a
+    # device handle + a hwupload filter + no trailing -pix_fmt; EncodePlan / the
+    # render paths supply those. These are just the encoder flags.
+    "vaapi": {
+        "h264": ["-c:v", "h264_vaapi", "-rc_mode", "CQP", "-qp", "24"],
+        "hevc": ["-c:v", "hevc_vaapi", "-rc_mode", "CQP", "-qp", "26"],
+    },
 }
 
 # Decode acceleration flags (input side).
@@ -64,7 +73,110 @@ _HWACCEL_DECODE: dict[str, list[str]] = {
     "nvenc": [],
     "qsv": [],
     "amf": [],
+    "vaapi": [],
 }
+
+
+# --------------------------------------------------------------- hwaccel plan
+@dataclass
+class EncodePlan:
+    """Everything needed to drive one encode at a chosen acceleration.
+
+    ``device_args`` go before the inputs, ``upload_filter`` (when non-empty) is
+    appended to the end of the video filtergraph to hand the encoder a GPU
+    surface, and ``pix_fmt`` is dropped for surface-consuming encoders (VAAPI).
+    For the drop-in encoders (nvenc/qsv/amf/none) device_args and upload_filter
+    are empty and pix_fmt is the usual ``-pix_fmt yuv420p`` — i.e. no behaviour
+    change versus the old flat ``encoder_args`` path.
+    """
+    accel: str
+    device_args: list[str]
+    upload_filter: str
+    codec_args: list[str]
+    pix_fmt: list[str]
+
+
+# Priority order for HWACCEL=auto. vaapi covers AMD + Intel on Linux; probing an
+# encoder this machine lacks fails fast, so the order is just preference.
+_AUTO_CANDIDATES = ("nvenc", "qsv", "vaapi", "amf")
+
+
+@functools.lru_cache(maxsize=1)
+def _vaapi_device() -> str | None:
+    """First DRM render node, e.g. /dev/dri/renderD128 (None off Linux)."""
+    try:
+        nodes = sorted(n for n in os.listdir("/dev/dri") if n.startswith("renderD"))
+    except OSError:
+        return None
+    return os.path.join("/dev/dri", nodes[0]) if nodes else None
+
+
+def _plan_for(accel: str, codec: str = "h264") -> EncodePlan | None:
+    """Build the EncodePlan for a *concrete* accel, or None if unavailable."""
+    codec = codec or "h264"
+    if accel == "vaapi":
+        node = _vaapi_device()
+        if not node:
+            return None
+        table = _ENCODERS["vaapi"]
+        return EncodePlan(
+            accel="vaapi",
+            device_args=["-vaapi_device", node],
+            upload_filter="format=nv12,hwupload",
+            codec_args=table.get(codec, table["h264"]),
+            pix_fmt=[],
+        )
+    table = _ENCODERS.get(accel)
+    if table is None:
+        accel, table = "none", _ENCODERS["none"]
+    return EncodePlan(
+        accel=accel,
+        device_args=[],
+        upload_filter="",
+        codec_args=table.get(codec, table["h264"]),
+        pix_fmt=["-pix_fmt", "yuv420p"],
+    )
+
+
+def _probe_encoder(accel: str) -> bool:
+    """True if this box can actually encode with ``accel`` right now.
+
+    Runs a throwaway few-frame encode to the null muxer — the only reliable
+    check, since an ffmpeg build can advertise an encoder (e.g. h264_nvenc) the
+    hardware can't run. A Tesla P100 has no NVENC engine, so this fails here at
+    detection time rather than mid-render.
+    """
+    plan = _plan_for(accel)
+    if plan is None:
+        return False
+    vf = ["-vf", plan.upload_filter] if plan.upload_filter else []
+    cmd = [
+        settings.FFMPEG_BIN, "-hide_banner", "-loglevel", "error",
+        *plan.device_args,
+        "-f", "lavfi", "-i", "color=c=black:s=128x128:r=5:d=1",
+        *vf, *plan.codec_args, *plan.pix_fmt,
+        "-f", "null", "-",
+    ]
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=30).returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
+@functools.lru_cache(maxsize=8)
+def _resolve_hwaccel(requested: str) -> str:
+    """Map a requested HWACCEL (incl. "auto") to a concrete, working encoder.
+
+    Cached: the probe runs once per worker process, on the first render.
+    """
+    if requested != "auto":
+        return requested
+    for cand in _AUTO_CANDIDATES:
+        if _probe_encoder(cand):
+            logger.info("HWACCEL=auto: encoding on GPU via '%s'", cand)
+            return cand
+    logger.info("HWACCEL=auto: no usable GPU encoder; encoding on CPU (libx264)")
+    return "none"
 
 
 class FFmpeg:
@@ -98,13 +210,18 @@ class FFmpeg:
                 info.has_audio = True
         return info
 
+    def encode_plan(self, codec: str = "h264", hwaccel: str | None = None) -> EncodePlan:
+        """Resolve HWACCEL (incl. "auto") into a ready-to-use encode recipe."""
+        accel = _resolve_hwaccel(hwaccel or settings.HWACCEL)
+        return _plan_for(accel, codec) or _plan_for("none", codec)
+
     def encoder_args(self, codec: str = "h264", hwaccel: str | None = None) -> list[str]:
-        accel = hwaccel or settings.HWACCEL
-        table = _ENCODERS.get(accel, _ENCODERS["none"])
-        return table.get(codec, table["h264"])
+        # Back-compat: bare encoder flags only. Prefer encode_plan(), which also
+        # carries the device + hwupload + pix_fmt pieces VAAPI needs.
+        return self.encode_plan(codec, hwaccel).codec_args
 
     def decode_args(self, hwaccel: str | None = None) -> list[str]:
-        accel = hwaccel or settings.HWACCEL
+        accel = _resolve_hwaccel(hwaccel or settings.HWACCEL)
         return _HWACCEL_DECODE.get(accel, [])
 
     # ------------------------------------------------------------------- runs
@@ -179,10 +296,13 @@ class FFmpeg:
         """Cut [start, end]. Re-encode for frame accuracy by default."""
         dur = max(0.1, end - start)
         if reencode:
+            plan = self.encode_plan("h264")
+            vf = ["-vf", plan.upload_filter] if plan.upload_filter else []
             args = [
+                *plan.device_args,
                 "-ss", f"{start:.3f}", "-i", src, "-t", f"{dur:.3f}",
-                *self.encoder_args("h264"),
-                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
+                *vf, *plan.codec_args, *plan.pix_fmt,
+                "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
                 dst,
             ]
         else:

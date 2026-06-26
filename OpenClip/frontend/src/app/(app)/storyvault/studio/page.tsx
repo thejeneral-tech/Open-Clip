@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
-import { DurationPicker } from "@/components/storyvault/duration-picker";
+import { DurationPicker, MAX_DURATION, MIN_DURATION } from "@/components/storyvault/duration-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +37,7 @@ import {
   useSvVoices,
 } from "@/hooks/use-api";
 import { PhonePreview, type PreviewPhase, type PreviewStory } from "@/components/storyvault/template-preview";
-import { categoryLabel } from "@/lib/utils";
+import { categoryLabel, estimateNarrationSeconds } from "@/lib/utils";
 import type { SvProject, SvTemplate, SvTemplateData, SvVideo, SvVoicePreset } from "@/lib/types";
 
 const ACTIVE_STATUSES = new Set(["queued", "processing", "rendering", "failed"]);
@@ -299,6 +299,24 @@ function StudioInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects]);
+
+  // Arriving from the library's "Create video" (?story=…): size the duration to
+  // the story's estimated narration length so the video matches the story out of
+  // the box (clamped to the picker's bounds). Runs once, when the story first
+  // loads, so it never clobbers a manual edit or a polling refetch — and yields
+  // to ?project=, whose saved recipe owns the duration.
+  const storyDurationApplied = useRef(false);
+  useEffect(() => {
+    if (storyDurationApplied.current || !storyParam || projectParam) return;
+    const s = stories.find((story) => String(story.id) === storyParam);
+    if (!s) return;
+    storyDurationApplied.current = true;
+    const seconds = Math.max(
+      MIN_DURATION,
+      Math.min(MAX_DURATION, estimateNarrationSeconds(s.body)),
+    );
+    setDuration(seconds);
+  }, [stories, storyParam, projectParam]);
 
   // Preselect the preset: the one passed in via ?template=, else the user's default.
   useEffect(() => {

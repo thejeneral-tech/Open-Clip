@@ -25,7 +25,7 @@ OpenClip ingests long-form videos, finds the most viral-worthy moments, cuts the
 | **Titles & descriptions** | 20 title variations per platform, SEO descriptions, hashtags, keywords |
 | **Batch processing** | Multi-video queues, distributed Celery workers, priority scheduling |
 | **Timeline editor** | Browser-based trim / split / reposition captions / change aspect / replace / overlays |
-| **Export** | MP4 / MOV, 720p–4K, NVENC / QuickSync / AMF hardware acceleration |
+| **Export** | MP4 / MOV, 720p–4K, auto-detected GPU encode (NVENC / QuickSync / VAAPI / AMF), CPU fallback |
 
 ---
 
@@ -117,13 +117,16 @@ Install these once (no Docker required):
 
 | Tool | Notes |
 | --- | --- |
-| **Python 3.10–3.12** | The ML wheels (mediapipe, faster-whisper, numpy) don't yet ship for 3.13+. |
+| **Python 3.10–3.12** | Required, not just preferred — the pinned ML wheels (mediapipe, numpy, opencv, faster-whisper) have **no builds for 3.13/3.14**, so `setup` will fail at `pip install`. On a box with only a newer Python, install 3.12 (e.g. `sudo apt install python3.12 python3.12-venv`, or [deadsnakes](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) / [pyenv](https://github.com/pyenv/pyenv)). If 3.12 lives alongside a newer Python, force it with `OPENCLIP_PYTHON=$(command -v python3.12) ./launch.sh setup`. |
 | **Node.js 18+** | For the Next.js dashboard. |
 | **FFmpeg** | On PATH (`ffmpeg`/`ffprobe`). Required for all media work. |
 | **Ollama** | <https://ollama.com/download> — the local LLM runtime. |
 
-An NVIDIA GPU is optional: everything runs on CPU, just slower. With a GPU, set
-`WHISPER_DEVICE=cuda` (and `HWACCEL=nvenc`) in `.env`.
+A GPU is optional: everything runs on CPU, just slower. Video encoding defaults
+to `HWACCEL=auto`, which probes the machine and uses the first hardware encoder
+that actually works (NVENC / QuickSync / VAAPI / AMF), falling back to CPU
+otherwise — so AMD/Intel GPUs on Linux are picked up via VAAPI with no config.
+For faster transcription on an NVIDIA GPU, also set `WHISPER_DEVICE=cuda`.
 
 ---
 
@@ -149,6 +152,22 @@ arguments — they just find Python and hand off to `launch.py`:
 ./launch.sh            # Linux / macOS   — e.g. ./launch.sh up, ./launch.sh logs api
 .\launch.ps1           # Windows / PowerShell — e.g. .\launch.ps1 up
 ```
+
+**Double-click launcher (Linux desktops — KDE Plasma, GNOME …).** Don't run
+`launch.py` via your file manager's *"Open with → Python"* — that starts it with
+no terminal, so the interactive menu hits end-of-input and the window vanishes
+instantly. Instead run once:
+
+```bash
+chmod +x launch.sh
+./launch.sh install-launcher    # adds an “OpenClip” entry to your app menu
+```
+
+Then launch **OpenClip** from your application menu (or copy the entry to your
+Desktop, as the command prints). It opens a real terminal window — Konsole on
+KDE — running the menu, and keeps the window open if anything errors. (Under the
+hood, `launch.sh` detects when it was started without a terminal and re-opens
+itself inside Konsole / gnome-terminal / xterm automatically.)
 
 `setup` creates `backend/.venv`, installs the Python + Node dependencies, and
 initializes the SQLite database. `up` then starts four background processes —
