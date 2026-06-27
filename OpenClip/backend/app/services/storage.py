@@ -65,6 +65,26 @@ def sv_background_thumb_key(background_id: int) -> str:
     return f"storyvault/backgrounds/{background_id}/thumbnail.jpg"
 
 
+def sv_music_key(music_id: int, ext: str = "mp4") -> str:
+    """The original uploaded music/video file, pre-conversion."""
+    return f"storyvault/music/{music_id}/source.{ext.lstrip('.')}"
+
+
+def sv_music_mp3_key(music_id: int) -> str:
+    """The extracted MP3 the render mixes under the narration."""
+    return f"storyvault/music/{music_id}/audio.mp3"
+
+
+def sv_music_preview_key(music_id: int, volume_pct: int) -> str:
+    """A cached audition clip of a track mixed under sample narration at a level."""
+    return f"storyvault/music/{music_id}/preview_v{int(volume_pct)}.mp3"
+
+
+def sv_music_sample_narration_key() -> str:
+    """The shared sample narration the music-preview mixes a track under."""
+    return "storyvault/music/_sample/narration.wav"
+
+
 def sv_video_dir(sv_video_id: int) -> str:
     return f"storyvault/videos/{sv_video_id}"
 

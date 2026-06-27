@@ -33,7 +33,7 @@ class Base(DeclarativeBase):
     """Declarative base shared by every ORM model."""
 
 
-_ECHO = settings.DEBUG and settings.ENVIRONMENT == "development"
+_ECHO = settings.DB_ECHO and settings.ENVIRONMENT == "development"
 
 # --------------------------------------------------------------------- async
 if settings.is_sqlite:

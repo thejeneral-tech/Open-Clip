@@ -27,6 +27,7 @@ import {
   useSvVoicePresets,
   useSvVoices,
 } from "@/hooks/use-api";
+import { MusicPicker } from "@/components/storyvault/music-picker";
 import { categoryLabel } from "@/lib/utils";
 import type {
   SvProject,
@@ -53,6 +54,8 @@ export const DEFAULT_SETTINGS: SvProjectSettings = {
   caption_style: "modern_tiktok",
   background_category: null,
   background_id: null,
+  music_id: null,
+  music_volume: 0.18,
   template_id: null,
   script_engine: "auto",
   publish_connector_ids: [],
@@ -416,6 +419,15 @@ export function ProjectForm({
               </SelectContent>
             </Select>
           </div>
+          <div className="sm:col-span-2">
+            <MusicPicker
+              musicId={s.music_id}
+              volume={s.music_volume}
+              onChange={({ musicId, volume }) =>
+                setS((prev) => ({ ...prev, music_id: musicId, music_volume: volume }))
+              }
+            />
+          </div>
         </div>
 
         {/* Captions — style, position and colours, saved onto the selected preset */}
@@ -534,8 +546,8 @@ export function ProjectForm({
           <div>
             <p className="text-sm font-medium">No duplicates</p>
             <p className="text-xs text-muted-foreground">
-              Never reuse a story that's already become a video, and skip cross-posts of the same
-              story — so every video in this project is unique.
+              Never reuse a story that&apos;s already become a video, and skip cross-posts of the
+              same story — so every video in this project is unique.
             </p>
           </div>
           <Switch checked={s.no_duplicates} onCheckedChange={(v) => set("no_duplicates", v)} />

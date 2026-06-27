@@ -103,6 +103,64 @@ class SvBackgroundImport(BaseModel):
     category: str | None = None
 
 
+# ------------------------------------------------------------------- music
+class SvMusicOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    original_filename: str | None = None
+    duration_seconds: float | None = None
+    size_bytes: int | None = None
+    status: str
+    error: str | None = None
+    created_at: datetime
+    # Enriched by the endpoint — the playable MP3 URL.
+    media_url: str | None = None
+
+
+class SvMusicUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=512)
+
+
+class SvMusicImport(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class SvMusicPreviewRequest(BaseModel):
+    music_id: int
+    volume: float = Field(default=0.18, ge=0.0, le=1.0)
+
+
+class SvMusicPreviewOut(BaseModel):
+    media_url: str
+    duration: float
+
+
+class SvMusicPresetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    music_id: int
+    volume: float = Field(default=0.18, ge=0.0, le=1.0)
+
+
+class SvMusicPresetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    music_id: int | None = None
+    volume: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class SvMusicPresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    music_id: int | None = None
+    volume: float
+    created_at: datetime
+    # Enriched by the endpoint — the track behind the preset.
+    music_filename: str | None = None
+    media_url: str | None = None
+
+
 # -------------------------------------------------------------------- videos
 class SvVideoCreate(BaseModel):
     story_id: int
@@ -117,6 +175,8 @@ class SvVideoCreate(BaseModel):
     caption_style: str = "hormozi"
     background_category: str | None = None
     background_id: int | None = None   # pin gameplay footage to one background
+    music_id: int | None = None        # background music mixed under the narration
+    music_volume: float = Field(default=0.18, ge=0.0, le=1.0)
     script_engine: str = "auto"        # auto|ai|heuristic
     project_id: int | None = None      # file the video under a project folder
     template_id: int | None = None     # snapshot this preset's caption config
@@ -146,6 +206,8 @@ class SvVideoOut(BaseModel):
     caption_style: str
     background_category: str | None = None
     background_id: int | None = None
+    music_id: int | None = None
+    music_volume: float = 0.18
     script_engine: str
     project_id: int | None = None
     narration_duration: float | None = None
@@ -354,6 +416,8 @@ class SvProjectSettings(BaseModel):
     caption_style: str = "modern_tiktok"
     background_category: str | None = None
     background_id: int | None = None
+    music_id: int | None = None                        # background music bed
+    music_volume: float = Field(default=0.18, ge=0.0, le=1.0)
     template_id: int | None = None
     script_engine: str = "auto"                        # auto|ai|heuristic
 

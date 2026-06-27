@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.services.ffmpeg import ffmpeg
 from app.services.storage import storage
@@ -43,6 +44,11 @@ class RenderSpec:
     # {"path", "x", "y", "start", "end", "fade"} (absolute PNG path, target-px
     # position, on-screen window in seconds, alpha fade duration). Empty = none.
     overlays: list[dict[str, Any]] | None = None
+    # Optional background-music bed: an absolute MP3 path looped to fill the
+    # timeline and mixed under the narration at ``music_volume`` (0..1). The
+    # narration always stays at full level on top. None = narration only.
+    music_path: str | None = None
+    music_volume: float = 0.18
 
 
 def _escape_filter_path(path: str) -> str:
@@ -127,10 +133,43 @@ def render_video(
             logger.warning("Skipping missing footage source %s", item["storage_path"])
     spec = RenderSpec(**{**spec.__dict__, "plan": plan})
 
+    # --- Seamless-loop planning -------------------------------------------
+    # For a natural, flowing wrap we render a little EXTRA footage past the
+    # narration — a continuation of the *last* segment's own source — and then
+    # cross-dissolve that ending footage back into the opening over
+    # SV_LOOP_SECONDS. Because the extra footage is the genuine continuation of
+    # what was just on screen, the end flows continuously into the start: no
+    # hard cut and (unlike a tail-only overlay) no rewind/stutter of the opening.
+    # If the final source has no room to extend (e.g. a short clip), fall back to
+    # a length-preserving tail dissolve. The wrap sits below the captions so the
+    # text is never ghosted, and the output duration is always exactly ``total``.
+    loop_s = max(0.0, float(settings.SV_LOOP_SECONDS))
+    seamless_l = 0.0   # >0 => extend the last segment and xfade-wrap it
+    overlay_l = 0.0    # >0 => length-preserving tail-overlay fallback
+    if loop_s and spec.plan and total > 2 * loop_s:
+        last = spec.plan[-1]
+        try:
+            src_dur = ffmpeg.probe(
+                storage.abspath(last["storage_path"], ensure_parent=False)
+            ).duration
+        except Exception:  # noqa: BLE001 — a probe failure just disables the nicer path
+            src_dur = 0.0
+        room = src_dur - (float(last["start"]) + float(last["length"])) - 0.10
+        seamless_l = min(loop_s, max(0.0, room), total * 0.45)
+        if seamless_l < 0.30:  # not enough spare footage — use the tail overlay
+            seamless_l = 0.0
+            overlay_l = min(loop_s, 0.6, total * 0.45)
+
     if spec.plan:
+        last_idx = len(spec.plan) - 1
         for idx, item in enumerate(spec.plan):
             src = storage.abspath(item["storage_path"], ensure_parent=False)
-            args.extend(["-ss", f"{float(item['start']):.3f}", "-t", f"{float(item['length']):.3f}", "-i", src])
+            seg_len = float(item["length"])
+            # Read a touch more from the final clip so its continuation can be
+            # dissolved into the opening for the seamless wrap.
+            if idx == last_idx and seamless_l > 0:
+                seg_len += seamless_l + 0.20
+            args.extend(["-ss", f"{float(item['start']):.3f}", "-t", f"{seg_len:.3f}", "-i", src])
             filters.append(
                 f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
                 f"crop={w}:{h},setsar=1,fps={FPS}[v{idx}]"
@@ -150,10 +189,46 @@ def render_video(
     args.extend(["-i", spec.narration_path])
     audio_idx = n_video_inputs
 
-    # Footage + captions → [base].
-    chain = [f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS"]
+    if seamless_l > 0:
+        # Split the over-length footage into opening A[0,L), body B[L,total) and
+        # the extra tail C[total,total+L); cross-dissolve C into A to form the
+        # first L seconds, then play B. The wrap moment (B's end → C's start) is
+        # one continuous motion, and the dissolve eases the scene change.
+        L = seamless_l
+        filters.append(f"{vsrc}split=3[sa][sb][sc]")
+        filters.append(f"[sa]trim=0:{L:.3f},setpts=PTS-STARTPTS[swa]")
+        filters.append(f"[sc]trim={total:.3f}:{total + L:.3f},setpts=PTS-STARTPTS[swc]")
+        filters.append(f"[swc][swa]xfade=transition=fade:duration={L:.3f}:offset=0[swr]")
+        filters.append(f"[sb]trim={L:.3f}:{total:.3f},setpts=PTS-STARTPTS[sbrest]")
+        filters.append("[swr][sbrest]concat=n=2:v=1:a=0[lbase]")
+        foot = "[lbase]"
+    elif overlay_l > 0:
+        # No spare footage to extend: dissolve the opening frames back in over
+        # the final ``overlay_l`` seconds (length-preserving tail overlay).
+        L = overlay_l
+        shift = total - L
+        filters.append(f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS[fbase]")
+        filters.append("[fbase]split[lmain][lhead]")
+        filters.append(
+            f"[lhead]trim=duration={L:.3f},setpts=PTS-STARTPTS,format=yuva420p,"
+            f"fade=t=in:st=0:d={L:.3f}:alpha=1,setpts=PTS+{shift:.3f}/TB[lhead2]"
+        )
+        filters.append(
+            f"[lmain][lhead2]overlay=enable='gte(t,{shift:.3f})':"
+            f"format=auto,format=yuv420p[lbase]"
+        )
+        foot = "[lbase]"
+    else:
+        filters.append(f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS[fbase]")
+        foot = "[fbase]"
+
+    # Captions burned on top of the (looped) footage. The source label glues
+    # directly onto the first filter (no comma); ``null`` stands in when there
+    # are no captions so the label is still a valid filterchain to attach to.
+    steps = []
     if spec.ass_path and os.path.exists(spec.ass_path):
-        chain.append(f"ass='{_escape_filter_path(spec.ass_path)}'")
+        steps.append(f"ass='{_escape_filter_path(spec.ass_path)}'")
+    body = foot + (",".join(steps) if steps else "null")
     last = "[vout]"
 
     # Intro overlays (Reddit topic card, author intro): each PNG is looped over
@@ -161,7 +236,7 @@ def render_video(
     # only within its on-screen window.
     overlays = [o for o in (spec.overlays or []) if os.path.exists(o.get("path", ""))]
     if overlays:
-        filters.append(",".join(chain) + "[base]")
+        filters.append(body + "[base]")
         prev = "[base]"
         for k, ov in enumerate(overlays):
             ov_idx = audio_idx + 1 + k
@@ -180,7 +255,37 @@ def render_video(
             )
             prev = out
     else:
-        filters.append(",".join(chain) + last)
+        filters.append(body + last)
+
+    amap = f"{audio_idx}:a"
+
+    # Optional background-music bed: loop the track to fill the timeline, scale it
+    # down, and mix it under the narration (narration stays at full level — the
+    # mixer's normalize is off so it isn't attenuated by the second input). Its
+    # input is appended last, so its index sits after the narration + overlays.
+    music_vol = max(0.0, min(1.0, float(spec.music_volume)))
+    if spec.music_path and os.path.exists(spec.music_path) and music_vol > 0:
+        music_idx = audio_idx + 1 + len(overlays)
+        args.extend(["-stream_loop", "-1", "-i", spec.music_path])
+        narr_ref = amap if amap.startswith("[") else f"[{amap}]"
+        filters.append(f"[{music_idx}:a]volume={music_vol:.3f}[svmusic]")
+        filters.append(
+            f"{narr_ref}[svmusic]amix=inputs=2:duration=first:normalize=0[amixed]"
+        )
+        amap = "[amixed]"
+
+    # Loop seam: a tiny fade on the *final* audio (narration, plus the music bed
+    # if any) so the waveform starts and ends near silence and there's no click
+    # where the clip wraps on social autoplay. Kept short so speech isn't
+    # clipped; applied last so it covers the music too. Tied to the loop feature.
+    if loop_s and total > 0.3:
+        a_in = amap if amap.startswith("[") else f"[{amap}]"
+        out_d = min(0.08, total / 4)
+        filters.append(
+            f"{a_in}afade=t=in:st=0:d=0.03,"
+            f"afade=t=out:st={total - out_d:.3f}:d={out_d:.3f}[aloop]"
+        )
+        amap = "[aloop]"
 
     os.makedirs(os.path.dirname(spec.output_path), exist_ok=True)
     plan = ffmpeg.encode_plan("h264", hwaccel)
@@ -193,7 +298,7 @@ def render_video(
         *plan.device_args,
         *args,
         "-filter_complex", ";".join(filters),
-        "-map", vmap, "-map", f"{audio_idx}:a",
+        "-map", vmap, "-map", amap,
         *plan.codec_args,
         *plan.pix_fmt,
         "-c:a", "aac", "-b:a", "160k",

@@ -104,6 +104,54 @@ class SvBackground(TimestampMixin, Base):
     )
 
 
+class SvMusic(TimestampMixin, Base):
+    """A background-music track for story videos.
+
+    The user imports any audio/video file (e.g. an MP4); the ingest task extracts
+    its audio to an MP3 (``storage_path``) the render mixes in under the
+    narration. Unlike footage there are no segments or thumbnails — a track is
+    used whole and looped to fill the video.
+    """
+
+    __tablename__ = "sv_music"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+
+    original_filename: Mapped[str | None] = mapped_column(String(512), default=None)
+    storage_path: Mapped[str | None] = mapped_column(String(1024), default=None)  # the converted MP3
+    duration_seconds: Mapped[float | None] = mapped_column(Float, default=None)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+
+    status: Mapped[str] = mapped_column(String(32), default=JobStatus.PENDING.value, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+
+
+class SvMusicPreset(TimestampMixin, Base):
+    """A named, reusable music choice — a track plus the volume it plays at.
+
+    Lets the user save e.g. "intro music at 20%" and pick it in the Studio /
+    Projects instead of re-choosing the track and dialing the level each time. A
+    preset resolves to ``(music_id, music_volume)`` on the video at queue time;
+    nothing references the preset afterwards, so editing or deleting it never
+    affects an already-queued video.
+    """
+
+    __tablename__ = "sv_music_presets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    music_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sv_music.id", ondelete="SET NULL"), default=None, index=True
+    )
+    volume: Mapped[float] = mapped_column(Float, default=0.18, nullable=False)
+
+
 class SvSegment(CreatedAtMixin, Base):
     __tablename__ = "sv_segments"
 
@@ -166,6 +214,13 @@ class SvVideo(TimestampMixin, Base):
     background_id: Mapped[int | None] = mapped_column(
         ForeignKey("sv_backgrounds.id", ondelete="SET NULL"), default=None, index=True
     )
+    # Optional background music mixed under the narration (looped to fill). The
+    # track is an SvMusic the user imported; ``music_volume`` scales it (0 =
+    # silent, 1 = full) while the narration always plays at full level on top.
+    music_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sv_music.id", ondelete="SET NULL"), default=None, index=True
+    )
+    music_volume: Mapped[float] = mapped_column(Float, default=0.18, nullable=False)
     script_engine: Mapped[str] = mapped_column(String(16), default="auto", nullable=False)  # auto|ai|heuristic
 
     # Pipeline artifacts (storage keys).

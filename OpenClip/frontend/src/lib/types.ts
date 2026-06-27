@@ -448,6 +448,8 @@ export interface SvProjectSettings {
   caption_style: string;
   background_category: string | null;
   background_id: number | null;
+  music_id: number | null;
+  music_volume: number;
   template_id: number | null;
   script_engine: string;
   publish_connector_ids: number[];
@@ -516,6 +518,32 @@ export interface SvBackground {
   segment_count: number;
 }
 
+export interface SvMusic {
+  id: number;
+  original_filename: string | null;
+  duration_seconds: number | null;
+  size_bytes: number | null;
+  status: string;
+  error: string | null;
+  created_at: string;
+  media_url: string | null;
+}
+
+export interface SvMusicPreset {
+  id: number;
+  name: string;
+  music_id: number | null;
+  volume: number;
+  created_at: string;
+  music_filename: string | null;
+  media_url: string | null;
+}
+
+export interface SvMusicPreview {
+  media_url: string;
+  duration: number;
+}
+
 export interface SvVideoCreate {
   story_id: number;
   duration_target: number;
@@ -527,6 +555,8 @@ export interface SvVideoCreate {
   caption_style: string;
   background_category?: string | null;
   background_id?: number | null;
+  music_id?: number | null;
+  music_volume?: number;
   script_engine: string;
   template_id?: number | null;
   project_id?: number | null;
@@ -546,6 +576,8 @@ export interface SvVideo {
   caption_style: string;
   background_category: string | null;
   background_id: number | null;
+  music_id: number | null;
+  music_volume: number;
   script_engine: string;
   project_id: number | null;
   narration_duration: number | null;

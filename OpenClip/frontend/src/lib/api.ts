@@ -20,6 +20,9 @@ import type {
   SvDiscoveryResult,
   SvExport,
   SvMeta,
+  SvMusic,
+  SvMusicPreset,
+  SvMusicPreview,
   SvProject,
   SvProjectRunResult,
   SvProjectSettings,
@@ -413,6 +416,29 @@ export const api = {
   svUpdateBackground: (id: number, data: { category?: string }) =>
     request<SvBackground>(`/storyvault/backgrounds/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   svDeleteBackground: (id: number) => request<void>(`/storyvault/backgrounds/${id}`, { method: "DELETE" }),
+  svListMusic: () => request<SvMusic[]>("/storyvault/music"),
+  svUploadMusic: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<SvMusic>("/storyvault/music/upload", { method: "POST", body: form });
+  },
+  svImportMusic: (url: string) =>
+    request<SvMusic>("/storyvault/music/import", { method: "POST", body: JSON.stringify({ url }) }),
+  svRenameMusic: (id: number, name: string) =>
+    request<SvMusic>(`/storyvault/music/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  svDeleteMusic: (id: number) => request<void>(`/storyvault/music/${id}`, { method: "DELETE" }),
+  svMusicPreview: (music_id: number, volume: number) =>
+    request<SvMusicPreview>("/storyvault/music/preview", {
+      method: "POST",
+      body: JSON.stringify({ music_id, volume }),
+    }),
+  svListMusicPresets: () => request<SvMusicPreset[]>("/storyvault/music/presets"),
+  svCreateMusicPreset: (data: { name: string; music_id: number; volume: number }) =>
+    request<SvMusicPreset>("/storyvault/music/presets", { method: "POST", body: JSON.stringify(data) }),
+  svUpdateMusicPreset: (id: number, data: { name?: string; music_id?: number; volume?: number }) =>
+    request<SvMusicPreset>(`/storyvault/music/presets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  svDeleteMusicPreset: (id: number) =>
+    request<void>(`/storyvault/music/presets/${id}`, { method: "DELETE" }),
   svCreateVideo: (data: SvVideoCreate) =>
     request<SvVideo>("/storyvault/videos", { method: "POST", body: JSON.stringify(data) }),
   svListVideos: (status?: string, projectId?: number) => {

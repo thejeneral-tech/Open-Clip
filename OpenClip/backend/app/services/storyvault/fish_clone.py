@@ -15,11 +15,14 @@ import contextlib
 import json
 import os
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from filelock import FileLock, Timeout as _LockTimeout
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -53,6 +56,66 @@ _SETTINGS_FILE = Path(settings.DATA_DIR) / "fish-clone-settings.json"
 
 class FishCloneError(RuntimeError):
     """Raised when the Fish Speech server is unreachable or synthesis fails."""
+
+
+class _Transient(Exception):
+    """A retryable synthesis failure (server busy / dropped connection)."""
+
+
+# The s2.cpp server synthesizes exactly ONE request at a time and 503s ("Server
+# busy processing another synthesis request") anything that arrives mid-render —
+# it also sometimes just drops the connection under that contention. Both Celery
+# prefork workers AND the API process (the /voices/clone/generate endpoint) can
+# reach it, so an in-process lock is not enough: serialize every /generate call
+# through a cross-process advisory file lock under DATA_DIR. A single synthesis
+# can run for minutes, so a queued caller may wait a long time for the lock — the
+# timeout is generous and is a hard ceiling, not the expected wait.
+_SYNTH_LOCK_FILE = str(Path(settings.DATA_DIR) / "fish-synthesis.lock")
+_SYNTH_LOCK = FileLock(_SYNTH_LOCK_FILE)
+_LOCK_TIMEOUT = float(getattr(settings, "FISH_LOCK_TIMEOUT_S", 3600.0))
+_HTTP_TIMEOUT = 1800
+_SYNTH_RETRIES = max(1, int(getattr(settings, "FISH_SYNTH_RETRIES", 3)))
+
+
+@contextlib.contextmanager
+def _synthesis_lock():
+    """Serialize access to the single-threaded s2 server across processes/threads."""
+    try:
+        with _SYNTH_LOCK.acquire(timeout=_LOCK_TIMEOUT):
+            yield
+    except _LockTimeout as exc:
+        raise FishCloneError(
+            "Timed out waiting for the Fish Speech server to free up — another "
+            "narration is still synthesizing. Try again once it finishes."
+        ) from exc
+
+
+def _post_generate(body: bytes, boundary: str) -> bytes:
+    """POST one multipart synthesis request, classifying retryable failures."""
+    req = urllib.request.Request(
+        f"{server_url()}/generate",
+        data=body,
+        method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    try:
+        # The s2 server sends headers only AFTER synthesis (no streaming here),
+        # which on CPU can take minutes — keep the socket timeout generous.
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:  # noqa: S310 (loopback only)
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        with contextlib.suppress(Exception):
+            detail = exc.read().decode("utf-8", "replace")[:200].strip()
+        msg = f"Fish synthesis failed (HTTP {exc.code}{': ' + detail if detail else ''})."
+        # 503 = the engine is mid-synthesis for someone else; worth a retry.
+        raise (_Transient if exc.code == 503 else FishCloneError)(msg) from exc
+    except (urllib.error.URLError, OSError) as exc:
+        # A dropped/closed connection ("Remote end closed connection without
+        # response") is the other face of contention — retry it too.
+        raise _Transient(f"Fish synthesis failed ({exc}). Server {server_url()}.") from exc
+    except Exception as exc:
+        raise FishCloneError(f"Fish synthesis failed ({exc}). Server {server_url()}.") from exc
 
 
 def server_url() -> str:
@@ -200,28 +263,28 @@ def synthesize(
         ref_name=ref_name,
         ref_text=prompt,
     )
-    req = urllib.request.Request(
-        f"{server_url()}/generate",
-        data=body,
-        method="POST",
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-    )
     logger.info(
         "Fish clone synth: %d chars%s -> %s",
         len(text), " (cloned)" if ref_bytes else "", out_wav,
     )
-    try:
-        # The s2 server sends headers only AFTER synthesis (no streaming here),
-        # which on CPU can take minutes — keep the socket timeout generous.
-        with urllib.request.urlopen(req, timeout=1800) as resp:  # noqa: S310 (loopback only)
-            audio = resp.read()
-    except urllib.error.HTTPError as exc:
-        detail = ""
-        with contextlib.suppress(Exception):
-            detail = exc.read().decode("utf-8", "replace")[:200].strip()
-        raise FishCloneError(f"Fish synthesis failed (HTTP {exc.code}{': ' + detail if detail else ''}).") from exc
-    except Exception as exc:
-        raise FishCloneError(f"Fish synthesis failed ({exc}). Server {server_url()}.") from exc
+    # Hold the cross-process lock for the whole request so two callers never hit
+    # the single-threaded engine at once. A 503/dropped connection inside the
+    # lock means an *unlocked* caller is racing us — back off and retry.
+    audio = b""
+    with _synthesis_lock():
+        for attempt in range(1, _SYNTH_RETRIES + 1):
+            try:
+                audio = _post_generate(body, boundary)
+                break
+            except _Transient as exc:
+                if attempt >= _SYNTH_RETRIES:
+                    raise FishCloneError(str(exc)) from exc
+                backoff = min(5.0 * attempt, 20.0)
+                logger.warning(
+                    "Fish synth transient failure (attempt %d/%d): %s — retrying in %.0fs",
+                    attempt, _SYNTH_RETRIES, exc, backoff,
+                )
+                time.sleep(backoff)
 
     if not audio or len(audio) < 256:
         raise FishCloneError("Fish synthesis returned an unexpectedly small audio response.")

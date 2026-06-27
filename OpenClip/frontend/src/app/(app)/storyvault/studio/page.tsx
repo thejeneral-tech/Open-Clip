@@ -7,6 +7,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CaptionControls, useCaptionEditor } from "@/components/storyvault/caption-generator";
 import { DurationPicker, MAX_DURATION, MIN_DURATION } from "@/components/storyvault/duration-picker";
+import { MusicPicker } from "@/components/storyvault/music-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -257,6 +258,8 @@ function StudioInner() {
   const [captionStyle, setCaptionStyle] = useState(DEFAULT_CAPTION_STYLE);
   const [backgroundCategory, setBackgroundCategory] = useState("any");
   const [footageId, setFootageId] = useState("auto");
+  const [musicTrackId, setMusicTrackId] = useState<number | null>(null);
+  const [musicVolume, setMusicVolume] = useState(0.18);
   const [scriptEngine, setScriptEngine] = useState("auto");
   const [templateId, setTemplateId] = useState<number | null>(
     templateParam ? Number(templateParam) : null,
@@ -278,6 +281,8 @@ function StudioInner() {
     setCaptionStyle(s.caption_style);
     setBackgroundCategory(s.background_category ?? "any");
     setFootageId(s.background_id != null ? String(s.background_id) : "auto");
+    setMusicTrackId(s.music_id ?? null);
+    setMusicVolume(s.music_volume ?? 0.18);
     setScriptEngine(s.script_engine);
     if (s.template_id != null) setTemplateId(s.template_id);
   };
@@ -348,6 +353,8 @@ function StudioInner() {
         caption_style: captionStyle,
         background_category: backgroundCategory === "any" ? undefined : backgroundCategory,
         background_id: isSplitScreen && footageId !== "auto" ? Number(footageId) : undefined,
+        music_id: musicTrackId ?? undefined,
+        music_volume: musicVolume,
         script_engine: scriptEngine,
         template_id: templateId ?? undefined,
         project_id: projectId !== "none" ? Number(projectId) : undefined,
@@ -587,6 +594,16 @@ function StudioInner() {
                         <SelectItem value="heuristic">Instant, no AI</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <MusicPicker
+                      musicId={musicTrackId}
+                      volume={musicVolume}
+                      onChange={({ musicId, volume }) => {
+                        setMusicTrackId(musicId);
+                        setMusicVolume(volume);
+                      }}
+                    />
                   </div>
                 </div>
               </form>

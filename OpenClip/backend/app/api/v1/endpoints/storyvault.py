@@ -34,6 +34,8 @@ from app.models.publishing import PublishingConnector
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvMusic,
+    SvMusicPreset,
     SvProject,
     SvPublishJob,
     SvScript,
@@ -63,6 +65,14 @@ from app.schemas.storyvault import (
     SvDiscoverySearch,
     SvExportOut,
     SvMetaOut,
+    SvMusicImport,
+    SvMusicOut,
+    SvMusicPresetCreate,
+    SvMusicPresetOut,
+    SvMusicPresetUpdate,
+    SvMusicPreviewOut,
+    SvMusicPreviewRequest,
+    SvMusicUpdate,
     SvProjectCreate,
     SvProjectOut,
     SvProjectRunResult,
@@ -93,18 +103,30 @@ from app.services.storage import (
     storage,
     sv_background_key,
     sv_caption_preview_key,
+    sv_music_key,
+    sv_music_preview_key,
+    sv_music_sample_narration_key,
     sv_voice_clone_key,
     sv_voice_ref_key,
     sv_voice_sample_key,
 )
-from app.services.storyvault import fish_clone, piper_tts, reddit, scoring, tts as tts_svc
+from app.services.storyvault import (
+    fish_clone,
+    music_preview as music_preview_svc,
+    piper_tts,
+    reddit,
+    scoring,
+    tts as tts_svc,
+)
 from app.services.storyvault.templates_data import BUILTIN_TEMPLATES
 from app.services.storyvault.voice_presets import ensure_voice_presets
 from app.workers.sv_tasks import (
     sv_caption_previews_task,
     sv_generate_video_task,
     sv_import_background_task,
+    sv_import_music_task,
     sv_ingest_background_task,
+    sv_ingest_music_task,
     sv_publish_job_task,
     sv_render_video_task,
 )
@@ -113,6 +135,11 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 _ALLOWED_UPLOAD_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+# Music import accepts video files (audio is extracted) and common audio formats.
+_ALLOWED_MUSIC_EXT = {
+    ".mp4", ".mov", ".mkv", ".webm", ".m4v",
+    ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus",
+}
 _voices_cache: list[dict] | None = None
 
 
@@ -139,6 +166,12 @@ def _background_out(bg: SvBackground, segment_count: int = 0) -> SvBackgroundOut
     out = SvBackgroundOut.model_validate(bg)
     out.thumbnail_url = storage.url(bg.thumbnail_path)
     out.segment_count = segment_count
+    return out
+
+
+def _music_out(track: SvMusic) -> SvMusicOut:
+    out = SvMusicOut.model_validate(track)
+    out.media_url = storage.url(track.storage_path)
     return out
 
 
@@ -880,6 +913,10 @@ async def _validate_project_settings(
         bg = await db.get(SvBackground, s.background_id)
         if not bg or bg.owner_id != user.id:
             raise HTTPException(status_code=404, detail="Footage not found")
+    if s.music_id is not None:
+        track = await db.get(SvMusic, s.music_id)
+        if not track or track.owner_id != user.id:
+            raise HTTPException(status_code=404, detail="Music track not found")
     if s.template_id is not None:
         tpl = await db.get(SvTemplate, s.template_id)
         if not tpl or tpl.owner_id != user.id or tpl.deleted_at is not None:
@@ -1166,6 +1203,8 @@ async def run_project(
             template_config=template_config,
             background_category=s.background_category,
             background_id=s.background_id,
+            music_id=s.music_id,
+            music_volume=s.music_volume,
             script_engine=s.script_engine,
             status=SvVideoStatus.QUEUED.value,
         )
@@ -1582,6 +1621,267 @@ async def delete_background(
     return Message(detail="Background deleted")
 
 
+# --------------------------------------------------------------------- music
+@router.post("/music/upload", response_model=SvMusicOut, status_code=201)
+async def upload_music(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicOut:
+    """Import a music track. Any video file (audio is extracted) or audio file is
+    accepted; the worker converts it to an MP3 the render mixes under videos."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_MUSIC_EXT:
+        raise HTTPException(status_code=422, detail=f"Unsupported file type {ext!r}")
+
+    track = SvMusic(
+        owner_id=current_user.id,
+        original_filename=(file.filename or "upload")[:512],
+        status=JobStatus.PENDING.value,
+    )
+    db.add(track)
+    await db.commit()
+    await db.refresh(track)
+
+    key = sv_music_key(track.id, ext)
+    dest = storage.abspath(key)
+    try:
+        with open(dest, "wb") as fh:
+            while chunk := await file.read(8 * 1024 * 1024):
+                fh.write(chunk)
+        storage.commit(key)
+    except Exception as exc:
+        await db.delete(track)
+        await db.commit()
+        raise HTTPException(status_code=500, detail="Failed to store the upload") from exc
+
+    track.storage_path = key
+    track.status = JobStatus.QUEUED.value
+    await db.commit()
+    await db.refresh(track)
+    sv_ingest_music_task.delay(track.id)
+    return _music_out(track)
+
+
+@router.post("/music/import", response_model=SvMusicOut, status_code=201)
+async def import_music(
+    payload: SvMusicImport,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicOut:
+    """Import a track from a YouTube (or other supported) URL — the audio is
+    downloaded and converted to an MP3 automatically."""
+    url = payload.url.strip()
+    if not url:
+        raise HTTPException(status_code=422, detail="A video URL is required")
+
+    track = SvMusic(
+        owner_id=current_user.id,
+        original_filename=url[:512],
+        status=JobStatus.QUEUED.value,
+    )
+    db.add(track)
+    await db.commit()
+    await db.refresh(track)
+    sv_import_music_task.delay(track.id, url)
+    return _music_out(track)
+
+
+@router.get("/music", response_model=list[SvMusicOut])
+async def list_music(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvMusicOut]:
+    rows = (
+        await db.execute(
+            select(SvMusic)
+            .where(SvMusic.owner_id == current_user.id)
+            .order_by(SvMusic.created_at.desc())
+        )
+    ).scalars().all()
+    return [_music_out(t) for t in rows]
+
+
+async def _owned_music(db: AsyncSession, music_id: int, user: User) -> SvMusic:
+    track = await db.get(SvMusic, music_id)
+    if not track or track.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Music track not found")
+    return track
+
+
+@router.post("/music/preview", response_model=SvMusicPreviewOut)
+async def preview_music(
+    payload: SvMusicPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicPreviewOut:
+    """Render (and cache) a short clip of a track mixed under sample narration at
+    ``volume`` — so the studio "Test" button plays how the bed sits under the
+    voice. Cached per (track, volume) so repeat auditions are instant."""
+    track = await _owned_music(db, payload.music_id, current_user)
+    if track.status != JobStatus.COMPLETED.value or not track.storage_path:
+        raise HTTPException(status_code=409, detail="Track is still converting — try again in a moment")
+
+    vol_pct = int(round(max(0.0, min(1.0, payload.volume)) * 100))
+    out_key = sv_music_preview_key(track.id, vol_pct)
+    if not await run_in_threadpool(storage.exists, out_key):
+        # Synthesize the shared sample narration once (system voice); fall back to
+        # a music-only audition if no voice engine is available.
+        narr_key = sv_music_sample_narration_key()
+        narr_abs: str | None = None
+        if await run_in_threadpool(storage.exists, narr_key):
+            narr_abs = storage.abspath(narr_key, ensure_parent=False)
+        else:
+            try:
+                await run_in_threadpool(
+                    _voice_engine().synthesize,
+                    music_preview_svc.SAMPLE_TEXT,
+                    storage.abspath(narr_key),
+                    voice=None,
+                    speed=1.0,
+                )
+                storage.commit(narr_key)
+                narr_abs = storage.abspath(narr_key, ensure_parent=False)
+            except Exception as exc:  # noqa: BLE001 — degrade to music-only audition
+                logger.info("Music preview: no system voice (%s); auditioning music only", exc)
+                narr_abs = None
+        try:
+            await run_in_threadpool(
+                music_preview_svc.build_preview,
+                storage.abspath(track.storage_path, ensure_parent=False),
+                narr_abs,
+                payload.volume,
+                storage.abspath(out_key),
+            )
+            storage.commit(out_key)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Preview failed: {exc}") from exc
+
+    try:
+        duration = await run_in_threadpool(
+            lambda: ffmpeg.probe(storage.abspath(out_key, ensure_parent=False)).duration
+        )
+    except Exception:
+        duration = 0.0
+    return SvMusicPreviewOut(media_url=storage.url(out_key) or "", duration=duration)
+
+
+# ------------------------------------------------------- music presets
+def _music_preset_out(preset: SvMusicPreset, track: SvMusic | None) -> SvMusicPresetOut:
+    out = SvMusicPresetOut.model_validate(preset)
+    if track is not None:
+        out.music_filename = track.original_filename
+        out.media_url = storage.url(track.storage_path)
+    return out
+
+
+async def _owned_music_preset(db: AsyncSession, preset_id: int, user: User) -> SvMusicPreset:
+    preset = await db.get(SvMusicPreset, preset_id)
+    if not preset or preset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Music preset not found")
+    return preset
+
+
+@router.get("/music/presets", response_model=list[SvMusicPresetOut])
+async def list_music_presets(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> list[SvMusicPresetOut]:
+    rows = (
+        await db.execute(
+            select(SvMusicPreset, SvMusic)
+            .outerjoin(SvMusic, SvMusicPreset.music_id == SvMusic.id)
+            .where(SvMusicPreset.owner_id == current_user.id)
+            .order_by(SvMusicPreset.created_at.desc())
+        )
+    ).all()
+    return [_music_preset_out(p, t) for p, t in rows]
+
+
+@router.post("/music/presets", response_model=SvMusicPresetOut, status_code=201)
+async def create_music_preset(
+    payload: SvMusicPresetCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicPresetOut:
+    track = await _owned_music(db, payload.music_id, current_user)
+    preset = SvMusicPreset(
+        owner_id=current_user.id,
+        name=payload.name.strip()[:128],
+        music_id=track.id,
+        volume=payload.volume,
+    )
+    db.add(preset)
+    await db.commit()
+    await db.refresh(preset)
+    return _music_preset_out(preset, track)
+
+
+@router.patch("/music/presets/{preset_id}", response_model=SvMusicPresetOut)
+async def update_music_preset(
+    preset_id: int,
+    payload: SvMusicPresetUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicPresetOut:
+    preset = await _owned_music_preset(db, preset_id, current_user)
+    if payload.name is not None:
+        preset.name = payload.name.strip()[:128]
+    if payload.music_id is not None:
+        track = await _owned_music(db, payload.music_id, current_user)
+        preset.music_id = track.id
+    if payload.volume is not None:
+        preset.volume = payload.volume
+    await db.commit()
+    await db.refresh(preset)
+    track = await db.get(SvMusic, preset.music_id) if preset.music_id else None
+    return _music_preset_out(preset, track)
+
+
+@router.delete("/music/presets/{preset_id}", response_model=Message)
+async def delete_music_preset(
+    preset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    preset = await _owned_music_preset(db, preset_id, current_user)
+    await db.delete(preset)
+    await db.commit()
+    return Message(detail="Music preset deleted")
+
+
+@router.patch("/music/{music_id}", response_model=SvMusicOut)
+async def update_music(
+    music_id: int,
+    payload: SvMusicUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> SvMusicOut:
+    track = await db.get(SvMusic, music_id)
+    if not track or track.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Music track not found")
+    if payload.name is not None:
+        track.original_filename = payload.name.strip()[:512]
+    await db.commit()
+    await db.refresh(track)
+    return _music_out(track)
+
+
+@router.delete("/music/{music_id}", response_model=Message)
+async def delete_music(
+    music_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+) -> Message:
+    track = await db.get(SvMusic, music_id)
+    if not track or track.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Music track not found")
+    await db.delete(track)
+    await db.commit()
+    storage.delete(f"storyvault/music/{music_id}")
+    return Message(detail="Music deleted")
+
+
 # -------------------------------------------------------------------- videos
 @router.post("/videos", response_model=SvVideoOut, status_code=201)
 async def create_video(
@@ -1595,6 +1895,11 @@ async def create_video(
         bg = await db.get(SvBackground, payload.background_id)
         if not bg or bg.owner_id != current_user.id:
             raise HTTPException(status_code=404, detail="Footage not found")
+    # Optional background music must belong to the caller.
+    if payload.music_id is not None:
+        track = await db.get(SvMusic, payload.music_id)
+        if not track or track.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Music track not found")
     # Optional project folder must belong to the caller.
     if payload.project_id is not None:
         await _owned_project(db, payload.project_id, current_user)
@@ -1627,6 +1932,8 @@ async def create_video(
         template_config=template_config,
         background_category=payload.background_category,
         background_id=payload.background_id,
+        music_id=payload.music_id,
+        music_volume=payload.music_volume,
         script_engine=payload.script_engine,
         status=SvVideoStatus.QUEUED.value,
     )

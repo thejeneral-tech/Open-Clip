@@ -33,6 +33,12 @@ bcrypt==4.0.1
 # ---- HTTP / AI ----
 httpx==0.28.1
 
+# ---- Concurrency ----
+# Cross-process advisory lock serializing access to the single-threaded Fish
+# Speech (s2.cpp) TTS server. Already pulled in transitively (huggingface_hub),
+# pinned here because we import it directly.
+filelock>=3.12
+
 # ---- System / process introspection (GPU process dashboard) ----
 psutil==7.2.2
 

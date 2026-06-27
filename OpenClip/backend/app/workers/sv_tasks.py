@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 
@@ -23,6 +24,7 @@ from app.models.publishing import PublishingConnector
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvMusic,
     SvProject,
     SvPublishJob,
     SvScript,
@@ -39,6 +41,8 @@ from app.services.storage import (
     sv_caption_preview_key,
     sv_captions_key,
     sv_export_key,
+    sv_music_key,
+    sv_music_mp3_key,
     sv_narration_key,
     sv_preview_key,
 )
@@ -355,6 +359,121 @@ def sv_import_background_task(background_id: int, url: str) -> None:
 
 
 # =====================================================================
+# Music ingestion (any audio/video upload → MP3 bed)
+# =====================================================================
+@celery_app.task(name="app.workers.sv_tasks.sv_ingest_music_task")
+def sv_ingest_music_task(music_id: int) -> None:
+    """Convert an uploaded audio/video file to an MP3 bed and probe its duration.
+
+    Mirrors footage ingestion but far simpler: there's no segmenting or
+    thumbnailing — the whole track is mixed in (and looped) under the narration.
+    The original upload is dropped once the MP3 is produced.
+    """
+    with session_scope() as db:
+        track = db.get(SvMusic, music_id)
+        if not track or not track.storage_path:
+            return
+        track.status = JobStatus.PROCESSING.value
+        track.error = None
+        src_key = track.storage_path
+
+    src = storage.abspath(src_key, ensure_parent=False)
+    mp3_key = sv_music_mp3_key(music_id)
+    mp3_path = storage.abspath(mp3_key)
+    try:
+        # Drop any video stream, encode a clean stereo MP3 (libmp3lame VBR ~q2).
+        ffmpeg.run(["-i", src, "-vn", "-ac", "2", "-c:a", "libmp3lame", "-q:a", "2", mp3_path])
+        storage.commit(mp3_key)
+        info = ffmpeg.probe(mp3_path)
+    except Exception as exc:
+        logger.exception("Music %s ingest failed", music_id)
+        with session_scope() as db:
+            track = db.get(SvMusic, music_id)
+            if track:
+                track.status = JobStatus.FAILED.value
+                track.error = str(exc)[:1000]
+        return
+
+    # The source upload was only needed for the conversion — drop it, keep the MP3.
+    if src_key != mp3_key:
+        with contextlib.suppress(Exception):
+            storage.delete(src_key)
+
+    with session_scope() as db:
+        track = db.get(SvMusic, music_id)
+        if not track:
+            return
+        track.storage_path = mp3_key
+        track.duration_seconds = info.duration
+        track.size_bytes = storage.size(mp3_key)
+        track.status = JobStatus.COMPLETED.value
+        track.error = None
+    logger.info("Music %s ingested: %.1fs", music_id, info.duration)
+
+
+@celery_app.task(name="app.workers.sv_tasks.sv_import_music_task")
+def sv_import_music_task(music_id: int, url: str) -> None:
+    """Download audio from a YouTube (or other yt-dlp supported) URL, then run the
+    standard convert-to-MP3 ingest on it. Mirrors ``sv_import_background_task``."""
+    from app.services import youtube
+
+    with session_scope() as db:
+        track = db.get(SvMusic, music_id)
+        if not track:
+            return
+        track.status = JobStatus.PROCESSING.value
+        track.error = None
+
+    key = sv_music_key(music_id, "mp4")
+    try:
+        dest = storage.open_write(key)
+        meta = youtube.download(url, dest)
+        storage.commit(key)
+    except Exception as exc:
+        logger.exception("Music %s URL import failed", music_id)
+        with session_scope() as db:
+            track = db.get(SvMusic, music_id)
+            if track:
+                track.status = JobStatus.FAILED.value
+                track.error = str(exc)[:1000]
+        return
+
+    with session_scope() as db:
+        track = db.get(SvMusic, music_id)
+        if not track:
+            return
+        track.storage_path = key
+        if meta.get("title"):
+            track.original_filename = str(meta["title"])[:512]
+
+    # Reuse the shared ingest path (extract audio → MP3, drop the source).
+    sv_ingest_music_task(music_id)
+
+
+def _resolve_music_path(owner_id: int, music_id: int | None) -> str | None:
+    """The absolute MP3 path for a video's chosen music bed, or None.
+
+    Returns None when the track is missing, not owned, not finished converting,
+    or its file has since been deleted — so a stale/broken choice simply renders
+    with narration only (the composer also guards on the path existing).
+    """
+    if not music_id:
+        return None
+    with session_scope() as db:
+        track = db.get(SvMusic, music_id)
+        if (
+            not track
+            or track.owner_id != owner_id
+            or track.status != JobStatus.COMPLETED.value
+            or not track.storage_path
+        ):
+            return None
+        key = track.storage_path
+    path = storage.abspath(key, ensure_parent=False)
+    return path if os.path.exists(path) else None
+
+
+# =====================================================================
 # Story → preview pipeline
 # =====================================================================
 def _segment_candidates(
@@ -422,6 +541,8 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             "caption_config": video.caption_config,
             "background_category": video.background_category,
             "background_id": video.background_id,
+            "music_id": video.music_id,
+            "music_volume": video.music_volume,
             "script_engine": video.script_engine,
             "script_id": video.script_id,
             "template_config": video.template_config,
@@ -579,6 +700,7 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         _abort_if_cancelled(sv_video_id)
 
         # ---------------------------------------------------------- 5. preview
+        music_path = _resolve_music_path(opts["owner_id"], opts.get("music_id"))
         preview_key = sv_preview_key(sv_video_id)
         preview_intro = overlays_svc.prepare_intro_overlays(
             sv_video_id=sv_video_id,
@@ -598,6 +720,8 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             width=composer.PREVIEW_W,
             height=composer.PREVIEW_H,
             overlays=preview_intro["overlays"],
+            music_path=music_path,
+            music_volume=opts.get("music_volume") or 0.0,
         )
         composer.render_video(
             spec,
@@ -730,6 +854,9 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
         template_config = video.template_config
         intro_plan = video.intro_plan or {}
         story_meta = _story_meta(story) if story else None
+        owner_id = video.owner_id
+        music_id = video.music_id
+        music_volume = video.music_volume
         video.status = SvVideoStatus.RENDERING.value
         video.stage = "render"
         video.progress = 0.0
@@ -755,6 +882,7 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             else {"overlays": []}
         )
         out_key = sv_export_key(sv_video_id, export_id)
+        music_path = _resolve_music_path(owner_id, music_id)
         spec = composer.RenderSpec(
             narration_path=storage.abspath(narration_key, ensure_parent=False),
             total_duration=duration,
@@ -764,6 +892,8 @@ def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
             width=composer.RENDER_W,
             height=composer.RENDER_H,
             overlays=intro["overlays"],
+            music_path=music_path,
+            music_volume=music_volume or 0.0,
         )
         result = composer.render_video(
             spec,

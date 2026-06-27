@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "OpenClip"
     ENVIRONMENT: Literal["development", "production", "test"] = "development"
     DEBUG: bool = True
+    # Echo every SQL statement (very noisy — opt-in even in DEBUG). Leaving this
+    # tied to DEBUG floods api.log with per-query lines (hundreds of MB).
+    DB_ECHO: bool = False
     API_V1_PREFIX: str = "/api/v1"
     # NoDecode: keep pydantic-settings from JSON-parsing the env var so the
     # validator below can accept a plain comma-separated list (or a JSON array).
@@ -192,6 +195,14 @@ class Settings(BaseSettings):
     # AMD/Intel GPUs. Note: some GPUs (e.g. Tesla P100) have no video-encode
     # engine at all, so "auto" correctly lands on CPU there.
     HWACCEL: Literal["auto", "none", "nvenc", "qsv", "vaapi", "amf"] = "auto"
+    # StoryVault seamless loop: how long (seconds) the background takes to wrap
+    # back to the start. The renderer pulls a little extra footage past the
+    # narration (a continuation of the last clip) and cross-dissolves it into the
+    # opening over this window, so social autoplay flows back to the start with no
+    # hard cut and no rewind (the dissolve sits *below* the captions, so text
+    # isn't ghosted). ~1–2.5s reads as a smooth, flowing wrap; 0 disables it;
+    # values above ~half the video length are clamped.
+    SV_LOOP_SECONDS: float = 1.5
     # How many clips to enrich+render concurrently within one worker process.
     # Each clip render is an ffmpeg subprocess, so >1 overlaps the (ffmpeg-bound)
     # render of one clip with the LLM/reframe work of another. Keep modest: a

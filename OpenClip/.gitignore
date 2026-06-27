@@ -58,6 +58,11 @@ uploads/
 !data/storage/storyvault/voices/presets/
 !data/storage/storyvault/voices/presets/*.wav
 
+# Per-render StoryVault video working dirs (narration/captions/overlays for each
+# generated story video). The extension rules above catch the wav/mp4/srt/ass,
+# but overlay PNGs slip through — ignore the whole tree; it's all generated.
+data/storage/storyvault/videos/
+
 # Bundled built-in voice-preset audition clips (the TikTok clone voices) are
 # source assets seeded for every user — they must be committed, not ignored.
 !backend/app/services/storyvault/assets/

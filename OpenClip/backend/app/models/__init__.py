@@ -19,6 +19,8 @@ from app.models.settings import UserSettings
 from app.models.storyvault import (
     SvBackground,
     SvExport,
+    SvMusic,
+    SvMusicPreset,
     SvProject,
     SvPublishJob,
     SvScript,
@@ -46,6 +48,8 @@ __all__ = [
     "PublishingJob",
     "SvBackground",
     "SvExport",
+    "SvMusic",
+    "SvMusicPreset",
     "SvProject",
     "SvPublishJob",
     "SvScript",

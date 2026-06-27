@@ -38,8 +38,14 @@ def configure_logging() -> None:
     root.addHandler(handler)
     root.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
 
-    # Tame noisy third-party loggers.
-    for noisy in ("uvicorn.access", "httpx", "httpcore", "multipart"):
+    # Tame noisy third-party loggers. aiosqlite/SQLAlchemy log *every* SQL
+    # statement and connection op at DEBUG — with DEBUG on (the dev default) that
+    # alone bloats api.log to hundreds of MB and can fill the disk. Keep app
+    # DEBUG output but silence the per-query database chatter.
+    for noisy in (
+        "uvicorn.access", "httpx", "httpcore", "multipart",
+        "aiosqlite", "sqlalchemy.engine", "sqlalchemy.pool",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

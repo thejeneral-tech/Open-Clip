@@ -400,6 +400,83 @@ export function useSvDeleteBackground() {
   });
 }
 
+export function useSvMusic(poll = false) {
+  return useQuery({
+    queryKey: ["sv-music"],
+    queryFn: api.svListMusic,
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+export function useSvUploadMusic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => api.svUploadMusic(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music"] }),
+  });
+}
+
+export function useSvImportMusic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (url: string) => api.svImportMusic(url),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music"] }),
+  });
+}
+
+export function useSvRenameMusic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; name: string }) => api.svRenameMusic(vars.id, vars.name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music"] }),
+  });
+}
+
+export function useSvDeleteMusic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteMusic(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music"] }),
+  });
+}
+
+export function useSvMusicPreview() {
+  return useMutation({
+    mutationFn: (vars: { music_id: number; volume: number }) =>
+      api.svMusicPreview(vars.music_id, vars.volume),
+  });
+}
+
+export function useSvMusicPresets() {
+  return useQuery({ queryKey: ["sv-music-presets"], queryFn: api.svListMusicPresets });
+}
+
+export function useSvCreateMusicPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; music_id: number; volume: number }) =>
+      api.svCreateMusicPreset(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music-presets"] }),
+  });
+}
+
+export function useSvUpdateMusicPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; data: { name?: string; music_id?: number; volume?: number } }) =>
+      api.svUpdateMusicPreset(vars.id, vars.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music-presets"] }),
+  });
+}
+
+export function useSvDeleteMusicPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.svDeleteMusicPreset(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-music-presets"] }),
+  });
+}
+
 export function useSvVideos(status?: string, poll = false, projectId?: number) {
   return useQuery({
     queryKey: ["sv-videos", status ?? "all", projectId ?? "all"],
