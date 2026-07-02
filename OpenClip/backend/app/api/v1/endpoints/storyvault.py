@@ -905,6 +905,25 @@ def _story_key(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
+# How much of the target duration a story must be able to fill to "match" it, and
+# the average characters per spoken word (used to turn a word budget into a body
+# length). A body shorter than this yields a video shorter than the target.
+_DURATION_MATCH_RATIO = 0.8
+_AVG_CHARS_PER_WORD = 5.5
+
+
+def _min_body_chars_for_duration(duration_target: int, speed: float = 1.0) -> int:
+    """The story-body length (characters) needed to sustain a target-duration script.
+
+    The script pulls sentences up to ``word_budget(duration)`` words, so require a
+    body long enough to fill most of that budget — otherwise the video comes out
+    much shorter than the requested duration.
+    """
+    from app.services.storyvault.scripts import word_budget
+
+    return int(word_budget(duration_target, speed) * _DURATION_MATCH_RATIO * _AVG_CHARS_PER_WORD)
+
+
 async def _validate_project_settings(
     db: AsyncSession, user: User, s: SvProjectSettings
 ) -> None:
@@ -947,9 +966,12 @@ async def _collect_reddit_into_project(
     (best-effort) so a flaky source never blocks the rest of the run.
     """
     fetched: list[dict] = []
-    # Scan deeper when the project wants long stories — they're a small fraction
-    # of any feed, so a shallow scan would rarely surface a 20–30 minute story.
-    scan_limit = 100 if s.min_length >= 8000 else 25
+    # Only pull stories long enough to fill the project's target duration (so a
+    # 3-minute project doesn't collect 30-second posts), never below the user's own
+    # floor. Long stories are a small fraction of any feed, so scan deeper the
+    # longer the target — otherwise a 10–30 minute story rarely surfaces.
+    min_body = max(s.min_length, _min_body_chars_for_duration(s.duration_target, s.speed))
+    scan_limit = 100 if min_body >= 3000 else 25
     for community in s.communities:
         # Pacing between subreddits is enforced centrally by the throttle gate in
         # reddit.fetch_community, so we just fetch each in turn here.
@@ -961,7 +983,7 @@ async def _collect_reddit_into_project(
                     time_window=s.discovery_time_window,
                     limit=scan_limit,
                     min_upvotes=s.min_upvotes,
-                    min_length=s.min_length,
+                    min_length=min_body,
                 )
             )
         except Exception as exc:  # noqa: BLE001 — one bad source shouldn't abort the run
@@ -1163,7 +1185,9 @@ async def run_project(
     if s.story_source == "reddit" and s.communities:
         stories_added = await _collect_reddit_into_project(db, current_user, project, s)
 
-    # Best ready stories in this folder that don't have a video yet.
+    # Best ready stories in this folder that don't have a video yet AND are long
+    # enough to fill the target duration (so the video actually runs that long).
+    min_body = _min_body_chars_for_duration(s.duration_target, s.speed)
     used_subq = select(SvVideo.story_id).where(SvVideo.project_id == project.id)
     base_q = (
         select(SvStory)
@@ -1173,6 +1197,7 @@ async def run_project(
             SvStory.deleted_at.is_(None),
             SvStory.status.in_(_READY_STORY_STATUSES),
             SvStory.id.notin_(used_subq),
+            func.length(SvStory.body) >= min_body,
         )
         .order_by(SvStory.score.desc())
     )
@@ -1219,19 +1244,27 @@ async def run_project(
         await db.commit()
 
     n = len(queued)
-    if stories_added == 0 and n == 0:
-        detail = (
-            "No new stories to turn into videos. Add stories to this project, "
-            "or set a story source and upvote thresholds it can reach."
-        )
+    mins = s.duration_target // 60
+    length_hint = f"~{mins} min" if mins >= 1 else f"{s.duration_target}s"
+    if n == 0:
+        if stories_added:
+            detail = (
+                f"Collected {stories_added} new "
+                f"{'story' if stories_added == 1 else 'stories'}, but none are long enough for a "
+                f"{length_hint} video yet — try a longer-form community or a shorter duration."
+            )
+        else:
+            detail = (
+                f"No stories long enough for a {length_hint} video. Point the project at "
+                "communities with longer posts, add longer stories manually, or lower the duration."
+            )
     else:
         bits = []
         if stories_added:
             bits.append(f"collected {stories_added} new {'story' if stories_added == 1 else 'stories'}")
-        if n:
-            bits.append(f"queued {n} {'video' if n == 1 else 'videos'}")
+        bits.append(f"queued {n} {'video' if n == 1 else 'videos'}")
         detail = "Run started — " + " and ".join(bits) + "."
-        if s.auto_publish and n:
+        if s.auto_publish:
             detail += " They'll render and queue for publishing automatically."
     return SvProjectRunResult(stories_added=stories_added, videos_queued=n, detail=detail)
 
