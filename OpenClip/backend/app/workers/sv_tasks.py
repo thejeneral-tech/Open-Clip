@@ -289,6 +289,9 @@ def _maybe_auto_publish(sv_video_id: int) -> None:
             )
             privacy = settings.get("privacy", "public")
             title = (video.title or "Story video")[:100]
+            # The description just repeats the title (plus the auto #Shorts tag the
+            # connector appends at upload).
+            description = video.title or "Story video"
             for connector in connectors:
                 job = SvPublishJob(
                     owner_id=video.owner_id,
@@ -296,6 +299,7 @@ def _maybe_auto_publish(sv_video_id: int) -> None:
                     connector_id=connector.id,
                     platform=connector.platform,
                     title=title,
+                    description=description,
                     payload={"privacy": privacy},
                 )
                 db.add(job)

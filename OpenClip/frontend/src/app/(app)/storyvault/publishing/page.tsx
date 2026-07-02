@@ -81,7 +81,8 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
   // only limits typing, so an untrimmed long story title would otherwise be sent
   // as-is and rejected by the API (surfacing as a generic "Request failed").
   const [title, setTitle] = useState((video.story_title ?? video.title ?? "").slice(0, 100));
-  const [description, setDescription] = useState("");
+  // Default the description to the title ("just the title"); the user can edit it.
+  const [description, setDescription] = useState(video.story_title ?? video.title ?? "");
   const [privacy, setPrivacy] = useState("public");
 
   const toggle = (id: number) =>
