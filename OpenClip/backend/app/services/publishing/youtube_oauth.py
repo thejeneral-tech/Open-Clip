@@ -91,7 +91,14 @@ def build_auth_url(state: str) -> str:
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",      # ask for a refresh_token
-        "prompt": "consent",           # force refresh_token even on re-consent
+        # ``select_account`` forces Google's account picker, and ``consent`` forces
+        # the permission screen (so a refresh_token is returned even on re-consent).
+        # The account picker is what surfaces YouTube's "choose a channel" step when
+        # one Google login owns several channels (Brand Accounts) — without it the
+        # flow silently reuses the login's default channel, so a second/third
+        # channel can never be connected. Each connected channel becomes its own
+        # connector (keyed by channel id in the callback).
+        "prompt": "select_account consent",
         "include_granted_scopes": "true",
         "state": state,
     }
