@@ -146,7 +146,10 @@ def render_video(
     loop_s = max(0.0, float(settings.SV_LOOP_SECONDS))
     seamless_l = 0.0   # >0 => extend the last segment and xfade-wrap it
     overlay_l = 0.0    # >0 => length-preserving tail-overlay fallback
-    if loop_s and spec.plan and total > 2 * loop_s:
+    # The video wrap is gated off by default: blending the tail back into the head
+    # forces ffmpeg to buffer almost the whole stream, which exhausts RAM on longer
+    # videos (see SV_VIDEO_LOOP). The audio loop-fade below is cheap and stays on.
+    if settings.SV_VIDEO_LOOP and loop_s and spec.plan and total > 2 * loop_s:
         last = spec.plan[-1]
         try:
             src_dur = ffmpeg.probe(
