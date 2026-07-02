@@ -965,29 +965,10 @@ async def _collect_reddit_into_project(
     a one-click run pulls straight into the right folder. Failures are swallowed
     (best-effort) so a flaky source never blocks the rest of the run.
     """
-    fetched: list[dict] = []
     # Only pull stories long enough to fill the project's target duration (so a
     # 3-minute project doesn't collect 30-second posts), never below the user's own
-    # floor. Long stories are a small fraction of any feed, so scan deeper the
-    # longer the target — otherwise a 10–30 minute story rarely surfaces.
+    # floor.
     min_body = max(s.min_length, _min_body_chars_for_duration(s.duration_target, s.speed))
-    scan_limit = 100 if min_body >= 3000 else 25
-    for community in s.communities:
-        # Pacing between subreddits is enforced centrally by the throttle gate in
-        # reddit.fetch_community, so we just fetch each in turn here.
-        try:
-            fetched.extend(
-                await reddit.fetch_community(
-                    community,
-                    sort=s.discovery_sort,
-                    time_window=s.discovery_time_window,
-                    limit=scan_limit,
-                    min_upvotes=s.min_upvotes,
-                    min_length=min_body,
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 — one bad source shouldn't abort the run
-            logger.warning("Project %s discovery failed for %s: %s", project.id, community, exc)
 
     existing_ids = set(
         (
@@ -1009,38 +990,82 @@ async def _collect_reddit_into_project(
             ).scalars()
         }
 
+    # Reach *fresh* posts, not just the same top list every run. Reddit's public RSS
+    # returns up to 100 posts per listing and can't page past that, so once a
+    # subreddit's top posts are already collected the only way to find new stories
+    # is a *different* listing. Try the project's own sort/window first, then widen
+    # the window and vary the sort, stopping as soon as we've collected enough new
+    # matching stories for this run (each extra live pull is throttled, so a small
+    # fetch budget bounds the wait).
+    attempts: list[tuple[str, str]] = []
+
+    def _try(srt: str, win: str) -> None:
+        if (srt, win) not in attempts:
+            attempts.append((srt, win))
+
+    _try(s.discovery_sort, s.discovery_time_window)
+    for win in ("all", "year", "month", "week"):
+        _try(s.discovery_sort, win)
+    for srt in ("top", "hot", "rising", "new"):
+        _try(srt, s.discovery_time_window)
+
+    target = s.videos_per_run
+    max_fetches = 5
     added = 0
-    for item in fetched:
-        if item["external_id"] in existing_ids:
-            continue
-        if s.no_duplicates:
-            key = _story_key(item["title"])
-            if key in existing_keys:
+    fetches = 0
+    for community in s.communities:
+        for srt, win in attempts:
+            if added >= target or fetches >= max_fetches:
+                break
+            fetches += 1
+            try:
+                items = await reddit.fetch_community(
+                    community,
+                    sort=srt,
+                    time_window=win,
+                    limit=100,
+                    min_upvotes=s.min_upvotes,
+                    min_length=min_body,
+                )
+            except Exception as exc:  # noqa: BLE001 — one bad listing shouldn't abort the run
+                logger.warning(
+                    "Project %s discovery failed for %s (%s/%s): %s",
+                    project.id, community, srt, win, exc,
+                )
                 continue
-            existing_keys.add(key)
-        existing_ids.add(item["external_id"])
-        scored = scoring.score_story(
-            item["title"], item["body"], item["upvotes"], item["num_comments"]
-        )
-        db.add(
-            SvStory(
-                owner_id=user.id,
-                project_id=project.id,
-                source=item["source"],
-                source_url=item["source_url"],
-                external_id=item["external_id"],
-                community=item["community"],
-                author=item.get("author"),
-                title=item["title"],
-                body=item["body"],
-                category=scoring.guess_category(item["title"], item["body"], item["community"]),
-                upvotes=item["upvotes"],
-                num_comments=item["num_comments"],
-                score=scored["overall"],
-                score_breakdown=scored["breakdown"],
-            )
-        )
-        added += 1
+            for item in items:
+                if item["external_id"] in existing_ids:
+                    continue
+                if s.no_duplicates:
+                    key = _story_key(item["title"])
+                    if key in existing_keys:
+                        continue
+                    existing_keys.add(key)
+                existing_ids.add(item["external_id"])
+                scored = scoring.score_story(
+                    item["title"], item["body"], item["upvotes"], item["num_comments"]
+                )
+                db.add(
+                    SvStory(
+                        owner_id=user.id,
+                        project_id=project.id,
+                        source=item["source"],
+                        source_url=item["source_url"],
+                        external_id=item["external_id"],
+                        community=item["community"],
+                        author=item.get("author"),
+                        title=item["title"],
+                        body=item["body"],
+                        category=scoring.guess_category(item["title"], item["body"], item["community"]),
+                        upvotes=item["upvotes"],
+                        num_comments=item["num_comments"],
+                        score=scored["overall"],
+                        score_breakdown=scored["breakdown"],
+                    )
+                )
+                added += 1
+        if added >= target or fetches >= max_fetches:
+            break
     if added:
         await db.commit()
     return added
@@ -1250,13 +1275,20 @@ async def run_project(
         if stories_added:
             detail = (
                 f"Collected {stories_added} new "
-                f"{'story' if stories_added == 1 else 'stories'}, but none are long enough for a "
-                f"{length_hint} video yet — try a longer-form community or a shorter duration."
+                f"{'story' if stories_added == 1 else 'stories'}, but none are usable for a "
+                f"{length_hint} video yet (already made, or a duplicate). Add more communities "
+                "or turn off No-duplicates."
+            )
+        elif s.story_source == "reddit" and s.communities:
+            detail = (
+                f"Couldn't find new stories long enough for a {length_hint} video — the top posts "
+                "from these communities are likely already in your library. Add more communities, "
+                "widen the sort/time window, or lower the duration."
             )
         else:
             detail = (
-                f"No stories long enough for a {length_hint} video. Point the project at "
-                "communities with longer posts, add longer stories manually, or lower the duration."
+                f"No stories long enough for a {length_hint} video. Add longer stories to this "
+                "project, or set a Reddit source so it can fetch matching ones."
             )
     else:
         bits = []
