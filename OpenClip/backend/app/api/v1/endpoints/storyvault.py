@@ -2145,7 +2145,10 @@ async def publish_video(
 ) -> list[SvPublishJobOut]:
     """Queue an upload of this video to each selected channel.
 
-    The final 1080×1920 render happens automatically if it hasn't yet.
+    Publishing uploads the publish-ready 1080×1920 file produced at generation
+    time — it never regenerates the video. (A missing final render is re-produced
+    on demand only as a fallback for legacy videos.) The chosen privacy
+    (public / unlisted / private) is carried through to the upload.
     """
     video = await _owned_video(db, video_id, current_user)
     publishable = {
