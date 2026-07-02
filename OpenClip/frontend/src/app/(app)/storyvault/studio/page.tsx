@@ -296,6 +296,18 @@ function StudioInner() {
     if (p) applyProject(p);
   };
 
+  // Picking a story sizes the duration to its estimated narration length so the
+  // video fits the story out of the box (clamped to the picker's bounds). The
+  // user can still tweak the duration afterward.
+  const onStoryChange = (value: string) => {
+    setStoryId(value);
+    const s = stories.find((story) => String(story.id) === value);
+    if (!s) return;
+    setDuration(
+      Math.max(MIN_DURATION, Math.min(MAX_DURATION, estimateNarrationSeconds(s.body))),
+    );
+  };
+
   // When arriving via ?project=, auto-fill once the projects load.
   useEffect(() => {
     if (projectParam && projectId === projectParam) {
@@ -428,7 +440,7 @@ function StudioInner() {
 
                 <div className="space-y-2">
                   <Label>Story</Label>
-                  <Select value={storyId} onValueChange={setStoryId}>
+                  <Select value={storyId} onValueChange={onStoryChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Pick a story" />
                     </SelectTrigger>
