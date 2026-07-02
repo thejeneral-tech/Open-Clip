@@ -699,15 +699,22 @@ def sv_generate_video_task(sv_video_id: int) -> None:
         tracker.set(stage="footage", progress=_FOOTAGE[1], message=msg)
         _abort_if_cancelled(sv_video_id)
 
-        # ---------------------------------------------------------- 5. preview
+        # ------------------------------------------------------ 5. final render
+        # Render the publish-ready 1080×1920 cut straight away, so a finished video
+        # lands in review already exportable. The same file doubles as the
+        # on-screen review preview, and an SvExport row is recorded — so hitting
+        # Publish later just uploads this file and never re-renders. (See
+        # sv_render_video_task, whose fast path reuses render_path.) Rendering once
+        # at full resolution here also avoids the old preview-then-final double
+        # encode.
         music_path = _resolve_music_path(opts["owner_id"], opts.get("music_id"))
-        preview_key = sv_preview_key(sv_video_id)
-        preview_intro = overlays_svc.prepare_intro_overlays(
+        render_key = sv_preview_key(sv_video_id)
+        render_intro = overlays_svc.prepare_intro_overlays(
             sv_video_id=sv_video_id,
             story_meta=opts["story_meta"],
             template_config=opts.get("template_config"),
-            width=composer.PREVIEW_W,
-            height=composer.PREVIEW_H,
+            width=composer.RENDER_W,
+            height=composer.RENDER_H,
             card_window=card_window,
             author_window=author_window,
         )
@@ -716,26 +723,47 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             total_duration=duration,
             ass_path=storage.abspath(ass_key, ensure_parent=False),
             plan=plan,
-            output_path=storage.abspath(preview_key),
-            width=composer.PREVIEW_W,
-            height=composer.PREVIEW_H,
-            overlays=preview_intro["overlays"],
+            output_path=storage.abspath(render_key),
+            width=composer.RENDER_W,
+            height=composer.RENDER_H,
+            overlays=render_intro["overlays"],
             music_path=music_path,
             music_volume=opts.get("music_volume") or 0.0,
         )
-        composer.render_video(
+        result = composer.render_video(
             spec,
-            on_progress=_render_progress(sv_video_id, tracker, "preview", "Rendering preview", _PREVIEW),
+            on_progress=_render_progress(sv_video_id, tracker, "preview", "Rendering video", _PREVIEW),
         )
-        storage.commit(preview_key)
+        storage.commit(render_key)
         # Final checkpoint: honour a Stop that landed during the render before we
         # mark the video ready — otherwise it would silently finish with the flag
         # still raised, which then self-cancels any later approve/retry.
         _abort_if_cancelled(sv_video_id)
         with session_scope() as db:
             video = db.get(SvVideo, sv_video_id)
-            video.preview_path = preview_key
+            # One 1080×1920 file backs both the review preview and the upload, so a
+            # later publish is a pure upload with no second render.
+            video.preview_path = render_key
+            video.render_path = render_key
             video.cancel_requested = False  # genuine success — reconcile the flag
+            story = db.get(SvStory, video.story_id)
+            db.add(
+                SvExport(
+                    owner_id=opts["owner_id"],
+                    sv_video_id=sv_video_id,
+                    platform="tiktok",
+                    title=(
+                        video.title
+                        or (story.title if story else None)
+                        or f"Story video {sv_video_id}"
+                    )[:512],
+                    storage_path=render_key,
+                    size_bytes=result["size_bytes"],
+                    duration_seconds=result["duration"],
+                    width=result["width"],
+                    height=result["height"],
+                )
+            )
         tracker.set(
             stage="ready", progress=1.0,
             status=SvVideoStatus.READY_FOR_REVIEW.value,
@@ -832,6 +860,68 @@ def sv_caption_previews_task(styles: list[str], force: bool = False) -> None:
 @celery_app.task(name="app.workers.sv_tasks.sv_render_video_task")
 def sv_render_video_task(sv_video_id: int, platform: str = "tiktok") -> None:
     tracker = ProgressTracker("sv_video", sv_video_id)
+
+    # Fast path: generation already produced the publish-ready 1080×1920 file
+    # (render_path set). Don't re-render — just finalize: record an export row if
+    # one is missing, mark the video complete, and continue to auto-publish. This
+    # keeps "approve" (and the on-demand publish render) cheap and guarantees a
+    # publish is a pure upload.
+    with session_scope() as db:
+        video = db.get(SvVideo, sv_video_id)
+        if not video or not video.narration_path:
+            return
+        existing_render = video.render_path
+        cancel_requested = video.cancel_requested
+    if existing_render and os.path.exists(storage.abspath(existing_render, ensure_parent=False)):
+        if cancel_requested:
+            _mark_cancelled(sv_video_id)
+            return
+        with session_scope() as db:
+            video = db.get(SvVideo, sv_video_id)
+            story = db.get(SvStory, video.story_id)
+            has_export = (
+                db.query(SvExport)
+                .filter(
+                    SvExport.sv_video_id == sv_video_id,
+                    SvExport.storage_path == existing_render,
+                    SvExport.deleted_at.is_(None),
+                )
+                .first()
+            )
+            if not has_export:
+                probe = None
+                with contextlib.suppress(Exception):
+                    probe = ffmpeg.probe(storage.abspath(existing_render, ensure_parent=False))
+                db.add(
+                    SvExport(
+                        owner_id=video.owner_id,
+                        sv_video_id=sv_video_id,
+                        platform=platform,
+                        title=(
+                            video.title
+                            or (story.title if story else None)
+                            or f"Story video {sv_video_id}"
+                        )[:512],
+                        storage_path=existing_render,
+                        size_bytes=storage.size(existing_render),
+                        duration_seconds=(probe.duration if probe else video.narration_duration) or 0.0,
+                        width=probe.width if probe else composer.RENDER_W,
+                        height=probe.height if probe else composer.RENDER_H,
+                    )
+                )
+            video.status = SvVideoStatus.COMPLETED.value
+            video.stage = "done"
+            video.progress = 1.0
+            video.cancel_requested = False
+            if story and story.status != SvStoryStatus.EXCLUDED.value:
+                story.status = SvStoryStatus.USED.value
+        tracker.set(
+            stage="done", progress=1.0,
+            status=SvVideoStatus.COMPLETED.value,
+            message="Export ready",
+        )
+        _maybe_auto_publish(sv_video_id)
+        return
 
     with session_scope() as db:
         video = db.get(SvVideo, sv_video_id)
@@ -973,14 +1063,20 @@ def sv_publish_job_task(job_id: int) -> None:
                 j.status = PublishStatus.FAILED.value
                 j.error = message[:1000]
 
+    def _render_ready(key: str | None) -> bool:
+        return bool(key and os.path.exists(storage.abspath(key, ensure_parent=False)))
+
     try:
-        # The upload needs the final 1080×1920 file — render it on demand.
-        if not render_key:
+        # Publish uploads the already-rendered 1080×1920 file — it never
+        # regenerates the story. Generation produces this file up front (render_path
+        # set), so this is normally a pure upload. The render fallback only covers a
+        # legacy video whose final file was never produced or has gone missing.
+        if not _render_ready(render_key):
             sv_render_video_task(sv_video_id, platform)
             with session_scope() as db:
                 video = db.get(SvVideo, sv_video_id)
                 render_key = video.render_path if video else None
-        if not render_key:
+        if not _render_ready(render_key):
             _fail("Final render failed — see the video's error for details")
             return
         asset_path = storage.abspath(render_key, ensure_parent=False)
@@ -1007,6 +1103,16 @@ def sv_publish_job_task(job_id: int) -> None:
                 job.published_at = datetime.now(timezone.utc)
                 story_video = db.get(SvVideo, job.sv_video_id)
                 if story_video:
+                    # A published video is finished — mark it complete so it no
+                    # longer sits in the review queue (it was uploaded, not
+                    # re-rendered).
+                    if story_video.status in (
+                        SvVideoStatus.READY_FOR_REVIEW.value,
+                        SvVideoStatus.APPROVED.value,
+                    ):
+                        story_video.status = SvVideoStatus.COMPLETED.value
+                        story_video.stage = "done"
+                        story_video.progress = 1.0
                     story = db.get(SvStory, story_video.story_id)
                     if story and story.status != SvStoryStatus.EXCLUDED.value:
                         story.status = SvStoryStatus.USED.value

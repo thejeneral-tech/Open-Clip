@@ -92,7 +92,7 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
         data: { connector_ids: selected, title, description: description || undefined, privacy },
       });
       toast.success(
-        `Queued ${jobs.length} upload${jobs.length === 1 ? "" : "s"} — final render happens automatically`,
+        `Queued ${jobs.length} upload${jobs.length === 1 ? "" : "s"} — uploading the ready video (no re-render)`,
       );
       setSelected([]);
     } catch (err) {
@@ -560,8 +560,8 @@ export default function StoryVaultPublishingPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Publishing</h1>
         <p className="text-muted-foreground">
-          Connect channels, then pick where each story video goes — the final 1080×1920 render and
-          upload run automatically.
+          Connect channels, then pick where each story video goes. Videos are rendered publish-ready
+          when generated, so publishing just uploads them — it never re-renders.
         </p>
       </div>
       <Tabs defaultValue="channels">
