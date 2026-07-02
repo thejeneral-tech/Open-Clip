@@ -34,7 +34,7 @@ from app.services.ffmpeg import ffmpeg
 # working unchanged.
 from app.services.storyvault.narration_align import (
     BEAT_GAP as _BEAT_GAP,
-    MAX_WORD_DUR as _MAX_WORD_DUR,
+    MAX_WORD_DUR as _MAX_WORD_DUR,  # noqa: F401 — re-exported for tests (fish_clone._MAX_WORD_DUR)
     align_to_text as _align_to_text,
     apply_tempo as _apply_tempo,
     concat_with_gaps as _concat_with_gaps,
