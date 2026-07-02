@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Palette, Sparkles, Type } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { assToCss } from "@/components/storyvault/template-preview";
 import { useModels, useProcessVideo, useSettings, useSvTemplates } from "@/hooks/use-api";
-import type { AspectRatio, ProcessOptions } from "@/lib/types";
+import type { AspectRatio, ProcessOptions, SvTemplateData } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ASPECTS: { value: AspectRatio; label: string }[] = [
@@ -112,21 +112,38 @@ export function ProcessDialog({
   const [capStyle, setCapStyle] = useState<"karaoke" | "pop">("karaoke");
   const [primary, setPrimary] = useState("#ffffff");
   const [highlight, setHighlight] = useState("#ffd400");
+  // Whether the user has touched the preset picker — until then we pre-select the
+  // default preset so the dialog starts from the "Set default" the whole stack uses.
+  const [presetTouched, setPresetTouched] = useState(false);
+
+  // Seed the caption style + colours from a preset's caption config.
+  const seedFromCaptions = (caps: SvTemplateData["captions"]) => {
+    if (!caps) return;
+    setCapStyle(caps.style === "pop" ? "pop" : "karaoke");
+    setPrimary(assToCss(caps.primary, "#ffffff").toLowerCase());
+    setHighlight(assToCss(caps.highlight, "#ffd400").toLowerCase());
+  };
+
+  // Pre-select the user's default preset (the whole-stack default) on first load,
+  // until they pick one themselves.
+  useEffect(() => {
+    if (presetTouched || templateId !== null || templates.length === 0) return;
+    const def = templates.find((t) => t.is_default);
+    if (!def) return;
+    setTemplateId(def.id);
+    seedFromCaptions(def.data?.captions);
+  }, [templates, templateId, presetTouched]);
 
   // Picking a preset seeds the caption style + colours from its caption config.
   const onPreset = (v: string) => {
+    setPresetTouched(true);
     if (v === "none") {
       setTemplateId(null);
       return;
     }
     const id = Number(v);
     setTemplateId(id);
-    const caps = templates.find((t) => t.id === id)?.data?.captions;
-    if (caps) {
-      setCapStyle(caps.style === "pop" ? "pop" : "karaoke");
-      setPrimary(assToCss(caps.primary, "#ffffff").toLowerCase());
-      setHighlight(assToCss(caps.highlight, "#ffd400").toLowerCase());
-    }
+    seedFromCaptions(templates.find((t) => t.id === id)?.data?.captions);
   };
 
   const toggleAspect = (a: AspectRatio) => {

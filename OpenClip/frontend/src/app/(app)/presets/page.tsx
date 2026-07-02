@@ -365,7 +365,7 @@ export default function PresetsPage() {
                     disabled={selected.is_default || setDefault.isPending}
                   >
                     <Star className={cn("h-4 w-4", selected.is_default && "fill-current")} />
-                    {selected.is_default ? "Default" : "Use for next run"}
+                    {selected.is_default ? "Default" : "Set default"}
                   </Button>
                   <Button variant="outline" onClick={onDuplicate} disabled={duplicate.isPending}>
                     <Copy className="h-4 w-4" /> Duplicate

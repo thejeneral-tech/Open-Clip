@@ -272,20 +272,39 @@ def _transcribe(video_id: int, opts: ProcessOptions, models: dict[str, str],
     return result
 
 
-def _resolve_caption_config(db, opts: ProcessOptions) -> dict[str, Any] | None:
-    """Effective caption override blob for a run: a chosen preset's caption
-    config (colours, size, position, style) with the dialog's caption overrides
-    (style · text/highlight colour) layered on top so the dialog wins. None when
-    nothing is set, which keeps the named caption_style's defaults."""
+def _resolve_caption_config(
+    db, opts: ProcessOptions, owner_id: int | None = None
+) -> dict[str, Any] | None:
+    """Effective caption override blob for a run: a preset's caption config
+    (colours, size, position, style) with the dialog's caption overrides (style ·
+    text/highlight colour) layered on top so the dialog wins. None when nothing is
+    set, which keeps the named caption_style's defaults.
+
+    The preset is the run's explicit ``template_id`` when given, otherwise the
+    owner's default preset (the one flagged "Set default" on the Presets page).
+    That fallback is what carries a chosen default across the whole OpenClip stack:
+    the process dialog *and* unattended bot runs pick it up without naming it."""
+    from app.models.storyvault import SvTemplate
+
     cfg: dict[str, Any] = {}
     template_id = getattr(opts, "template_id", None)
+    tpl = None
     if template_id:
-        from app.models.storyvault import SvTemplate
-
         tpl = db.get(SvTemplate, template_id)
-        data = tpl.data if tpl else None
-        if isinstance(data, dict) and isinstance(data.get("captions"), dict):
-            cfg.update(data["captions"])
+    elif owner_id is not None:
+        tpl = (
+            db.query(SvTemplate)
+            .filter(
+                SvTemplate.owner_id == owner_id,
+                SvTemplate.is_default.is_(True),
+                SvTemplate.deleted_at.is_(None),
+            )
+            .order_by(SvTemplate.id.desc())
+            .first()
+        )
+    data = tpl.data if tpl else None
+    if isinstance(data, dict) and isinstance(data.get("captions"), dict):
+        cfg.update(data["captions"])
     if opts.caption_config:
         cfg.update({k: v for k, v in opts.caption_config.items() if v is not None})
     return cfg or None
@@ -309,7 +328,9 @@ def _detect(video_id: int, transcript: dict[str, Any], opts: ProcessOptions,
     clip_ids: list[int] = []
     aspect = opts.aspect_ratios[0].value if opts.aspect_ratios else "9:16"
     with session_scope() as db:
-        caption_cfg = _resolve_caption_config(db, opts)
+        vid = db.get(Video, video_id)
+        owner_id = vid.project.owner_id if vid and vid.project else None
+        caption_cfg = _resolve_caption_config(db, opts, owner_id)
         for a in analyses:
             db.add(_ai_analysis(video_id, **a))
         for idx, cand in enumerate(candidates):
