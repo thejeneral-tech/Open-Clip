@@ -203,6 +203,13 @@ class Settings(BaseSettings):
     # isn't ghosted). ~1–2.5s reads as a smooth, flowing wrap; 0 disables it;
     # values above ~half the video length are clamped.
     SV_LOOP_SECONDS: float = 1.5
+    # Cap the threads ffmpeg uses for the StoryVault render filter graph
+    # (scale/crop/concat/subtitles/overlay — all CPU-side). Its peak memory scales
+    # with thread count, so on a memory-constrained box the default (all cores) can
+    # exhaust RAM and abort a long/many-segment render with "Cannot allocate
+    # memory". 2 keeps memory bounded while staying reasonably fast; 0 lets ffmpeg
+    # decide (all cores). The encode itself is offloaded to the GPU via HWACCEL.
+    SV_RENDER_FILTER_THREADS: int = 2
     # How many clips to enrich+render concurrently within one worker process.
     # Each clip render is an ffmpeg subprocess, so >1 overlaps the (ffmpeg-bound)
     # render of one clip with the LLM/reframe work of another. Keep modest: a

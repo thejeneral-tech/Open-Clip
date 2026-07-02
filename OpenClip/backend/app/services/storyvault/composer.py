@@ -294,9 +294,17 @@ def render_video(
         # VAAPI: upload the composed CPU frames to a GPU surface for the encoder.
         filters.append(f"[vout]{plan.upload_filter}[venc]")
         vmap = "[venc]"
+    # Bound the filter graph's thread count (and therefore its peak memory) so a
+    # long/many-segment render doesn't exhaust RAM on a memory-constrained box.
+    filter_thread_args = (
+        ["-filter_complex_threads", str(settings.SV_RENDER_FILTER_THREADS)]
+        if settings.SV_RENDER_FILTER_THREADS > 0
+        else []
+    )
     cmd = [
         *plan.device_args,
         *args,
+        *filter_thread_args,
         "-filter_complex", ";".join(filters),
         "-map", vmap, "-map", amap,
         *plan.codec_args,
