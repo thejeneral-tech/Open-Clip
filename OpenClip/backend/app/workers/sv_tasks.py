@@ -13,6 +13,8 @@ from __future__ import annotations
 import contextlib
 import os
 import sys
+import threading
+import time
 
 from celery.signals import worker_ready
 
@@ -139,6 +141,40 @@ def _render_progress(sv_video_id: int, tracker: ProgressTracker, stage: str, mes
         tracker.throttled(stage, _lerp(band, frac) if band else frac, message=message)
 
     return cb
+
+
+@contextlib.contextmanager
+def _narration_heartbeat(sv_video_id: int, tracker: ProgressTracker, est_seconds: float, message: str):
+    """Keep a long, opaque narration call visibly alive.
+
+    TTS (especially a cloned Fish voice on a slow GPU) is one blocking call with no
+    intermediate progress — the pipeline would otherwise sit frozen at the start of
+    the narration band for minutes, indistinguishable from a hang. A daemon thread
+    crawls progress across the narration band against ``est_seconds`` and refreshes
+    the row every ~15s, so the UI shows movement and ``updated_at`` stays fresh (a
+    genuinely dead task then has a stale timestamp). Purely cosmetic: the real band
+    end is set by the caller when narration actually returns."""
+    stop = threading.Event()
+    lo, hi = _NARRATE
+    start = time.monotonic()
+
+    def _tick() -> None:
+        while not stop.wait(15.0):
+            frac = min(0.95, (time.monotonic() - start) / max(1.0, est_seconds))
+            try:
+                if _cancel_requested(sv_video_id):
+                    return  # a checkpoint in the main thread will park it
+                tracker.set(stage="narration", progress=lo + (hi - lo) * frac, message=message)
+            except Exception:  # noqa: BLE001 — a heartbeat must never break the render
+                return
+
+    th = threading.Thread(target=_tick, name=f"sv-narr-hb-{sv_video_id}", daemon=True)
+    th.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        th.join(timeout=2.0)
 
 
 def _reconcile_orphaned_videos(**_) -> None:
@@ -625,14 +661,25 @@ def sv_generate_video_task(sv_video_id: int) -> None:
             narr_kw = {"voice": opts["voice"], "speed": opts["speed"]}
             story_fn, body_fn = piper_tts.synthesize_story, piper_tts.synthesize
 
-        if story_parts:
-            narr = story_fn(story_parts, narration_abspath, **narr_kw)
-            body_words, body_start = narr.body_words, narr.body_start
-            card_window, author_window = narr.card_window, narr.author_window
-            duration = narr.duration
-        else:
-            result = body_fn(script_text, narration_abspath, **narr_kw)
-            body_words, body_start, duration = result.words, 0.0, result.duration
+        # Estimate narration time so the heartbeat can pace a progress crawl. A
+        # cloned Fish voice on this GPU runs ~10x slower than a system voice, so a
+        # long body can take many minutes; the estimate only needs to be
+        # order-of-magnitude right to keep the bar honestly moving.
+        word_est = max(1, len((script_text or "").split()))
+        est_seconds = max(20.0, word_est * (6.0 if use_clone else 0.5))
+        hb_msg = (
+            "Synthesizing narration — a cloned voice can take several minutes"
+            if use_clone else "Synthesizing narration"
+        )
+        with _narration_heartbeat(sv_video_id, tracker, est_seconds, hb_msg):
+            if story_parts:
+                narr = story_fn(story_parts, narration_abspath, **narr_kw)
+                body_words, body_start = narr.body_words, narr.body_start
+                card_window, author_window = narr.card_window, narr.author_window
+                duration = narr.duration
+            else:
+                result = body_fn(script_text, narration_abspath, **narr_kw)
+                body_words, body_start, duration = result.words, 0.0, result.duration
         storage.commit(narration_key)
         if duration <= 0.5:
             if use_clone:
