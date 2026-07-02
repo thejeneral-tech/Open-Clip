@@ -134,44 +134,41 @@ def render_video(
     spec = RenderSpec(**{**spec.__dict__, "plan": plan})
 
     # --- Seamless-loop planning -------------------------------------------
-    # For a natural, flowing wrap we render a little EXTRA footage past the
-    # narration — a continuation of the *last* segment's own source — and then
-    # cross-dissolve that ending footage back into the opening over
-    # SV_LOOP_SECONDS. Because the extra footage is the genuine continuation of
-    # what was just on screen, the end flows continuously into the start: no
-    # hard cut and (unlike a tail-only overlay) no rewind/stutter of the opening.
-    # If the final source has no room to extend (e.g. a short clip), fall back to
-    # a length-preserving tail dissolve. The wrap sits below the captions so the
-    # text is never ghosted, and the output duration is always exactly ``total``.
+    # A perfect loop needs the video's END to flow into its START with no visible
+    # cut. We do it on the footage layer (below the captions, so text is never
+    # ghosted): read a short *continuation* of the last segment's own source — the
+    # genuine next frames after the body ends — as its OWN small input, then
+    # alpha-dissolve it over just the first ``SV_LOOP_SECONDS``. So the last frame
+    # (body end) flows straight into the first (its continuation), then that
+    # dissolves into the normal opening. Crucially this overlays a bounded
+    # L-second clip instead of splitting/holding the whole stream, so it stays
+    # memory-safe on long videos (the old split+concat wrap OOM'd — see
+    # SV_VIDEO_LOOP). Output duration stays exactly ``total``.
     loop_s = max(0.0, float(settings.SV_LOOP_SECONDS))
-    seamless_l = 0.0   # >0 => extend the last segment and xfade-wrap it
-    overlay_l = 0.0    # >0 => length-preserving tail-overlay fallback
-    # The video wrap is gated off by default: blending the tail back into the head
-    # forces ffmpeg to buffer almost the whole stream, which exhausts RAM on longer
-    # videos (see SV_VIDEO_LOOP). The audio loop-fade below is cheap and stays on.
+    loop_l = 0.0          # >0 => dissolve a tail continuation over the opening
+    loop_src: str | None = None
+    loop_src_start = 0.0
     if settings.SV_VIDEO_LOOP and loop_s and spec.plan and total > 2 * loop_s:
         last = spec.plan[-1]
         try:
             src_dur = ffmpeg.probe(
                 storage.abspath(last["storage_path"], ensure_parent=False)
             ).duration
-        except Exception:  # noqa: BLE001 — a probe failure just disables the nicer path
+        except Exception:  # noqa: BLE001 — a probe failure just disables the wrap
             src_dur = 0.0
-        room = src_dur - (float(last["start"]) + float(last["length"])) - 0.10
-        seamless_l = min(loop_s, max(0.0, room), total * 0.45)
-        if seamless_l < 0.30:  # not enough spare footage — use the tail overlay
-            seamless_l = 0.0
-            overlay_l = min(loop_s, 0.6, total * 0.45)
+        body_end = float(last["start"]) + float(last["length"])
+        want = min(loop_s, total * 0.45)
+        # Only wrap when the last clip genuinely continues past the body — that
+        # continuation is what makes end→start seamless.
+        if want >= 0.30 and src_dur - body_end - 0.05 >= want:
+            loop_l = want
+            loop_src = storage.abspath(last["storage_path"], ensure_parent=False)
+            loop_src_start = body_end
 
     if spec.plan:
-        last_idx = len(spec.plan) - 1
         for idx, item in enumerate(spec.plan):
             src = storage.abspath(item["storage_path"], ensure_parent=False)
             seg_len = float(item["length"])
-            # Read a touch more from the final clip so its continuation can be
-            # dissolved into the opening for the seamless wrap.
-            if idx == last_idx and seamless_l > 0:
-                seg_len += seamless_l + 0.20
             args.extend(["-ss", f"{float(item['start']):.3f}", "-t", f"{seg_len:.3f}", "-i", src])
             filters.append(
                 f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
@@ -189,41 +186,35 @@ def render_video(
         vsrc = "[0:v]"
         n_video_inputs = 1
 
-    args.extend(["-i", spec.narration_path])
-    audio_idx = n_video_inputs
+    # The loop continuation is its own small input (bounded, ~L seconds), added
+    # before the narration so the audio/overlay/music indices below still line up.
+    loop_idx: int | None = None
+    if loop_l > 0 and loop_src:
+        loop_idx = n_video_inputs
+        args.extend(["-ss", f"{loop_src_start:.3f}", "-t", f"{loop_l + 0.10:.3f}", "-i", loop_src])
 
-    if seamless_l > 0:
-        # Split the over-length footage into opening A[0,L), body B[L,total) and
-        # the extra tail C[total,total+L); cross-dissolve C into A to form the
-        # first L seconds, then play B. The wrap moment (B's end → C's start) is
-        # one continuous motion, and the dissolve eases the scene change.
-        L = seamless_l
-        filters.append(f"{vsrc}split=3[sa][sb][sc]")
-        filters.append(f"[sa]trim=0:{L:.3f},setpts=PTS-STARTPTS[swa]")
-        filters.append(f"[sc]trim={total:.3f}:{total + L:.3f},setpts=PTS-STARTPTS[swc]")
-        filters.append(f"[swc][swa]xfade=transition=fade:duration={L:.3f}:offset=0[swr]")
-        filters.append(f"[sb]trim={L:.3f}:{total:.3f},setpts=PTS-STARTPTS[sbrest]")
-        filters.append("[swr][sbrest]concat=n=2:v=1:a=0[lbase]")
-        foot = "[lbase]"
-    elif overlay_l > 0:
-        # No spare footage to extend: dissolve the opening frames back in over
-        # the final ``overlay_l`` seconds (length-preserving tail overlay).
-        L = overlay_l
-        shift = total - L
-        filters.append(f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS[fbase]")
-        filters.append("[fbase]split[lmain][lhead]")
+    args.extend(["-i", spec.narration_path])
+    audio_idx = n_video_inputs + (1 if loop_idx is not None else 0)
+
+    filters.append(f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS[foot]")
+    if loop_idx is not None:
+        # Normalise the continuation to the frame grid, fade its alpha out across
+        # the window, and overlay it on only the first L seconds. At t=0 it's fully
+        # the continuation (so end→start is one continuous motion); by t=L it's
+        # gone and the true opening shows. eof_action=pass lets the base run on.
+        L = loop_l
         filters.append(
-            f"[lhead]trim=duration={L:.3f},setpts=PTS-STARTPTS,format=yuva420p,"
-            f"fade=t=in:st=0:d={L:.3f}:alpha=1,setpts=PTS+{shift:.3f}/TB[lhead2]"
+            f"[{loop_idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
+            f"crop={w}:{h},setsar=1,fps={FPS},format=yuva420p,"
+            f"fade=t=out:st=0:d={L:.3f}:alpha=1[loopcont]"
         )
         filters.append(
-            f"[lmain][lhead2]overlay=enable='gte(t,{shift:.3f})':"
-            f"format=auto,format=yuv420p[lbase]"
+            f"[foot][loopcont]overlay=enable='lt(t,{L:.3f})':eof_action=pass,"
+            f"format=yuv420p[lbase]"
         )
         foot = "[lbase]"
     else:
-        filters.append(f"{vsrc}trim=duration={total:.3f},setpts=PTS-STARTPTS[fbase]")
-        foot = "[fbase]"
+        foot = "[foot]"
 
     # Captions burned on top of the (looped) footage. The source label glues
     # directly onto the first filter (no comma); ``null`` stands in when there
