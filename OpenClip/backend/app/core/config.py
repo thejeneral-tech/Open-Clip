@@ -203,6 +203,13 @@ class Settings(BaseSettings):
     # isn't ghosted). ~1–2.5s reads as a smooth, flowing wrap; 0 disables it;
     # values above ~half the video length are clamped.
     SV_LOOP_SECONDS: float = 1.5
+    # Whether to also cross-dissolve the *video* back to its start (the seamless
+    # visual wrap). This is OFF by default because its filter graph must buffer
+    # almost the whole stream to blend the tail into the head — which exhausts RAM
+    # and aborts the render with "Cannot allocate memory" on anything longer than a
+    # short clip. The (cheap, bounded) audio loop-fade above still applies. Only
+    # enable on a box with plenty of free RAM relative to the video length.
+    SV_VIDEO_LOOP: bool = False
     # Cap the threads ffmpeg uses for the StoryVault render filter graph
     # (scale/crop/concat/subtitles/overlay — all CPU-side). Its peak memory scales
     # with thread count, so on a memory-constrained box the default (all cores) can
