@@ -77,7 +77,10 @@ function PublishCard({ video, channels }: { video: SvVideo; channels: Connector[
   const deleteVideo = useSvDeleteVideo();
 
   const [selected, setSelected] = useState<number[]>([]);
-  const [title, setTitle] = useState(video.story_title ?? video.title ?? "");
+  // Pre-fill the title trimmed to YouTube's 100-char cap. The <Input maxLength>
+  // only limits typing, so an untrimmed long story title would otherwise be sent
+  // as-is and rejected by the API (surfacing as a generic "Request failed").
+  const [title, setTitle] = useState((video.story_title ?? video.title ?? "").slice(0, 100));
   const [description, setDescription] = useState("");
   const [privacy, setPrivacy] = useState("public");
 

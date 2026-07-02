@@ -368,7 +368,11 @@ class SvTemplateOut(BaseModel):
 # ---------------------------------------------------------------- publishing
 class SvPublishRequest(BaseModel):
     connector_ids: list[int] = Field(min_length=1, max_length=10)
-    title: str | None = Field(default=None, max_length=100)
+    # Accept a full-length story title (stored up to 512 chars) — the endpoint
+    # trims it to YouTube's 100-char limit. Validating at 100 here instead 422'd a
+    # long pre-filled title, which the UI surfaced only as a generic "Request
+    # failed".
+    title: str | None = Field(default=None, max_length=512)
     description: str | None = Field(default=None, max_length=5000)
     privacy: str = "public"  # public|unlisted|private
 
