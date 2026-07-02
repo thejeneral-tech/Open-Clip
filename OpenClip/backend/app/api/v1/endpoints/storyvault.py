@@ -2177,6 +2177,9 @@ async def publish_video(
         video.status = SvVideoStatus.APPROVED.value
 
     title = (payload.title or video.title or "Story video").strip()[:100]
+    # Default the description to just the title (overridable if one was typed).
+    # The connector appends the #Shorts tag at upload.
+    description = (payload.description or "").strip() or (payload.title or video.title or "Story video").strip()
     jobs: list[SvPublishJob] = []
     for connector in connectors:
         job = SvPublishJob(
@@ -2185,7 +2188,7 @@ async def publish_video(
             connector_id=connector.id,
             platform=connector.platform,
             title=title,
-            description=payload.description,
+            description=description,
             payload={"privacy": payload.privacy},
         )
         db.add(job)
