@@ -487,7 +487,7 @@ export default function WhopStudioCampaignPage() {
   const findResult = findVideos.data ?? null;
   const [selected, setSelected] = useState<Set<string>>(new Set()); // by url
   const [channelInput, setChannelInput] = useState("");
-  const [strictChannel, setStrictChannel] = useState(true);
+  const [strictChannel, setStrictChannel] = useState(false);
   const [filterInput, setFilterInput] = useState("");
 
   const runFind = () => {
@@ -499,7 +499,7 @@ export default function WhopStudioCampaignPage() {
     findVideos.mutate(
       {
         campaignId,
-        limit: 12,
+        limit: 48,
         channel: channelInput.trim() || undefined,
         strictChannel: channelInput.trim() ? strictChannel : undefined,
         filters,

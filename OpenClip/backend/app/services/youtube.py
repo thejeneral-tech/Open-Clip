@@ -39,7 +39,10 @@ def channel_videos(ref: str, limit: int = 15) -> list[dict[str, Any]]:
         return []
     import yt_dlp
 
-    limit = max(1, min(int(limit), 40))
+    # Pull deep: a creator's whole catalog is the richest source of clippable
+    # material, and playlistend just caps a single flat extraction (no per-video
+    # cost), so a large ceiling stays cheap (~2s for ~130 entries).
+    limit = max(1, min(int(limit), 150))
     opts = {
         "quiet": True,
         "no_warnings": True,

@@ -198,7 +198,7 @@ class WhopVideoMatch(BaseModel):
 class WhopFindBody(BaseModel):
     """Optional refinements for the auto video finder."""
 
-    limit: int = Field(default=12, ge=3, le=24)
+    limit: int = Field(default=48, ge=3, le=100)
     use_llm: bool = True
     # Pin a creator (name, @handle, or URL). A plain name is resolved to that
     # creator's actual channel.
@@ -218,7 +218,7 @@ class WhopFindOut(BaseModel):
 class WhopScoreBody(BaseModel):
     """Re-score specific candidates at a deeper stage (Auto Finder deepening)."""
 
-    urls: list[str] = Field(min_length=1, max_length=24)
+    urls: list[str] = Field(min_length=1, max_length=100)
     stage: int = Field(default=3, ge=1, le=4)
     # Previous score per url so the deeper pass can report a delta (e.g. "94 (+7)").
     prev_scores: dict[str, int] = Field(default_factory=dict)

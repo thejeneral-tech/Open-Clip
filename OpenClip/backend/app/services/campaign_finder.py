@@ -29,6 +29,9 @@ _STOP = {
     "rewards", "whop", "video", "videos", "ugc", "official", "channel", "edit", "edits",
     "post", "posts", "viral", "short", "shorts", "reel", "reels", "tiktok", "instagram",
     "youtube", "twitter", "podcast",  # 'podcast' re-added as a query flavor below, not a keyword
+    # Payout / pricing boilerplate — signal about the deal, not the subject.
+    "creator", "creators", "paid", "pay", "budget", "cpm", "cpc", "cpv", "rpm",
+    "per", "usd", "dollar", "dollars", "views", "bonus", "payout",
 }
 
 # Marks a placeholder/imported description that carries no real detail.
@@ -38,10 +41,33 @@ _GENERIC_DESC = re.compile(r"whop content rewards|content rewards", re.IGNORECAS
 # name to recover the underlying source name ("Rob the Bank Podcast Clips" →
 # "Rob the Bank Podcast").
 _SUFFIX = re.compile(
-    r"\b(clips?|clipping|campaign|content\s+rewards?|ugc|edits?|reposting|repost|v\d+)\b",
+    r"\b(clips?|clipping|campaign|content\s+rewards?|ugc|edits?|reposting|repost|v\d+"
+    r"|clipfarm|clipr|clip\s*farm)\b",   # clipping-agency tags ("… x Clipfarm")
     re.IGNORECASE,
 )
+# Emoji / pictographs / dingbats that campaign names love to prefix ("🚨 LEVI …").
+# Left in a query, YouTube returns nothing — strip them (but keep real letters of
+# every language: accents, Arabic, CJK are all preserved).
+_EMOJI = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    "\U00002190-\U000021FF\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U0000200D\U00002122\U00002139]"
+)
 _WORD = re.compile(r"[A-Za-z0-9']+")
+
+# Payout / pricing / budget boilerplate that leaks into campaign NAMES and muddies
+# search queries ("$10/10,000", "$1.50 CPM", "$7k Budget", "1CPM", "$15 per clip").
+# Stripped from the source name so we search the subject, not the deal terms.
+_PAYOUT_JUNK = re.compile(
+    r"\$\s*\d[\d,.]*\s*(?:k|m)?(?:\s*/\s*[\d,]+)?"        # $10  $1.50  $7k  $10/10,000
+    r"|\b\d+\s*(?:cpm|cpc|cpv|rpm)\b"                      # 1CPM  3 RPM
+    r"|\b\d[\d,.]*\s*k\b"                                  # 10k  37.5k  (budgets)
+    r"|\bcpm\b|\bcpc\b|\brpm\b|\bbudget\b|\bpayout\b"      # bare pricing words
+    r"|\bper\s+(?:clip|post|video|\d[\d,]*)\b"             # per clip / per 1000
+    r"|\b(?:get\s+)?paid\s+to\s+post\b|\bget\s+paid\b",
+    re.IGNORECASE,
+)
+# A single token that is really a number/amount ("10k", "1cpm", "20k") — no topic.
+_MONEY_TOKEN = re.compile(r"\d[\d,]*(?:k|m|b|cpm|cpc|cpv|rpm|x)?", re.IGNORECASE)
 
 
 def _tokens(text: str | None) -> list[str]:
@@ -49,8 +75,11 @@ def _tokens(text: str | None) -> list[str]:
         return []
     out: list[str] = []
     for w in _WORD.findall(text.lower()):
-        if len(w) >= 3 and w not in _STOP and not w.isdigit():
-            out.append(w)
+        if len(w) < 3 or w in _STOP or w.isdigit():
+            continue
+        if _MONEY_TOKEN.fullmatch(w):        # "10k", "1cpm", "20k" — an amount, not a topic
+            continue
+        out.append(w)
     return out
 
 
@@ -72,9 +101,13 @@ def _source_name(name: str) -> str:
     Campaign") — callers must not fall back to the raw name, or they'd search for
     the clipping words themselves instead of the source material.
     """
-    cleaned = _SUFFIX.sub(" ", name or "")
+    cleaned = _EMOJI.sub(" ", name or "")         # drop "🚨" & friends (0-result queries)
+    cleaned = _SUFFIX.sub(" ", cleaned)
+    cleaned = _PAYOUT_JUNK.sub(" ", cleaned)      # drop "$10/10,000", "1CPM", "$7k Budget"…
     cleaned = re.sub(r"[\[\](){}|·•—–-]+", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # A dangling collab/separator token left after stripping an agency ("… x").
+    cleaned = re.sub(r"\s+[x&]$", "", cleaned, flags=re.IGNORECASE).strip()
     return cleaned
 
 
@@ -110,15 +143,21 @@ def understand_campaign(campaign: dict[str, Any]) -> dict[str, Any]:
     keywords = _dedupe(_tokens(name) + (_tokens(description) if reliable else []))[:8]
     flavor = _CATEGORY_FLAVOR.get(category, "podcast interview")
 
+    # Build a DIVERSE query set (each angle surfaces different videos): the exact
+    # source, a keyword+flavor query, and the description keywords. The redundant
+    # "source + flavor" only fills a leftover slot — never displaces the diverse
+    # ones (that starved product campaigns of results).
     queries: list[str] = []
     if has_source:
-        queries.append(source)  # primary: the source itself (exact correlation)
+        queries.append(source)                                         # 1) exact source
     if keywords:
-        queries.append(f"{' '.join(keywords[:4])} {flavor}".strip())
+        queries.append(f"{' '.join(keywords[:4])} {flavor}".strip())   # 2) keywords + flavor
     if reliable:
         desc_kw = _dedupe(_tokens(description))[:4]
         if desc_kw:
-            queries.append(" ".join(desc_kw))
+            queries.append(" ".join(desc_kw))                          # 3) description keywords
+    if has_source and len(_dedupe(queries)) < 3:
+        queries.append(f"{source} {flavor}".strip())                   # 4) filler if room
     # Last resort (name was all clipping-vocab AND no usable description): search
     # generic source material for the category, never the clipping words.
     if not queries:
@@ -398,6 +437,51 @@ def _channel_display_name(channel: str) -> str:
     return ch.lstrip("@")
 
 
+# Creator/brand names mined from a description ("...content creator Rob The Bank...",
+# "Clip for Jane Doe..."). Case-sensitive on purpose — proper nouns are capitalized,
+# which separates a real name from ordinary words.
+_CREATOR_PHRASE = re.compile(
+    r"(?:content\s+)?creator[s]?\s+([A-Z][\w'.&]*(?:\s+[A-Z][\w'.&]*){0,3})"
+    r"|clip(?:s|ping)?\s+(?:for\s+)?([A-Z][\w'.&]*(?:\s+[A-Z][\w'.&]*){1,3})"
+    r"|\bfor\s+([A-Z][\w'.&]*(?:\s+[A-Z][\w'.&]*){1,3})"
+)
+
+
+def _creator_phrases(description: str) -> list[str]:
+    """Capitalized creator/brand phrases mentioned in the description."""
+    out: list[str] = []
+    for m in _CREATOR_PHRASE.finditer(description or ""):
+        phrase = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+        if phrase:
+            out.append(phrase)
+    return _dedupe(out)
+
+
+def _auto_creator(campaign: dict[str, Any]) -> dict[str, Any] | None:
+    """Best-effort: identify the creator/brand the campaign is about and resolve
+    their channel, so the finder pulls that creator's FULL catalog even when the
+    user hasn't pinned a channel. Tries the cleaned campaign name, then creator
+    phrases mined from the description. Bounded to 2 resolve attempts (each is one
+    yt-dlp search, ~1-2s) and degrades to ``None`` — the keyword search still runs.
+    """
+    name = campaign.get("name") or ""
+    src = _source_name(name)
+    candidates: list[str] = []
+    # Require a real signal (multi-word, or a single token ≥4 chars) so we never
+    # resolve on a lone ambiguous word like "Rob".
+    if src and (len(src.split()) >= 2 or len(src.replace(" ", "")) >= 4):
+        candidates.append(src)
+    candidates.extend(_creator_phrases(campaign.get("description") or ""))
+
+    for cand in _dedupe(candidates)[:2]:
+        if len(cand.strip()) < 3:
+            continue
+        resolved = youtube.resolve_channel(cand)
+        if resolved:
+            return resolved
+    return None
+
+
 def find_matches(
     campaign: dict[str, Any],
     *,
@@ -415,7 +499,7 @@ def find_matches(
     (return ONLY that creator's own videos, dropping other people's videos about
     them), and ``filters`` (words that steer the search + ranking).
     """
-    limit = max(3, min(int(limit), 24))
+    limit = max(3, min(int(limit), 100))
     channel = (channel or "").strip()
     filter_terms = [str(f).strip() for f in (filters or []) if str(f).strip()][:12]
     filter_tokens = _dedupe([t for f in filter_terms for t in _tokens(f)])
@@ -435,10 +519,19 @@ def find_matches(
         topic = heuristic["topic"]
 
     # --- user refinements ---
-    # Resolve the creator reference: a plain NAME → their actual channel (so the
-    # finder pulls that creator's own uploads, not other people's videos ABOUT
-    # them); an @handle/URL is used as-is.
-    resolved = youtube.resolve_channel(channel) if channel else None
+    # Resolve the creator reference: a pinned plain NAME → their actual channel (so
+    # the finder pulls that creator's own uploads, not other people's videos ABOUT
+    # them); an @handle/URL is used as-is. When nothing is pinned, AUTO-detect the
+    # creator from the campaign itself so the user gets that creator's full catalog
+    # with zero input. Auto-detected channels never run in strict mode.
+    if channel:
+        resolved = youtube.resolve_channel(channel)
+        auto_creator = False
+    else:
+        resolved = _auto_creator(campaign)
+        auto_creator = resolved is not None
+    if auto_creator:
+        strict_channel = False
     channel_ref = resolved["ref"] if resolved else channel
     channel_name = resolved["name"] if resolved else _channel_display_name(channel)
     channel_id_hint = resolved.get("channel_id") if resolved else None
@@ -458,14 +551,15 @@ def find_matches(
         "channel_name": channel_name,
     }
     primary = queries[0] if queries else None
-    per_query = min(40, max(4, math.ceil(limit * 1.8 / max(1, len(queries)))))
+    per_query = min(40, max(8, math.ceil(limit * 1.5 / max(1, len(queries)))))
 
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
-    # The pinned creator contributes their actual uploads first — more of them in
-    # strict mode, since other channels' results get filtered out below.
+    # The creator (pinned OR auto-detected) contributes their actual uploads first,
+    # in bulk — this is the richest vein of usable source material and it's a single
+    # yt-dlp call regardless of depth, so pull deep (60–150) to give the user tons.
     if channel_ref:
-        channel_pull = min(40, max(per_query, limit * 3)) if strict_channel else per_query
+        channel_pull = min(150, max(limit * 2, 60))
         for r in youtube.channel_videos(channel_ref, channel_pull):
             vid = r.get("id")
             if vid and vid not in seen:
@@ -501,16 +595,21 @@ def find_matches(
 
     extra: list[str] = []
     if channel_name:
-        extra.append(
-            f"only {channel_name}’s own videos" if strict_channel else f"channel “{channel_name}”"
-        )
+        if auto_creator:
+            extra.append(f"auto-detected creator “{channel_name}” — pulled their full catalog")
+        elif strict_channel:
+            extra.append(f"only {channel_name}’s own videos")
+        else:
+            extra.append(f"channel “{channel_name}”")
     if filter_terms:
         extra.append("filters: " + ", ".join(filter_terms))
     if extra:
         understanding = understanding.rstrip(".") + ". Refined by " + " · ".join(extra) + "."
 
     logger.info(
-        "Campaign finder: %d queries -> %d candidates -> %d matches (llm=%s, channel=%s, strict=%s, filters=%d)",
-        len(queries), len(candidates), len(matches), bool(llm), bool(channel), strict_channel, len(filter_terms),
+        "Campaign finder: %d queries -> %d candidates -> %d matches "
+        "(llm=%s, channel=%s, auto=%s, strict=%s, filters=%d)",
+        len(queries), len(candidates), len(matches),
+        bool(llm), bool(channel), auto_creator, strict_channel, len(filter_terms),
     )
     return {"understanding": understanding, "queries": queries, "matches": matches}

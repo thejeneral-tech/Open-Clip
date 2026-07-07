@@ -617,7 +617,7 @@ export const api = {
     request<WhopFindResult>(`/whop/campaigns/${campaignId}/find-videos`, {
       method: "POST",
       body: JSON.stringify({
-        limit: opts.limit ?? 12,
+        limit: opts.limit ?? 48,
         ...(opts.channel ? { channel: opts.channel } : {}),
         ...(opts.channel && opts.strictChannel ? { strict_channel: true } : {}),
         ...(opts.filters && opts.filters.length ? { filters: opts.filters } : {}),
