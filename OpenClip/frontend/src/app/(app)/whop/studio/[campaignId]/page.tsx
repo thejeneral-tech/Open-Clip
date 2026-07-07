@@ -32,7 +32,13 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EditingOptionsPanel, MatchCard } from "@/components/whop/finder-shared";
+import { InfoTip } from "@/components/ui/tooltip";
+import {
+  ClipLengthControl,
+  EditingOptionsPanel,
+  MatchCard,
+  parseClipLengthRule,
+} from "@/components/whop/finder-shared";
 import {
   FormulaCard,
   FormulaInline,
@@ -262,6 +268,8 @@ export default function WhopStudioCampaignPage() {
     target_clip_count: 10,
     aspect_ratios: ["9:16"],
     caption_style: "hormozi",
+    min_clip_seconds: 30,
+    max_clip_seconds: 60,
     enable_captions: true,
     enable_reframe: true,
     generate_titles: true,
@@ -273,6 +281,21 @@ export default function WhopStudioCampaignPage() {
   useEffect(() => {
     if (defaultModel) setEditOpts((o) => (o.model ? o : { ...o, model: defaultModel }));
   }, [defaultModel]);
+
+  // Seed the clip length from the campaign's own requirements ("30-60 seconds")
+  // once, so clips fit the brief by default — the user can still override it.
+  const lengthRule = useMemo(() => parseClipLengthRule(campaign?.requirements), [campaign]);
+  const lengthSeededRef = useRef(false);
+  useEffect(() => {
+    if (lengthSeededRef.current || !campaign) return;
+    lengthSeededRef.current = true;
+    if (lengthRule) {
+      setEditOpts((o) => ({ ...o, min_clip_seconds: lengthRule.min, max_clip_seconds: lengthRule.max }));
+    }
+  }, [campaign, lengthRule]);
+  const lengthHint = lengthRule
+    ? `This campaign asks for ${lengthRule.min}–${lengthRule.max}s clips — raise it if you want longer.`
+    : "No length set on this campaign — pick what fits.";
 
   // ProcessOptions for a clip run, from the shared editing config.
   const buildClipOptions = (): Partial<ProcessOptions> => {
@@ -824,19 +847,33 @@ export default function WhopStudioCampaignPage() {
           <div className="space-y-2 border-t pt-4">
             <p className="text-sm font-medium">Make</p>
             <div className="flex gap-2">
-              <OutputChip
-                active={wantClips}
-                onClick={() => setOutputs(!wantClips, wantFormula)}
-                icon={Scissors}
-                label="Clips"
-              />
+              <InfoTip
+                side="bottom"
+                label="Cut each selected video into short, ready-to-post clips — the AI finds the strongest moments and edits them to your settings (length, captions, reframing) below."
+              >
+                <span className="flex flex-1">
+                  <OutputChip
+                    active={wantClips}
+                    onClick={() => setOutputs(!wantClips, wantFormula)}
+                    icon={Scissors}
+                    label="Clips"
+                  />
+                </span>
+              </InfoTip>
               <div className="relative flex flex-1">
-                <OutputChip
-                  active={wantFormula}
-                  onClick={() => setOutputs(wantClips, !wantFormula)}
-                  icon={FlaskConical}
-                  label="Formula"
-                />
+                <InfoTip
+                  side="bottom"
+                  label="Reverse-engineer each video into a reusable playbook: the hook, script psychology, ranked viral timestamps, editing & retention tricks, and a step-by-step recreation plan. Tap the ⋮ for the full breakdown."
+                >
+                  <span className="flex flex-1">
+                    <OutputChip
+                      active={wantFormula}
+                      onClick={() => setOutputs(wantClips, !wantFormula)}
+                      icon={FlaskConical}
+                      label="Formula"
+                    />
+                  </span>
+                </InfoTip>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -879,6 +916,7 @@ export default function WhopStudioCampaignPage() {
               capStyle={capStyle}
               setCapStyle={setCapStyle}
               models={models}
+              lengthHint={lengthHint}
             />
           )}
 
@@ -931,6 +969,25 @@ export default function WhopStudioCampaignPage() {
                   />
                 ))}
               </div>
+              {/* Set clip length right before running the chosen videos. */}
+              {wantClips && selected.size > 0 && (
+                <div className="mx-auto w-full max-w-2xl space-y-2 rounded-lg border bg-muted/20 p-3">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium">
+                      Clip length for {selected.size} selected
+                    </p>
+                    <InfoTip label="How long each clip we cut from these videos will be. Pick a preset or type exact seconds (up to 10 min). This overrides the campaign default for this run." />
+                  </div>
+                  <ClipLengthControl
+                    min={editOpts.min_clip_seconds ?? 30}
+                    max={editOpts.max_clip_seconds ?? 60}
+                    onChange={({ min, max }) =>
+                      setEditOpts((o) => ({ ...o, min_clip_seconds: min, max_clip_seconds: max }))
+                    }
+                    hint={lengthHint}
+                  />
+                </div>
+              )}
               <Button
                 className="mx-auto flex w-full max-w-2xl"
                 size="lg"

@@ -37,8 +37,8 @@ class SettingsUpdate(BaseModel):
     vision_model: str | None = None
     whisper_model: str | None = None
     target_clip_count: int | None = Field(default=None, ge=1, le=50)
-    min_clip_seconds: int | None = Field(default=None, ge=3, le=120)
-    max_clip_seconds: int | None = Field(default=None, ge=5, le=180)
+    min_clip_seconds: int | None = Field(default=None, ge=3, le=300)
+    max_clip_seconds: int | None = Field(default=None, ge=5, le=600)
     default_aspect_ratio: AspectRatio | None = None
     default_caption_style: CaptionStyle | None = None
     default_export_format: ExportFormat | None = None

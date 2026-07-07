@@ -22,8 +22,10 @@ class ProcessOptions(BaseModel):
     """Options that drive the analysis pipeline for a video."""
 
     target_clip_count: int = Field(12, ge=1, le=50)
-    min_clip_seconds: int = Field(8, ge=3, le=120)
-    max_clip_seconds: int = Field(90, ge=5, le=180)
+    # Clip-length window. Upper bounds are generous so a campaign can ask for
+    # longer, meatier cuts (up to ~10 min) when short-form isn't the goal.
+    min_clip_seconds: int = Field(8, ge=3, le=300)
+    max_clip_seconds: int = Field(90, ge=5, le=600)
     aspect_ratios: list[AspectRatio] = Field(default_factory=lambda: [AspectRatio.VERTICAL])
     # Base named style (font / outline / layout defaults). The caption look is
     # refined by ``caption_config`` (karaoke/pop + colours) and an optional preset.
