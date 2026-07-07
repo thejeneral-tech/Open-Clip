@@ -24,6 +24,7 @@ from app.models.export import Export
 from app.models.settings import UserSettings
 from app.models.transcript import Transcript
 from app.models.video import Video
+from app.models.whop import WhopFormula
 from app.schemas.video import ProcessOptions
 from app.services import (
     broll as broll_svc,
@@ -98,16 +99,26 @@ def _ensure_llm_models_installed(models: dict[str, str]) -> None:
         return  # Ollama unreachable/empty — let the real call surface the error.
 
     fallback = settings.OLLAMA_DEFAULT_MODEL
+    if fallback not in installed:
+        # The configured default isn't pulled either — pick any installed model so
+        # the job still runs, preferring text models over vision-only tags.
+        vision_hints = ("moondream", "llava", "bakllava", "-vl", "vision", "minicpm-v")
+        ranked = sorted(
+            (n for n in installed if n),
+            key=lambda n: (any(h in n.lower() for h in vision_hints), n),
+        )
+        fallback = ranked[0] if ranked else None
+    if not fallback:
+        return
     for key in ("default", "ranking"):
         name = models[key]
         if name in installed:
             continue
-        if fallback in installed:
-            logger.warning(
-                "Model %r (%s) is not installed in Ollama; falling back to %r",
-                name, key, fallback,
-            )
-            models[key] = fallback
+        logger.warning(
+            "Model %r (%s) is not installed in Ollama; falling back to %r",
+            name, key, fallback,
+        )
+        models[key] = fallback
 
 
 def _owner_models(video: Video) -> dict[str, Any]:
@@ -561,6 +572,169 @@ def process_video_task(self, video_id: int, options: dict[str, Any]) -> dict[str
     except Exception as exc:
         logger.exception("Processing failed for video %s", video_id)
         tracker.fail("process", str(exc))
+        raise
+
+
+class _FormulaTranscribeProgress:
+    """Mirror transcription progress onto a WhopFormula row.
+
+    ``_transcribe`` reports through a video-scoped ``ProgressTracker`` (Video row +
+    WebSocket). The Studio, though, polls the *formula* row — so without this the
+    Studio's progress bar would sit frozen at 5% for the whole (slow) transcription
+    and then jump to 55%. This wraps the real tracker, delegating every call to it
+    and additionally writing a lerped progress onto the formula row (mapping
+    transcription's ``_TRANSCRIBE`` 0.05–0.40 band into the row's 0.10–0.50 band).
+    """
+
+    def __init__(self, inner: ProgressTracker, formula_id: int) -> None:
+        self._inner = inner
+        self._formula_id = formula_id
+        self._last = -1.0
+
+    def _mirror(self, progress: Any) -> None:
+        if progress is None:
+            return
+        frac = (max(0.05, min(0.40, float(progress))) - 0.05) / 0.35
+        pct = 0.10 + frac * 0.40
+        if pct - self._last < 0.01:  # coalesce the frequent whisper callbacks
+            return
+        self._last = pct
+        with session_scope() as db:
+            formula = db.get(WhopFormula, self._formula_id)
+            if formula:
+                formula.stage = "transcribe"
+                formula.progress = pct
+
+    def set(self, *args: Any, **kwargs: Any) -> None:
+        self._inner.set(*args, **kwargs)
+        self._mirror(kwargs.get("progress"))
+
+    def throttled(self, stage: str, progress: float, **kwargs: Any) -> None:
+        self._inner.throttled(stage, progress, **kwargs)
+        self._mirror(progress)
+
+    def __getattr__(self, name: str) -> Any:  # delegate complete()/fail()/etc.
+        return getattr(self._inner, name)
+
+
+@celery_app.task(bind=True, name="app.workers.tasks.analyze_formula_task")
+def analyze_formula_task(self, formula_id: int) -> dict[str, Any]:
+    """Reverse-engineer a campaign source video into a reusable clip formula.
+
+    Ensures the video is transcribed (reusing an existing transcript when one is
+    present), then runs the two-call LLM breakdown in ``clip_formula`` and stores
+    the structured result on the ``WhopFormula`` row. Progress is written to the
+    row itself so the Studio can poll it — no WebSocket needed.
+    """
+    from app.models.whop import WhopCampaign, WhopFormula, WhopSubmission
+    from app.services import clip_formula
+
+    def _set(**fields: Any) -> None:
+        with session_scope() as db:
+            formula = db.get(WhopFormula, formula_id)
+            if formula:
+                for key, value in fields.items():
+                    setattr(formula, key, value)
+
+    try:
+        # Load the formula + build the campaign context while attached to a session.
+        with session_scope() as db:
+            formula = db.get(WhopFormula, formula_id)
+            if not formula:
+                return {"error": "formula not found"}
+            video_id = formula.video_id
+            campaign = db.get(WhopCampaign, formula.campaign_id)
+            if not campaign:
+                raise RuntimeError("Campaign not found")
+            paid_out = sum(
+                s.paid_amount
+                for s in db.query(WhopSubmission)
+                .filter(
+                    WhopSubmission.campaign_id == campaign.id,
+                    WhopSubmission.status == "paid",
+                )
+                .all()
+            )
+            campaign_ctx = {
+                "name": campaign.name,
+                "description": campaign.description,
+                "campaign_type": campaign.campaign_type,
+                "category": campaign.category,
+                "platforms": list(campaign.platforms or []),
+                "requirements": list(campaign.requirements or []),
+                "rate_per_1k": campaign.rate_per_1k,
+                "budget": campaign.budget,
+                "paid_out": paid_out,
+            }
+            formula.status = "processing"
+            formula.stage = "transcribe"
+            formula.progress = 0.05
+            formula.error = None
+
+        if not video_id:
+            raise RuntimeError("No source video attached to this formula")
+
+        with session_scope() as db:
+            video = db.get(Video, video_id)
+            if not video:
+                raise RuntimeError("Source video not found")
+            if not video.storage_path:
+                raise RuntimeError("Source video is still downloading — try again in a moment")
+            duration = video.duration_seconds or 0.0
+            title = video.title
+
+        _set(title=title)
+        models = _owner_models(video)
+
+        # Reuse an existing transcript ONLY if it actually has segments — an empty
+        # row (e.g. a prior failed/low-speech pass) must fall through and re-transcribe
+        # rather than hard-fail forever on the cached-empty result.
+        with session_scope() as db:
+            row = db.query(Transcript).filter(Transcript.video_id == video_id).one_or_none()
+            transcript = (
+                {
+                    "segments": row.segments,
+                    "full_text": row.full_text or "",
+                    "duration": row.duration_seconds or duration,
+                }
+                if row and row.segments
+                else None
+            )
+        if transcript is None:
+            tracker = _FormulaTranscribeProgress(ProgressTracker("video", video_id), formula_id)
+            transcript = _transcribe(video_id, ProcessOptions(), models, tracker)
+
+        segments = transcript.get("segments") or []
+        if not segments:
+            raise RuntimeError("Transcription produced no text (is there speech in the video?)")
+
+        _set(stage="analyze", progress=0.55)
+        result, hook_score = clip_formula.analyze_formula(
+            segments=segments,
+            full_text=transcript.get("full_text", ""),
+            duration=transcript.get("duration") or duration,
+            campaign=campaign_ctx,
+            model=models["default"],
+            on_stage=lambda stage, pct: _set(stage=stage, progress=pct),
+        )
+
+        with session_scope() as db:
+            formula = db.get(WhopFormula, formula_id)
+            if formula:
+                formula.result = result
+                formula.hook_score = hook_score
+                formula.status = "completed"
+                formula.stage = "done"
+                formula.progress = 1.0
+        return {"formula_id": formula_id, "status": "completed"}
+    except Exception as exc:
+        logger.exception("Formula analysis failed for %s", formula_id)
+        with session_scope() as db:
+            formula = db.get(WhopFormula, formula_id)
+            if formula:
+                formula.status = "failed"
+                formula.stage = "failed"
+                formula.error = str(exc)
         raise
 
 

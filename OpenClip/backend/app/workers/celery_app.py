@@ -47,6 +47,7 @@ celery_app.conf.update(
     task_routes={
         "app.workers.tasks.ingest_*": {"queue": "media"},
         "app.workers.tasks.process_video_task": {"queue": "ai"},
+        "app.workers.tasks.analyze_formula_task": {"queue": "ai"},
         "app.workers.tasks.regenerate_clip_task": {"queue": "ai"},
         "app.workers.tasks.render_preview_task": {"queue": "media"},
         "app.workers.tasks.export_clip_task": {"queue": "media"},

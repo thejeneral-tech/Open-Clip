@@ -81,3 +81,24 @@ export function scoreColor(score: number): string {
   if (score >= 40) return "text-orange-500";
   return "text-rose-500";
 }
+
+/** Format a dollar amount: "$1,234.56" (always two decimals). */
+export function formatMoney(n: number): string {
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Compact count for stats: "1.2M", "87.8K", "950" (one decimal, ".0" trimmed). */
+export function formatCompactNumber(n: number): string {
+  const abs = Math.abs(n);
+  const compact = (value: number, suffix: string) =>
+    `${value.toFixed(1).replace(/\.0$/, "")}${suffix}`;
+  if (abs >= 1_000_000_000) return compact(n / 1_000_000_000, "B");
+  if (abs >= 1_000_000) return compact(n / 1_000_000, "M");
+  if (abs >= 1_000) return compact(n / 1_000, "K");
+  return `${Math.round(n)}`;
+}

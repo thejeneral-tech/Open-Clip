@@ -1,0 +1,885 @@
+﻿[
+    {
+        "screens":  [
+                        {
+                            "frames":  "002",
+                            "screen":  "Motion-graphic b-roll (not Whop UI): a YouTube embed card on a dark blue gradient background, with animated title text appearing above",
+                            "elements":  [
+                                             "Animated headline text (mid-animation): \"Clip cont...\" (likely \"Clip content\")",
+                                             "Bordered card styled like a YouTube link preview with thin blue outline",
+                                             "YouTube logo (red play button icon) + word \"YouTube\" at top-left of card",
+                                             "Video thumbnail of a podcast guest (man with braided hair, glasses, mic)",
+                                             "Caption line under thumbnail"
+                                         ],
+                            "data":  [
+                                         "YouTube",
+                                         "Rob the bank podcast"
+                                     ]
+                        },
+                        {
+                            "frames":  "004",
+                            "screen":  "Motion-graphic b-roll (not Whop UI): MacBook laptop mockup playing a YouTube video (the same podcast), with a bold text counter above the laptop",
+                            "elements":  [
+                                             "Bold white overlay text above laptop",
+                                             "YouTube watch page in dark mode on laptop screen: large video player (podcast guest with mic), right-hand column of suggested-video thumbnails, video title/controls bar at bottom (too small to read)"
+                                         ],
+                            "data":  [
+                                         "Hours Spent: 3"
+                                     ]
+                        },
+                        {
+                            "frames":  "005",
+                            "screen":  "Motion-graphic b-roll (not Whop UI): MacBook mockup showing a video editing app (CapCut-style editor) with a vertical 9:16 clip open",
+                            "elements":  [
+                                             "Dark left tool rail with small icons stacked vertically",
+                                             "Left settings/captions panel with a teal/green highlighted selection block and small form rows (labels unreadable)",
+                                             "Center canvas: vertical short-form clip of the podcast guest with burned-in captions",
+                                             "Caption text on clip (approximate): \"we\u0027re gonna look back at that windows\"",
+                                             "Top-right blue primary button (Export-style) plus small panel of options below it, one highlighted green/yellow",
+                                             "Bottom timeline strip with two small clip thumbnails at the left end",
+                                             "Playback control row (play button, timecode) under canvas"
+                                         ],
+                            "data":  [
+
+                                     ]
+                        },
+                        {
+                            "frames":  "007",
+                            "screen":  "Motion-graphic b-roll (not Whop UI): large blurred app icon (rounded-square, white icon with concentric dark rings â€“ the \u0027secret AI tool\u0027 logo, resembling Opus Clip) on blue-black background with feature text on a horizontal connector line",
+                            "elements":  [
+                                             "Blurred app icon in a rounded blue-outlined square, left side",
+                                             "Feature label text mid-screen on a thin blue horizontal line",
+                                             "Second text element still animating in (unreadable, top-right of label)"
+                                         ],
+                            "data":  [
+                                         "Edits the clips"
+                                     ]
+                        },
+                        {
+                            "frames":  "008",
+                            "screen":  "Whop platform â€“ Content Rewards marketplace (Explore page), shown as an angled 3D screen mockup. Dark theme. Grid of campaign (Content Reward) cards, each with a per-1k-views rate pill, paid-out progress bar, Type, Platforms icons, and Views",
+                            "elements":  [
+                                             "Far-left dark sidebar rail with Whop logo at top and Home + Search icons at bottom",
+                                             "Top tab bar: \"Explore\" (active, highlighted pill) and \"Leaderboards\"",
+                                             "Subheader count text: \"465 live Content Rewards\"",
+                                             "Filter dropdowns: \"Type: All\" and \"Category: All\"",
+                                             "Mouse cursor visible over filter row",
+                                             "Campaign card layout: square logo + campaign name (header row), blue rate pill top-right (\"$X.XX / 1K\" style), description/title line, \"$X of $Y paid out\" line with percentage at right, orange progress bar, footer with \"Type\" value, \"Platforms\" label with platform icons (Instagram, TikTok, YouTube, X), and \"Views\" count",
+                                             "Card 1: CPI Clipping â€” platform icons Instagram, TikTok, YouTube",
+                                             "Card 2: SNOW Content Creators â€” platform icons Instagram, TikTok, YouTube",
+                                             "Right columns (smaller/partially legible): Roobet Creator Program card, \"$$$ - (INSANELY VIRAL CLIPS)\" card, Ambro Clips card, plus a fourth column of partially visible cards"
+                                         ],
+                            "data":  [
+                                         "465 live Content Rewards",
+                                         "Type: All",
+                                         "Category: All",
+                                         "CPI Clipping â€” \"$10,453.28 of $101,197.43 paid out\" â€” 10% â€” Type: Clipping â€” Views: 2,467,250 â€” blue pill \"$3.00 / 1K\" (approx, partially legible)",
+                                         "SNOW Content Creators â€” \"UNLIMITED BUDGET - NEW PRODUCT UGC CONTENT - $2.50 PER THOUSAND VIEWS...\" â€” \"$0.00 of $29,926.28 paid out\" â€” 0% â€” Views: 0 â€” Type: UGC â€” blue pill \"$2.50 / 1K\" (approx)",
+                                         "Roobet Creator Program â€” \"$2,649.88 of $48,046.84 paid out\" â€” Type: UGC â€” platform icons include Instagram/TikTok/X",
+                                         "$$$ - (INSANELY VIRAL CLIPS) â€” subtitle \"100M VIEWS MONTHLY - UNLIMITED BUDGET - INCLUDES ... VIRAL CONTENT\" â€” \"$7,632.11 of $13,713.42 paid out\" â€” Views approx 1,127,1xx â€” Type: Clipping",
+                                         "Ambro Clips â€” \"Ambro Di Pilato Clips (Earn $3 per 1,000 views)\" â€” paid out line approx \"$0.47 of $10,73x.xx / $18,73x.xx\" (small/blurry) â€” views approx 15,7xx"
+                                     ]
+                        },
+                        {
+                            "frames":  "009",
+                            "screen":  "Presenter on camera with a graphic overlay (no platform UI): teaser for the AI clipping tool",
+                            "elements":  [
+                                             "Overlay headline text right of presenter",
+                                             "Blurred rounded-square app icon below the headline (white glyph with dark ring, same logo as frame 007)",
+                                             "Partial animating text bottom-left: \"to do\" (mid-animation)"
+                                         ],
+                            "data":  [
+                                         "Secret AI tool"
+                                     ]
+                        },
+                        {
+                            "frames":  "010",
+                            "screen":  "Whop platform â€“ inside a community (whop) called \"AC Hampton Clips\": Home feed tab with post composer, announcement posts, and right-side \"Welcome to Whop\" empty-state panel. Presenter webcam bubble bottom-right",
+                            "elements":  [
+                                             "Far-left icon rail (dark): Home icon, Search icon, Discover icon (lightbulb) with visible tooltip label \"Discover\", Messages/chat icon with unread badge, Notifications bell with red badge \"13\", check-square/inbox icon, apps/grid icon, and a red-orange community avatar at bottom",
+                                             "Top of content column (partially cropped): a chat message bubble reading approx \"when we up-load the vid...\" above an app tile labeled \"Chat\"",
+                                             "Feed filter dropdown: \"All posts Ë…\"",
+                                             "Horizontal community tab bar: Home (active, underlined), Chat (blue badge 9), Earn (blue badge 1), Learn, Play (with notification dot), Tools, Integrations (cropped as \"Integratio...\")",
+                                             "Post composer: user avatar + placeholder \"Write something...\", attachment icon row (image, GIF, emoji/token, poll icons), destination selectors \"AC Hampton Clips Ë…\" and \"Announcements Ë…\", blue \"Post\" button",
+                                             "Feed post card 1: section label \"Announcements\", avatar, author \"a- @uftd Â· 8h\", body text, footer stats row: comment icon 0, heart icon 0, bar-chart/views icon 270, share icon",
+                                             "Feed post card 2: section label \"Announcements\", avatar, author \"Feonix @feonix Â· 17h\", an Instagram reel link, body text, additional truncated line",
+                                             "Right detail panel (empty state): salad-bowl illustration, heading \"Welcome to Whop ðŸ \", subtext \"Select a post or app to open it here\", dashed placeholder outline with arrow doodle",
+                                             "Circular presenter webcam overlay, bottom right (blue ring)"
+                                         ],
+                            "data":  [
+                                         "All posts",
+                                         "Tabs: Home, Chat (9), Earn (1), Learn, Play, Tools, Integrations",
+                                         "Write something...",
+                                         "AC Hampton Clips",
+                                         "Announcements",
+                                         "Post",
+                                         "Post 1 â€” a- @uftd Â· 8h: \"anyone having a good TikTok/insta account under 100$ show me i need to buy only verified persons.\" â€” 0 comments, 0 likes, 270 views",
+                                         "Post 2 â€” Feonix @feonix Â· 17h: link \"https://www.instagram.com/reel/DKEViq2yW6l/?igsh=MXRuNDlqcGN3NnhOQQ==\" (approx) â€” \"Tis is how I made my first 100$ on whop\" â€” \"Check out for new users or people who wanna know...\" (truncated)",
+                                         "Welcome to Whop ðŸ ",
+                                         "Select a post or app to open it here",
+                                         "Notification badge: 13 (bell), Discover tooltip"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "001",
+                                "003",
+                                "006"
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "011-012",
+                            "screen":  "Whop \u0027Content Rewards\u0027 explore/marketplace page (campaign discovery grid), sorted by \u0027Highest available budget\u0027. Frame 011 is a zoomed-in crop of the same page shown fully in frame 012 (full browser window with left app sidebar).",
+                            "elements":  [
+                                             "Left app sidebar (frame 012): Whop logo at top, then vertical icon stack: Home icon, Search (magnifier) icon, Compass/Explore icon (active, highlighted white circle), Chat/messages icon with small orange badge, Bell/notifications icon with blue badge \u002713\u0027, Envelope/inbox icon, Diamond/apps icon, red app icon at bottom",
+                                             "Top nav bar: \u0027Explore\u0027 tab (active) and \u0027Leaderboards\u0027 tab, right-aligned search input with magnifier icon and placeholder \u0027Search...\u0027",
+                                             "Page header: money-bag emoji icon + H1 \u0027Content Rewards\u0027",
+                                             "Subtitle text with inline link: \u0027Post content on social media and get paid for the views you generate. If you want to launch a campaign click here.\u0027 (\u0027here\u0027 is a link)",
+                                             "Counter text: \u0027452 live Content Rewards\u0027",
+                                             "Filter dropdowns: \u0027Type: All Ë…\u0027 and \u0027Category: All Ë…\u0027",
+                                             "Sort control (right side): \u0027Sort by:\u0027 + dropdown \u0027Highest available budget Ë…\u0027",
+                                             "Blue \u0027Learn\u0027 button with book icon, top right of header",
+                                             "Campaign card grid, 4 columns Ã— ~3.5 rows visible; each card contains: brand avatar/logo, campaign name, blue rate pill badge in the format \u0027$X.XX / 1k\u0027 at top right, one-line description, payout progress line \u0027$X of $Y paid out\u0027 with percentage on the right, thin orange progress bar, and a 3-column footer labeled \u0027Type\u0027, \u0027Platforms\u0027 (icons for Instagram / TikTok / YouTube / X), and \u0027Views\u0027 (count)",
+                                             "Presenter webcam circle overlay, bottom-right of screen"
+                                         ],
+                            "data":  [
+                                         "Card: \u0027CPI Clipping\u0027 â€” badge $3.00 / 1k â€” desc \u0027CPI Clipping\u0027 â€” \u0027$8,316.90 of $101,197.43 paid out\u0027 â€” 8% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 1,867,417",
+                                         "Card: \u0027Roobet Creator Program\u0027 â€” $2.00 / 1k â€” desc \u0027Roobet Creator Program\u0027 â€” \u0027$2,495.23 of $48,046.84 paid out\u0027 â€” 5% â€” Type: UGC â€” Platforms: Instagram, TikTok, YouTube â€” Views: 205,861",
+                                         "Card: \u0027Bolt.new Creators\u0027 â€” $3.00 / 1k â€” desc \u0027Bolt.new Hackathon UGC (Short Form)\u0027 â€” \u0027$0.00 of $33,251.13 paid out\u0027 â€” 0% â€” Type: UGC â€” Platforms: Instagram, TikTok, YouTube â€” Views: 0",
+                                         "Card: \u0027dub\u0027 â€” $1.50 / 1k â€” desc \u0027UNLIMITED BUDGET - Clipping / UGC\u0027 â€” \u0027$93.64 of $30,995.48 paid out\u0027 â€” 0% â€” Type: Clipping â€” Platforms: Instagram, TikTok, X, YouTube â€” Views: 45,140",
+                                         "Card: \u0027SNOW Content Creators\u0027 â€” $2.50 / 1k â€” desc \u0027UNLIMITED BUDGET - NEW PRODUCT UGC...\u0027 â€” \u0027$0.00 of $29,926.28 paid out\u0027 â€” 0% â€” Type: UGC â€” Platforms: Instagram, TikTok, YouTube â€” Views: 0",
+                                         "Card: \u0027$$$ - (INSANELY VIRAL CLIPS)\u0027 â€” $0.30 / 1k â€” desc \u0027100M VIEWS MONTHLY - UNLIMITED BUDGET -...\u0027 â€” \u0027$6,785.84 of $32,773.42 paid out\u0027 â€” 21% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 14,826,579",
+                                         "Card: \u0027Brez Elite Clips\u0027 â€” $0.50 / 1k â€” desc \u0027Brez Elite Clips\u0027 â€” \u0027$1,857.42 of $27,000.00 paid out\u0027 â€” 7% â€” Type: Clipping â€” Platforms: Instagram, YouTube â€” Views: 3,380,602",
+                                         "Card: \u0027Ambro Clips\u0027 â€” $3.00 / 1k â€” desc \u0027Ambro Di Pilato Clips (Earn $3 per 1,000 views)\u0027 â€” \u0027$88,405.98 of $109,728.83 paid out\u0027 â€” 81% â€” Type: Clipping â€” Views: 26,473,542 (partially obscured by webcam overlay; reads \u0027...473,542\u0027)",
+                                         "Card: \u0027Eric Crutchfield Clips\u0027 â€” $3.00 / 1k â€” desc \u0027Earn $3 per 1k Views for Eric Crutchfield Clips\u0027 â€” \u0027$129.75 of $20,239.36 paid out\u0027 â€” 1% â€” Type: Clipping â€” Platforms: Instagram â€” Views: 31,287",
+                                         "Card: \u0027Ant/Rippy Club Clips\u0027 â€” $2.00 / 1k â€” desc \u0027Make $2 Per 1000 Views + Recurring Affiliate...\u0027 â€” \u0027$4,123.12 of $19,950.73 paid out\u0027 â€” 21% â€” Type: Clipping â€” Platforms: Instagram, TikTok â€” Views: 1,003,853",
+                                         "Card: \u0027David Ghiyam Clipping Hub\u0027 â€” $2.00 / 1k â€” desc \u0027David Ghiyam Clipping Hub\u0027 â€” \u0027$34,199.63 of $49,877.38 paid out\u0027 â€” 69% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 14,560,622",
+                                         "Card (partially covered by webcam): \u0027Timothy Sy...\u0027 â€” \u0027$0.00 of $14,...\u0027 â€” 0% â€” Type: Clipping â€” Views: 0",
+                                         "Partially visible next-row cards at bottom of frame 012: \u0027Hastinese Uniques\u0027 (name unclear), \u0027Whop UGC Creators\u0027, \u0027BeamBeam\u0027 (unclear), \u0027Sourcery Podcast Molly\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "014",
+                            "screen":  "Same Whop \u0027Content Rewards\u0027 explore page but re-sorted with \u0027Sort by: Most paid out\u0027 â€” demonstrates the sort dropdown changing card order to highest lifetime payouts first.",
+                            "elements":  [
+                                             "Top nav: \u0027Explore\u0027 / \u0027Leaderboards\u0027 tabs, \u0027Search...\u0027 box",
+                                             "Header: money-bag emoji + \u0027Content Rewards\u0027, subtitle \u0027Post content on social media and get paid for the views you generate. If you want to launch a campaign click here.\u0027",
+                                             "\u0027452 live Content Rewards\u0027 counter",
+                                             "Filters \u0027Type: All Ë…\u0027, \u0027Category: All Ë…\u0027",
+                                             "\u0027Sort by: Most paid out Ë…\u0027 dropdown (changed from previous frames)",
+                                             "Blue \u0027Learn\u0027 button (partially cropped)",
+                                             "Same 4-column campaign card grid with rate pill, paid-out progress, Type/Platforms/Views footer",
+                                             "Presenter webcam circle overlay bottom-right"
+                                         ],
+                            "data":  [
+                                         "Card: \u0027Whop UGC Creators\u0027 â€” badge ~$3.50 / 1k â€” desc \u0027Whop UGC With Face (Content Rewards Clipping ...\u0027 â€” \u0027$124,669.61 of $135,500.00 paid out\u0027 â€” 92% â€” Type: UGC â€” Platforms: Instagram, TikTok â€” Views: 49,414,447",
+                                         "Card: \u0027Whop UGC Creators\u0027 â€” $2.00 / 1k â€” desc \u0027Whop UGC (Faceless) - (ANYTHING WHOP...\u0027 â€” \u0027$96,480.42 of $100,000.00 paid out\u0027 â€” 96% â€” Type: Faceless â€” Platforms: Instagram, TikTok, X â€” Views: 45,842,254",
+                                         "Card: \u0027Ambro Clips\u0027 â€” $3.00 / 1k â€” desc \u0027Ambro Di Pilato Clips (Earn $3 per 1,000 views)\u0027 â€” \u0027$88,403.58 of $109,728.83 paid out\u0027 â€” 81% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 26,472,698",
+                                         "Card: \u0027Rob Clips\u0027 â€” ~$1.00 / 1k â€” desc \u0027ROBTHEBANK CLIPS $10/10,000\u0027 â€” \u0027$37,928.82 of $47,163.91 paid out\u0027 â€” 80% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 70,678,853",
+                                         "Card: \u0027David Ghiyam Clipping Hub\u0027 â€” $2.00 / 1k â€” desc \u0027David Ghiyam Clipping Hub\u0027 â€” \u0027$34,197.81 of $49,877.38 paid out\u0027 â€” 69% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 14,559,709",
+                                         "Card: \u0027Whop UGC Creators\u0027 â€” wide badge reading roughly \u0027$88.00 + ...\u0027 (special/flat-rate badge) â€” desc \u0027(INVITE ONLY) Long Form YouTube Video on...\u0027 â€” \u0027$15,000.00 of $15,000.00 paid out\u0027 â€” 100% â€” Type: UGC â€” Platforms: YouTube â€” Views: 156,987",
+                                         "Card: \u0027Windsurf Creators Club\u0027 â€” $2.00 / 1k â€” desc \u0027Windsurf UGC Content - TikTok\u0027 â€” \u0027$14,632.06 of $14,632.06 paid out\u0027 â€” 100% â€” Type: UGC â€” Platforms: TikTok â€” Views: 1,111,490",
+                                         "Card: \u0027Autopilot Clips\u0027 â€” $4.00 / 1k â€” desc \u0027[Please Use Our Other Campaign] // $4 Per 1k...\u0027 â€” \u0027$12,366.47 of $15,322.58 paid out\u0027 â€” Type: Clipping â€” Views: 2,225,896",
+                                         "Card: \u0027TJR Clips\u0027 â€” $1.00 / 1k â€” desc \u0027TJR Clips May 2025\u0027 â€” \u0027$11,408.51 of $20,000.00 paid out\u0027 â€” 57% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 8,510,471",
+                                         "Card: \u0027Lovable\u0027 â€” wide badge \u0027$10.00 + ...\u0027 â€” desc \u0027Clipping \u0026 UGC [SUBMIT TO THE OTHER...\u0027 â€” \u0027$9,173.10 of $9,975.18 paid out\u0027 â€” 92% â€” Type: UGC â€” Platforms: Instagram, TikTok â€” Views: 40,154",
+                                         "Card: \u0027Whop UGC Creators\u0027 â€” $5.00 / 1k â€” desc \u0027Whop UGC With face: Content Rewards for UGC...\u0027 â€” \u0027$8,904.09 of $10,000.00 paid out\u0027 â€” 89% â€” Type: UGC â€” Platforms: Instagram, TikTok â€” Views: 2,246,445",
+                                         "Card (mostly covered by webcam): \u0027CPI Clipping\u0027",
+                                         "Bottom row partially visible: \u0027Kalshi\u0027 ($0.50 / 1k), \u0027Jason Wojo Clips\u0027 ($2.00 / 1k), \u0027Caleb Gordon Clipping\u0027, \u0027Spence Clips\u0027, \u0027Sourcery Podcast Molly\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "016-017",
+                            "screen":  "Whop campaign detail / landing page for the \u0027Lovable\u0027 campaign (what a creator sees after clicking a campaign card, before joining). Frame 017 is a zoomed-in view of the identical page in frame 016.",
+                            "elements":  [
+                                             "\u0027\u003c Back\u0027 button, top left",
+                                             "Left app sidebar (frame 016): same icon stack as explore page â€” home, search, compass/explore (active), chat, bell with \u002713\u0027 badge, envelope, diamond, red app icon",
+                                             "Hero banner card (dark, rounded, pink/magenta gradient glow at bottom): Lovable logo (pink heart mark) + wordmark \u0027Lovable\u0027; headline \u0027Earn up to $10,000 promoting lovable.dev\u0027; embedded product screenshot of the lovable.dev prompt bar â€” a dark input field with placeholder \u0027Build something lovable\u0027 and a circular submit/arrow button on the right",
+                                             "Below hero: small Lovable logo + \u0027Lovable\u0027 label",
+                                             "Title: \u0027Be a content creator for Lovable\u0027",
+                                             "Description: \u0027Lovable lets you build apps and websites by chatting with AI.\u0027",
+                                             "Full-width blue primary button: \u0027Join\u0027",
+                                             "Social-proof block: \u0027Join 12,018 people\u0027 with a horizontal row of ~7 overlapping member avatar images",
+                                             "Rating row: \u00272.0 stars (1)\u0027 in green text next to 5 star icons (2 filled yellow, 3 empty)",
+                                             "Section heading further down: \u0027Here\u0027s what you\u0027ll get\u0027",
+                                             "Presenter webcam circle overlay bottom-right"
+                                         ],
+                            "data":  [
+                                         "Earn up to $10,000 promoting lovable.dev",
+                                         "Build something lovable (input placeholder)",
+                                         "Be a content creator for Lovable",
+                                         "Lovable lets you build apps and websites by chatting with AI.",
+                                         "Join",
+                                         "Join 12,018 people",
+                                         "2.0 stars (1)",
+                                         "Here\u0027s what you\u0027ll get"
+                                     ]
+                        },
+                        {
+                            "frames":  "019-020",
+                            "screen":  "Whop \u0027Content Rewards\u0027 explore page scrolled further down the \u0027Most paid out\u0027 list, ending at page pagination. Frame 020 is a zoomed-in crop of the same grid shown in frame 019.",
+                            "elements":  [
+                                             "Left app sidebar and top nav (\u0027Explore\u0027 active, \u0027Leaderboards\u0027, \u0027Search...\u0027) still visible in frame 019",
+                                             "Same 4-column campaign card grid: brand avatar, name, blue \u0027$X.XX / 1k\u0027 rate pill, description, \u0027$X of $Y paid out\u0027 + %, orange progress bar, Type / Platforms / Views footer",
+                                             "Pagination control centered below the grid (frame 019): \u0027\u003c 1 2 3 4 5 ... 19 \u003e\u0027 with page 1 highlighted/current",
+                                             "Presenter webcam circle overlay (top-right area in these frames)"
+                                         ],
+                            "data":  [
+                                         "Card: \u0027TJR Clips\u0027 â€” $1.00 / 1k â€” desc \u0027TJR Clips May 2025\u0027 â€” \u0027$11,408.51 of $20,000.00 paid out\u0027 â€” 57% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 8,510,489",
+                                         "Card: \u0027Lovable\u0027 â€” wide badge \u0027$10.00 + ...\u0027 â€” desc \u0027Clipping \u0026 UGC [SUBMIT TO THE OTHER...\u0027 â€” \u0027$9,173.10 of $9,975.18 paid out\u0027 â€” 92% â€” Type: UGC â€” Platforms: Instagram, TikTok â€” Views: 40,154",
+                                         "Card: \u0027Whop UGC Creators\u0027 â€” $5.00 / 1k â€” desc \u0027Whop UGC With face: Content Rewards for UGC...\u0027 â€” \u0027$8,904.30 of $10,000.00 paid out\u0027 â€” 89% â€” Type: UGC â€” Platforms: Instagram, TikTok â€” Views: 2,246,487",
+                                         "Card: \u0027CPI Clipping\u0027 â€” $3.00 / 1k â€” desc \u0027CPI Clipping\u0027 â€” \u0027$8,316.95 of $101,197.43 paid out\u0027 â€” 8% â€” Type: Clipping (right edge partially covered by webcam)",
+                                         "Card: \u0027Kalshi\u0027 â€” $0.50 / 1k â€” desc \u0027Post your Kalshi Bet Slip\u0027 â€” \u0027$8,214.95 of $9,975.18 paid out\u0027 â€” 82% â€” Type: Clipping â€” Platforms: Instagram, TikTok â€” Views: 2,057,688",
+                                         "Card: \u0027Jason Wojo Clips\u0027 â€” $2.00 / 1k â€” desc \u0027Clipping for Jason Wojo (Talking Head)\u0027 â€” \u0027$8,414.66 of $10,886.31 paid out\u0027 â€” 77% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 3,584,694",
+                                         "Card: \u0027Caleb Gordon Clipping\u0027 â€” $1.50 / 1k â€” desc \u0027Caleb\u0027s Motivational/Streams/Personal Brand...\u0027 â€” \u0027$7,225.58 of $10,000.00 paid out\u0027 â€” 72% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 1,422,326",
+                                         "Card (partially covered): \u0027Spence Clips\u0027 â€” desc \u0027Earn Money C.../Clipping My Sp...\u0027 â€” \u0027$6,961.47 of $6,982.xx paid out\u0027 â€” 100% â€” Type: Clipping â€” Platforms: Instagram, TikTok, X, YouTube â€” Views: 3,967,466",
+                                         "Card: \u0027Wava Ai UGC Clips\u0027 â€” $2.00 / 1k â€” desc \u0027Wava Ai UGC Clips\u0027 â€” \u0027$6,420.35 of $10,000.00 paid out\u0027 â€” 64% â€” Type: UGC â€” Platforms: Instagram, TikTok, X, YouTube â€” Views: 2,503,162",
+                                         "Card: \u0027Windsurf Creators Club\u0027 â€” $2.00 / 1k â€” desc \u0027Windsurf UGC Content - Instagram\u0027 â€” \u0027$6,815.02 of $7,368.68 paid out\u0027 â€” 92% â€” Type: UGC â€” Platforms: Instagram â€” Views: 2,793,980",
+                                         "Card: \u0027$$$ - (INSANELY VIRAL CLIPS)\u0027 â€” $0.30 / 1k â€” desc \u0027100M VIEWS MONTHLY - UNLIMITED BUDGET -...\u0027 â€” \u0027$6,785.81 of $32,773.42 paid out\u0027 â€” 21% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 14,826,459",
+                                         "Card: \u0027Ehsanszz Clips\u0027 â€” $3.00 / 1k â€” desc \u0027Earn $3 per 1k Views for Ehsanszz Clips From YT\u0027 â€” \u0027$5,229.11 of $9,871.80 paid out\u0027 â€” 53% â€” Type: Clipping â€” Platforms: Instagram, TikTok â€” Views: 1,611,336",
+                                         "Card: \u0027Seed Oil Scout Videos (USA)\u0027 â€” $1.50 / 1k â€” desc \u0027UNLIMITED BUDGET - FACELESS IG\u0027 â€” \u0027$4,690.51 of $7,481.29 paid out\u0027 â€” 63% â€” Type: UGC â€” Platforms: Instagram â€” Views: 190,854",
+                                         "Card: \u0027Lil Tecca\u0027 â€” $0.25 / 1k â€” desc \u0027lil tecca- OWA OWA (audio clipping)\u0027 â€” \u0027$4,479.24 of $5,000.00 paid out\u0027 â€” 90% â€” Type: Clipping â€” Platforms: TikTok â€” Views: 46,918,836",
+                                         "Card: \u0027Him 500 Clips\u0027 â€” $1.00 / 1k â€” desc \u0027Him500 Clips\u0027 â€” \u0027$4,229.53 of $5,252.86 paid out\u0027 â€” 81% â€” Type: Clipping â€” Platforms: Instagram, TikTok, YouTube â€” Views: 1,869,230",
+                                         "Card: \u0027Music Clipping Hub\u0027 â€” $2.00 / 1k â€” desc \u0027$10k $2RPM CLIPPING CAMPAIGN\u0027 â€” \u0027$4,150.95 of $8,079.82 paid out\u0027 â€” 51% â€” Type: Clipping â€” Platforms: TikTok, YouTube â€” Views: 1,447,588",
+                                         "Pagination: pages 1 (current) 2 3 4 5 ... 19, with prev/next arrows"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "013",
+                                "015",
+                                "018"
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "021-022",
+                            "screen":  "Whop \u0027Discover / Explore\u0027 marketplace page listing Content Rewards campaigns as a responsive card grid (frame 021 shows a wide 4+ column view with top nav; frame 022 is the same page zoomed/scrolled showing the left icon rail). Presenter webcam circle overlaid on the right side of both frames.",
+                            "elements":  [
+                                             "Top navigation bar (frame 021): \u0027Explore\u0027 tab (active, boxed) and \u0027Leaderboards\u0027 tab; right-aligned search input with magnifier icon and placeholder \u0027Search...\u0027",
+                                             "Left icon-only sidebar rail (frame 022, top to bottom): search/magnifier icon, orange Whop leaf logo icon, chat/message bubble icon, bell notification icon with red badge \u002713\u0027, line-chart/activity icon, diamond/affiliate icon, orange community avatar icon",
+                                             "Campaign card layout (repeated for every card): square logo/avatar top-left; campaign owner name in bold; blue pill badge top-right with rate \u0027$X.XX / 1K\u0027; one-line campaign title/subtitle; paid-out line \u0027$X of $Y paid out\u0027 with percentage right-aligned; horizontal orange gradient progress bar; three-column footer with labels \u0027Type\u0027 / \u0027Platforms\u0027 / \u0027Views\u0027 â€” Type value is \u0027Clipping\u0027 or \u0027UGC\u0027, Platforms shows small round icons (Instagram gradient, TikTok, YouTube, X), Views shows a comma-formatted number",
+                                             "Platform icons observed across cards: Instagram, TikTok, YouTube, X (Twitter)",
+                                             "Blue rate pill badges, e.g. \u0027$2.00 / 1K\u0027, \u0027$1.00 / 1K\u0027, \u0027$0.50 / 1K\u0027, \u0027$0.25 / 1K\u0027, \u0027$1.50 / 1K\u0027, \u0027$0.30 / 1K\u0027, and a compound \u0027$50.00 + $50.00 / 1K\u0027",
+                                             "Orange gradient progress bars on every card indicating budget-paid-out percentage"
+                                         ],
+                            "data":  [
+                                         "Card: David Ghiyam Clipping Hub | $2.00 / 1K | subtitle \u0027David Ghiyam Clipping Hub\u0027 | $34,199.63 of $49,877.38 paid out | 69% | Type: Clipping | Platforms: Instagram, TikTok, YouTube | Views: 14,560,622",
+                                         "Card: Whop UGC Creators | $50.00 + $50.00 / 1K (badge partly cut) | \u0027(INVITE ONLY) Long Form YouTube Video on...\u0027 | $15,000.00 of $15,000.00 paid out | 100% | Type: UGC | Platforms: YouTube | Views: 157,111",
+                                         "Card: Windsurf Creators Club | \u0027Windsurf UGC Content - TikTok\u0027 | $14,632.06 of $14,632.06 paid out (100%, badge obscured by webcam) | Type: UGC | Platforms: TikTok",
+                                         "Card: TJR Clips | $1.00 / 1K | \u0027TJR Clips May 2025\u0027 | $11,408.51 of $20,000.00 paid out | 57% | Type: Clipping | Platforms: Instagram, TikTok, YouTube | Views: 8,510,489",
+                                         "Card: Lovable | $10.00 + $?.00 / 1K (second amount faded) | \u0027Clipping \u0026 UGC [SUBMIT TO THE OTHER...\u0027 | $9,173.10 of $9,975.18 paid out | 92% | Type: UGC | Platforms: Instagram, TikTok | Views: 40,154",
+                                         "Card: Whop UGC Creators (2nd) | $5.00 (badge partly hidden) | \u0027Whop UGC With face: Content Rewards for UGC...\u0027 | $8,904.30 of $10,000.00 paid out | 89% | Type: UGC | Platforms: Instagram, TikTok | Views: 2,246,487",
+                                         "Card: Kalshi | $0.50 / 1K | \u0027Post your Kalshi Bet Slip\u0027 | $8,214.95 of $9,975.18 paid out | 82% | Type: Clipping | Platforms: Instagram, TikTok | Views: 2,057,686",
+                                         "Card: Jason Wojo Clips | $2.00 / 1K | \u0027Clipping for Jason Wojo (Talking Head)\u0027 | $8,414.66 of $10,886.31 paid out | 77% | Type: Clipping | Platforms: Instagram, TikTok, YouTube | Views: 3,584,694",
+                                         "Card: Caleb Gordon Clipping | $1.50 / 1K | \u0027Caleb\u0027s Motivational/Streams/Personal Brand...\u0027 | $7,225.58 of $10,000.00 paid out | 72% | Type: Clipping | Platforms: Instagram, TikTok, YouTube | Views: 1,422,326",
+                                         "Card: Wava Ai UGC Clips | $2.00 / 1K | subtitle \u0027Wava Ai UGC Clips\u0027 | $6,420.35 of $10,000.00 paid out | 64% | Type: UGC | Platforms: Instagram, TikTok, X, YouTube | Views: 2,503,162",
+                                         "Card: Windsurf Creators Club (2nd) | $2.00 / 1K | \u0027Windsurf UGC Content - Instagram\u0027 | $6,815.02 of $7,368.68 paid out | 92% | Type: UGC | Platforms: Instagram | Views: 2,793,980",
+                                         "Card: Seed Oil Scout Videos (USA) | $1.50 / 1K | \u0027UNLIMITED BUDGET - FACELESS IG\u0027 | $4,690.51 of $7,481.29 paid out | 63% | Type: UGC | Platforms: Instagram | Views: 190,854",
+                                         "Card: Lil Tecca | $0.25 / 1K | \u0027lil tecca- OWA OWA (audio clipping)\u0027 | $4,479.24 of $5,000.00 paid out | 90% | Type: Clipping | Platforms: TikTok | Views: 46,918,836",
+                                         "Card (partial, right edge): \u0027$$$ - (INSANELY VIRAL CLIPS)\u0027 | $0.30 / 1K | subtitle fragment \u0027100M VIEWS MO...\u0027 | $6,785.81 of $32,... paid out | Type: Clipping",
+                                         "Card (partial, right edge): Him 500 C... | \u0027Him500 Clips\u0027 | $4,229.53 of $5,2... | Type: Clipping",
+                                         "Card (partial, right edge): CPI Clipping | $8,316.95 (fragment) | Type: Clipping",
+                                         "Card (partial, right edge): \u0027Spe...\u0027 | \u0027Earn Mone...\u0027 | $6,961.47 (fragment) | Type: Clipping",
+                                         "Card (partial, right edge): Auto... | \u0027[Please Us...\u0027 | $?2,366... | Type: Clipping",
+                                         "Card (partial, bottom): \u0027Ehs...\u0027 (only avatar and name fragment visible)"
+                                     ]
+                        },
+                        {
+                            "frames":  "025",
+                            "screen":  "Whop community page (\u0027Ant/Rippy Club Clips\u0027) with the \u0027Earn\u0027 tab open in the left panel and a Content Rewards campaign detail drawer/modal open on the right â€” this is the creator-facing campaign detail + submission view.",
+                            "elements":  [
+                                             "Far-left icon rail: Whop logo, home icon, search icon, circular icon, chat icon, bell icon, check/inbox icon, diamond icon, orange community avatar",
+                                             "Left panel header: back arrow \u0027\u003c\u0027, community avatar, community name \u0027Ant/Rippy Club Clips\u0027, member/online count \u002711 online\u0027, share and invite-person icons, \u0027...\u0027 overflow menu",
+                                             "Community cover/banner: two vertical video thumbnails (nightclub/car footage) with centered title overlay \u0027Ant/Rippy Club Clips\u0027",
+                                             "Community tab bar: \u0027Home\u0027, \u0027Chat\u0027 (with unread dot), \u0027Earn\u0027 (active), \u0027Learn\u0027",
+                                             "\u0027Content Rewards\u0027 section card (left panel, highlighted with blue border): campaign title \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027; paid-out line \u0027$3,724.54 of $19,950.73 paid out\u0027 with \u002719%\u0027 right-aligned; orange progress bar; footer labels \u0027Type\u0027 (value \u0027Clipping\u0027), \u0027Platforms\u0027 (Instagram + TikTok icons), \u0027$ / views\u0027 (blue badge \u0027$2.00 / 1k\u0027); green \u00279 online\u0027 badge",
+                                             "\u0027Bounties\u0027 section card (left panel): bounty title \u0027Affiliate Commision Raise\u0027; columns \u0027Paid out\u0027 = \u0027$0.00\u0027, \u0027Submissions\u0027 = \u0027218\u0027, \u0027Reward\u0027 = red/orange badge \u0027$1 per submission\u0027; footer \u0027Thomas Lefort listed this bounty\u0027; green \u00272 online\u0027 badge",
+                                             "Right drawer header: bar-chart icon + title \u0027Content Rewards\u0027, info (i) icon, bell icon, \u0027Search\u0027 input, \u0027X\u0027 close icon",
+                                             "Right drawer: \u0027\u003c Back\u0027 link; centered page title \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027; hero image (same nightclub thumbnails) labeled \u0027Ant/Rippy Club Clips\u0027 with small play icon",
+                                             "Amber/yellow notice banner with info icon: \u0027Only views after you submit count towards payout. Submit as soon as you post to get paid for all of your views.\u0027",
+                                             "Stats row: \u0027PAID OUT\u0027 label over \u0027$3,724.54 of $19,950.73 paid out\u0027 with \u002719%\u0027 and orange progress bar; \u0027TIME LEFT\u0027 label over \u0027346 days left\u0027 with progress bar and \u00278%\u0027 at far right",
+                                             "Campaign attribute row (label-over-value columns): \u0027REWARD\u0027 = blue badge \u0027$2.00 / 1K\u0027; \u0027TYPE\u0027 = \u0027Clipping\u0027; \u0027MINIMUM PAYOUT\u0027 = \u0027$6.00\u0027; \u0027MAXIMUM PAYOUT\u0027 = \u0027$600.00\u0027; \u0027CATEGORY\u0027 = \u0027Personal brand\u0027; \u0027PLATFORMS\u0027 = Instagram icon (additional icons hidden behind webcam overlay)",
+                                             "\u0027REQUIREMENTS\u0027 section rendered as rounded chip/tag rows (verbatim chips listed in data)",
+                                             "\u0027ASSETS\u0027 section: Google Drive icon + link \u0027drive.google.com\u0027",
+                                             "Sticky bottom bar: campaign title \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027 with rate \u0027$2.00 / 1k\u0027 beneath, and a blue primary \u0027Submit\u0027 button at bottom right",
+                                             "Browser chrome faintly visible at very top of frame"
+                                         ],
+                            "data":  [
+                                         "Campaign title: \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027",
+                                         "Paid out: $3,724.54 of $19,950.73 paid out (19%)",
+                                         "Time left: 346 days left (8% elapsed on its progress bar)",
+                                         "Reward: $2.00 / 1K; Type: Clipping; Minimum payout: $6.00; Maximum payout: $600.00; Category: Personal brand",
+                                         "Requirement chips (verbatim): \u0027tag @antrippy on tiktok\u0027 | \u0027tag @anthonytapietra on IG\u0027 | \u0027Must have whop affiliate link in bio - earn...\u0027 | \u0027Usernames must have \"Ant\" or \"Rippy\" in it\u0027 | \u0027Clips must be 10 seconds+\u0027 | \u0027All Clips, Texts, and S...\u0027 (truncated) | \u0027Must be a dedicated page to Ant\u0027 | \u0027Views must be real no form of view botting or ads is allowed\u0027",
+                                         "Asset link: drive.google.com",
+                                         "Bounty: \u0027Affiliate Commision Raise\u0027 â€” Paid out $0.00, Submissions 218, Reward \u0027$1 per submission\u0027, listed by Thomas Lefort",
+                                         "Community: Ant/Rippy Club Clips, 11 online; Content Rewards card shows 9 online; Bounties card shows 2 online"
+                                     ]
+                        },
+                        {
+                            "frames":  "029-030",
+                            "screen":  "Full-screen motion-graphic animation (not Whop UI): a 2-row grid of blue video-tile cards with white/blue play-button triangles on a black background; the center tile is enlarged/highlighted with a white eye icon and view-count label beneath it. Used to illustrate the pay-per-1,000-views concept.",
+                            "elements":  [
+                                             "Nine rounded-rectangle blue video tiles, each with a play triangle",
+                                             "Enlarged center tile with larger play button",
+                                             "Eye (views) icon with counter text"
+                                         ],
+                            "data":  [
+                                         "View counter reads \u002750k\u0027"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "023",
+                                "024",
+                                "026",
+                                "027",
+                                "028"
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "032-034",
+                            "screen":  "Whop campaign detail page: \u0027David Ghiyam Clipping Hub\u0027 (content-rewards campaign view, progressively zoomed across the 3 frames; frame 034 has the last requirement chip text-selected/highlighted in blue)",
+                            "elements":  [
+                                             "Page header title (top center): \u0027David Ghiyam Clipping Hub\u0027 with \u0027\u003c Back\u0027 arrow (top left, partially cropped)",
+                                             "Hero banner image: fashion-show photo captioned \u0027DAVID GHIYAM CLIPS\u0027 / \u0027GET PAID TO CLIP VIRAL CONTENT\u0027 / \u0027@DAVIDGHIYAM\u0027",
+                                             "Yellow/amber info alert bar with (i) icon across content width",
+                                             "PAID OUT stat block: label + dollar progress text + orange horizontal progress bar + percentage at right end",
+                                             "TIME LEFT stat block: label + days-left text + short orange progress bar + percentage at far right",
+                                             "Six-column metadata row with uppercase gray labels: REWARD (blue pill \u0027$2.00 /1K\u0027), TYPE, MINIMUM PAYOUT, MAXIMUM PAYOUT, CATEGORY, PLATFORMS",
+                                             "PLATFORMS icon row: Instagram, TikTok, YouTube icons",
+                                             "REQUIREMENTS section: ~10 dark rounded chip/tags in a wrapped grid, each containing one rule sentence",
+                                             "ASSETS section: Google Drive link row (Drive triangle icon + link title \u0027drive.google.com\u0027 + full URL below) and a second asset row \u0027David Ghiyam\u0027 with avatar thumbnail",
+                                             "Sticky bottom bar: campaign name \u0027David Ghiyam Clipping Hub\u0027 at left, blue \u0027Submit\u0027 button at bottom right (partially visible in frame 032)",
+                                             "Left sidebar (partially visible campaign browser panel): campaign thumbnail card, \u0027Tools\u0027 tab label, paid-out progress bar with \u002761%\u0027, \u0027Platforms\u0027 icon row (TikTok/YouTube visible), \u0027$ / views\u0027 column with blue \u0027$2.00 /1K\u0027 pill, green online-count badge",
+                                             "Presenter webcam overlay: circular camera bubble with blue ring, top right"
+                                         ],
+                            "data":  [
+                                         "Info banner: \u0027Only views after you submit count towards payout. Submit as soon as you post to get paid for aâ€¦\u0027 (right edge cut off by webcam bubble)",
+                                         "PAID OUT: \u0027$30,626.20 of $49,877.38 paid out\u0027 â€” \u002761%\u0027",
+                                         "TIME LEFT: \u0027354 days left\u0027 â€” \u00276%\u0027 (small progress bar)",
+                                         "REWARD: \u0027$2.00 /1K\u0027 (blue pill)",
+                                         "TYPE: \u0027Clipping\u0027",
+                                         "MINIMUM PAYOUT: \u0027$20.00\u0027",
+                                         "MAXIMUM PAYOUT: \u0027$500.00\u0027",
+                                         "CATEGORY: \u0027Personal brand\u0027",
+                                         "PLATFORMS: Instagram, TikTok, YouTube icons",
+                                         "Requirement chips (verbatim): \u0027Content may not destroy or Damage David\u0027s Image\u0027 | \u0027Must use #DavidGhiyam in comments\u0027 | \u0027**MUST READ PDF INSIDE OF GOOGLE DRIVE**\u0027 | \u0027Absolutely No Impersonations of David will be tolerated.\u0027 | \u0027Captions in all Posts must Mention @davidghiyam and www.davidghiyam.com\u0027 | \u0027Must be a dedicated David Ghiyam Page\u0027 | \u0027page should have a creative username *using David Ghiyam* in the username is not allowed.\u0027 | \u0027Videos must be High Quality and over 10K views to be reviewed or \"eligible\"\u0027 | \u0027username cannot use David\u0027s full name.\u0027 | \u0027Video must have 50% + tier 1 viewership (USA, Canada, Australia, andselect countries in Europe, etc\u0027 (sic â€” \u0027andselect\u0027 run together; this chip is text-highlighted blue in frame 034)",
+                                         "ASSETS link: \u0027drive.google.com\u0027 â€” \u0027https://drive.google.com/drive/folders/1xfDpwdWhyqRyMi2TkjCQLUI8oWw_2jfe?usp=drive_link\u0027 (best-effort transcription of folder id), second asset row: \u0027David Ghiyam\u0027",
+                                         "Sidebar online badge: \u0027â€¢ 16 online\u0027 (frame 032), \u0027â€¢ 13 online\u0027 (frame 034)",
+                                         "Sidebar rate pill: \u0027$2.00 /1K\u0027 under \u0027$ / views\u0027 column, paid-out \u002761%\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "035",
+                            "screen":  "Whop campaign detail page: \u0027Clip a Famous Podcast - Get Paid\u0027 (same content-rewards campaign template as frames 032-034, different campaign; left sidebar shows the Whop \u0027Earn/Play\u0027 cartoon-city hub with the campaign list)",
+                            "elements":  [
+                                             "Header: \u0027\u003c Back\u0027 link at top left, centered page title \u0027Clip a Famous Podcast - Get Paid\u0027",
+                                             "Hero banner: orange Whop \u0027Content rewards\u0027 branded graphic with tagline \u0027create. post. earn.\u0027 and Whop logo",
+                                             "Yellow/amber info alert bar with (i) icon",
+                                             "PAID OUT stat block with orange progress bar and right-aligned percentage",
+                                             "Metadata row: REWARD (blue pill), TYPE, MINIMUM PAYOUT, MAXIMUM PAYOUT, CATEGORY, PLATFORMS (Instagram/TikTok/YouTube icons)",
+                                             "REQUIREMENTS section: 5 rounded requirement chips",
+                                             "ASSETS section: Google Docs asset row (doc icon + blue link title + full URL)",
+                                             "DISCLAIMER section: small gray legal text with inline blue links \u0027FTC guidelines\u0027 and \u0027Content Rewards Terms\u0027",
+                                             "Sticky bottom bar: campaign name + rate (\u0027Clip a Famous Podcast - Get Paid\u0027 / \u0027$5.00 / 1K\u0027) at left, blue \u0027Submit\u0027 button at right",
+                                             "Left sidebar: cartoon Whop-city illustration logo at top, tab bar \u0027Earn\u0027 (active, underlined, with dot on \u0027Play\u0027) / \u0027Play\u0027, campaign list entry (truncated: \u0027â€¦ards\u0027 / \u0027â€¦odcast - Get Paid\u0027 / \u0027â€¦paid out  38%\u0027) with progress bar, \u0027Platforms\u0027 column with Instagram/TikTok/YouTube icons, \u0027$ / views\u0027 column with blue \u0027$5.00 /1K\u0027 pill, green \u0027â€¢ 2 online\u0027 badge; a second list slot below showing \u00270 online\u0027",
+                                             "Presenter webcam overlay bubble, top right"
+                                         ],
+                            "data":  [
+                                         "Info banner: \u0027Only views after you submit count towards payout. Submit as soon as you post to get paid for aâ€¦\u0027",
+                                         "PAID OUT: \u0027$76.96 of $200.66 paid out\u0027 â€” \u002738%\u0027",
+                                         "REWARD: \u0027$5.00 /1K\u0027 (blue pill)",
+                                         "TYPE: \u0027Clipping\u0027",
+                                         "MINIMUM PAYOUT: \u0027$25.00\u0027",
+                                         "MAXIMUM PAYOUT: \u0027$35.00\u0027",
+                                         "CATEGORY: \u0027Products\u0027",
+                                         "Requirement chips (verbatim): \u0027On-screen demo of the summarizer tool\u0027 | \u0027Must say \"Comment \"Explain\" to find out how\" or other variations\u0027 | \u0027Must be a Podcast Channel\u0027 | \u0027Source clip must come from Joe Rogan\u0027s Podcast\u0027 | \u0027USA or UK or Canada or AUS or NZ Audience (70% +)\u0027",
+                                         "ASSETS: \u0027JoeRogan - Video Summarizer Launch\u0027 â€” \u0027https://docs.google.com/document/d/1DmXVz2O-nmiCsZzxPjsO-zEagImpcTvZGi8CfyF8Boc/edit?usp=sharing\u0027 (best-effort doc id)",
+                                         "DISCLAIMER (verbatim): \u0027Creators may reject submissions that don\u0027t meet requirements. By submitting, you grant full usage rights and agree to follow the FTC guidelines and the Content Rewards Terms.\u0027",
+                                         "Bottom bar: \u0027Clip a Famous Podcast - Get Paid\u0027 / \u0027$5.00 / 1K\u0027 + \u0027Submit\u0027 button",
+                                         "Sidebar: \u0027$ / views\u0027 pill \u0027$5.00 /1K\u0027, paid-out \u002738%\u0027, \u0027â€¢ 2 online\u0027, \u00270 online\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "036",
+                            "screen":  "Google Drive file preview (not Whop) â€” presenter opens an example clip asset from the campaign\u0027s Drive folder; the video is a vertical short-form clip mockup of a phone playing a Joe Rogan YouTube video",
+                            "elements":  [
+                                             "Drive preview top bar: red video-file icon + filename at left, \u0027Open with â–¾\u0027 dropdown center, right-side icons: info (i), download, kebab menu, blue \u0027Share\u0027 button with dropdown caret, circular \u0027B\u0027 account avatar",
+                                             "Centered vertical (9:16) video player on black letterboxed background",
+                                             "In-video phone mockup UI: iOS status bar \u00279:41\u0027, circular spinning JRE logo (\u0027THE JOE ROGAN EXPERIENCE\u0027 text ring) with pause bars, video scrubber \u00270:01 / 2:11:58\u0027 (approx), YouTube title/description block, channel row with subscribe button, like/share/download action row, \u0027Comments\u0027 section header",
+                                             "Large white caption card overlay (hook text) in bold black type",
+                                             "Suggested-video row at bottom of phone mockup",
+                                             "Presenter webcam overlay bubble, top right"
+                                         ],
+                            "data":  [
+                                         "Filename: \u0027Everyone Can Be Rich_ Unveiling the Truth! (3).mp4\u0027",
+                                         "In-video YouTube title: \u0027Joe Rogan Experience #1309 - Naval Ravikant\u0027",
+                                         "In-video channel: \u0027PowerfulJRE\u0027",
+                                         "Caption overlay (verbatim): \u0027I don\u0027t have time to watch this 2 hour + video\u0027",
+                                         "Suggested video below: \u0027How To Progress Way Faster Thenâ€¦\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "039",
+                            "screen":  "Whop community app â€” \u0027Whop Clips\u0027 community, split view: left panel shows the community Home feed, right panel shows the \u0027Clipping Deals\u0027 announcement channel where clipping campaigns/deals are posted",
+                            "elements":  [
+                                             "Far-left app rail (dark icon column): Whop \u0027W\u0027 logo, home icon, search icon, compass/discover icon, chat bubble icon with blue badge \u00279\u0027, bell notification icon, messages/graph icon, grid/apps icon, red-orange community avatar icon",
+                                             "Left panel header: back arrow, community avatar, community name \u0027Whop Clips\u0027, green \u0027â€¢ 60 online\u0027 status, right-side icons: leaderboard/chart, invite-person (person+), kebab \u0027...\u0027",
+                                             "Left panel tab bar: \u0027Home\u0027 (active, blue underline), \u0027Chat\u0027 (with unread dot), \u0027Earn\u0027, \u0027Learn\u0027, \u0027Tools\u0027",
+                                             "Feed post 1 (top, partially cropped): embedded card with yellow CTA button and \u0027((creatorXchange\u0027 wordmark; engagement row: comment icon \u00270\u0027, heart icon \u0027190\u0027, bar-chart views icon \u002725K\u0027, share icon",
+                                             "Feed post 2: channel tag \u0027Clipping Deals\u0027 above author row \u0027Tyler @tcartiii Â· May 16\u0027, post text, embedded YouTube video thumbnail (red play button, creator in front of mansion with sports cars)",
+                                             "Right panel header: orange bar-chart channel icon + channel name \u0027Clipping Deals\u0027",
+                                             "Right panel post: author row \u0027Dylan Lundgren @dylanlundgren Â· 2d\u0027, deal text block (RPM / Budget / Max per vid / Apply below + link), embedded campaign card image (\u0027GET PAID CLIPPâ€¦\u0027 \u0027CARTER COâ€¦\u0027 with man in white blazer and yellow CTA button), engagement row: comment icon \u00270\u0027, views \u002725K\u0027",
+                                             "Right panel bottom: lock icon + \u0027You are not allowed to reply\u0027 (read-only announcement channel)",
+                                             "Presenter webcam overlay bubble, lower right"
+                                         ],
+                            "data":  [
+                                         "Community: \u0027Whop Clips\u0027 â€” \u0027â€¢ 60 online\u0027",
+                                         "Tabs: Home | Chat | Earn | Learn | Tools",
+                                         "Post 1 engagement: 0 comments, 190 likes, 25K views",
+                                         "Post 2 (verbatim): \u0027Tyler @tcartiii Â· May 16\u0027 â€” \u0027ðŸš¨NEW WHOP YOUTUBE VIDEO WITH BREZ SCALES\u0027 / \u0027A banger video got dropped today with so many fire moments for clipping ðŸ”¥ðŸ”¥\u0027 / \u0027Make sure you start clipping this ASAP, as Brez is a super easy person to go viral with!\u0027 / \u0027Go check it out now:\u0027",
+                                         "Clipping Deals post (verbatim): \u0027Dylan Lundgren @dylanlundgren Â· 2d\u0027 â€” \u0027Carter Cofield ($3.00 per 1,000 views)\u0027 / \u0027RPM: $3.00 per 1,000 views\u0027 / \u0027Budget: $10,000\u0027 / \u0027Max per vid: $200\u0027 / \u0027Apply below:\u0027 / \u0027https://whop.com/carter-cofield-clips-cxc/\u0027",
+                                         "Embedded card text: \u0027GET PAID CLIPP[ING]\u0027 / \u0027CARTER CO[FIELD]\u0027 (right-cropped), \u0027Cofiel[d]\u0027",
+                                         "Deal post engagement: 0 comments, 25K views",
+                                         "Footer notice: \u0027You are not allowed to reply\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "040",
+                            "screen":  "Motion-graphic insert (video edit, not a real platform screen): stylized Whop balance widget on dark navy background with falling dollar bills",
+                            "elements":  [
+                                             "Rounded rectangle card (dark blue with lighter border/glow)",
+                                             "Red rounded-square Whop \u0027W\u0027 logo at card left",
+                                             "Balance text label + bold amount",
+                                             "Animated falling cash bill graphics around the card"
+                                         ],
+                            "data":  [
+                                         "\u0027Balance: $588\u0027"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "031",
+                                "037",
+                                "038"
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "042",
+                            "screen":  "B-roll motion graphic: floating MacBook mockup on dark blue gradient background with caption text above it, playing a YouTube podcast video (long-form source content a clipper would cut manually). No Whop UI.",
+                            "elements":  [
+                                             "Caption text above laptop: \"Doing everything manually\"",
+                                             "MacBook laptop mockup with YouTube dark-theme video player fullscreen",
+                                             "Video shows a podcast guest at a microphone; right rail of suggested video thumbnails; player scrub bar and control strip at bottom (too small to read)"
+                                         ],
+                            "data":  [
+                                         "Doing everything manually"
+                                     ]
+                        },
+                        {
+                            "frames":  "045",
+                            "screen":  "Whop campaign (bounty) detail page, dark theme. Right ~2/3 is the opened campaign detail; left edge shows the campaign list/browse column it was opened from. Presenter webcam in a blue-ringed circle at bottom right.",
+                            "elements":  [
+                                             "Back link at top left of detail pane: \"\u003c Back\"",
+                                             "Centered page title: \"Make $2 Per 1000 Views + Recurring Affiliate Revenue\"",
+                                             "Media strip below title: 3 example clip video thumbnails (car/lifestyle content) with an overlay label chip \"Ant/Rippy Club Clips\" and a play button on the center thumbnail",
+                                             "Amber/yellow info banner with info (i) icon: \"Only views after you submit count towards payout. Submit as soon as you post to get paid for all of your views.\"",
+                                             "PAID OUT stat block: label \"PAID OUT\", value \"$3,726.51 of $19,950.73 paid out\", orange progress bar, percentage \"19%\"",
+                                             "TIME LEFT stat block: label \"TIME LEFT\", value \"346 days left\", small orange progress bar, percentage \"8%\" at far right",
+                                             "Stat/spec row of 6 labeled fields: REWARD (blue pill \"$2.00\" with \"/1k\"-style suffix), TYPE \"Clipping\", MINIMUM PAYOUT \"$6.00\", MAXIMUM PAYOUT \"$600.00\", CATEGORY \"Personal brand\", PLATFORMS (Instagram icon + TikTok icon)",
+                                             "REQUIREMENTS section: rows of rounded requirement chips/tags (8 visible)",
+                                             "ASSETS section: two asset rows, each with an icon/thumbnail, a link title, and the raw URL beneath â€” row 1 Google Drive icon, row 2 a video thumbnail",
+                                             "DISCLAIMER section heading visible at bottom (content cut off)",
+                                             "Left sidebar (browse column, partially cut off): campaign card with thumbnails labeled \"...t/Rippy Club Clips\", tab \"Learn\", card text \"...+ Recurring Affiliate Revenue\", \"...id out\" with \"19%\", column headers \"Platforms\" and \"$ / views\", blue rate pill \"$2.00\" (/1k suffix), green online indicator \"â€¢ 15 online\"",
+                                             "Second campaign card lower in left sidebar: label \"Reward\" with red/orange pill \"$1 per submission\", text \"...s bounty\", \"0 online\", \"...ssions\" (submissions) column label"
+                                         ],
+                            "data":  [
+                                         "Make $2 Per 1000 Views + Recurring Affiliate Revenue",
+                                         "Ant/Rippy Club Clips",
+                                         "Only views after you submit count towards payout. Submit as soon as you post to get paid for all of your views.",
+                                         "PAID OUT: $3,726.51 of $19,950.73 paid out â€” 19%",
+                                         "TIME LEFT: 346 days left â€” 8%",
+                                         "REWARD: $2.00 (per 1k views, blue pill)",
+                                         "TYPE: Clipping",
+                                         "MINIMUM PAYOUT: $6.00",
+                                         "MAXIMUM PAYOUT: $600.00",
+                                         "CATEGORY: Personal brand",
+                                         "PLATFORMS: Instagram, TikTok",
+                                         "Requirement chip: tag @antrippy on tiktok",
+                                         "Requirement chip: tag @anthonylapietra on IG",
+                                         "Requirement chip: Must have whop affiliate link in bio - earn MRR",
+                                         "Requirement chip: Usernames must have \"Ant\" or \"Rippy\" in it",
+                                         "Requirement chip: Clips must be 10 seconds+",
+                                         "Requirement chip: All Clips, Texts, and Sounds Must b... (cut off by webcam overlay)",
+                                         "Requirement chip: Must be a dedicated page to Ant",
+                                         "Requirement chip: Views must be real no form of view botting or ads is allowed",
+                                         "Asset 1: drive.google.com â€” https://drive.google.com/drive/folders/1jGAMi8BxMbbhFIJNsutVUDUkHAW_LRsw?usp=sharing",
+                                         "Asset 2: $100,000 shopping spree w/ brezscales â€” https://www.youtube.com/watch?v=wSxut9YdEJA",
+                                         "Sidebar campaign 2: Reward $1 per submission, 0 online",
+                                         "Sidebar campaign 1: $2.00 rate pill, 15 online, 19% paid out"
+                                     ]
+                        },
+                        {
+                            "frames":  "046",
+                            "screen":  "Google Drive (dark theme) showing the campaign\u0027s shared asset folder â€” \"Shared with me \u003e Ant Rippy Club\" â€” i.e. the drive.google.com asset link from the Whop campaign opened in the browser. Presenter webcam circle bottom right. Not Whop UI, but part of the clipping workflow (source footage folders).",
+                            "elements":  [
+                                             "Google Drive logo + \"Drive\" wordmark top left",
+                                             "Search bar: \"Search in Drive\" with advanced-search sliders icon",
+                                             "Top-right icons: help (?), settings gear, plus, Google apps grid, blue avatar \"B\"",
+                                             "Left sidebar: \"+ New\" button; nav items Home, My Drive, Computers, Shared with me, Recent, Starred, Spam, Trash, Storage; storage meter \"5.49 GB of 15 GB used\"; \"Get more storage\" button",
+                                             "Breadcrumb: \"Shared with me \u003e Ant Rippy Club\" with sharing (people) icon",
+                                             "Filter chips row: Type, People, Modified, Source (each with dropdown caret)",
+                                             "\"Folders\" section label; sort control \"Last modified\" with up-arrow; list/grid view toggle buttons and info (i) button top right",
+                                             "8 folder tiles in 2 rows, each with folder icon and kebab (3-dot) menu",
+                                             "Right-hand details panel: folder name \"Ant Rippy Club\", tabs \"Details\" / \"Activity\", large folder icon, sections \"Who has access\" (\"You do not have permission to see sharing information for this item\"), \"Security limitations\" (\"No limitations applied...\"), folder metadata fields (Type/Owner/Modified/Opened/Created â€” Created \"Apr 24, 2025\")",
+                                             "Bottom-left toast/banner: desktop notifications prompt for shared files with \"Turn on\" button and dismiss X"
+                                         ],
+                            "data":  [
+                                         "Shared with me \u003e Ant Rippy Club",
+                                         "Folder tiles: ss/pics, Podcasts, Kick Streams, YT Vids, Brabus/Dream Car ..., Rants/Value, TT/Clips, TJR \u0026 BREZSCALES ...",
+                                         "5.49 GB of 15 GB used",
+                                         "Get more storage",
+                                         "Details / Activity tabs",
+                                         "Who has access",
+                                         "Security limitations â€” No limitations applied",
+                                         "Created Apr 24, 2025",
+                                         "Sort: Last modified"
+                                     ]
+                        },
+                        {
+                            "frames":  "047",
+                            "screen":  "OpusClip marketing homepage (opus.pro) in browser, dark theme â€” the AI clipping tool the presenter recommends instead of manual clipping. OpusClip logo circled with a red hand-drawn annotation added in the video edit. Not Whop UI.",
+                            "elements":  [
+                                             "Browser URL bar: \"opus.pro\"",
+                                             "Logo top left: \"OpusClip\" (circled in red annotation)",
+                                             "Top nav: Features (caret), Solutions (caret), Resources (caret), Pricing",
+                                             "Green eyebrow label: \"#1 AI VIDEO CLIPPING TOOL\"",
+                                             "Hero headline: \"1 long video, 10 viral clips. C...\" (right edge cut off, likely \"Create 10x faster.\")",
+                                             "Subheadline: \"OpusClip turns long videos into shorts, and publishes them to all...\" (cut off)",
+                                             "URL input field with link icon, placeholder \"Drop a video link\"",
+                                             "White pill CTA button: \"Get free clips\""
+                                         ],
+                            "data":  [
+                                         "opus.pro",
+                                         "OpusClip",
+                                         "#1 AI VIDEO CLIPPING TOOL",
+                                         "1 long video, 10 viral clips. C... (truncated)",
+                                         "OpusClip turns long videos into shorts, and publishes them to all... (truncated)",
+                                         "Drop a video link",
+                                         "Get free clips",
+                                         "Nav: Features, Solutions, Resources, Pricing"
+                                     ]
+                        },
+                        {
+                            "frames":  "050",
+                            "screen":  "\"Select a file\" modal â€” Google Drive file picker opened from inside the OpusClip app (importing source footage from the campaign\u0027s shared Drive). Background dimmed; OpusClip app chrome visible behind (credits counter top right). Presenter webcam circle bottom right. Not Whop UI.",
+                            "elements":  [
+                                             "Modal dialog titled \"Select a file\" with close X top right",
+                                             "Active tab: \"Google Drive\" (underlined)",
+                                             "Search text input (cursor active) with blue magnifying-glass search button beside it",
+                                             "Upload icon button at far right of the search row",
+                                             "\"Folders\" section label with grid of ~30 folder rows/tiles (5 columns x 6 rows, names blurred/unreadable), small loading spinner",
+                                             "Two action buttons bottom left of modal (disabled/greyed, likely Select and Cancel)",
+                                             "Host app top bar behind modal: notification bell icon with red badge, credits indicator \"âš¡ 7,327\", avatar"
+                                         ],
+                            "data":  [
+                                         "Select a file",
+                                         "Google Drive",
+                                         "Folders",
+                                         "7,327 (credit balance in host app header)"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "041",
+                                "043",
+                                "044",
+                                "048",
+                                "049"
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "051-051",
+                            "screen":  "OpusClip AI clipping project settings screen (dark theme) with the Clip Length dropdown expanded. Not Whop itself - this is the clipping tool step of the workflow.",
+                            "elements":  [
+                                             "Two tabs at top of settings card: \u0027AI clipping\u0027 (active, underlined) and \u0027Don\u0027t clip\u0027",
+                                             "\u0027Clip Length\u0027 label with dropdown pill showing current selection \u0027\u003c30s, 30s-59s\u0027 and chevron",
+                                             "Open dropdown menu with clip-length options; \u0027\u003c30s\u0027 and \u002730s-59s\u0027 have checkmarks (multi-select)",
+                                             "Genre/topic chip row (partially covered by dropdown): \u0027Let AI detect\u0027 chip with sparkle icon, \u0027Podcast\u0027 chip (selected, highlighted, with gear/settings icon), \u0027Lifestyle\u0027 chip, \u0027Sports\u0027 chip",
+                                             "Second chip row: \u0027Marketing \u0026...\u0027 chip with checked checkbox, \u0027Entertainment\u0027 chip, \u0027News\u0027 chip",
+                                             "Third chip row: \u0027Informative \u0026 Educational\u0027 chip (partially covered), \u0027Show more\u0027 link with double-chevron-down",
+                                             "\u0027Include specific ...\u0027 field label (partially covered) with right-aligned helper \u0027Not sure how to prompt? learn more\u0027 (learn more underlined)",
+                                             "Prompt text input with lightbulb icon and placeholder \u0027Example: Compile all the hilarious moments\u0027",
+                                             "\u0027Processing timeframe\u0027 label above a dual-handle range slider (both handles at extremes)",
+                                             "Slider start time box \u00270:00:00\u0027 and end time box \u00271:22:31\u0027",
+                                             "Bottom section tabs: \u0027Quick presets\u0027 (active) and \u0027My templates\u0027",
+                                             "Circular presenter webcam overlay bottom-right"
+                                         ],
+                            "data":  [
+                                         "Clip Length selected: \u0027\u003c30s, 30s-59s\u0027",
+                                         "Dropdown options: \u0027Auto (\u003c90s)\u0027, \u0027\u003c30s\u0027 (checked), \u002730s-59s\u0027 (checked), \u002760s-89s\u0027, \u002790s-3m\u0027, \u00273m-5m\u0027, \u00275m-10m\u0027",
+                                         "Video duration / timeframe: 0:00:00 to 1:22:31",
+                                         "Placeholder: \u0027Example: Compile all the hilarious moments\u0027",
+                                         "Helper link: \u0027Not sure how to prompt? learn more\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "052-052",
+                            "screen":  "Same OpusClip AI clipping settings screen scrolled down to the prompt field, processing timeframe, template presets carousel, and aspect ratio picker.",
+                            "elements":  [
+                                             "\u0027Include specific moments\u0027 field label with right-aligned \u0027Not sure how to prompt? learn more\u0027 link",
+                                             "Prompt input with lightbulb icon and placeholder \u0027Example: Find me the section with epic fights\u0027 (placeholder text rotates vs frame 051)",
+                                             "\u0027Processing timeframe\u0027 dual-handle slider, handles at 0:00:00 and 1:22:31",
+                                             "Tabs: \u0027Quick presets\u0027 (active) / \u0027My templates\u0027",
+                                             "Horizontal carousel of 3 caption-template preset cards, each a 9:16 vertical video thumbnail with a name label underneath: \u0027Pod P\u0027 (podcast guest thumbnail), \u0027Mozi\u0027 (man in cap thumbnail), \u0027Popline\u0027 (Elon Musk podcast thumbnail)",
+                                             "Left carousel arrow button (circle with \u0027\u003c\u0027) on the left edge of the preset row; cursor near right edge suggesting a right arrow too",
+                                             "\u0027Choose aspect ratio\u0027 label with phone icon, value \u00279:16\u0027 and dropdown chevron",
+                                             "Circular presenter webcam overlay bottom-right"
+                                         ],
+                            "data":  [
+                                         "Placeholder: \u0027Example: Find me the section with epic fights\u0027",
+                                         "Timeframe: 0:00:00 - 1:22:31",
+                                         "Preset names: \u0027Pod P\u0027, \u0027Mozi\u0027, \u0027Popline\u0027",
+                                         "Aspect ratio: \u00279:16\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "053-053",
+                            "screen":  "OpusClip project results page showing the grid of AI-generated clips (\u0027Original clips (43)\u0027) for project \u0027SAAMIR POD FINAL NONYT R...\u0027, top of grid (clips scored 99 down to 88).",
+                            "elements":  [
+                                             "Browser chrome at top with URL bar (URL blurred, reads approx \u0027clips.opusclip...\u0027)",
+                                             "Full-width notice banner: green/teal icon + text \u0027We\u0027re currently experiencing issues with connecting and refreshing Twitter accounts due to degraded performance on X/Twitter\u0027s API.\u0027 with right arrow",
+                                             "Header bar: grid-view and list-view toggle icons, project title \u0027SAAMIR POD FINAL NONYT R...\u0027, center search input \u0027Find keywords or moments...\u0027 with keyboard shortcut hint (âŒ˜K), right side: notification bell with red badge \u00271\u0027, lightning/credit icon with balance \u00277,245\u0027, button \u0027Add more credits\u0027",
+                                             "Secondary toolbar right-aligned: \u0027Filter\u0027 button with funnel icon, \u0027Download all\u0027 button with download icon, two more small icons (refresh/share), overflow \u0027...\u0027 menu",
+                                             "Narrow left icon sidebar (top to bottom): collapse/expand arrow icon, \u0027d\u0027 workspace avatar with chevron, person/profile icon, home icon, grid/apps icon, folder icon, calendar icon, card icon, circle/link icon; near bottom: another icon and a book/help icon",
+                                             "Section heading \u0027Original clips (43)\u0027",
+                                             "Grid of vertical 9:16 clip cards, 6 per row; each card shows: virality score number in green (large, left of icon row), a red calendar/schedule icon, a share/post icon, an \u0027X\u0027 remove icon, duration overlay top-right of thumbnail (e.g. 00:43, 00:51), progress bar under first thumbnail, yellow burned-in caption words on thumbnails, and a 2-line clip title below",
+                                             "First card in hover state showing play button and heart (like) / thumbs-down icons at top-left of thumbnail"
+                                         ],
+                            "data":  [
+                                         "Project: \u0027SAAMIR POD FINAL NONYT R...\u0027",
+                                         "Credits balance: 7,245; button \u0027Add more credits\u0027",
+                                         "Section: \u0027Original clips (43)\u0027",
+                                         "Score 99: \u0027Dropshipping Guru EXPOSED! How To Actually Make Mone...\u0027 (caption \u0027let\u0027s say\u0027, duration ~00:43)",
+                                         "Score 98: \u0027Dropshipping HATE EXPOSED: Why Everyone\u0027s...\u0027",
+                                         "Score 97: \u0027Unlock Your Obsession: Turn Passion into Profit!\u0027 (caption \u0027Dude\u0027)",
+                                         "Score 96: \u0027TikTok Dropshipping: How I Went From Zero to Obsessed!\u0027 (caption \u0027so\u0027)",
+                                         "Score 95: \u0027Don\u0027t Quit! The Guaranteed Way to Win (Success Secrets)\u0027 (caption \u0027It\u0027s literally\u0027)",
+                                         "Score 94: \u0027Motion is the NEW Money: Why Influence Rules...\u0027 (caption \u0027powerful\u0027)",
+                                         "Second row partially visible: scores 93, 92, 91, 90, 89, 88 with captions \u0027What\u0027s your\u0027, \u0027So it was\u0027, \u0027You said\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "054-054",
+                            "screen":  "Same OpusClip results grid scrolled down one row, showing clips scored 93 down to 83.",
+                            "elements":  [
+                                             "Same banner, header (project title, search \u0027Find keywords or moments...\u0027, bell, credits \u00277,245\u0027, \u0027Add more credits\u0027), toolbar (\u0027Filter\u0027, \u0027Download all\u0027), left icon sidebar, and \u0027Original clips (43)\u0027 heading",
+                                             "Each clip card: green score number, red calendar/schedule icon, share icon, \u0027X\u0027 remove icon, duration overlay (e.g. 00:36, 01:40, 00:29, 00:27, 00:41, 00:48), yellow caption text on thumbnails, 2-line title",
+                                             "Cursor hovering near card #88"
+                                         ],
+                            "data":  [
+                                         "Score 93: \u0027Unlock Maturity: Why Solo Travel is a GAME CHANGER!\u0027",
+                                         "Score 92: \u0027From Zero to $250K/Month Dropshipping Success...\u0027",
+                                         "Score 91: \u0027Unlock Maturity: Why Solo Travel Is Your Ultimate...\u0027",
+                                         "Score 90: \u0027Dropshipping NIGHTMARE! Poor Quality \u0026 Wrong Size...\u0027",
+                                         "Score 89: \u0027Is Everyone Faking Success? The Conspiracy They Don\u0027t...\u0027",
+                                         "Score 88: \u0027Dropshipping Success: Ignore Motivation, Just Grind.\u0027",
+                                         "Score 87: \u0027Entrepreneurship: Lock In, Grind Daily, Embrace Losses...\u0027",
+                                         "Score 86: \u0027Escape the \u0027Blob\u0027: Find Your Passion \u0026 Live a Full Life!\u0027",
+                                         "Score 85: \u0027E-Commerce Guru SCAMS Exposed: Are You Being...\u0027",
+                                         "Score 84: \u0027Unlocking Confidence: Brutal Honesty vs. Faking It \u0027Til You...\u0027",
+                                         "Score 83: \u0027Miami Networking: Unlock Lifelong Friends \u0026 E-comm...\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "055-056",
+                            "screen":  "OpusClip clip detail modal for clip \u0027#5 Don\u0027t Quit! The Guaranteed Way to Win (Success Secrets)\u0027 - virality score breakdown, video preview with burned-in captions, scene analysis with timecoded transcript, and export/edit action rail. Frame 055 shows playback at 00:02 (caption \u0027don\u0027t quit\u0027); frame 056 at 00:10 (caption \u0027just\u0027, OpusClip logo watermark visible on video).",
+                            "elements":  [
+                                             "Title header: \u0027#5 Don\u0027t Quit! The Guaranteed Way to Win (Success Secrets)\u0027 with pencil/edit icon on right",
+                                             "Up and down arrow buttons top-right corner (navigate between clips)",
+                                             "Left rating column: heart (like) and thumbs-down (dislike) icons; large green virality score \u002795/100\u0027; letter-grade rows: \u0027A- Hook\u0027, \u0027A- Flow\u0027, \u0027A Value\u0027, \u0027A- Trend\u0027",
+                                             "Center: 9:16 vertical video player with time overlay (00:02 / 00:17 in frame 055; 00:10 / 00:17 in frame 056), yellow karaoke-style captions, progress bar",
+                                             "Right panel header: \u0027Scene analysis\u0027 with \u0027Transcript only\u0027 checkbox toggle",
+                                             "Scene analysis summary paragraph followed by timecoded beats; each beat = [timestamp range], AI description line, then caption-icon + verbatim transcript quote; vertical scrollbar",
+                                             "Far-right action rail buttons (each with colored icon): \u0027Publish on Social\u0027, \u0027Export XML\u0027, \u0027Download HD\u0027, \u0027Edit clip\u0027, \u0027AI hook\u0027 with \u0027Beta\u0027 badge, \u0027Enhance speech\u0027 with \u0027Beta\u0027 badge, \u0027Add B-Roll\u0027 with \u0027Beta\u0027 badge, \u00279:16\u0027 aspect-ratio button with phone icon"
+                                         ],
+                            "data":  [
+                                         "Score: 95/100; grades: Hook A-, Flow A-, Value A, Trend A-",
+                                         "Clip duration: 00:17",
+                                         "Summary: \u0027The video emphasizes the importance of persistence as the key to success, defining failure as quitting rather than losing money, and reflecting on the value of sticking with e-commerce projects.\u0027",
+                                         "[56:11 - 56:14] \u0027Speaker emphasizes that persistence guarantees success, stating it\u0027s impossible to fail if you don\u0027t quit.\u0027 Quote: \u0027it\u0027s literally impossible to fail if you just don\u0027t quit.\u0027",
+                                         "[56:14 - 56:27] \u0027Speaker defines failure as quitting, not losing money, and asserts that sticking to projects guarantees success.\u0027 Quote: \u0027bro. that\u0027s what i think defines failure: is quitting, not losing money. or this one didn\u0027t go well, or this project, you know, fell off like literally just sticking to it is like a guaranteed. you know\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "057-057",
+                            "screen":  "OpusClip results grid again (identical layout/data to frame 053), with clip card #94 in hover state showing play button and heart/thumbs-down icons and a progress bar under its thumbnail.",
+                            "elements":  [
+                                             "Same page as frame 053: X/Twitter API issue banner, project header \u0027SAAMIR POD FINAL NONYT R...\u0027, search \u0027Find keywords or moments...\u0027, bell with red badge, credits \u00277,245\u0027, \u0027Add more credits\u0027 button, \u0027Filter\u0027 / \u0027Download all\u0027 toolbar, left icon sidebar, \u0027Original clips (43)\u0027",
+                                             "Clip cards 99-88 with same scores, icons (red calendar, share, X), durations, yellow captions and titles as frame 053",
+                                             "Card #94 hovered: play button overlay, heart and thumbs-down icons top-left, scrub/progress bar",
+                                             "Presenter webcam overlay bottom-right"
+                                         ],
+                            "data":  [
+                                         "Same clip list as frames 053: 99 \u0027Dropshipping Guru EXPOSED!...\u0027, 98 \u0027Dropshipping HATE EXPOSED...\u0027, 97 \u0027Unlock Your Obsession...\u0027, 96 \u0027TikTok Dropshipping...\u0027, 95 \u0027Don\u0027t Quit!...\u0027, 94 \u0027Motion is the NEW Money: Why Influence Rules...\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "058-058",
+                            "screen":  "OpusClip clip detail modal for clip \u0027#6 Motion is the NEW Money: Why Influence Rules Everything!\u0027 - same layout as frames 055-056.",
+                            "elements":  [
+                                             "Title: \u0027#6 Motion is the NEW Money: Why Influence Rules Everything!\u0027 with pencil edit icon; up/down clip-navigation arrows top-right",
+                                             "Left column: heart / thumbs-down icons, green score \u002794/100\u0027, grades \u0027A- Hook\u0027, \u0027A- Flow\u0027, \u0027A Value\u0027, \u0027A- Trend\u0027",
+                                             "Center: vertical video preview at 00:07 / 00:46, yellow caption \u0027motion\u0027",
+                                             "Right: \u0027Scene analysis\u0027 header with \u0027Transcript only\u0027 checkbox, summary + timecoded beats with quotes, scrollbar",
+                                             "Action rail: \u0027Publish on Social\u0027, \u0027Export XML\u0027, \u0027Download HD\u0027, \u0027Edit clip\u0027, \u0027AI hook\u0027 (Beta), \u0027Enhance speech\u0027 (Beta), \u0027Add B-Roll\u0027 (Beta), \u00279:16\u0027"
+                                         ],
+                            "data":  [
+                                         "Score: 94/100; grades: Hook A-, Flow A-, Value A, Trend A-",
+                                         "Clip duration: 00:46",
+                                         "Summary: \u0027A podcast discussion debating the power of influence versus money, the importance of recognition and social media, and the impact of motion on various aspects of life.\u0027",
+                                         "[11:45 - 11:56] \u0027The podcast hosts debate whether influence is more powerful than money, emphasizing the power of motion.\u0027 Quote: \u0027this might be a debatable thing, but i think, not like clout, but influence, i think, is more powerful than the money itself. having motion, motion. motion is more powerful than money itself, bro.\u0027",
+                                         "[11:56 - 12:15] \u0027The hosts discuss the advantages of being recognized and argue for the importance of social media followers and influence.\u0027 Quote (cut off): \u0027like dude, when you like, if you can walk into somewhere and\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "059-059",
+                            "screen":  "OpusClip results grid once more (same as 053/057); presenter webcam overlay has moved to the top-right, partially covering the credits/\u0027Add more credits\u0027 area.",
+                            "elements":  [
+                                             "Identical grid page: banner, project title \u0027SAAMIR POD FINAL NONYT R...\u0027, search bar, \u0027Original clips (43)\u0027, left icon sidebar, clip cards 99-88 with scores, red calendar icon, share icon, X icon, durations, yellow captions, titles",
+                                             "Webcam circle overlay top-right"
+                                         ],
+                            "data":  [
+                                         "Same clip titles/scores as frame 053 (99 through 88 visible)"
+                                     ]
+                        },
+                        {
+                            "frames":  "060-060",
+                            "screen":  "Whop platform - \u0027Create submission\u0027 modal for submitting a posted clip to a clipping campaign, overlaid on a blurred campaign detail page for what appears to be an \u0027Anti/Rippy Club Clips\u0027 campaign.",
+                            "elements":  [
+                                             "Modal title \u0027Create submission\u0027 centered, close \u0027X\u0027 button top-right",
+                                             "Yellow/amber info banner with info icon: \u0027Only views after you submit count towards payout. Submit as soon as you post to get paid for all of your views.\u0027 (bold)",
+                                             "Section heading \u0027Submit your social media post\u0027 with subtext: \u0027Share your post\u0027s link and the original image or video below. Once approved, you\u0027ll start earning rewards based on the views your content generates.\u0027",
+                                             "Required text field labeled \u0027Provide link *\u0027 containing example/placeholder URL \u0027https://www.instagram.com/reel/1234567890\u0027",
+                                             "Required upload field labeled \u0027Media *\u0027 - large dropzone with helper text: \u0027Upload the original media file you posted (not a screenshot). For videos, upload the video file. For posts with multiple files, upload the first file.\u0027 and an \u0027Upload media\u0027 button with upload-arrow icon",
+                                             "Full-width \u0027Submit\u0027 button at bottom of modal (greyed/disabled state)",
+                                             "Blurred background (campaign page) shows: campaign name tooltip/label \u0027Anti/Rippy Club Clips\u0027 top-left, tab bar with an active underlined tab (one tab reads \u0027Earn\u0027), a rewards line reading approximately \u0027...Per 1000 Views + Recurring Affiliate Revenue\u0027, an orange progress bar (budget paid out), platform icons including Instagram, a blue action button, a red button/badge lower-left (possible rejected status or destructive action - blurred), and bottom-right another line \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027 next to a blue \u0027Submit\u0027 button",
+                                             "Presenter webcam overlay top-right"
+                                         ],
+                            "data":  [
+                                         "Banner: \u0027Only views after you submit count towards payout. Submit as soon as you post to get paid for all of your views.\u0027",
+                                         "Field labels: \u0027Provide link *\u0027, \u0027Media *\u0027",
+                                         "Link example: \u0027https://www.instagram.com/reel/1234567890\u0027",
+                                         "Background campaign (blurred, partially readable): \u0027Anti/Rippy Club Clips\u0027, \u0027Make $2 Per 1000 Views + Recurring Affiliate Revenue\u0027, Instagram platform icon, orange budget progress bar",
+                                         "Buttons: \u0027Upload media\u0027, \u0027Submit\u0027"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+
+                            ]
+    },
+    {
+        "screens":  [
+                        {
+                            "frames":  "061-062",
+                            "screen":  "OpusClip (clip.opus.pro) AI clip results page - detail view of one auto-generated clip. NOT the Whop platform; this is the OpusClip clipping tool shown as part of the workflow. Frame 061 is zoomed out with dimmed background; frame 062 is zoomed in on the same clip card with a tooltip visible over the title.",
+                            "elements":  [
+                                             "Browser chrome at top with URL bar (URL partially readable as clip.opus.pro/... in frame 061)",
+                                             "Clip card header: clip index \u0027#6\u0027 followed by bold clip title, with a pencil/edit icon to the right of the title",
+                                             "Tooltip above the title (frame 062) repeating the title text",
+                                             "Left rail of the card: heart/like icon and thumbs-down icon (feedback buttons)",
+                                             "Virality score block: large green score \u002794/100\u0027 with letter-grade sub-scores listed vertically: \u0027A- Hook\u0027, \u0027A- Flow\u0027, \u0027A Value\u0027, \u0027A- Trend\u0027",
+                                             "Vertical 9:16 video preview thumbnail with centered white circular play button, burned-in caption text (\u0027this might\u0027 in frame 061, \u0027but i think\u0027 in frame 062), playback timestamp overlay \u002700:02 / 00:45\u0027 at top of thumbnail, faint \u0027SUBTITLES PREVIEW\u0027-style watermark top-left",
+                                             "Middle column titled \u0027Scene analysis\u0027 with a checkbox labeled \u0027Transcript only\u0027 at its top-right",
+                                             "Scene analysis body: summary paragraph, then timestamped segments \u0027[11:45 - 11:56]\u0027 and \u0027[11:56 - 12:15]\u0027, each with a description line plus a quoted transcript line prefixed by a small \u0027cc\u0027 (closed-caption) icon",
+                                             "Right-side action button stack, each with a small colored icon: \u0027Publish on Social\u0027, \u0027Export XML\u0027, \u0027Download HD\u0027, then \u0027Edit clip\u0027, \u0027AI hook\u0027 (Beta tag), \u0027Enhance speech\u0027 (Beta tag), \u0027Add B-Roll\u0027 (Beta tag), and an aspect-ratio button \u00279:16\u0027 with a phone icon",
+                                             "Floating controls top-right in frame 061: up arrow, down arrow, and X (close) buttons for navigating between clips in the modal"
+                                         ],
+                            "data":  [
+                                         "Clip title: \u0027#6 Motion is the NEW Money: Why Influence Rules Everything!\u0027",
+                                         "Virality score: 94/100; Hook A-, Flow A-, Value A, Trend A-",
+                                         "Scene analysis summary: \u0027A podcast discussion debating the power of influence versus money, the importance of recognition and social media, and the impact of motion on various aspects of life.\u0027",
+                                         "Segment 1: \u0027[11:45 - 11:56] The podcast hosts debate whether influence is more powerful than money, emphasizing the power of motion.\u0027 quote: \u0027this might be a debatable thing, but i think, not like clout, but influence, i think, is more powerful than the money itself. having motion. motion. motion is more powerful than money itself, bro.\u0027",
+                                         "Segment 2: \u0027[11:56 - 12:15] The hosts discuss the advantages of being recognized and argue for the importance of social media followers and influence.\u0027 quote begins: \u0027like dude, when you like, if you can walk into somewhere and...\u0027",
+                                         "Clip length/position: 00:02 / 00:45; aspect ratio 9:16",
+                                         "Button labels verbatim: Publish on Social, Export XML, Download HD, Edit clip, AI hook (Beta), Enhance speech (Beta), Add B-Roll (Beta), 9:16"
+                                     ]
+                        },
+                        {
+                            "frames":  "063-064",
+                            "screen":  "Full-screen motion-graphic explainer slide (video edit, not platform UI): \u0027Editor A\u0027 comparison. Glowing blue rounded-square avatar silhouette labeled \u0027A\u0027 on the left, with bullet points appearing one by one on the right on a dark navy background.",
+                            "elements":  [
+                                             "Blue neon rounded-square profile-silhouette card labeled with metallic letter \u0027A\u0027 above it",
+                                             "Empty radio-button style circles preceding each bullet line",
+                                             "Bullet text lines in white sans-serif"
+                                         ],
+                            "data":  [
+                                         "Bullet 1 (frames 063-064): \u0027Manually goes through hours of raw footage\u0027",
+                                         "Bullet 2 (frame 064 only): \u0027Manually trims clips and adds captions\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "065",
+                            "screen":  "Full-screen motion-graphic explainer slide (video edit, not platform UI): \u0027Editor B\u0027 comparison. Glowing purple/magenta rounded-square avatar silhouette labeled \u0027B\u0027 on the left with a bullet point animating in on the right.",
+                            "elements":  [
+                                             "Purple neon rounded-square profile-silhouette card labeled with metallic letter \u0027B\u0027 above it",
+                                             "Empty radio-button style circle before the bullet line",
+                                             "Bullet text in white sans-serif (still animating in, sentence cut off)"
+                                         ],
+                            "data":  [
+                                         "Bullet text (partial/animating): \u0027Uses AI to auto-generate 100+ clips per\u0027"
+                                     ]
+                        },
+                        {
+                            "frames":  "066",
+                            "screen":  "Full-screen motion-graphic explainer slide (video edit, not platform UI): side-by-side A vs B comparison. Blue silhouette card \u0027A\u0027 on the left, purple silhouette card \u0027B\u0027 on the right, with a pixel-art red question mark between them.",
+                            "elements":  [
+                                             "Blue neon avatar card labeled \u0027A\u0027 (left)",
+                                             "Purple neon avatar card labeled \u0027B\u0027 (right)",
+                                             "Pixel-art red/orange question mark centered between the two cards"
+                                         ],
+                            "data":  [
+
+                                     ]
+                        },
+                        {
+                            "frames":  "067-068",
+                            "screen":  "OpusClip pricing page (opus.pro/pricing) showing three plan cards: Starter, Pro (highlighted/center with border), Business. NOT the Whop platform. Frame 067 shows the full page with header nav and a cookie-consent banner at the bottom, with the Pro price displayed as a discounted annual price ($29 struck through, $14.50 in green); frame 068 is zoomed in with Pro shown at $29 USD/mo (monthly billing) and \u0027300 credits\u0027 highlighted/selected in the Pro feature list.",
+                            "elements":  [
+                                             "Header (frame 067): OpusClip logo (\u0027P\u0027 play icon + \u0027OpusClip\u0027 wordmark), nav items with dropdown carets: \u0027Features\u0027, \u0027Solutions\u0027, \u0027Resources\u0027, plus \u0027Pricing\u0027, a gold/yellow-badged \u0027OpusSearch\u0027 item, and \u0027My dashboard\u0027 link at far right",
+                                             "Banner line above cards: \u0027Save up to 50% with annual billing\u0027 (green/teal text)",
+                                             "Starter plan card: title \u0027Starter\u0027, subtitle \u0027For individual creators\u0027, price \u0027$15 USD/mo\u0027, button \u0027Start your free trial\u0027 (with faint sub-caption \u0027No credit card required\u0027), footnote \u0027$15 billed monthly\u0027 with info (i) icon, checkmarked feature list",
+                                             "Pro plan card (center, elevated with rounded border): title \u0027Pro\u0027, subtitle \u0027For professional creators, marketers, \u0026 teams\u0027, price (frame 067) \u0027$29 USD\u0027 struck through followed by \u0027$14.50 USD/mo\u0027 in green; price (frame 068) \u0027$29 USD/mo\u0027",
+                                             "Pro card controls: a pill toggle/stepper showing \u00271x\u0027 on the left and a dropdown labeled \u00271 pack\u0027 with up/down carets on the right",
+                                             "Pro primary CTA: white button \u0027Start your free trial\u0027 with sub-caption \u0027No credit card required\u0027",
+                                             "Pro footnote: \u0027$174 billed annually\u0027 with (i) icon in frame 067; \u0027$29 billed monthly\u0027 with (i) icon in frame 068",
+                                             "Pro feature list with green checkmarks; \u0027300 credits\u0027 appears text-highlighted (selected) in frame 068 with an (i) icon after it",
+                                             "Business plan card: title \u0027Business\u0027, subtitle \u0027For organizations that need tailored solutions, API, and more\u0027, line \u0027Custom pricing and packs\u0027, button \u0027Contact us\u0027, header \u0027Everything in the Pro plan, plus:\u0027 followed by checkmarked list, footer text \u0027Used by teams at\u0027 (partially visible)",
+                                             "Cookie/privacy consent banner across the bottom of frame 067 with dense legal text and an X dismiss button"
+                                         ],
+                            "data":  [
+                                         "Starter: $15 USD/mo; \u0027Starter plan only available in monthly\u0027; features: \u0027150 credits (i) per month\u0027, \u0027AI clipping with Virality Score\u0027, \u0027AI animated captions in 20+ languages\u0027, \u0027Auto post to YouTube Shorts, TikTok, IG Reels, or download\u0027, \u0027Powerful editor\u0027, \u00271 brand template\u0027, \u0027Filler \u0026 silence removal\u0027, \u0027Remove Watermark\u0027",
+                                         "Pro (frame 067 annual promo): $29 USD struck through -\u003e $14.50 USD/mo, \u0027$174 billed annually\u0027; feature \u00273,600 credits (i) per year, available instantly\u0027",
+                                         "Pro (frame 068 monthly): $29 USD/mo, \u0027$29 billed monthly\u0027; feature \u0027300 credits (i) per month, available instantly\u0027",
+                                         "Shared Pro features: \u0027Team workspace with 2 seats\u0027, \u00272 brand templates\u0027, \u00276 social account connections\u0027, header \u0027Everything in Starter plan, plus:\u0027, \u0027AI B-roll\u0027, \u0027Input from 10+ sources\u0027, \u0027Export to Adobe Premiere Pro \u0026 DaVinci Resolve\u0027, \u0027Multiple aspect ratios (9:16, 1:1, 16:9)\u0027, \u0027Social media scheduler\u0027, \u0027Intercom chat support\u0027, \u0027Custom fonts\u0027, \u0027Speech enhancement\u0027",
+                                         "Business features: \u0027Custom pricing and packs\u0027; \u0027Everything in the Pro plan, plus:\u0027 \u0027Priority project processing\u0027, \u0027Customized credits, team seats and social account connections\u0027, \u0027Tailored business assets: brand templates, fonts, vocabulary \u0026 more\u0027, \u0027Dedicated storage\u0027, \u0027API \u0026 custom integrations\u0027, \u0027Master Service Agreement (MS...)\u0027, \u0027Priority support with a dedicated Slack channel\u0027, \u0027Enterprise-level security\u0027",
+                                         "Promo line: \u0027Save up to 50% with annual billing\u0027"
+                                     ]
+                        }
+                    ],
+        "talkingHeadOnly":  [
+                                "069",
+                                "070"
+                            ]
+    }
+]

@@ -137,6 +137,17 @@ def sv_caption_preview_key(style: str) -> str:
     return f"storyvault/presets/caption_{style}.mp4"
 
 
+# ---------------------------------------------------------- whop campaign keys
+def whop_thumbnail_key(campaign_id: int, ext: str) -> str:
+    return f"whop/campaigns/{campaign_id}/thumbnail{ext}"
+
+
+# ------------------------------------------------------------- publishing keys
+def youtube_avatar_key(connector_id: int) -> str:
+    """Cached copy of a connected YouTube channel's avatar, served same-origin."""
+    return f"youtube/avatars/{connector_id}.jpg"
+
+
 class Storage:
     def __init__(self) -> None:
         self.backend = settings.STORAGE_BACKEND

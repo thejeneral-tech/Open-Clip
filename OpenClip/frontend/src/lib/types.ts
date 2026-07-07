@@ -740,3 +740,184 @@ export interface SvMeta {
   caption_styles: string[];
   platforms: string[];
 }
+
+// ---------------------------------------------------------- whop campaigns
+export type WhopCampaignType = "clipping" | "ugc" | "faceless";
+export type WhopCampaignStatus = "active" | "paused" | "ended";
+export type WhopPlatform = "tiktok" | "instagram" | "youtube" | "x";
+export type WhopSubmissionStatus = "pending" | "approved" | "rejected" | "paid";
+export interface WhopAssetLink { label: string; url: string }
+export interface WhopCampaign {
+  id: number; name: string; description: string | null;
+  campaign_type: WhopCampaignType; category: string; status: WhopCampaignStatus;
+  rate_per_1k: number; budget: number | null; min_payout: number | null; max_payout: number | null;
+  platforms: WhopPlatform[]; requirements: string[]; asset_links: WhopAssetLink[];
+  whop_url: string | null; ends_at: string | null; created_at: string; updated_at: string;
+  thumbnail_url: string | null;
+  studio_project_id: number | null;
+  submissions_total: number; submissions_pending: number; submissions_approved: number;
+  submissions_rejected: number; submissions_paid: number;
+  views_total: number; paid_out: number; pending_payout: number;
+  budget_used_pct: number | null; days_left: number | null;
+}
+export interface WhopStudio { project_id: number; campaign_id: number }
+// ---- whop clip formula (Studio "Analyze video → reusable formula") ----
+export interface WhopFormulaRequirements {
+  video_length: string;
+  platforms: string[];
+  captions_required: string;
+  cta_required: string;
+  logo_required: string;
+  hashtags: string[];
+  tags: string[];
+  valid_submission: string[];
+  rejection_reasons: string[];
+  join_type: string;
+  rpm: string;
+  budget_remaining: string;
+  special_instructions: string;
+  how_requirements_control: string;
+}
+export interface WhopFormulaStructureRow {
+  start?: string; end?: string; label: string; purpose: string;
+  visual?: string; narration?: string; why?: string; supports?: string;
+}
+export interface WhopFormulaSentence {
+  text: string; purpose: string; serves?: string;
+  action?: "keep" | "shorten" | "move" | "remove";
+}
+export interface WhopFormulaMoment {
+  rank?: number; start?: string; end?: string; why_viral: string; hook_line: string;
+  caption_title?: string; best_platform?: string; needs_context?: boolean; strength?: number;
+}
+export interface WhopFormulaEditing {
+  caption_style?: string; font?: string; size?: string; placement?: string;
+  animation?: string; zooms?: string; cuts?: string; sfx?: string; music?: string;
+  motion_graphics?: string; logo_placement?: string; retention_notes?: string;
+}
+export interface WhopFormulaResult {
+  requirements: WhopFormulaRequirements;
+  checklist: { label: string; required: boolean }[];
+  structure: WhopFormulaStructureRow[];
+  hook: { rating: number; why_it_stops_scroll: string; triggers: string[]; best_hook_lines: string[] };
+  script: { framework: string; sentences: WhopFormulaSentence[] };
+  retention: { avg_seconds_between_changes?: string; techniques: string[] };
+  campaign_integration: { blend_type: string; feels_natural?: boolean; notes: string };
+  background_footage: { footage_type: string; must_match?: boolean; notes: string };
+  viral_moments: WhopFormulaMoment[];
+  visual_timeline: { change_frequency?: string; changes: { time?: string; visual: string }[] };
+  editing: WhopFormulaEditing;
+  recreation_plan: string[];
+  automation_workflow: string[];
+  template: string;
+}
+export interface WhopFormula {
+  id: number; campaign_id: number; video_id: number | null;
+  title: string | null; source_url: string | null;
+  status: "processing" | "completed" | "failed";
+  stage: string | null; progress: number; error: string | null;
+  hook_score: number | null; result: WhopFormulaResult | null;
+  created_at: string; updated_at: string;
+}
+// ---- whop auto video finder (Studio "Auto-find") ----
+export interface WhopScoreFactor {
+  key: string;
+  label: string;
+  weight: number;
+  value: number; // 0-100
+  measured: boolean; // real data this stage vs. prior/estimate
+}
+export interface WhopScoreReason {
+  kind: "ok" | "warn";
+  text: string;
+}
+export interface WhopVideoMatch {
+  url: string;
+  title: string;
+  duration: number | null;
+  uploader: string | null;
+  thumbnail: string | null;
+  view_count: number | null;
+  score: number;
+  reason: string;
+  // staged Auto Finder Score detail (present once scored)
+  stage?: number | null;
+  confidence?: number | null;
+  delta?: number | null;
+  factors?: WhopScoreFactor[];
+  reasons?: WhopScoreReason[];
+  projected_low?: number | null;
+  projected_high?: number | null;
+  best_moment_start?: number | null; // densest transcript moment (seconds)
+  best_moment_end?: number | null;
+}
+export interface WhopFindResult {
+  understanding: string;
+  queries: string[];
+  matches: WhopVideoMatch[];
+}
+export interface WhopScoreResult {
+  matches: WhopVideoMatch[];
+}
+export interface WhopStrategy {
+  opportunity_score: number;
+  recommended_index: number | null;
+  recommended_url: string | null;
+  recommended_title: string | null;
+  headline: string;
+  reasoning: string[];
+  clip_plan: string;
+  worth_joining: boolean;
+  source: "ai" | "heuristic";
+}
+// ---- whop publishing ----
+export interface WhopReadyClip {
+  id: number;
+  title: string | null;
+  duration: number;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  publish_status: string | null; // queued | publishing | published | failed | …
+  external_url: string | null;
+}
+export interface WhopPublishResult {
+  clip_id: number;
+  job_id: number;
+  status: string;
+}
+export interface WhopImportResult {
+  total: number; created: number; updated: number; ended: number; reconciled: boolean;
+}
+export interface WhopUrlPreview {
+  url: string; title: string | null; description: string | null;
+  image: string | null; site_name: string | null;
+}
+export interface WhopSubmission {
+  id: number; campaign_id: number; creator_handle: string | null; platform: WhopPlatform;
+  post_url: string; title: string | null; status: WhopSubmissionStatus;
+  views: number; likes: number; paid_amount: number;
+  rejection_reason: string | null; clawback_requested: boolean; clawback_reason: string | null;
+  notes: string | null; created_at: string; updated_at: string;
+  earnings_estimate: number; campaign_name: string | null; rate_per_1k: number;
+}
+export interface WhopDashboard {
+  campaigns_active: number; campaigns_total: number;
+  submissions_pending: number; submissions_total: number;
+  views_total: number; paid_out: number; pending_payout: number; approval_rate: number;
+  recent_submissions: WhopSubmission[]; campaigns: WhopCampaign[];
+}
+// A connected YouTube channel, as surfaced in the Review section.
+export interface WhopChannel {
+  connector_id: number; name: string;
+  channel_id: string | null; channel_title: string | null; channel_thumbnail: string | null;
+  status: string; has_credentials: boolean;
+  campaigns_connected: number; submissions_pending: number; submissions_total: number;
+}
+export interface WhopChannelCampaign { campaign: WhopCampaign; source: "manual" | "auto" }
+export interface WhopAnalyticsPoint { date: string; views: number; earnings: number }
+export interface WhopCampaignStat { campaign_id: number; name: string; submissions: number; views: number; earnings: number }
+export interface WhopAnalytics {
+  days: number; views_total: number; earnings_total: number; effective_cpm: number;
+  submissions_total: number; approval_rate: number;
+  series: WhopAnalyticsPoint[]; campaigns: WhopCampaignStat[];
+}

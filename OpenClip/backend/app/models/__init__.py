@@ -34,6 +34,13 @@ from app.models.transcript import Transcript
 from app.models.trend import TrendItem, TrendSource
 from app.models.user import User
 from app.models.video import Video
+from app.models.whop import (
+    WhopCampaign,
+    WhopChannelCampaign,
+    WhopFormula,
+    WhopSubmission,
+    WhopViewSnapshot,
+)
 
 __all__ = [
     "AIAnalysis",
@@ -64,4 +71,9 @@ __all__ = [
     "User",
     "UserSettings",
     "Video",
+    "WhopCampaign",
+    "WhopFormula",
+    "WhopChannelCampaign",
+    "WhopSubmission",
+    "WhopViewSnapshot",
 ]

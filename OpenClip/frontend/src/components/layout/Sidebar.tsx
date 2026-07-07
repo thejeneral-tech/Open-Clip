@@ -4,20 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   BookOpen,
   Bot,
   Clapperboard,
+  ClipboardCheck,
   Compass,
   Cpu,
   FolderKanban,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Mic,
   Minus,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Scissors,
   Send,
   Settings,
   Sparkles,
@@ -62,6 +66,18 @@ const SECTIONS: NavSection[] = [
       { href: "/storyvault/voicelab", label: "Voice Lab", icon: Mic },
       { href: "/storyvault/presets", label: "Presets", icon: Sparkles },
       { href: "/storyvault/publishing", label: "Publishing", icon: Send },
+    ],
+  },
+  {
+    id: "whop",
+    label: "Whop Campaigns",
+    items: [
+      { href: "/whop/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/whop/campaigns", label: "Campaigns", icon: Megaphone },
+      { href: "/whop/studio", label: "Studio", icon: Scissors },
+      { href: "/whop/publishing", label: "Publishing", icon: Send },
+      { href: "/whop/review", label: "Review", icon: ClipboardCheck },
+      { href: "/whop/analytics", label: "Analytics", icon: BarChart3 },
     ],
   },
 ];

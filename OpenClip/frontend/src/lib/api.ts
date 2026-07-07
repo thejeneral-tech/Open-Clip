@@ -47,6 +47,25 @@ import type {
   User,
   UserSettings,
   Video,
+  WhopAnalytics,
+  WhopAssetLink,
+  WhopCampaign,
+  WhopCampaignStatus,
+  WhopCampaignType,
+  WhopChannel,
+  WhopChannelCampaign,
+  WhopDashboard,
+  WhopFindResult,
+  WhopScoreResult,
+  WhopStrategy,
+  WhopFormula,
+  WhopImportResult,
+  WhopPlatform,
+  WhopPublishResult,
+  WhopReadyClip,
+  WhopStudio,
+  WhopSubmission,
+  WhopUrlPreview,
   YouTubeStatus,
 } from "./types";
 
@@ -234,6 +253,11 @@ export const api = {
     const token = tokenStore.access ?? "";
     return `${API_BASE}/exports/${id}/download?token=${encodeURIComponent(token)}`;
   },
+  // Same-origin proxy for a connected channel's avatar. Hotlinking Google's
+  // image CDN fails when a browser/AV blocks third-party image hosts, so load
+  // the profile picture through our own origin instead.
+  channelAvatarUrl: (connectorId: number) =>
+    `${API_BASE}/publishing/channel-avatar/${connectorId}`,
 
   // ---- settings / models ----
   getSettings: () => request<UserSettings>("/settings"),
@@ -337,7 +361,7 @@ export const api = {
     request<Connector>(`/publishing/connectors/${id}/assign`, { method: "POST", body: JSON.stringify({ bot_id: botId }) }),
   deleteConnector: (id: number) => request<void>(`/publishing/connectors/${id}`, { method: "DELETE" }),
   youtubeStatus: () => request<YouTubeStatus>("/publishing/youtube/status"),
-  youtubeAuthUrl: (data: { bot_id?: number | null; name?: string }) =>
+  youtubeAuthUrl: (data: { bot_id?: number | null; name?: string; return_to?: string }) =>
     request<{ auth_url: string }>("/publishing/youtube/auth-url", { method: "POST", body: JSON.stringify(data) }),
   listJobs: (botId?: number, status?: string) => {
     const q = new URLSearchParams();
@@ -522,4 +546,201 @@ export const api = {
   svDeleteExport: (id: number) => request<void>(`/storyvault/exports/${id}`, { method: "DELETE" }),
   svExportDownloadUrl: (id: number) =>
     `${API_BASE}/storyvault/exports/${id}/download?token=${encodeURIComponent(tokenStore.access ?? "")}`,
+
+  // ---- whop campaigns ----
+  whopDashboard: () => request<WhopDashboard>("/whop/dashboard"),
+  whopListCampaigns: (params: { status?: string; q?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.q) q.set("q", params.q);
+    const qs = q.toString();
+    return request<WhopCampaign[]>(`/whop/campaigns${qs ? `?${qs}` : ""}`);
+  },
+  whopGetCampaign: (id: number) => request<WhopCampaign>(`/whop/campaigns/${id}`),
+  whopCreateCampaign: (data: {
+    name: string;
+    description?: string | null;
+    campaign_type?: WhopCampaignType;
+    category?: string;
+    rate_per_1k?: number;
+    budget?: number | null;
+    min_payout?: number | null;
+    max_payout?: number | null;
+    platforms?: WhopPlatform[];
+    requirements?: string[];
+    asset_links?: WhopAssetLink[];
+    whop_url?: string | null;
+    ends_at?: string | null;
+  }) => request<WhopCampaign>("/whop/campaigns", { method: "POST", body: JSON.stringify(data) }),
+  whopUpdateCampaign: (
+    id: number,
+    data: {
+      name?: string;
+      description?: string | null;
+      campaign_type?: WhopCampaignType;
+      category?: string;
+      status?: WhopCampaignStatus;
+      rate_per_1k?: number;
+      budget?: number | null;
+      min_payout?: number | null;
+      max_payout?: number | null;
+      platforms?: WhopPlatform[];
+      requirements?: string[];
+      asset_links?: WhopAssetLink[];
+      whop_url?: string | null;
+      ends_at?: string | null;
+    },
+  ) => request<WhopCampaign>(`/whop/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  whopDeleteCampaign: (id: number) => request<void>(`/whop/campaigns/${id}`, { method: "DELETE" }),
+  whopUploadCampaignThumbnail: (id: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<WhopCampaign>(`/whop/campaigns/${id}/thumbnail`, { method: "POST", body: form });
+  },
+  whopEnsureStudio: (campaignId: number) =>
+    request<WhopStudio>(`/whop/campaigns/${campaignId}/studio`, { method: "POST" }),
+  // ---- whop clip formulas (Studio analyzer) ----
+  whopListFormulas: (campaignId: number) =>
+    request<WhopFormula[]>(`/whop/campaigns/${campaignId}/formulas`),
+  whopCreateFormula: (campaignId: number, videoId: number) =>
+    request<WhopFormula>(`/whop/campaigns/${campaignId}/formulas`, {
+      method: "POST",
+      body: JSON.stringify({ video_id: videoId }),
+    }),
+  whopGetFormula: (id: number) => request<WhopFormula>(`/whop/formulas/${id}`),
+  whopDeleteFormula: (id: number) => request<void>(`/whop/formulas/${id}`, { method: "DELETE" }),
+  // ---- whop auto video finder ----
+  whopFindVideos: (
+    campaignId: number,
+    opts: { limit?: number; channel?: string; strictChannel?: boolean; filters?: string[] } = {},
+  ) =>
+    request<WhopFindResult>(`/whop/campaigns/${campaignId}/find-videos`, {
+      method: "POST",
+      body: JSON.stringify({
+        limit: opts.limit ?? 12,
+        ...(opts.channel ? { channel: opts.channel } : {}),
+        ...(opts.channel && opts.strictChannel ? { strict_channel: true } : {}),
+        ...(opts.filters && opts.filters.length ? { filters: opts.filters } : {}),
+      }),
+    }),
+  // Deepen the Auto Finder Score for specific candidates (Stage 3 enrichment).
+  whopScoreVideos: (
+    campaignId: number,
+    urls: string[],
+    opts: { stage?: number; prevScores?: Record<string, number> } = {},
+  ) =>
+    request<WhopScoreResult>(`/whop/campaigns/${campaignId}/score-videos`, {
+      method: "POST",
+      body: JSON.stringify({
+        urls,
+        stage: opts.stage ?? 3,
+        ...(opts.prevScores ? { prev_scores: opts.prevScores } : {}),
+      }),
+    }),
+  // Campaign Copilot: synthesize a strategy from the ranked candidates.
+  whopStrategy: (
+    campaignId: number,
+    videos: Array<{
+      url: string;
+      title: string;
+      score: number;
+      duration?: number | null;
+      projected_low?: number | null;
+      projected_high?: number | null;
+      reasons?: string[];
+    }>,
+  ) =>
+    request<WhopStrategy>(`/whop/campaigns/${campaignId}/strategy`, {
+      method: "POST",
+      body: JSON.stringify({ videos }),
+    }),
+  // ---- whop publishing ----
+  whopReadyClips: (campaignId: number) =>
+    request<WhopReadyClip[]>(`/whop/campaigns/${campaignId}/ready-clips`),
+  whopPublishClip: (campaignId: number, clipId: number, connectorId: number) =>
+    request<WhopPublishResult>(`/whop/campaigns/${campaignId}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ clip_id: clipId, connector_id: connectorId }),
+    }),
+  whopUrlPreview: (url: string) =>
+    request<WhopUrlPreview>(`/whop/url-preview?url=${encodeURIComponent(url)}`),
+  whopImportCampaigns: (body: {
+    campaigns: Array<Record<string, unknown>>;
+    source?: string;
+    reconcile?: boolean;
+  }) =>
+    request<WhopImportResult>("/whop/campaigns/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  whopRescan: () =>
+    request<WhopImportResult>("/whop/campaigns/rescan", { method: "POST" }),
+  whopCreateSubmission: (
+    campaignId: number,
+    data: {
+      platform?: WhopPlatform;
+      post_url: string;
+      title?: string | null;
+      creator_handle?: string | null;
+      views?: number;
+      likes?: number;
+      notes?: string | null;
+    },
+  ) =>
+    request<WhopSubmission>(`/whop/campaigns/${campaignId}/submissions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  whopListSubmissions: (
+    params: { status?: string; campaign_id?: number; connector_id?: number } = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.campaign_id != null) q.set("campaign_id", String(params.campaign_id));
+    if (params.connector_id != null) q.set("connector_id", String(params.connector_id));
+    const qs = q.toString();
+    return request<WhopSubmission[]>(`/whop/submissions${qs ? `?${qs}` : ""}`);
+  },
+  whopUpdateSubmission: (
+    id: number,
+    data: {
+      platform?: WhopPlatform;
+      post_url?: string;
+      title?: string | null;
+      creator_handle?: string | null;
+      views?: number;
+      likes?: number;
+      notes?: string | null;
+    },
+  ) => request<WhopSubmission>(`/whop/submissions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  whopApproveSubmission: (id: number) =>
+    request<WhopSubmission>(`/whop/submissions/${id}/approve`, { method: "POST" }),
+  whopRejectSubmission: (id: number, reason?: string) =>
+    request<WhopSubmission>(`/whop/submissions/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  whopPaySubmission: (id: number) =>
+    request<WhopSubmission>(`/whop/submissions/${id}/pay`, { method: "POST" }),
+  whopClawbackSubmission: (id: number, reason?: string) =>
+    request<WhopSubmission>(`/whop/submissions/${id}/clawback`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  whopDeleteSubmission: (id: number) => request<void>(`/whop/submissions/${id}`, { method: "DELETE" }),
+  whopAnalytics: (params: { days?: number; campaign_id?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.days != null) q.set("days", String(params.days));
+    if (params.campaign_id != null) q.set("campaign_id", String(params.campaign_id));
+    const qs = q.toString();
+    return request<WhopAnalytics>(`/whop/analytics${qs ? `?${qs}` : ""}`);
+  },
+  // ---- whop channels (review section) ----
+  whopChannels: () => request<WhopChannel[]>("/whop/channels"),
+  whopChannelCampaigns: (connectorId: number) =>
+    request<WhopChannelCampaign[]>(`/whop/channels/${connectorId}/campaigns`),
+  whopLinkCampaign: (connectorId: number, campaignId: number) =>
+    request<WhopChannelCampaign>(`/whop/channels/${connectorId}/campaigns`, {
+      method: "POST",
+      body: JSON.stringify({ campaign_id: campaignId }),
+    }),
+  whopUnlinkCampaign: (connectorId: number, campaignId: number) =>
+    request<void>(`/whop/channels/${connectorId}/campaigns/${campaignId}`, { method: "DELETE" }),
 };

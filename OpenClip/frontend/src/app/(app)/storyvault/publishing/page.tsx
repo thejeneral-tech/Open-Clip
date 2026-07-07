@@ -271,7 +271,7 @@ function SvChannelCard({ c }: { c: Connector }) {
       <CardContent className="flex flex-wrap items-center gap-4 p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {thumb ? (
-          <img src={thumb} alt="" className="h-10 w-10 shrink-0 rounded-full" />
+          <img src={api.channelAvatarUrl(c.id)} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
         ) : (
           <Youtube className="h-10 w-10 shrink-0 text-red-600" />
         )}

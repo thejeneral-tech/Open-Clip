@@ -84,6 +84,9 @@ class YouTubeAuthUrlIn(BaseModel):
     # (defaults to the channel title once we learn it).
     bot_id: int | None = None
     name: str | None = Field(default=None, max_length=255)
+    # Where to send the browser back to after connecting (a relative app path,
+    # e.g. "/whop/review"). Defaults to the Publishing page.
+    return_to: str | None = Field(default=None, max_length=255)
 
 
 class YouTubeAuthUrlOut(BaseModel):

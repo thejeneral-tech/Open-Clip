@@ -175,6 +175,39 @@ class ConnectorStatus(str, Enum):
     ERROR = "error"
 
 
+# ------------------------------------------------------------ whop campaigns
+class WhopCampaignStatus(str, Enum):
+    """Lifecycle of a clipping/UGC reward campaign."""
+
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ENDED = "ended"
+
+
+class WhopCampaignType(str, Enum):
+    """What kind of content the campaign pays for."""
+
+    CLIPPING = "clipping"
+    UGC = "ugc"
+    FACELESS = "faceless"
+
+
+class WhopSubmissionStatus(str, Enum):
+    """Review lifecycle of a creator submission."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    PAID = "paid"
+
+
+# Whop campaign option vocabularies (mirrored in the frontend forms).
+WHOP_CATEGORIES = [
+    "personal_brand", "products", "education", "entertainment", "music", "gaming", "other",
+]
+WHOP_PLATFORMS = ["tiktok", "instagram", "youtube", "x"]
+
+
 # Aspect ratio string -> integer (width, height) ratio. Drives output sizing in
 # the export/reframe pipeline (see ``app.services.export.output_dimensions``).
 ASPECT_DIMENSIONS: dict[str, tuple[int, int]] = {

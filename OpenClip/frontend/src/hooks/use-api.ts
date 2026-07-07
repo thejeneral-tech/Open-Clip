@@ -731,3 +731,345 @@ export function useSvDeleteExport() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sv-exports"] }),
   });
 }
+
+// ------------------------------------------------------------ whop campaigns
+export function useWhopDashboard(poll = false) {
+  return useQuery({
+    queryKey: ["whop-dashboard"],
+    queryFn: api.whopDashboard,
+    refetchInterval: poll ? 6000 : false,
+  });
+}
+
+export function useWhopCampaigns(params?: { status?: string; q?: string }, poll = false) {
+  return useQuery({
+    queryKey: ["whop-campaigns", params ?? {}],
+    queryFn: () => api.whopListCampaigns(params),
+    refetchInterval: poll ? 5000 : false,
+  });
+}
+
+export function useWhopCampaign(id: number, poll = false) {
+  return useQuery({
+    queryKey: ["whop-campaign", id],
+    queryFn: () => api.whopGetCampaign(id),
+    enabled: !!id,
+    refetchInterval: poll ? 5000 : false,
+  });
+}
+
+export function useWhopCreateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.whopCreateCampaign>[0]) => api.whopCreateCampaign(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaign"] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+    },
+  });
+}
+
+export function useWhopUpdateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; data: Parameters<typeof api.whopUpdateCampaign>[1] }) =>
+      api.whopUpdateCampaign(vars.id, vars.data),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaign", vars.id] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+    },
+  });
+}
+
+export function useWhopDeleteCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.whopDeleteCampaign(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaign"] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["whop-analytics"] });
+    },
+  });
+}
+
+export function useWhopUploadThumbnail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: number; file: File }) =>
+      api.whopUploadCampaignThumbnail(vars.id, vars.file),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaign", vars.id] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+    },
+  });
+}
+
+export function useWhopEnsureStudio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (campaignId: number) => api.whopEnsureStudio(campaignId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-campaign"] }),
+  });
+}
+
+// ---- whop clip formulas (Studio "Analyze video → reusable formula") ----
+export function useWhopFormulas(campaignId: number, poll = false) {
+  return useQuery({
+    queryKey: ["whop-formulas", campaignId],
+    queryFn: () => api.whopListFormulas(campaignId),
+    enabled: !!campaignId,
+    // Poll when asked, and also self-continue while any formula is still
+    // processing — so the unified feed updates without a local flag racing it.
+    refetchInterval: (query) =>
+      poll || query.state.data?.some((f) => f.status === "processing") ? 3000 : false,
+  });
+}
+
+export function useWhopCreateFormula() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { campaignId: number; videoId: number }) =>
+      api.whopCreateFormula(vars.campaignId, vars.videoId),
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: ["whop-formulas", vars.campaignId] }),
+  });
+}
+
+export function useWhopDeleteFormula() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.whopDeleteFormula(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-formulas"] }),
+  });
+}
+
+// Auto-find source videos that correlate to a campaign — a mutation because it
+// runs on demand (searches YouTube), not on mount.
+export function useWhopFindVideos() {
+  return useMutation({
+    mutationFn: (vars: {
+      campaignId: number;
+      limit?: number;
+      channel?: string;
+      strictChannel?: boolean;
+      filters?: string[];
+    }) =>
+      api.whopFindVideos(vars.campaignId, {
+        limit: vars.limit,
+        channel: vars.channel,
+        strictChannel: vars.strictChannel,
+        filters: vars.filters,
+      }),
+  });
+}
+
+// Deepen the Auto Finder Score for specific candidates (Stage 3 enrichment) —
+// a mutation because it runs on demand and can take ~30-90s for a full batch.
+export function useWhopScoreVideos() {
+  return useMutation({
+    mutationFn: (vars: {
+      campaignId: number;
+      urls: string[];
+      stage?: number;
+      prevScores?: Record<string, number>;
+    }) =>
+      api.whopScoreVideos(vars.campaignId, vars.urls, {
+        stage: vars.stage,
+        prevScores: vars.prevScores,
+      }),
+  });
+}
+
+// Campaign Copilot: one LLM synthesis over the ranked candidates → a strategy.
+export function useWhopStrategy() {
+  return useMutation({
+    mutationFn: (vars: {
+      campaignId: number;
+      videos: Array<{
+        url: string;
+        title: string;
+        score: number;
+        duration?: number | null;
+        projected_low?: number | null;
+        projected_high?: number | null;
+        reasons?: string[];
+      }>;
+    }) => api.whopStrategy(vars.campaignId, vars.videos),
+  });
+}
+
+// ---- whop publishing ----
+export function useWhopReadyClips(campaignId: number | null, poll = false) {
+  return useQuery({
+    queryKey: ["whop-ready-clips", campaignId],
+    queryFn: () => api.whopReadyClips(campaignId as number),
+    enabled: !!campaignId,
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+export function useWhopPublishClip() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { campaignId: number; clipId: number; connectorId: number }) =>
+      api.whopPublishClip(vars.campaignId, vars.clipId, vars.connectorId),
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: ["whop-ready-clips", vars.campaignId] }),
+  });
+}
+
+// On-demand scrape of a pasted whop.com link (title/description/cover) — a
+// mutation because the form fires it when the URL changes, not on mount.
+export function useWhopUrlPreview() {
+  return useMutation({
+    mutationFn: (url: string) => api.whopUrlPreview(url),
+  });
+}
+
+// Bulk upsert/rescan: re-import a scraped marketplace file (upsert + reconcile).
+export function useWhopImportCampaigns() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.whopImportCampaigns>[0]) =>
+      api.whopImportCampaigns(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+    },
+  });
+}
+
+// One-click rescan: the backend scrapes Whop's marketplace + upserts/reconciles.
+export function useWhopRescan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.whopRescan(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+    },
+  });
+}
+
+export function useWhopSubmissions(
+  params?: { status?: string; campaign_id?: number; connector_id?: number },
+  poll = false,
+) {
+  return useQuery({
+    queryKey: ["whop-submissions", params ?? {}],
+    queryFn: () => api.whopListSubmissions(params),
+    refetchInterval: poll ? 4000 : false,
+  });
+}
+
+// Every submission mutation moves money/views totals, so invalidate the whole
+// whop surface (lists, campaign detail, dashboard, analytics) — mirrors
+// useSvVideoMutation above.
+function useWhopSubmissionMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-submissions"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-campaign"] });
+      qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["whop-analytics"] });
+      qc.invalidateQueries({ queryKey: ["whop-channels"] });
+      qc.invalidateQueries({ queryKey: ["whop-channel-campaigns"] });
+    },
+  });
+}
+
+export function useWhopCreateSubmission() {
+  return useWhopSubmissionMutation(
+    (vars: { campaignId: number; data: Parameters<typeof api.whopCreateSubmission>[1] }) =>
+      api.whopCreateSubmission(vars.campaignId, vars.data),
+  );
+}
+
+export function useWhopUpdateSubmission() {
+  return useWhopSubmissionMutation(
+    (vars: { id: number; data: Parameters<typeof api.whopUpdateSubmission>[1] }) =>
+      api.whopUpdateSubmission(vars.id, vars.data),
+  );
+}
+
+export function useWhopApproveSubmission() {
+  return useWhopSubmissionMutation((id: number) => api.whopApproveSubmission(id));
+}
+
+export function useWhopRejectSubmission() {
+  return useWhopSubmissionMutation((vars: { id: number; reason?: string }) =>
+    api.whopRejectSubmission(vars.id, vars.reason),
+  );
+}
+
+export function useWhopPaySubmission() {
+  return useWhopSubmissionMutation((id: number) => api.whopPaySubmission(id));
+}
+
+export function useWhopClawbackSubmission() {
+  return useWhopSubmissionMutation((vars: { id: number; reason?: string }) =>
+    api.whopClawbackSubmission(vars.id, vars.reason),
+  );
+}
+
+export function useWhopDeleteSubmission() {
+  return useWhopSubmissionMutation((id: number) => api.whopDeleteSubmission(id));
+}
+
+export function useWhopAnalytics(params?: { days?: number; campaign_id?: number }) {
+  return useQuery({
+    queryKey: ["whop-analytics", params ?? {}],
+    queryFn: () => api.whopAnalytics(params),
+    // Analytics moves slowly; keep the chart fresh without hammering the API.
+    refetchInterval: 15_000,
+  });
+}
+
+// ---- whop channels (review section) ----
+export function useWhopChannels(poll = false) {
+  return useQuery({
+    queryKey: ["whop-channels"],
+    queryFn: api.whopChannels,
+    refetchInterval: poll ? 6000 : false,
+  });
+}
+
+export function useWhopChannelCampaigns(connectorId: number | null) {
+  return useQuery({
+    queryKey: ["whop-channel-campaigns", connectorId],
+    queryFn: () => api.whopChannelCampaigns(connectorId as number),
+    enabled: connectorId != null,
+  });
+}
+
+function useWhopChannelMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["whop-channels"] });
+      qc.invalidateQueries({ queryKey: ["whop-channel-campaigns"] });
+      qc.invalidateQueries({ queryKey: ["whop-submissions"] });
+    },
+  });
+}
+
+export function useWhopLinkCampaign() {
+  return useWhopChannelMutation((vars: { connectorId: number; campaignId: number }) =>
+    api.whopLinkCampaign(vars.connectorId, vars.campaignId),
+  );
+}
+
+export function useWhopUnlinkCampaign() {
+  return useWhopChannelMutation((vars: { connectorId: number; campaignId: number }) =>
+    api.whopUnlinkCampaign(vars.connectorId, vars.campaignId),
+  );
+}

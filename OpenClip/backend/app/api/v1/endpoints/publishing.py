@@ -1,11 +1,13 @@
 """Publishing API: connectors + the publish queue (approve / cancel / retry)."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,10 +32,23 @@ from app.schemas.publishing import (
     YouTubeStatusOut,
 )
 from app.services.publishing import youtube_oauth
+from app.services.storage import storage, youtube_avatar_key
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+# Hosts we'll proxy an avatar from. The URL always comes from our own OAuth
+# channel lookup, but validating the host keeps this from becoming an open proxy.
+_AVATAR_HOSTS = ("ggpht.com", "googleusercontent.com")
+# Display size we fetch/cache the avatar at (it renders in a ~44px circle). The
+# Google CDN resizes on the "=sNN" token, so ask for a crisp-but-small render.
+_AVATAR_SIZE = 176
+
+
+def _sized_avatar_url(url: str) -> str:
+    """Rewrite a Google avatar URL's size token so we cache a crisp render."""
+    return re.sub(r"=s\d+", f"=s{_AVATAR_SIZE}", url, count=1)
 
 
 def _now() -> datetime:
@@ -305,15 +320,31 @@ async def youtube_auth_url(
         if not bot or bot.owner_id != current_user.id:
             raise HTTPException(status_code=404, detail="Bot not found")
     state = youtube_oauth.sign_state(
-        user_id=current_user.id, bot_id=payload.bot_id, name=payload.name
+        user_id=current_user.id,
+        bot_id=payload.bot_id,
+        name=payload.name,
+        return_to=payload.return_to,
     )
     return YouTubeAuthUrlOut(auth_url=youtube_oauth.build_auth_url(state))
 
 
-def _frontend_redirect(**params: str) -> RedirectResponse:
+def _safe_return_path(return_to: str | None) -> str:
+    """Whitelist the post-connect landing page to a same-origin relative path.
+
+    Only a path that starts with a single ``/`` (not ``//`` — that's a
+    protocol-relative URL to another host) is honored; anything else falls back
+    to the Publishing page.
+    """
+    if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+        return return_to
+    return "/publishing"
+
+
+def _frontend_redirect(path: str = "/publishing", **params: str) -> RedirectResponse:
     base = settings.FRONTEND_BASE_URL.rstrip("/")
     query = "&".join(f"{k}={quote(v)}" for k, v in params.items() if v)
-    return RedirectResponse(url=f"{base}/publishing?{query}", status_code=302)
+    sep = "&" if "?" in path else "?"
+    return RedirectResponse(url=f"{base}{path}{sep}{query}", status_code=302)
 
 
 @router.get("/youtube/callback")
@@ -330,16 +361,18 @@ async def youtube_callback(
         return _frontend_redirect(error=f"YouTube authorization was cancelled ({error}).")
     if not code or not state:
         return _frontend_redirect(error="YouTube authorization is missing code/state.")
+    return_path = "/publishing"
     try:
         st = youtube_oauth.verify_state(state)
+        return_path = _safe_return_path(st.get("return_to"))
         tokens = await youtube_oauth.exchange_code(code)
         channel = await youtube_oauth.fetch_channel(tokens.get("access_token", ""))
     except youtube_oauth.OAuthError as exc:
         logger.warning("YouTube callback failed: %s", exc)
-        return _frontend_redirect(error=str(exc))
+        return _frontend_redirect(return_path, error=str(exc))
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("YouTube callback crashed")
-        return _frontend_redirect(error=f"YouTube connection failed: {exc}")
+        return _frontend_redirect(return_path, error=f"YouTube connection failed: {exc}")
 
     owner_id = int(st["uid"])
     bot_id = st.get("bot_id")
@@ -393,4 +426,45 @@ async def youtube_callback(
     await db.flush()
     await _sync_bot_platforms(db, connector.bot_id)
     await db.commit()
-    return _frontend_redirect(connected="youtube", channel=channel_title)
+    return _frontend_redirect(return_path, connected="youtube", channel=channel_title)
+
+
+@router.get("/channel-avatar/{connector_id}")
+async def channel_avatar(
+    connector_id: int,
+    db: AsyncSession = Depends(get_session),
+) -> Response:
+    """Serve a connected channel's avatar from our OWN origin.
+
+    Hotlinking Google's image CDN (``yt3.ggpht.com``) silently fails for users
+    whose browser or antivirus blocks third-party image hosts (ad-blockers,
+    McAfee/other web-protection) — the profile picture doesn't render and the
+    page background shows through. Proxying the bytes same-origin (and caching
+    them) makes the avatar load reliably. Unauthenticated because ``<img>`` can't
+    carry a bearer token, and channel avatars are public images anyway.
+    """
+    key = youtube_avatar_key(connector_id)
+    cache_headers = {"Cache-Control": "public, max-age=86400"}
+    if storage.exists(key):
+        with open(storage.abspath(key, ensure_parent=False), "rb") as fh:
+            return Response(fh.read(), media_type="image/jpeg", headers=cache_headers)
+
+    connector = await db.get(PublishingConnector, connector_id)
+    remote = (connector.config or {}).get("channel_thumbnail") if connector else None
+    if not connector or connector.platform != "youtube" or not remote:
+        raise HTTPException(status_code=404, detail="No avatar for this channel")
+    host = (urlparse(remote).hostname or "").lower()
+    if not any(host == h or host.endswith("." + h) for h in _AVATAR_HOSTS):
+        raise HTTPException(status_code=404, detail="Unsupported avatar host")
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(_sized_avatar_url(remote))
+        resp.raise_for_status()
+        data = resp.content
+    except Exception as exc:  # network hiccup / CDN error — don't 500 the page
+        logger.warning("Avatar fetch failed for connector %s: %s", connector_id, exc)
+        raise HTTPException(status_code=502, detail="Avatar fetch failed") from exc
+
+    storage.save_bytes(key, data)
+    return Response(data, media_type="image/jpeg", headers=cache_headers)

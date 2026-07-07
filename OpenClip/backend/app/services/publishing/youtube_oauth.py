@@ -58,7 +58,9 @@ def _require_client() -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------- state
-def sign_state(*, user_id: int, bot_id: int | None, name: str | None) -> str:
+def sign_state(
+    *, user_id: int, bot_id: int | None, name: str | None, return_to: str | None = None
+) -> str:
     """Sign the CSRF/identity ``state`` returned to us by Google."""
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
@@ -66,6 +68,7 @@ def sign_state(*, user_id: int, bot_id: int | None, name: str | None) -> str:
         "uid": int(user_id),
         "bot_id": int(bot_id) if bot_id else None,
         "name": name or None,
+        "return_to": return_to or None,
         "iat": now,
         "exp": now + _STATE_TTL,
     }
@@ -136,7 +139,12 @@ async def fetch_channel(access_token: str) -> dict[str, str | None]:
         return {"id": None, "title": None, "thumbnail": None}
     snip = items[0].get("snippet", {})
     thumbs = snip.get("thumbnails", {})
-    thumb = (thumbs.get("default") or thumbs.get("medium") or {}).get("url")
+    # Prefer the highest-resolution avatar so the stored picture matches what
+    # YouTube shows. The Data API returns default=88px, medium=240px, high=800px
+    # for channels; picking "default" left us with a blurry 88px thumbnail.
+    thumb = (
+        thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}
+    ).get("url")
     return {"id": items[0].get("id"), "title": snip.get("title"), "thumbnail": thumb}
 
 

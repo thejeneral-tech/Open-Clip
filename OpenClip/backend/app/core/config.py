@@ -37,7 +37,10 @@ def _resolve(path: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Absolute path to the repo-root .env so it loads no matter which directory
+        # the process starts from (a manual `uvicorn` from backend/ used to miss it).
+        # Real env vars still take precedence over the file.
+        env_file=str(_REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

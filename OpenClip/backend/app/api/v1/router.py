@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     storyvault,
     users,
     videos,
+    whop,
     ws,
 )
 
@@ -36,4 +37,6 @@ api_router.include_router(publishing.router, prefix="/publishing", tags=["publis
 api_router.include_router(automation.router, prefix="/automation", tags=["automation"])
 # --- Story Vault (story-to-vertical-video factory) ---
 api_router.include_router(storyvault.router, prefix="/storyvault", tags=["storyvault"])
+# --- Whop Campaigns (clipping & UGC reward campaigns) ---
+api_router.include_router(whop.router, prefix="/whop", tags=["whop"])
 api_router.include_router(ws.router, tags=["ws"])
