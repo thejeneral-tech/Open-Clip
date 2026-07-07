@@ -191,7 +191,10 @@ class OllamaClient:
     def list_models(self) -> list[dict[str, Any]]:
         url = f"{self.base_url}/api/tags"
         try:
-            with httpx.Client(timeout=30) as client:
+            # Cap at the client's own timeout so a short-timeout caller (e.g. the
+            # interactive finder) can't stall for 30s on a hung Ollama; listing
+            # tags is a cheap local read, so a small budget is plenty.
+            with httpx.Client(timeout=min(self.timeout, 30)) as client:
                 resp = client.get(url)
                 resp.raise_for_status()
                 return resp.json().get("models", [])

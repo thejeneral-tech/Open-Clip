@@ -322,8 +322,16 @@ def _clean_query_list(value: Any, cap: int) -> list[str]:
     return out
 
 
-def _llm_understand(campaign: dict[str, Any], *, model: str | None, timeout: int = 25) -> dict[str, Any] | None:
-    """Best-effort LLM read of the campaign. Returns None on any failure."""
+def _llm_understand(campaign: dict[str, Any], *, model: str | None, timeout: int = 8) -> dict[str, Any] | None:
+    """Best-effort LLM read of the campaign. Returns None on any failure.
+
+    ``timeout`` is deliberately SHORT (this is an interactive request the user is
+    waiting on): the LLM only refines the search queries, and the heuristic is a
+    solid fallback, so we never let a cold/slow/queued Ollama stall the finder.
+    An over-long wait here overruns the dev proxy's socket timeout and surfaces
+    to the user as a spurious "Internal Server Error" — so the whole LLM step is
+    strictly bounded and degrades to the heuristic well within a few seconds.
+    """
     from app.services.ollama_client import OllamaClient
 
     name = (campaign.get("name") or "").strip()
@@ -346,7 +354,10 @@ def _llm_understand(campaign: dict[str, Any], *, model: str | None, timeout: int
     try:
         parsed, _meta = client.generate_json(
             prompt, model=resolved, system=_LLM_SYSTEM, schema=_LLM_SCHEMA,
-            options={"temperature": 0.3}, retries=0,
+            # Tiny prompt → a small context keeps prompt-eval cheap so a warm
+            # model answers well inside the short timeout above (the default 8k
+            # ctx needlessly slows this on a weak GPU).
+            options={"temperature": 0.3, "num_ctx": 2048}, retries=0,
         )
     except Exception as exc:
         logger.info("Finder LLM understanding unavailable (%s); using heuristic", exc)
