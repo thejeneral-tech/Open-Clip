@@ -505,25 +505,12 @@ def find_matches(
     filter_tokens = _dedupe([t for f in filter_terms for t in _tokens(f)])
 
     heuristic = understand_campaign(campaign)
-    llm = _llm_understand(campaign, model=model) if use_llm else None
-    if llm:
-        # LLM's targeted queries lead; heuristic queries back them up.
-        queries = _dedupe(llm["queries"] + heuristic["queries"])[:4]
-        keywords = _dedupe(llm["keywords"] + heuristic["keywords"])[:12]
-        understanding = llm["understanding"]
-        topic = llm["topic"]
-    else:
-        queries = heuristic["queries"]
-        keywords = heuristic["keywords"]
-        understanding = heuristic["understanding"]
-        topic = heuristic["topic"]
 
-    # --- user refinements ---
-    # Resolve the creator reference: a pinned plain NAME → their actual channel (so
-    # the finder pulls that creator's own uploads, not other people's videos ABOUT
-    # them); an @handle/URL is used as-is. When nothing is pinned, AUTO-detect the
-    # creator from the campaign itself so the user gets that creator's full catalog
-    # with zero input. Auto-detected channels never run in strict mode.
+    # --- resolve the creator FIRST ---
+    # A pinned plain NAME → their actual channel (so the finder pulls that creator's
+    # own uploads, not other people's videos ABOUT them); an @handle/URL is used
+    # as-is. When nothing is pinned, AUTO-detect the creator from the campaign itself
+    # so the user gets their full catalog with zero input. Auto-detected → never strict.
     if channel:
         resolved = youtube.resolve_channel(channel)
         auto_creator = False
@@ -535,6 +522,23 @@ def find_matches(
     channel_ref = resolved["ref"] if resolved else channel
     channel_name = resolved["name"] if resolved else _channel_display_name(channel)
     channel_id_hint = resolved.get("channel_id") if resolved else None
+
+    # The LLM's only job here is to NAME the creator so we can search for their
+    # source videos — redundant once we've already resolved their channel (we have
+    # the whole catalog). So skip that slow, often-timing-out call in the common
+    # case and only spend it when we're still unsure who the campaign is about.
+    llm = _llm_understand(campaign, model=model) if (use_llm and not resolved) else None
+    if llm:
+        # LLM's targeted queries lead; heuristic queries back them up.
+        queries = _dedupe(llm["queries"] + heuristic["queries"])[:4]
+        keywords = _dedupe(llm["keywords"] + heuristic["keywords"])[:12]
+        understanding = llm["understanding"]
+        topic = llm["topic"]
+    else:
+        queries = heuristic["queries"]
+        keywords = heuristic["keywords"]
+        understanding = heuristic["understanding"]
+        topic = heuristic["topic"]
 
     if channel_name:
         keywords = _dedupe(_tokens(channel_name) + keywords)[:16]
