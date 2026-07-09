@@ -40,6 +40,7 @@ from app.schemas.whop import (
     WhopChannelCampaignOut,
     WhopChannelLinkBody,
     WhopChannelOut,
+    WhopConnectionOut,
     WhopDashboardOut,
     WhopFindBody,
     WhopFindOut,
@@ -52,6 +53,8 @@ from app.schemas.whop import (
     WhopPublishOut,
     WhopReadyClip,
     WhopReasonBody,
+    WhopRequirementsIn,
+    WhopRequirementsOut,
     WhopScoreBody,
     WhopScoreOut,
     WhopStrategyBody,
@@ -60,9 +63,21 @@ from app.schemas.whop import (
     WhopSubmissionCreate,
     WhopSubmissionOut,
     WhopSubmissionUpdate,
+    WhopSyncIn,
+    WhopSyncPreviewIn,
+    WhopSyncPreviewOut,
+    WhopSyncStatusOut,
     WhopUrlPreviewOut,
 )
-from app.services import campaign_finder, campaign_math, finder_scoring, youtube
+from app.services import (
+    campaign_finder,
+    campaign_math,
+    finder_scoring,
+    whop_requirements,
+    whop_session,
+    whop_sync,
+    youtube,
+)
 from app.services.storage import storage, whop_thumbnail_key
 from app.services.whop_marketplace import fetch_marketplace_campaigns
 from app.services.whop_preview import fetch_url_preview
@@ -986,6 +1001,115 @@ async def url_preview(
         logger.info("Whop URL preview failed for %r: %s", url, exc)
         raise HTTPException(status_code=502, detail="Couldn't load that Whop page") from exc
     return WhopUrlPreviewOut(**data)
+
+
+# ----------------------------------------------------- requirements extraction
+@router.post("/extract-requirements", response_model=WhopRequirementsOut)
+async def extract_requirements(
+    body: WhopRequirementsIn,
+    current_user: User = Depends(get_current_user),
+) -> WhopRequirementsOut:
+    """Distil a campaign's posting requirements from its brief / Whop page + linked docs.
+
+    Whop renders a campaign's requirements client-side, so a plain fetch can't see them.
+    When a ``whop_url`` is given we load the page in headless Chrome so its requirements
+    and linked docs (e.g. a Google Doc) become readable — full automation, no pasting.
+    Callers can still paste the brief ``text`` / a doc link directly. A formatted brief is
+    parsed deterministically; only unstructured prose reaches the local model. Best-effort:
+    returns an empty list rather than erroring.
+    """
+    brief = (body.text or body.description or "").strip()
+    whop_url = (body.whop_url or "").strip() or None
+
+    # Nothing to render and nothing pasted → nothing to do.
+    if not brief and not whop_url:
+        return WhopRequirementsOut(requirements=[], documents=[], links=[], source="none")
+
+    # Blocking (headless render + doc fetches + optional Ollama) — keep it off the loop.
+    # Give it room: a Chrome render runs ~10-20s, well past the default thread budget.
+    result = await asyncio.to_thread(
+        whop_requirements.extract_requirements,
+        brief or None,
+        whop_url,
+        model=body.model,
+    )
+    return WhopRequirementsOut(**result)
+
+
+# ------------------------------------------------------- whop login connection
+@router.get("/connection", response_model=WhopConnectionOut)
+async def whop_connection(current_user: User = Depends(get_current_user)) -> WhopConnectionOut:
+    """State of the app's dedicated logged-in Whop browser session."""
+    return WhopConnectionOut(**whop_session.status())
+
+
+@router.post("/connect", response_model=WhopConnectionOut)
+async def whop_connect(current_user: User = Depends(get_current_user)) -> WhopConnectionOut:
+    """Open a visible Chrome window at Whop login for a one-time sign-in.
+
+    A window appears on the machine running the app; the user logs into Whop, then calls
+    ``/connect/confirm``. The session persists in the app's own Chrome profile so gated
+    campaign pages can be read later. Non-blocking.
+    """
+    return WhopConnectionOut(**await asyncio.to_thread(whop_session.start_connect))
+
+
+@router.post("/connect/confirm", response_model=WhopConnectionOut)
+async def whop_connect_confirm(current_user: User = Depends(get_current_user)) -> WhopConnectionOut:
+    """Signal that the user finished logging in — closes the window and saves the session."""
+    return WhopConnectionOut(**await asyncio.to_thread(whop_session.confirm_connect))
+
+
+@router.post("/disconnect", response_model=WhopConnectionOut)
+async def whop_disconnect(current_user: User = Depends(get_current_user)) -> WhopConnectionOut:
+    """Forget the saved Whop session so the user can re-connect fresh."""
+    return WhopConnectionOut(**await asyncio.to_thread(whop_session.disconnect))
+
+
+@router.post("/sync", response_model=WhopSyncStatusOut)
+async def whop_sync_start(
+    body: WhopSyncIn,
+    current_user: User = Depends(get_current_user),
+) -> WhopSyncStatusOut:
+    """Start a background sync: crawl the Whop experience and fill every campaign's rules.
+
+    Requires a connected Whop session. Reads each campaign's linked Google Doc and upserts
+    requirements + the doc link onto the user's campaigns (updating existing, creating new).
+    """
+    if not whop_session.has_session():
+        raise HTTPException(status_code=409, detail="Connect your Whop account first")
+    app_url = (body.app_url or "").strip() or None
+    return WhopSyncStatusOut(**whop_sync.start_sync(app_url, current_user.id))
+
+
+@router.get("/sync", response_model=WhopSyncStatusOut)
+async def whop_sync_status(current_user: User = Depends(get_current_user)) -> WhopSyncStatusOut:
+    """Progress of the running / last Whop campaign sync."""
+    return WhopSyncStatusOut(**whop_sync.status())
+
+
+@router.post("/sync-preview", response_model=WhopSyncPreviewOut)
+async def whop_sync_preview(
+    body: WhopSyncPreviewIn,
+    current_user: User = Depends(get_current_user),
+) -> WhopSyncPreviewOut:
+    """Diagnostic: render a Whop URL with the logged-in session and dump what it sees.
+
+    Used to build/verify the campaign crawler against Whop's real authenticated pages.
+    """
+    page = await asyncio.to_thread(whop_session.fetch, body.url)
+    if not page:
+        return WhopSyncPreviewOut(ok=False)
+    text = page["text"]
+    links = whop_requirements._label_links(page["hrefs"], cap=40)
+    doc_links = whop_requirements._doc_urls(page["hrefs"])
+    return WhopSyncPreviewOut(
+        ok=True,
+        chars=len(text),
+        text=text[:8000],
+        links=links,
+        doc_links=doc_links,
+    )
 
 
 # -------------------------------------------------------------- submissions

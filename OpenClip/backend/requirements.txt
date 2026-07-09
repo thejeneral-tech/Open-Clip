@@ -33,6 +33,11 @@ bcrypt==4.0.1
 # ---- HTTP / AI ----
 httpx==0.28.1
 
+# Headless-browser scrape of a Whop campaign page (its requirements + linked docs are
+# client-rendered). Uses the user's installed Chrome via channel="chrome" — no Chromium
+# download needed. Optional at runtime: WHOP_HEADLESS_RENDER=0 disables it cleanly.
+playwright==1.61.0
+
 # ---- Concurrency ----
 # Cross-process advisory lock serializing access to the single-threaded Fish
 # Speech (s2.cpp) TTS server. Already pulled in transitively (huggingface_hub),

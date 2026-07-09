@@ -320,6 +320,64 @@ class WhopUrlPreviewOut(BaseModel):
     site_name: str | None = None
 
 
+class WhopRequirementsIn(BaseModel):
+    """Ask the backend to distil requirement bullets from a campaign's brief."""
+
+    # A pasted brief — the full rules text, or a Google Doc / brief link to follow.
+    text: str | None = Field(default=None, max_length=20000)
+    description: str | None = Field(default=None, max_length=4000)
+    whop_url: str | None = Field(default=None, max_length=500)
+    model: str | None = Field(default=None, max_length=120)
+
+
+class WhopRequirementsOut(BaseModel):
+    """Requirement bullets pulled from the pasted brief / description + linked docs."""
+
+    requirements: list[str] = Field(default_factory=list)
+    documents: list[str] = Field(default_factory=list)   # linked docs actually read
+    links: list[WhopAssetLink] = Field(default_factory=list)  # openable resource links
+    source: str = "none"                                 # structured | llm | heuristic | none
+
+
+class WhopConnectionOut(BaseModel):
+    """State of the app's dedicated logged-in Whop browser session."""
+
+    connected: bool = False
+    connecting: bool = False
+    error: str | None = None
+
+
+class WhopSyncIn(BaseModel):
+    # Optional: a specific experience URL. Omit to auto-discover every joined content-rewards whop.
+    app_url: str | None = Field(default=None, max_length=1000)
+
+
+class WhopSyncStatusOut(BaseModel):
+    """Progress of a background Whop campaign sync."""
+
+    running: bool = False
+    phase: str = "idle"                    # idle | starting | crawling | importing | done | error
+    total: int = 0
+    processed: int = 0
+    updated: int = 0
+    created: int = 0
+    error: str | None = None
+
+
+class WhopSyncPreviewIn(BaseModel):
+    url: str = Field(min_length=1, max_length=1000)
+
+
+class WhopSyncPreviewOut(BaseModel):
+    """Diagnostic dump of an authenticated Whop page render (to build the crawler)."""
+
+    ok: bool
+    chars: int = 0
+    text: str = ""                                       # truncated rendered body text
+    links: list[WhopAssetLink] = Field(default_factory=list)
+    doc_links: list[str] = Field(default_factory=list)   # followable Google Doc / brief links
+
+
 class WhopImportItem(BaseModel):
     """One campaign in a bulk import (e.g. scraped from the Whop marketplace)."""
 

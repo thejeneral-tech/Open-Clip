@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     # centralized OllamaService gates every AI request behind this.
     OLLAMA_MAX_CONCURRENCY: int = 1
 
+    # ---- Whop requirements auto-scrape ----
+    # Load a campaign's Whop page in headless Chrome (Playwright, channel="chrome") so
+    # its client-rendered requirements + linked docs can be read on import/rescan. OFF
+    # by default: Whop gates campaign pages behind login, so an anonymous render only
+    # sees the public storefront (a ~12s no-op). Enable (=1) only for PUBLIC campaign
+    # pages, or once an authenticated browser session is wired up. The reliable path for
+    # gated campaigns is pasting the (public) Google Doc / brief link.
+    WHOP_HEADLESS_RENDER: bool = False
+
     # ---- Bot automation ----
     # The API process runs a lightweight asyncio scheduler that dispatches due
     # bot cycles as Celery tasks — no separate `celery beat` service required.

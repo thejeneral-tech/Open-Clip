@@ -892,6 +892,17 @@ export interface WhopUrlPreview {
   url: string; title: string | null; description: string | null;
   image: string | null; site_name: string | null;
 }
+export interface WhopRequirementsResult {
+  requirements: string[]; documents: string[]; links: WhopAssetLink[];
+  source: "structured" | "llm" | "heuristic" | "none";
+}
+export interface WhopConnection {
+  connected: boolean; connecting: boolean; error: string | null;
+}
+export interface WhopSyncStatus {
+  running: boolean; phase: string; total: number; processed: number;
+  updated: number; created: number; error: string | null;
+}
 export interface WhopSubmission {
   id: number; campaign_id: number; creator_handle: string | null; platform: WhopPlatform;
   post_url: string; title: string | null; status: WhopSubmissionStatus;

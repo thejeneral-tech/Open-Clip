@@ -62,8 +62,11 @@ import type {
   WhopImportResult,
   WhopPlatform,
   WhopPublishResult,
+  WhopConnection,
   WhopReadyClip,
+  WhopRequirementsResult,
   WhopStudio,
+  WhopSyncStatus,
   WhopSubmission,
   WhopUrlPreview,
   YouTubeStatus,
@@ -664,6 +667,27 @@ export const api = {
     }),
   whopUrlPreview: (url: string) =>
     request<WhopUrlPreview>(`/whop/url-preview?url=${encodeURIComponent(url)}`),
+  whopExtractRequirements: (body: {
+    text?: string;
+    description?: string;
+    whop_url?: string;
+  }) =>
+    request<WhopRequirementsResult>("/whop/extract-requirements", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // ---- whop account connection + campaign sync ----
+  whopConnection: () => request<WhopConnection>("/whop/connection"),
+  whopConnect: () => request<WhopConnection>("/whop/connect", { method: "POST" }),
+  whopConnectConfirm: () =>
+    request<WhopConnection>("/whop/connect/confirm", { method: "POST" }),
+  whopDisconnect: () => request<WhopConnection>("/whop/disconnect", { method: "POST" }),
+  whopSyncStart: (appUrl?: string) =>
+    request<WhopSyncStatus>("/whop/sync", {
+      method: "POST",
+      body: JSON.stringify(appUrl ? { app_url: appUrl } : {}),
+    }),
+  whopSyncStatus: () => request<WhopSyncStatus>("/whop/sync"),
   whopImportCampaigns: (body: {
     campaigns: Array<Record<string, unknown>>;
     source?: string;

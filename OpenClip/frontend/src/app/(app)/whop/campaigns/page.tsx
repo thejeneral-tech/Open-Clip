@@ -31,10 +31,13 @@ import {
 } from "@/components/ui/select";
 import { CampaignPicker } from "@/components/whop/campaign-picker";
 import { BudgetBar, PlatformIcons, RatePill } from "@/components/whop/platform-meta";
+import { WhopSyncPanel } from "@/components/whop/whop-sync-panel";
 import {
   useWhopCampaigns,
+  useWhopConnection,
   useWhopDeleteCampaign,
-  useWhopRescan,
+  useWhopSyncStart,
+  useWhopSyncStatus,
   useWhopUpdateCampaign,
 } from "@/hooks/use-api";
 import type { WhopCampaign, WhopCampaignStatus } from "@/lib/types";
@@ -178,29 +181,28 @@ function CampaignCard({ c }: { c: WhopCampaign }) {
 
 export default function WhopCampaignsPage() {
   const { data: campaigns = [], isLoading } = useWhopCampaigns();
-  const rescan = useWhopRescan();
+  const connection = useWhopConnection(true);
+  const startSync = useWhopSyncStart();
+  const sync = useWhopSyncStatus(true);
+  const syncing = (sync.data?.running ?? false) || startSync.isPending;
   const [status, setStatus] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<SortKey>("recent");
   // "In use" = campaigns you're actively working on (opened in Studio, or have
   // submissions) — vs the full marketplace list.
   const [tab, setTab] = useState<"all" | "in_use">("all");
 
-  // One-click rescan: the backend scrapes Whop's marketplace and upserts/reconciles.
+  // Rescan = sync from Whop: crawl every joined campaign and fill in requirements + brief
+  // docs (needs a one-time Whop connection, done in the panel below).
   const onRescan = async () => {
+    if (!connection.data?.connected) {
+      toast.error("Connect your Whop account first (in the panel below), then Rescan.");
+      return;
+    }
     try {
-      const res = await rescan.mutateAsync();
-      const bits = [
-        res.created ? `${res.created} added` : "",
-        res.updated ? `${res.updated} updated` : "",
-        res.ended ? `${res.ended} ended` : "",
-      ].filter(Boolean);
-      toast.success(
-        `Rescanned ${res.total} campaigns` +
-          (bits.length ? ` — ${bits.join(", ")}` : " — nothing changed") +
-          (res.reconciled ? "" : " (statuses left as-is — scan looked partial)"),
-      );
+      await startSync.mutateAsync(undefined);
+      toast.success("Rescanning your Whop campaigns — this runs in the background.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Rescan failed");
+      toast.error(err instanceof Error ? err.message : "Couldn't start the rescan");
     }
   };
 
@@ -233,19 +235,21 @@ export default function WhopCampaignsPage() {
           <Button
             variant="outline"
             onClick={onRescan}
-            disabled={rescan.isPending}
-            title="Rescan Whop's marketplace — adds new campaigns and updates active/ended statuses"
+            disabled={syncing}
+            title="Rescan Whop — pulls every joined campaign's requirements + brief doc"
           >
-            {rescan.isPending ? (
+            {syncing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            {rescan.isPending ? "Rescanning…" : "Rescan"}
+            {syncing ? "Rescanning…" : "Rescan"}
           </Button>
           <CampaignPicker label="Find a campaign" />
         </div>
       </div>
+
+      <WhopSyncPanel />
 
       {/* All vs the campaigns you're actively working on. */}
       <div className="inline-flex rounded-lg border bg-secondary p-1">

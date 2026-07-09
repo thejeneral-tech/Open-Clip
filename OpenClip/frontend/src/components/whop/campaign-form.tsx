@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { Check, ExternalLink, FileText, Loader2, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,8 @@ import {
   WHOP_PLATFORMS,
   WHOP_TYPES,
 } from "@/components/whop/platform-meta";
-import { useWhopUrlPreview } from "@/hooks/use-api";
+import { RequirementsImportDialog } from "@/components/whop/requirements-import-dialog";
+import { useWhopExtractRequirements, useWhopUrlPreview } from "@/hooks/use-api";
 import type {
   WhopAssetLink,
   WhopCampaign,
@@ -122,6 +123,8 @@ export function CampaignForm({
   const [whopUrl, setWhopUrl] = useState(initial?.whop_url ?? "");
   const [requirements, setRequirements] = useState<string[]>(initial?.requirements ?? []);
   const [requirementDraft, setRequirementDraft] = useState("");
+  const [autoReqLoading, setAutoReqLoading] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [assetLinks, setAssetLinks] = useState<WhopAssetLink[]>(initial?.asset_links ?? []);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(initial?.thumbnail_url ?? null);
@@ -186,6 +189,67 @@ export function CampaignForm({
     isError: whopPreviewError,
   } = useWhopUrlPreview();
 
+  // Requirements auto-fill: read the description (following any linked Google Doc /
+  // brief) and distill the posting rules via the local model. Ref-held so the import
+  // effect below can fire it without re-subscribing on every keystroke.
+  const extractReq = useWhopExtractRequirements();
+  const extractReqRef = useRef(extractReq);
+  extractReqRef.current = extractReq;
+
+  // Merge freshly-extracted rules into the list (dedup, preserve existing order).
+  const mergeRequirements = (incoming: string[]) =>
+    setRequirements((prev) => {
+      const merged = [...prev];
+      for (const r of incoming) if (!merged.includes(r)) merged.push(r);
+      return merged;
+    });
+
+  // Merge detected document links into the campaign's assets (dedup by url).
+  const mergeLinks = (links: WhopAssetLink[]) => {
+    if (!links.length) return;
+    setAssetLinks((prev) => {
+      const merged = [...prev];
+      for (const l of links) if (!merged.some((x) => x.url === l.url)) merged.push(l);
+      return merged;
+    });
+  };
+
+  // Manual trigger (button in the Requirements section). Also runs automatically once
+  // on Whop import, below.
+  const autoFillRequirements = async () => {
+    const desc = description.trim();
+    const url = whopUrl.trim();
+    if (!desc && !/whop\.com/i.test(url)) {
+      toast.error("Add a description or a Whop link first");
+      return;
+    }
+    try {
+      const res = await extractReq.mutateAsync({
+        description: desc || undefined,
+        whop_url: url || undefined,
+      });
+      mergeLinks(res.links);
+      const fresh = res.requirements.filter((r) => !requirements.includes(r));
+      if (fresh.length === 0) {
+        toast.info(
+          res.requirements.length
+            ? "Those requirements are already added"
+            : res.links.length
+              ? "No new requirements — saved the linked doc"
+              : "No requirements found in the description or linked docs",
+        );
+        return;
+      }
+      mergeRequirements(fresh);
+      toast.success(
+        `Added ${fresh.length} requirement${fresh.length === 1 ? "" : "s"}` +
+          (res.documents.length ? " from the linked brief" : ""),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't read requirements");
+    }
+  };
+
   useEffect(() => {
     const url = whopUrl.trim();
     if (!/whop\.com/i.test(url)) {
@@ -198,8 +262,8 @@ export function CampaignForm({
 
   // Auto-import: the effect below reads the live form values without re-running
   // on every keystroke, so it fills only fields the user hasn't already set.
-  const latestFormRef = useRef({ name, description, thumbnail, preview });
-  latestFormRef.current = { name, description, thumbnail, preview };
+  const latestFormRef = useRef({ name, description, thumbnail, preview, requirements });
+  latestFormRef.current = { name, description, thumbnail, preview, requirements };
   const importedUrlRef = useRef<string | null>(initial?.whop_url ?? null);
 
   // As soon as a Whop link resolves, pull its details into the campaign — no click
@@ -239,6 +303,29 @@ export function CampaignForm({
       })();
     }
     if (imported) toast.success("Imported details from the Whop link");
+
+    // Auto-pull requirements from the imported description (following any linked
+    // brief) — once per URL, and only when the user hasn't set requirements yet.
+    const descForReqs = (cur.description.trim() || p.description || "").trim();
+    if (descForReqs && cur.requirements.length === 0) {
+      setAutoReqLoading(true);
+      extractReqRef.current
+        .mutateAsync({ description: descForReqs, whop_url: p.url })
+        .then((res) => {
+          mergeLinks(res.links);
+          if (res.requirements.length) {
+            mergeRequirements(res.requirements);
+            toast.success(
+              `Imported ${res.requirements.length} requirement${res.requirements.length === 1 ? "" : "s"}` +
+                (res.documents.length ? " from the linked brief" : ""),
+            );
+          }
+        })
+        .catch(() => {
+          // Best-effort — the user can still add requirements manually.
+        })
+        .finally(() => setAutoReqLoading(false));
+    }
   }, [whopPreview]);
 
   const whopHref = whopUrl.trim() ? withScheme(whopUrl.trim()) : null;
@@ -435,7 +522,32 @@ export function CampaignForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="wc-req">Requirements</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="wc-req">Requirements</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
+              <FileText className="h-4 w-4" /> Paste brief
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={autoFillRequirements}
+              disabled={extractReq.isPending || autoReqLoading}
+            >
+              {extractReq.isPending || autoReqLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              From description
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Paste the creator&apos;s brief (or its Google Doc link) to pull in the full rules — or
+          fill from the description, which also follows any linked doc.
+        </p>
         {requirements.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {requirements.map((req) => (
@@ -601,6 +713,24 @@ export function CampaignForm({
         {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
         {submitLabel}
       </Button>
+
+      <RequirementsImportDialog
+        open={pasteOpen}
+        onOpenChange={setPasteOpen}
+        existing={requirements}
+        onApply={(reqs, links, replace) => {
+          if (reqs.length) {
+            if (replace) {
+              setRequirements(reqs);
+              toast.success(`Replaced with ${reqs.length} requirement${reqs.length === 1 ? "" : "s"}`);
+            } else {
+              mergeRequirements(reqs);
+              toast.success(`Added ${reqs.length} requirement${reqs.length === 1 ? "" : "s"}`);
+            }
+          }
+          mergeLinks(links);
+        }}
+      />
     </form>
   );
 }

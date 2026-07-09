@@ -931,6 +931,73 @@ export function useWhopUrlPreview() {
   });
 }
 
+// Distill requirement bullets from a campaign's description (following any linked
+// Google Doc / brief) via the local model — fired on demand from the campaign form.
+export function useWhopExtractRequirements() {
+  return useMutation({
+    mutationFn: (body: { text?: string; description?: string; whop_url?: string }) =>
+      api.whopExtractRequirements(body),
+  });
+}
+
+// ---- Whop account connection + campaign sync ----
+export function useWhopConnection(poll = false) {
+  return useQuery({
+    queryKey: ["whop-connection"],
+    queryFn: () => api.whopConnection(),
+    refetchInterval: poll ? 2000 : false,
+  });
+}
+
+export function useWhopConnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.whopConnect(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-connection"] }),
+  });
+}
+
+export function useWhopConnectConfirm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.whopConnectConfirm(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-connection"] }),
+  });
+}
+
+export function useWhopDisconnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.whopDisconnect(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-connection"] }),
+  });
+}
+
+export function useWhopSyncStart() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (appUrl?: string) => api.whopSyncStart(appUrl),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["whop-sync"] }),
+  });
+}
+
+// Poll sync progress while a sync is running; refetch campaigns when it finishes.
+export function useWhopSyncStatus(poll = false) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["whop-sync"],
+    queryFn: async () => {
+      const s = await api.whopSyncStatus();
+      if (!s.running && (s.updated || s.created)) {
+        qc.invalidateQueries({ queryKey: ["whop-campaigns"] });
+        qc.invalidateQueries({ queryKey: ["whop-dashboard"] });
+      }
+      return s;
+    },
+    refetchInterval: poll ? 2500 : false,
+  });
+}
+
 // Bulk upsert/rescan: re-import a scraped marketplace file (upsert + reconcile).
 export function useWhopImportCampaigns() {
   const qc = useQueryClient();

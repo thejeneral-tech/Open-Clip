@@ -6,6 +6,7 @@ import {
   Clapperboard,
   DollarSign,
   ExternalLink,
+  FileText,
   Link as LinkIcon,
   Loader2,
   Megaphone,
@@ -13,6 +14,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Sparkles,
   Trash2,
   Undo2,
   X,
@@ -50,12 +52,14 @@ import {
   WHOP_PLATFORMS,
   WHOP_TYPES,
 } from "@/components/whop/platform-meta";
+import { RequirementsImportDialog } from "@/components/whop/requirements-import-dialog";
 import {
   useWhopApproveSubmission,
   useWhopCampaign,
   useWhopClawbackSubmission,
   useWhopCreateSubmission,
   useWhopDeleteSubmission,
+  useWhopExtractRequirements,
   useWhopPaySubmission,
   useWhopRejectSubmission,
   useWhopSubmissions,
@@ -63,6 +67,7 @@ import {
   useWhopUpdateSubmission,
 } from "@/hooks/use-api";
 import type {
+  WhopAssetLink,
   WhopCampaign,
   WhopCampaignStatus,
   WhopPlatform,
@@ -491,8 +496,10 @@ export default function WhopCampaignDetailPage() {
   const updateCampaign = useWhopUpdateCampaign();
   const rejectSubmission = useWhopRejectSubmission();
   const clawbackSubmission = useWhopClawbackSubmission();
+  const extractReq = useWhopExtractRequirements();
 
   const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [reasonTarget, setReasonTarget] = useState<{
     submission: WhopSubmission;
     mode: "reject" | "clawback";
@@ -539,6 +546,82 @@ export default function WhopCampaignDetailPage() {
     }
   };
 
+  // Rescan the campaign's description (following any linked Google Doc / brief) and ADD
+  // any new rules + document links it finds — never wipes what's already curated.
+  const onAutoFillRequirements = async () => {
+    if (!campaign) return;
+    try {
+      const res = await extractReq.mutateAsync({
+        description: campaign.description ?? undefined,
+        whop_url: campaign.whop_url ?? undefined,
+      });
+      const fresh = res.requirements.filter((r) => !campaign.requirements.includes(r));
+      const nextLinks = [...campaign.asset_links];
+      for (const l of res.links) if (!nextLinks.some((x) => x.url === l.url)) nextLinks.push(l);
+      const addedLinks = nextLinks.length - campaign.asset_links.length;
+
+      if (fresh.length === 0 && addedLinks === 0) {
+        toast.info(
+          res.requirements.length
+            ? "No new requirements found — the current list already covers the description."
+            : "Couldn't find requirements in the description. Use Paste brief to pull them from the full doc.",
+        );
+        return;
+      }
+      await updateCampaign.mutateAsync({
+        id: campaignId,
+        data: { requirements: [...campaign.requirements, ...fresh], asset_links: nextLinks },
+      });
+      const reqMsg = fresh.length ? `Added ${fresh.length} requirement${fresh.length === 1 ? "" : "s"}` : "";
+      const linkMsg = addedLinks ? `${addedLinks} link${addedLinks === 1 ? "" : "s"} saved` : "";
+      toast.success([reqMsg, linkMsg].filter(Boolean).join(" · "));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't read requirements");
+    }
+  };
+
+  // Apply results from the brief dialog: replace/append requirements, and always merge
+  // any detected document links into the campaign's assets so they're clickable.
+  const onApplyRequirements = async (
+    incoming: string[],
+    links: WhopAssetLink[],
+    replace: boolean,
+  ) => {
+    if (!campaign) return;
+    const nextReqs = replace
+      ? incoming
+      : [...campaign.requirements, ...incoming.filter((r) => !campaign.requirements.includes(r))];
+    const nextLinks = [...campaign.asset_links];
+    for (const l of links) if (!nextLinks.some((x) => x.url === l.url)) nextLinks.push(l);
+
+    await updateCampaign.mutateAsync({
+      id: campaignId,
+      data: { requirements: nextReqs, asset_links: nextLinks },
+    });
+
+    const addedLinks = nextLinks.length - campaign.asset_links.length;
+    const reqMsg = incoming.length
+      ? replace
+        ? `Replaced with ${nextReqs.length} requirement${nextReqs.length === 1 ? "" : "s"}`
+        : `Added ${incoming.length} requirement${incoming.length === 1 ? "" : "s"}`
+      : "";
+    const linkMsg = addedLinks > 0 ? `${addedLinks} link${addedLinks === 1 ? "" : "s"} saved` : "";
+    toast.success([reqMsg, linkMsg].filter(Boolean).join(" · ") || "Nothing new to add");
+  };
+
+  // Remove a single saved requirement from the campaign.
+  const onRemoveRequirement = async (req: string) => {
+    if (!campaign) return;
+    try {
+      await updateCampaign.mutateAsync({
+        id: campaignId,
+        data: { requirements: campaign.requirements.filter((r) => r !== req) },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't remove requirement");
+    }
+  };
+
   if (isLoading || !campaign) {
     return (
       <div className="flex justify-center py-20">
@@ -552,6 +635,26 @@ export default function WhopCampaignDetailPage() {
   const categoryName =
     WHOP_CATEGORIES.find((c) => c.value === campaign.category)?.label ?? campaign.category;
   const budgetPct = Math.min(100, Math.max(0, campaign.budget_used_pct ?? 0));
+
+  // The brief / source docs to open — document-style asset links (Google Doc, Drive,
+  // Notion…) plus any URL embedded in a requirement line — shown as "Open" buttons.
+  const briefLinks: WhopAssetLink[] = [];
+  const seenBriefUrls = new Set<string>();
+  const addBrief = (label: string, url: string) => {
+    if (!seenBriefUrls.has(url)) {
+      seenBriefUrls.add(url);
+      briefLinks.push({ label, url });
+    }
+  };
+  for (const l of campaign.asset_links) {
+    if (/docs\.google\.com|drive\.google\.com|forms\.gle|notion\.(so|site)|dropbox\.com/i.test(l.url)) {
+      addBrief(l.label || "Open link", l.url);
+    }
+  }
+  for (const req of campaign.requirements) {
+    const m = req.match(/https?:\/\/[^\s)]+/);
+    if (m) addBrief("Open link", m[0]);
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -680,21 +783,100 @@ export default function WhopCampaignDetailPage() {
         </CardContent>
       </Card>
 
-      {campaign.requirements.length > 0 && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between space-y-0">
+          <div className="space-y-1.5">
             <CardTitle className="text-base">Requirements</CardTitle>
             <CardDescription>What every submission must follow.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {campaign.requirements.map((req) => (
-              <span key={req} className="rounded-full border px-3 py-1 text-xs">
-                {req}
-              </span>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          {campaign.requirements.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAutoFillRequirements}
+                disabled={extractReq.isPending || updateCampaign.isPending}
+                title="Re-scan the description and any linked brief"
+              >
+                {extractReq.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                Rescan
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
+                <FileText className="h-4 w-4" /> Paste brief
+              </Button>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {briefLinks.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {briefLinks.map((l) => (
+                <Button key={l.url} variant="secondary" size="sm" asChild>
+                  <a href={l.url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4" /> Open {l.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+          )}
+          {campaign.requirements.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {campaign.requirements.map((req) => (
+                <span
+                  key={req}
+                  className="inline-flex items-center gap-1.5 rounded-full border py-1 pl-3 pr-2 text-xs"
+                >
+                  <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                  {req}
+                  <button
+                    type="button"
+                    onClick={() => onRemoveRequirement(req)}
+                    disabled={updateCampaign.isPending}
+                    aria-label={`Remove requirement: ${req}`}
+                    className="text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
+              <p>
+                No requirements set yet. Paste the creator&apos;s brief (or its Google Doc link) to
+                pull in the full rules — or fill from the campaign description.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" size="sm" onClick={() => setPasteOpen(true)}>
+                  <FileText className="h-4 w-4" /> Paste brief
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onAutoFillRequirements}
+                  disabled={extractReq.isPending || updateCampaign.isPending}
+                >
+                  {extractReq.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  From description
+                </Button>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/whop/campaigns/${campaignId}/workspace`}>
+                    <Pencil className="h-4 w-4" /> Add manually
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {campaign.asset_links.length > 0 && (
         <Card>
@@ -754,6 +936,13 @@ export default function WhopCampaignDetailPage() {
         campaignId={campaignId}
         open={submissionOpen}
         onOpenChange={setSubmissionOpen}
+      />
+
+      <RequirementsImportDialog
+        open={pasteOpen}
+        onOpenChange={setPasteOpen}
+        existing={campaign.requirements}
+        onApply={onApplyRequirements}
       />
 
       <Dialog open={reasonTarget !== null} onOpenChange={(o) => !o && setReasonTarget(null)}>
